@@ -255,6 +255,18 @@
 <p>This class supports TensorDict-based storages as well as pytrees.</p>
 <p>This class will call save and load hooks if provided. These hooks should take as input the
 data being transformed as well as the path where the data should be saved.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.replay_buffers.TensorStorageCheckpointer.register_load_hook">
+<span class="sig-name descname"><span class="pre">register_load_hook</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hook</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.replay_buffers.TensorStorageCheckpointer.register_load_hook" title="Link to this definition">¶</a></dt>
+<dd><p>Registers a load hook for this checkpointer.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.replay_buffers.TensorStorageCheckpointer.register_save_hook">
+<span class="sig-name descname"><span class="pre">register_save_hook</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hook</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.replay_buffers.TensorStorageCheckpointer.register_save_hook" title="Link to this definition">¶</a></dt>
+<dd><p>Registers a save hook for this checkpointer.</p>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -297,7 +309,11 @@ data being transformed as well as the path where the data should be saved.</p>
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">TensorStorageCheckpointer</a><ul>
-<li><a class="reference internal" href="#torchrl.data.replay_buffers.TensorStorageCheckpointer"><code class="docutils literal notranslate"><span class="pre">TensorStorageCheckpointer</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.data.replay_buffers.TensorStorageCheckpointer"><code class="docutils literal notranslate"><span class="pre">TensorStorageCheckpointer</span></code></a><ul>
+<li><a class="reference internal" href="#torchrl.data.replay_buffers.TensorStorageCheckpointer.register_load_hook"><code class="docutils literal notranslate"><span class="pre">TensorStorageCheckpointer.register_load_hook()</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.data.replay_buffers.TensorStorageCheckpointer.register_save_hook"><code class="docutils literal notranslate"><span class="pre">TensorStorageCheckpointer.register_save_hook()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>

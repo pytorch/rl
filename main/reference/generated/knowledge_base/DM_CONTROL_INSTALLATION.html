@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Working with gym &mdash; torchrl main documentation</title>
+  <title>Installing dm_control &mdash; torchrl main documentation</title>
   
 
   
@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
-    <link rel="next" title="Working with habitat-lab" href="HABITAT.html" />
-    <link rel="prev" title="Installing dm_control" href="DM_CONTROL_INSTALLATION.html" /> 
+    <link rel="next" title="Working with gym" href="GYM.html" />
+    <link rel="prev" title="Things to consider when debugging RL" href="DEBUGGING_RL.html" /> 
 
   
   <script src="../../../_static/js/modernizr.min.js"></script>
@@ -211,13 +211,13 @@
         
           <li><a href="../../knowledge_base.html">Knowledge Base</a> &gt;</li>
         
-      <li>Working with gym</li>
+      <li>Installing dm_control</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="../../../_sources/reference/generated/knowledge_base/GYM.rst.txt" rel="nofollow"><img src="../../../_static/images/view-page-source-icon.svg"></a>
+            <a href="../../../_sources/reference/generated/knowledge_base/DM_CONTROL_INSTALLATION.rst.txt" rel="nofollow"><img src="../../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -242,33 +242,104 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" class="pytorch-article">
               
-  <section id="working-with-gym">
-<h1>Working with gym<a class="headerlink" href="#working-with-gym" title="Link to this heading">¶</a></h1>
-<section id="what-is-openai-gym">
-<h2>What is OpenAI Gym?<a class="headerlink" href="#what-is-openai-gym" title="Link to this heading">¶</a></h2>
-<p>OpenAI Gym is a python library that provides the tooling for coding and using
-environments in RL contexts. The environments can be either simulators or real
-world systems (such as robots or games).
-Due to its easiness of use, Gym has been widely adopted as one the main APIs for
-environment interaction in RL and control.</p>
-<p>Historically, Gym was started by OpenAI on <a class="reference external" href="https://github.com/openai/gym">https://github.com/openai/gym</a>.
-Since then, OpenAI has ceased to maintain it and the library has been forked out
-in <a class="reference external" href="https://github.com/Farama-Foundation/Gymnasium">Gymnasium</a> by the Farama Foundation.</p>
-<p>Check the <a class="reference external" href="https://www.gymlibrary.dev/">Gym documentation</a> for further details
-about the installation and usage.</p>
+  <section id="installing-dm-control">
+<h1>Installing dm_control<a class="headerlink" href="#installing-dm-control" title="Link to this heading">¶</a></h1>
+<p>dm_control is DeepMind’s software stack for physics-based simulation and
+reinforcement learning environments, built on top of MuJoCo.</p>
+<p>GitHub: https://github.com/deepmind/dm_control</p>
+<section id="basic-installation">
+<h2>Basic Installation<a class="headerlink" href="#basic-installation" title="Link to this heading">¶</a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>dm_control
+</pre></div>
+</div>
+<p>This should work on most platforms with Python 3.8-3.12.</p>
 </section>
-<section id="versioning">
-<h2>Versioning<a class="headerlink" href="#versioning" title="Link to this heading">¶</a></h2>
-<p>The OpenAI Gym library is known to have gone through multiple BC breaking changes
-and significant user-facing API modifications.
-In practice, TorchRL is tested against gym 0.13 and further and should work with
-any version in between.</p>
-<p>However, libraries built around  Gym may have a custom env construction process
-that breaks the automatic wrapping from the <code class="docutils literal notranslate"><span class="pre">GymEnv</span></code> class. In those cases, it
-is best to first create the gym environment and wrap it using
-<code class="docutils literal notranslate"><span class="pre">torchrl.envs.libs.gym.GymWrapper</span></code>.</p>
-<p>If you run into an issue when running TorchRL with a specific version of gym,
-feel free to open an issue and we will gladly look into this.</p>
+<section id="common-issues">
+<h2>Common Issues<a class="headerlink" href="#common-issues" title="Link to this heading">¶</a></h2>
+<section id="labmaze-build-failure-with-bazel-8-python-3-13">
+<h3>1. labmaze build failure with Bazel 8 (Python 3.13+)<a class="headerlink" href="#labmaze-build-failure-with-bazel-8-python-3-13" title="Link to this heading">¶</a></h3>
+<p><strong>Error:</strong></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>× Failed to build `labmaze==1.0.6`
+ERROR: Skipping &#39;//labmaze/cc/python:_defaults&#39;: error loading package &#39;labmaze/cc/python&#39;:
+Unable to find package for @@[unknown repo &#39;bazel_skylib&#39; requested from @@]//lib:collections.bzl
+The WORKSPACE file is disabled by default in Bazel 8 (late 2024) and will be removed in Bazel 9
+</pre></div>
+</div>
+<p><strong>Cause:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">labmaze</span></code> (a dependency of dm_control) only has prebuilt wheels for Python 3.7-3.12</p></li>
+<li><p>Python 3.13+ requires building from source</p></li>
+<li><p>Bazel 8 has deprecated WORKSPACE files, which labmaze still uses</p></li>
+</ul>
+<p><strong>Solutions:</strong></p>
+<section id="option-1-use-python-3-12-recommended">
+<h4>Option 1: Use Python 3.12 (Recommended)<a class="headerlink" href="#option-1-use-python-3-12-recommended" title="Link to this heading">¶</a></h4>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Create a Python 3.12 virtual environment</span>
+python3.12<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>.venv
+<span class="nb">source</span><span class="w"> </span>.venv/bin/activate
+pip<span class="w"> </span>install<span class="w"> </span>dm_control
+</pre></div>
+</div>
+</section>
+<section id="option-2-downgrade-bazel-to-version-7-x">
+<h4>Option 2: Downgrade Bazel to version 7.x<a class="headerlink" href="#option-2-downgrade-bazel-to-version-7-x" title="Link to this heading">¶</a></h4>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Using Homebrew on macOS</span>
+brew<span class="w"> </span>install<span class="w"> </span>bazel@7
+<span class="nb">export</span><span class="w"> </span><span class="nv">PATH</span><span class="o">=</span><span class="s2">&quot;/opt/homebrew/opt/bazel@7/bin:</span><span class="nv">$PATH</span><span class="s2">&quot;</span>
+
+<span class="c1"># Or using bazelisk with version pinning</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">USE_BAZEL_VERSION</span><span class="o">=</span><span class="m">7</span>.4.1
+
+<span class="c1"># Then install</span>
+pip<span class="w"> </span>install<span class="w"> </span>dm_control
+</pre></div>
+</div>
+</section>
+<section id="option-3-install-dm-control-without-labmaze">
+<h4>Option 3: Install dm_control without labmaze<a class="headerlink" href="#option-3-install-dm-control-without-labmaze" title="Link to this heading">¶</a></h4>
+<p>If you don’t need the maze/locomotion environments that require labmaze:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>dm_control<span class="w"> </span>--no-deps
+pip<span class="w"> </span>install<span class="w"> </span>dm-env<span class="w"> </span>dm-tree<span class="w"> </span>glfw<span class="w"> </span>lxml<span class="w"> </span>mujoco<span class="w"> </span>numpy<span class="w"> </span>pyopengl<span class="w"> </span>pyparsing<span class="w"> </span>scipy
+</pre></div>
+</div>
+</section>
+</section>
+<section id="egl-rendering-issues">
+<h3>2. EGL/rendering issues<a class="headerlink" href="#egl-rendering-issues" title="Link to this heading">¶</a></h3>
+<p>See <a class="reference internal" href="#./MUJOCO_INSTALLATION.md"><span class="xref myst">MUJOCO_INSTALLATION.md</span></a> for rendering-related
+issues, as dm_control uses MuJoCo for rendering.</p>
+</section>
+<section id="macos-arm64-apple-silicon-specific-issues">
+<h3>3. macOS ARM64 (Apple Silicon) specific issues<a class="headerlink" href="#macos-arm64-apple-silicon-specific-issues" title="Link to this heading">¶</a></h3>
+<p>On Apple Silicon Macs, ensure you’re using native ARM Python, not Rosetta:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Check architecture</span>
+python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import platform; print(platform.machine())&quot;</span>
+<span class="c1"># Should output: arm64</span>
+</pre></div>
+</div>
+<p>If it outputs <code class="docutils literal notranslate"><span class="pre">x86_64</span></code>, you’re running under Rosetta. Install native ARM Python:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Using Homebrew</span>
+brew<span class="w"> </span>install<span class="w"> </span>python@3.12
+
+<span class="c1"># Or using pyenv</span>
+arch<span class="w"> </span>-arm64<span class="w"> </span>pyenv<span class="w"> </span>install<span class="w"> </span><span class="m">3</span>.12
+</pre></div>
+</div>
+</section>
+</section>
+<section id="verifying-installation">
+<h2>Verifying Installation<a class="headerlink" href="#verifying-installation" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">dm_control</span> <span class="kn">import</span> <span class="n">suite</span>
+
+<span class="c1"># List available environments</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">suite</span><span class="o">.</span><span class="n">BENCHMARKING</span><span class="p">)</span>
+
+<span class="c1"># Create an environment</span>
+<span class="n">env</span> <span class="o">=</span> <span class="n">suite</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;cheetah&quot;</span><span class="p">,</span> <span class="s2">&quot;run&quot;</span><span class="p">)</span>
+<span class="n">timestep</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">timestep</span><span class="o">.</span><span class="n">observation</span><span class="p">)</span>
+</pre></div>
+</div>
 </section>
 </section>
 
@@ -280,10 +351,10 @@ feel free to open an issue and we will gladly look into this.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="HABITAT.html" class="btn btn-neutral float-right" title="Working with habitat-lab" accesskey="n" rel="next">Next <img src="../../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="GYM.html" class="btn btn-neutral float-right" title="Working with gym" accesskey="n" rel="next">Next <img src="../../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="DM_CONTROL_INSTALLATION.html" class="btn btn-neutral" title="Installing dm_control" accesskey="p" rel="prev"><img src="../../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="DEBUGGING_RL.html" class="btn btn-neutral" title="Things to consider when debugging RL" accesskey="p" rel="prev"><img src="../../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -309,9 +380,20 @@ feel free to open an issue and we will gladly look into this.</p>
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">Working with gym</a><ul>
-<li><a class="reference internal" href="#what-is-openai-gym">What is OpenAI Gym?</a></li>
-<li><a class="reference internal" href="#versioning">Versioning</a></li>
+<li><a class="reference internal" href="#">Installing dm_control</a><ul>
+<li><a class="reference internal" href="#basic-installation">Basic Installation</a></li>
+<li><a class="reference internal" href="#common-issues">Common Issues</a><ul>
+<li><a class="reference internal" href="#labmaze-build-failure-with-bazel-8-python-3-13">1. labmaze build failure with Bazel 8 (Python 3.13+)</a><ul>
+<li><a class="reference internal" href="#option-1-use-python-3-12-recommended">Option 1: Use Python 3.12 (Recommended)</a></li>
+<li><a class="reference internal" href="#option-2-downgrade-bazel-to-version-7-x">Option 2: Downgrade Bazel to version 7.x</a></li>
+<li><a class="reference internal" href="#option-3-install-dm-control-without-labmaze">Option 3: Install dm_control without labmaze</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#egl-rendering-issues">2. EGL/rendering issues</a></li>
+<li><a class="reference internal" href="#macos-arm64-apple-silicon-specific-issues">3. macOS ARM64 (Apple Silicon) specific issues</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#verifying-installation">Verifying Installation</a></li>
 </ul>
 </li>
 </ul>

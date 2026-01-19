@@ -247,7 +247,7 @@
 <span class="kn">import</span> <span class="nn">re</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">import</span> <span class="nn">weakref</span>
-<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Sequence</span>
 <span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">deepcopy</span>
 <span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">partial</span><span class="p">,</span> <span class="n">wraps</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
@@ -1006,6 +1006,155 @@
 
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_action_spec</span><span class="o">.</span><span class="n">cardinality</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="EnvBase.configure_parallel">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.configure_parallel">[docs]</a>
+    <span class="k">def</span> <span class="nf">configure_parallel</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">use_buffers</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">shared_memory</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">memmap</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">mp_start_method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_sub_threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">non_blocking</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">daemon</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EnvBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Configure parallel execution parameters.</span>
+
+<span class="sd">        This method allows configuring parameters for parallel environment</span>
+<span class="sd">        execution before the environment is started. It is only effective</span>
+<span class="sd">        on :class:`~torchrl.envs.BatchedEnvBase` and its subclasses.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            use_buffers (bool, optional): whether communication between workers should</span>
+<span class="sd">                occur via circular preallocated memory buffers.</span>
+<span class="sd">            shared_memory (bool, optional): whether the returned tensordict will be</span>
+<span class="sd">                placed in shared memory.</span>
+<span class="sd">            memmap (bool, optional): whether the returned tensordict will be placed</span>
+<span class="sd">                in memory map.</span>
+<span class="sd">            mp_start_method (str, optional): the multiprocessing start method.</span>
+<span class="sd">            num_threads (int, optional): number of threads for this process.</span>
+<span class="sd">            num_sub_threads (int, optional): number of threads of the subprocesses.</span>
+<span class="sd">            non_blocking (bool, optional): if ``True``, device moves will be done using</span>
+<span class="sd">                the ``non_blocking=True`` option.</span>
+<span class="sd">            daemon (bool, optional): whether the processes should be daemonized.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            self: Returns self for method chaining.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            NotImplementedError: If called on an environment that does not support</span>
+<span class="sd">                parallel configuration.</span>
+<span class="sd">            RuntimeError: If called after the environment has already started.</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            &gt;&gt;&gt; env = DMControlEnv(&quot;cheetah&quot;, &quot;run&quot;, num_envs=4)</span>
+<span class="sd">            &gt;&gt;&gt; env.configure_parallel(use_buffers=True, num_threads=2)</span>
+<span class="sd">            &gt;&gt;&gt; env.reset()  # Environment starts here, configure_parallel no longer effective</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> does not support configure_parallel. &quot;</span>
+            <span class="s2">&quot;This method is only available on BatchedEnvBase and its subclasses.&quot;</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="EnvBase.make_parallel">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.make_parallel">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">make_parallel</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">create_env_fn</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">num_envs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">create_env_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">pin_memory</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">share_individual_td</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">shared_memory</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">memmap</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">policy_proof</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">allow_step_when_done</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">num_threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_sub_threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">serial_for_single</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">non_blocking</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">mp_start_method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">use_buffers</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">consolidate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">daemon</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">parallel_kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EnvBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Factory method to create a ParallelEnv from an environment creator.</span>
+
+<span class="sd">        This method provides a convenient way to create parallel environments</span>
+<span class="sd">        with the same signature as :class:`~torchrl.envs.ParallelEnv`.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            create_env_fn (callable): A callable that creates an environment instance.</span>
+<span class="sd">            num_envs (int, optional): Number of parallel environments. Defaults to 1.</span>
+<span class="sd">            create_env_kwargs (dict or list of dicts, optional): kwargs to be used</span>
+<span class="sd">                with the environments being created.</span>
+<span class="sd">            pin_memory (bool, optional): Whether to pin memory. Defaults to False.</span>
+<span class="sd">            share_individual_td (bool, optional): if ``True``, a different tensordict</span>
+<span class="sd">                is created for every process/worker and a lazy stack is returned.</span>
+<span class="sd">            shared_memory (bool, optional): whether the returned tensordict will be</span>
+<span class="sd">                placed in shared memory. Defaults to True.</span>
+<span class="sd">            memmap (bool, optional): whether the returned tensordict will be placed</span>
+<span class="sd">                in memory map. Defaults to False.</span>
+<span class="sd">            policy_proof (callable, optional): if provided, it&#39;ll be used to get</span>
+<span class="sd">                the list of tensors to return through step() and reset() methods.</span>
+<span class="sd">            device (str, int, torch.device, optional): The device of the batched</span>
+<span class="sd">                environment.</span>
+<span class="sd">            allow_step_when_done (bool, optional): Allow stepping when done.</span>
+<span class="sd">                Defaults to False.</span>
+<span class="sd">            num_threads (int, optional): number of threads for this process.</span>
+<span class="sd">            num_sub_threads (int, optional): number of threads of the subprocesses.</span>
+<span class="sd">                Defaults to 1.</span>
+<span class="sd">            serial_for_single (bool, optional): if ``True``, creating a parallel</span>
+<span class="sd">                environment with a single worker will return a SerialEnv instead.</span>
+<span class="sd">                Defaults to False.</span>
+<span class="sd">            non_blocking (bool, optional): if ``True``, device moves will be done</span>
+<span class="sd">                using the ``non_blocking=True`` option. Defaults to False.</span>
+<span class="sd">            mp_start_method (str, optional): the multiprocessing start method.</span>
+<span class="sd">            use_buffers (bool, optional): whether communication between workers</span>
+<span class="sd">                should occur via circular preallocated memory buffers.</span>
+<span class="sd">            consolidate (bool, optional): Whether to consolidate tensordicts.</span>
+<span class="sd">                Defaults to True.</span>
+<span class="sd">            daemon (bool, optional): whether the processes should be daemonized.</span>
+<span class="sd">                Defaults to False.</span>
+<span class="sd">            **parallel_kwargs: Additional keyword arguments passed to ParallelEnv.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            EnvBase: A ParallelEnv (or SerialEnv if serial_for_single=True and num_envs=1).</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">ParallelEnv</span>
+
+        <span class="k">return</span> <span class="n">ParallelEnv</span><span class="p">(</span>
+            <span class="n">num_workers</span><span class="o">=</span><span class="n">num_envs</span><span class="p">,</span>
+            <span class="n">create_env_fn</span><span class="o">=</span><span class="n">create_env_fn</span><span class="p">,</span>
+            <span class="n">create_env_kwargs</span><span class="o">=</span><span class="n">create_env_kwargs</span><span class="p">,</span>
+            <span class="n">pin_memory</span><span class="o">=</span><span class="n">pin_memory</span><span class="p">,</span>
+            <span class="n">share_individual_td</span><span class="o">=</span><span class="n">share_individual_td</span><span class="p">,</span>
+            <span class="n">shared_memory</span><span class="o">=</span><span class="n">shared_memory</span><span class="p">,</span>
+            <span class="n">memmap</span><span class="o">=</span><span class="n">memmap</span><span class="p">,</span>
+            <span class="n">policy_proof</span><span class="o">=</span><span class="n">policy_proof</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">allow_step_when_done</span><span class="o">=</span><span class="n">allow_step_when_done</span><span class="p">,</span>
+            <span class="n">num_threads</span><span class="o">=</span><span class="n">num_threads</span><span class="p">,</span>
+            <span class="n">num_sub_threads</span><span class="o">=</span><span class="n">num_sub_threads</span><span class="p">,</span>
+            <span class="n">serial_for_single</span><span class="o">=</span><span class="n">serial_for_single</span><span class="p">,</span>
+            <span class="n">non_blocking</span><span class="o">=</span><span class="n">non_blocking</span><span class="p">,</span>
+            <span class="n">mp_start_method</span><span class="o">=</span><span class="n">mp_start_method</span><span class="p">,</span>
+            <span class="n">use_buffers</span><span class="o">=</span><span class="n">use_buffers</span><span class="p">,</span>
+            <span class="n">consolidate</span><span class="o">=</span><span class="n">consolidate</span><span class="p">,</span>
+            <span class="n">daemon</span><span class="o">=</span><span class="n">daemon</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">parallel_kwargs</span><span class="p">,</span>
+        <span class="p">)</span></div>
 
 
     <span class="nd">@classmethod</span>
@@ -2912,6 +3061,7 @@
             <span class="n">nondeterministic</span><span class="o">=</span><span class="n">nondeterministic</span><span class="p">,</span>
             <span class="n">max_episode_steps</span><span class="o">=</span><span class="n">max_episode_steps</span><span class="p">,</span>
             <span class="n">order_enforce</span><span class="o">=</span><span class="n">order_enforce</span><span class="p">,</span>
+            <span class="n">autoreset</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">autoreset</span><span class="p">),</span>
         <span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;0.21&quot;</span><span class="p">,</span> <span class="n">class_method</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>

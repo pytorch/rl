@@ -252,6 +252,18 @@
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.StorageEnsembleCheckpointer">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.data.replay_buffers.</span></span><span class="sig-name descname"><span class="pre">StorageEnsembleCheckpointer</span></span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/checkpointers.html#StorageEnsembleCheckpointer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.StorageEnsembleCheckpointer" title="Link to this definition">¶</a></dt>
 <dd><p>Checkpointer for ensemble storages.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.replay_buffers.StorageEnsembleCheckpointer.register_load_hook">
+<span class="sig-name descname"><span class="pre">register_load_hook</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hook</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.replay_buffers.StorageEnsembleCheckpointer.register_load_hook" title="Link to this definition">¶</a></dt>
+<dd><p>Registers a load hook for this checkpointer.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.replay_buffers.StorageEnsembleCheckpointer.register_save_hook">
+<span class="sig-name descname"><span class="pre">register_save_hook</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hook</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.replay_buffers.StorageEnsembleCheckpointer.register_save_hook" title="Link to this definition">¶</a></dt>
+<dd><p>Registers a save hook for this checkpointer.</p>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -294,7 +306,11 @@
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">StorageEnsembleCheckpointer</a><ul>
-<li><a class="reference internal" href="#torchrl.data.replay_buffers.StorageEnsembleCheckpointer"><code class="docutils literal notranslate"><span class="pre">StorageEnsembleCheckpointer</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.data.replay_buffers.StorageEnsembleCheckpointer"><code class="docutils literal notranslate"><span class="pre">StorageEnsembleCheckpointer</span></code></a><ul>
+<li><a class="reference internal" href="#torchrl.data.replay_buffers.StorageEnsembleCheckpointer.register_load_hook"><code class="docutils literal notranslate"><span class="pre">StorageEnsembleCheckpointer.register_load_hook()</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.data.replay_buffers.StorageEnsembleCheckpointer.register_save_hook"><code class="docutils literal notranslate"><span class="pre">StorageEnsembleCheckpointer.register_save_hook()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>

@@ -284,6 +284,20 @@ is shared with other buffers (eg. Priority Samplers).</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.replay_buffers.Storage.register_load_hook">
+<span class="sig-name descname"><span class="pre">register_load_hook</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hook</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/storages.html#Storage.register_load_hook"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.Storage.register_load_hook" title="Link to this definition">¶</a></dt>
+<dd><p>Register a load hook for this storage.</p>
+<p>The hook is forwarded to the checkpointer.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.replay_buffers.Storage.register_save_hook">
+<span class="sig-name descname"><span class="pre">register_save_hook</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hook</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/storages.html#Storage.register_save_hook"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.Storage.register_save_hook" title="Link to this definition">¶</a></dt>
+<dd><p>Register a save hook for this storage.</p>
+<p>The hook is forwarded to the checkpointer.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.Storage.save">
 <span class="sig-name descname"><span class="pre">save</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/storages.html#Storage.save"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.Storage.save" title="Link to this definition">¶</a></dt>
 <dd><p>Alias for <code class="xref py py-meth docutils literal notranslate"><span class="pre">dumps()</span></code>.</p>
@@ -335,6 +349,8 @@ is shared with other buffers (eg. Priority Samplers).</p>
 <li><a class="reference internal" href="#torchrl.data.replay_buffers.Storage.attach"><code class="docutils literal notranslate"><span class="pre">Storage.attach()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.replay_buffers.Storage.dump"><code class="docutils literal notranslate"><span class="pre">Storage.dump()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.replay_buffers.Storage.load"><code class="docutils literal notranslate"><span class="pre">Storage.load()</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.data.replay_buffers.Storage.register_load_hook"><code class="docutils literal notranslate"><span class="pre">Storage.register_load_hook()</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.data.replay_buffers.Storage.register_save_hook"><code class="docutils literal notranslate"><span class="pre">Storage.register_save_hook()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.replay_buffers.Storage.save"><code class="docutils literal notranslate"><span class="pre">Storage.save()</span></code></a></li>
 </ul>
 </li>

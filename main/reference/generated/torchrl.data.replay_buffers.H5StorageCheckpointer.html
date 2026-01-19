@@ -277,6 +277,18 @@ passed to <code class="xref py py-meth docutils literal notranslate"><span class
 on memory-mapped tensors stored in shared file system. The physical memory usage may increase
 during loading as a consequence.</p>
 </div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.replay_buffers.H5StorageCheckpointer.register_load_hook">
+<span class="sig-name descname"><span class="pre">register_load_hook</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hook</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.replay_buffers.H5StorageCheckpointer.register_load_hook" title="Link to this definition">¶</a></dt>
+<dd><p>Registers a load hook for this checkpointer.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.replay_buffers.H5StorageCheckpointer.register_save_hook">
+<span class="sig-name descname"><span class="pre">register_save_hook</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hook</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.replay_buffers.H5StorageCheckpointer.register_save_hook" title="Link to this definition">¶</a></dt>
+<dd><p>Registers a save hook for this checkpointer.</p>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -319,7 +331,11 @@ during loading as a consequence.</p>
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">H5StorageCheckpointer</a><ul>
-<li><a class="reference internal" href="#torchrl.data.replay_buffers.H5StorageCheckpointer"><code class="docutils literal notranslate"><span class="pre">H5StorageCheckpointer</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.data.replay_buffers.H5StorageCheckpointer"><code class="docutils literal notranslate"><span class="pre">H5StorageCheckpointer</span></code></a><ul>
+<li><a class="reference internal" href="#torchrl.data.replay_buffers.H5StorageCheckpointer.register_load_hook"><code class="docutils literal notranslate"><span class="pre">H5StorageCheckpointer.register_load_hook()</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.data.replay_buffers.H5StorageCheckpointer.register_save_hook"><code class="docutils literal notranslate"><span class="pre">H5StorageCheckpointer.register_save_hook()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>

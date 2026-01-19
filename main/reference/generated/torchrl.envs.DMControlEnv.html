@@ -250,7 +250,7 @@
 <h1>DMControlEnv<a class="headerlink" href="#dmcontrolenv" title="Link to this heading">¶</a></h1>
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrl.envs.DMControlEnv">
-<span class="sig-prename descclassname"><span class="pre">torchrl.envs.</span></span><span class="sig-name descname"><span class="pre">DMControlEnv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/libs/dm_control.html#DMControlEnv"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.DMControlEnv" title="Link to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">torchrl.envs.</span></span><span class="sig-name descname"><span class="pre">DMControlEnv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_envs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/libs/dm_control.html#DMControlEnv"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.DMControlEnv" title="Link to this definition">¶</a></dt>
 <dd><p>DeepMind Control lab environment wrapper.</p>
 <p>The DeepMind control library can be found here: <a class="reference external" href="https://github.com/deepmind/dm_control">https://github.com/deepmind/dm_control</a>.</p>
 <p>Paper: <a class="reference external" href="https://arxiv.org/abs/2006.12983">https://arxiv.org/abs/2006.12983</a></p>
@@ -259,6 +259,12 @@
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>env_name</strong> (<em>str</em>) – name of the environment.</p></li>
 <li><p><strong>task_name</strong> (<em>str</em>) – name of the task.</p></li>
+<li><p><strong>num_envs</strong> (<em>int</em><em>, </em><em>optional</em>) – number of parallel environments. Defaults to 1.
+When <code class="docutils literal notranslate"><span class="pre">num_envs</span> <span class="pre">&gt;</span> <span class="pre">1</span></code>, a lazy <a class="reference internal" href="torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> is
+returned instead of a single environment. The parallel environment
+is not started until it is actually used (e.g., via reset/step or
+accessing specs). Use <code class="xref py py-meth docutils literal notranslate"><span class="pre">configure_parallel()</span></code>
+to set parallel execution parameters before the environment starts.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
@@ -317,7 +323,13 @@ environment / task pairs available.</p>
 <span class="go">    device=cpu,</span>
 <span class="go">    is_shared=False)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">available_envs</span><span class="p">)</span>
-<span class="go">[(&#39;acrobot&#39;, [&#39;swingup&#39;, &#39;swingup_sparse&#39;]), (&#39;ball_in_cup&#39;, [&#39;catch&#39;]), (&#39;cartpole&#39;, [&#39;balance&#39;, &#39;balance_sparse&#39;, &#39;swingup&#39;, &#39;swingup_sparse&#39;, &#39;three_poles&#39;, &#39;two_poles&#39;]), (&#39;cheetah&#39;, [&#39;run&#39;]), (&#39;finger&#39;, [&#39;spin&#39;, &#39;turn_easy&#39;, &#39;turn_hard&#39;]), (&#39;fish&#39;, [&#39;upright&#39;, &#39;swim&#39;]), (&#39;hopper&#39;, [&#39;stand&#39;, &#39;hop&#39;]), (&#39;humanoid&#39;, [&#39;stand&#39;, &#39;walk&#39;, &#39;run&#39;, &#39;run_pure_state&#39;]), (&#39;manipulator&#39;, [&#39;bring_ball&#39;, &#39;bring_peg&#39;, &#39;insert_ball&#39;, &#39;insert_peg&#39;]), (&#39;pendulum&#39;, [&#39;swingup&#39;]), (&#39;point_mass&#39;, [&#39;easy&#39;, &#39;hard&#39;]), (&#39;reacher&#39;, [&#39;easy&#39;, &#39;hard&#39;]), (&#39;swimmer&#39;, [&#39;swimmer6&#39;, &#39;swimmer15&#39;]), (&#39;walker&#39;, [&#39;stand&#39;, &#39;walk&#39;, &#39;run&#39;]), (&#39;dog&#39;, [&#39;fetch&#39;, &#39;run&#39;, &#39;stand&#39;, &#39;trot&#39;, &#39;walk&#39;]), (&#39;humanoid_CMU&#39;, [&#39;run&#39;, &#39;stand&#39;, &#39;walk&#39;]), (&#39;lqr&#39;, [&#39;lqr_2_1&#39;, &#39;lqr_6_2&#39;]), (&#39;quadruped&#39;, [&#39;escape&#39;, &#39;fetch&#39;, &#39;run&#39;, &#39;walk&#39;]), (&#39;stacker&#39;, [&#39;stack_2&#39;, &#39;stack_4&#39;])]</span>
+<span class="go">[(&#39;acrobot&#39;, [&#39;swingup&#39;, &#39;swingup_sparse&#39;]), ...]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># For running multiple envs in parallel (returns a lazy ParallelEnv)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">DMControlEnv</span><span class="p">(</span><span class="s2">&quot;cheetah&quot;</span><span class="p">,</span> <span class="s2">&quot;run&quot;</span><span class="p">,</span> <span class="n">num_envs</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Configure parallel parameters before the env starts</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">configure_parallel</span><span class="p">(</span><span class="n">use_buffers</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Environment starts when first used</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
 </pre></div>
 </div>
 </dd></dl>

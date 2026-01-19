@@ -283,6 +283,58 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_save_hooks</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_load_hooks</span> <span class="o">=</span> <span class="p">[]</span>
+
+<div class="viewcode-block" id="StorageCheckpointerBase.register_save_hook">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.StorageCheckpointerBase.html#torchrl.data.replay_buffers.StorageCheckpointerBase.register_save_hook">[docs]</a>
+    <span class="k">def</span> <span class="nf">register_save_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Registers a save hook for this checkpointer.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_save_hooks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StorageCheckpointerBase.register_load_hook">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.StorageCheckpointerBase.html#torchrl.data.replay_buffers.StorageCheckpointerBase.register_load_hook">[docs]</a>
+    <span class="k">def</span> <span class="nf">register_load_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Registers a load hook for this checkpointer.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_load_hooks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_get_shift_from_last_cursor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">last_cursor</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Computes shift from the last cursor position.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">last_cursor</span><span class="p">,</span> <span class="nb">slice</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">last_cursor</span><span class="o">.</span><span class="n">stop</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">last_cursor</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">last_cursor</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">last_cursor</span><span class="p">,</span> <span class="nb">range</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">last_cursor</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">last_cursor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">last_cursor</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">last_cursor</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">last_cursor</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unrecognised last_cursor type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">last_cursor</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_set_hooks_shift_is_full</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sets shift and is_full attributes on save hooks that have them.&quot;&quot;&quot;</span>
+        <span class="n">is_full</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="n">_is_full</span>
+        <span class="n">last_cursor</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="n">_last_cursor</span>
+        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_save_hooks</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;is_full&quot;</span><span class="p">):</span>
+                <span class="n">hook</span><span class="o">.</span><span class="n">is_full</span> <span class="o">=</span> <span class="n">is_full</span>
+        <span class="k">if</span> <span class="n">last_cursor</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;last_cursor is None. The replay buffer &quot;</span>
+                <span class="s2">&quot;may not be saved properly in this setting. To solve this issue, make &quot;</span>
+                <span class="s2">&quot;sure the storage updates the _last_cursor value during calls to `set`.&quot;</span>
+            <span class="p">)</span>
+            <span class="n">shift</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">shift</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_shift_from_last_cursor</span><span class="p">(</span><span class="n">last_cursor</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_save_hooks</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;shift&quot;</span><span class="p">):</span>
+                <span class="n">hook</span><span class="o">.</span><span class="n">shift</span> <span class="o">=</span> <span class="n">shift</span>
+
     <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
     <span class="k">def</span> <span class="nf">dumps</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
         <span class="o">...</span>
@@ -542,9 +594,6 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">_save_hooks</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">_load_hooks</span> <span class="o">=</span> <span class="p">[]</span>
-
     <span class="k">def</span> <span class="nf">dumps</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
         <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
         <span class="n">path</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -553,6 +602,9 @@
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Cannot save a non-initialized storage.&quot;</span><span class="p">)</span>
         <span class="n">metadata</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="n">_storage</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="n">_storage</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_hooks_shift_is_full</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span>
+
         <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_save_hooks</span><span class="p">:</span>
             <span class="n">_storage</span> <span class="o">=</span> <span class="n">hook</span><span class="p">(</span><span class="n">_storage</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">_storage</span><span class="p">):</span>
@@ -682,45 +734,14 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">done_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reward_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">if</span> <span class="n">done_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;done_keys&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">done_keys</span>
         <span class="k">if</span> <span class="n">reward_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;reward_keys&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">reward_keys</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_save_hooks</span> <span class="o">=</span> <span class="p">[</span><span class="n">TED2Flat</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_load_hooks</span> <span class="o">=</span> <span class="p">[</span><span class="n">Flat2TED</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)]</span>
-
-    <span class="k">def</span> <span class="nf">_save_shift_is_full</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">):</span>
-        <span class="n">is_full</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="n">_is_full</span>
-        <span class="n">last_cursor</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="n">_last_cursor</span>
-        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_save_hooks</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;is_full&quot;</span><span class="p">):</span>
-                <span class="n">hook</span><span class="o">.</span><span class="n">is_full</span> <span class="o">=</span> <span class="n">is_full</span>
-        <span class="k">if</span> <span class="n">last_cursor</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="s2">&quot;las_cursor is None. The replay buffer &quot;</span>
-                <span class="s2">&quot;may not be saved properly in this setting. To solve this issue, make &quot;</span>
-                <span class="s2">&quot;sure the storage updates the _las_cursor value during calls to `set`.&quot;</span>
-            <span class="p">)</span>
-        <span class="n">shift</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_shift_from_last_cursor</span><span class="p">(</span><span class="n">last_cursor</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_save_hooks</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;shift&quot;</span><span class="p">):</span>
-                <span class="n">hook</span><span class="o">.</span><span class="n">shift</span> <span class="o">=</span> <span class="n">shift</span>
-
-    <span class="k">def</span> <span class="nf">dumps</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_save_shift_is_full</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">_get_shift_from_last_cursor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">last_cursor</span><span class="p">):</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">last_cursor</span><span class="p">,</span> <span class="nb">slice</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">last_cursor</span><span class="o">.</span><span class="n">stop</span> <span class="o">+</span> <span class="mi">1</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">last_cursor</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">last_cursor</span> <span class="o">+</span> <span class="mi">1</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">last_cursor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">last_cursor</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">last_cursor</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">last_cursor</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unrecognised last_cursor type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">last_cursor</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_load_hooks</span> <span class="o">=</span> <span class="p">[</span><span class="n">Flat2TED</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)]</span></div>
 
 
 
@@ -739,7 +760,8 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">done_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reward_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">done_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reward_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">if</span> <span class="n">done_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;done_keys&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">done_keys</span>
@@ -786,6 +808,7 @@
         <span class="n">h5_kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
+        <span class="n">StorageCheckpointerBase</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
         <span class="n">ted2_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span>
         <span class="k">if</span> <span class="n">done_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">ted2_kwargs</span><span class="p">[</span><span class="s2">&quot;done_keys&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">done_keys</span>
@@ -799,7 +822,7 @@
     <span class="k">def</span> <span class="nf">dumps</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
         <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_save_shift_is_full</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_hooks_shift_is_full</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">storage</span><span class="o">.</span><span class="n">initialized</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Cannot save a non-initialized storage.&quot;</span><span class="p">)</span>

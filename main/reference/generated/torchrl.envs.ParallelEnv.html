@@ -978,6 +978,48 @@ to <a class="reference external" href="https://docs.pytorch.org/docs/stable/gene
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.envs.ParallelEnv.configure_parallel">
+<span class="sig-name descname"><span class="pre">configure_parallel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_buffers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shared_memory</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">memmap</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mp_start_method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_threads</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_sub_threads</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">non_blocking</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">daemon</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">BatchedEnvBase</span></span></span><a class="headerlink" href="#torchrl.envs.ParallelEnv.configure_parallel" title="Link to this definition">¶</a></dt>
+<dd><p>Configure parallel execution parameters before the environment starts.</p>
+<p>This method allows configuring parameters for parallel environment
+execution. It must be called before the environment is started
+(i.e., before accessing specs or calling reset/step).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>use_buffers</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether communication between workers should
+occur via circular preallocated memory buffers.</p></li>
+<li><p><strong>shared_memory</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether the returned tensordict will be
+placed in shared memory.</p></li>
+<li><p><strong>memmap</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether the returned tensordict will be placed
+in memory map.</p></li>
+<li><p><strong>mp_start_method</strong> (<em>str</em><em>, </em><em>optional</em>) – the multiprocessing start method.</p></li>
+<li><p><strong>num_threads</strong> (<em>int</em><em>, </em><em>optional</em>) – number of threads for this process.</p></li>
+<li><p><strong>num_sub_threads</strong> (<em>int</em><em>, </em><em>optional</em>) – number of threads of the subprocesses.</p></li>
+<li><p><strong>non_blocking</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, device moves will be done using
+the <code class="docutils literal notranslate"><span class="pre">non_blocking=True</span></code> option.</p></li>
+<li><p><strong>daemon</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether the processes should be daemonized.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Returns self for method chaining.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>self</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>RuntimeError</strong> – If called after the environment has already started.</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">ParallelEnv</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">configure_parallel</span><span class="p">(</span><span class="n">use_buffers</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>  <span class="c1"># Environment starts here</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.ParallelEnv.cpu">
 <span class="sig-name descname"><span class="pre">cpu</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#torchrl.envs.ParallelEnv.cpu" title="Link to this definition">¶</a></dt>
 <dd><p>Move all model parameters and buffers to the CPU.</p>
@@ -1625,6 +1667,18 @@ for which the value from the module is preserved. Default: <code class="docutils
 exists in <a class="reference internal" href="#torchrl.envs.ParallelEnv.state_dict" title="torchrl.envs.ParallelEnv.state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">state_dict</span></code></a>, <a class="reference internal" href="#torchrl.envs.ParallelEnv.load_state_dict" title="torchrl.envs.ParallelEnv.load_state_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_state_dict()</span></code></a> will raise a
 <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>.</p>
 </div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.envs.ParallelEnv.make_parallel">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">make_parallel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_envs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">parallel_kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.common.EnvBase"><span class="pre">EnvBase</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/batched_envs.html#ParallelEnv.make_parallel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.ParallelEnv.make_parallel" title="Link to this definition">¶</a></dt>
+<dd><p>Backward-compatible factory matching EnvBase.make_parallel signature.</p>
+<dl class="simple">
+<dt>Supports calls like:</dt><dd><p>ParallelEnv.make_parallel(create_env_fn, num_envs=4, …)</p>
+</dd>
+<dt>or the constructor form:</dt><dd><p>ParallelEnv.make_parallel(num_workers, create_env_fn, …)</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -3515,6 +3569,7 @@ See <a class="reference external" href="https://docs.pytorch.org/docs/stable/gen
 <li><a class="reference internal" href="#torchrl.envs.ParallelEnv.children"><code class="docutils literal notranslate"><span class="pre">ParallelEnv.children()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.ParallelEnv.collector"><code class="docutils literal notranslate"><span class="pre">ParallelEnv.collector</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.ParallelEnv.compile"><code class="docutils literal notranslate"><span class="pre">ParallelEnv.compile()</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.envs.ParallelEnv.configure_parallel"><code class="docutils literal notranslate"><span class="pre">ParallelEnv.configure_parallel()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.ParallelEnv.cpu"><code class="docutils literal notranslate"><span class="pre">ParallelEnv.cpu()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.ParallelEnv.cuda"><code class="docutils literal notranslate"><span class="pre">ParallelEnv.cuda()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.ParallelEnv.done_key"><code class="docutils literal notranslate"><span class="pre">ParallelEnv.done_key</span></code></a></li>
@@ -3548,6 +3603,7 @@ See <a class="reference external" href="https://docs.pytorch.org/docs/stable/gen
 <li><a class="reference internal" href="#torchrl.envs.ParallelEnv.ipu"><code class="docutils literal notranslate"><span class="pre">ParallelEnv.ipu()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.ParallelEnv.is_spec_locked"><code class="docutils literal notranslate"><span class="pre">ParallelEnv.is_spec_locked</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.ParallelEnv.load_state_dict"><code class="docutils literal notranslate"><span class="pre">ParallelEnv.load_state_dict()</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.envs.ParallelEnv.make_parallel"><code class="docutils literal notranslate"><span class="pre">ParallelEnv.make_parallel()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.ParallelEnv.maybe_reset"><code class="docutils literal notranslate"><span class="pre">ParallelEnv.maybe_reset()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.ParallelEnv.modules"><code class="docutils literal notranslate"><span class="pre">ParallelEnv.modules()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.ParallelEnv.mtia"><code class="docutils literal notranslate"><span class="pre">ParallelEnv.mtia()</span></code></a></li>

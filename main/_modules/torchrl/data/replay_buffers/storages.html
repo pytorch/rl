@@ -432,6 +432,26 @@
     <span class="k">def</span> <span class="nf">checkpointer</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_checkpointer</span>
 
+<div class="viewcode-block" id="Storage.register_save_hook">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage.register_save_hook">[docs]</a>
+    <span class="k">def</span> <span class="nf">register_save_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Register a save hook for this storage.</span>
+
+<span class="sd">        The hook is forwarded to the checkpointer.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_checkpointer</span><span class="o">.</span><span class="n">register_save_hook</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Storage.register_load_hook">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage.register_load_hook">[docs]</a>
+    <span class="k">def</span> <span class="nf">register_load_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Register a load hook for this storage.</span>
+
+<span class="sd">        The hook is forwarded to the checkpointer.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_checkpointer</span><span class="o">.</span><span class="n">register_load_hook</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span></div>
+
+
     <span class="nd">@checkpointer</span><span class="o">.</span><span class="n">setter</span>
     <span class="k">def</span> <span class="nf">checkpointer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">StorageCheckpointerBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>

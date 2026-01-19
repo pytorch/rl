@@ -706,6 +706,73 @@
 
     <span class="n">is_spec_locked</span> <span class="o">=</span> <span class="n">EnvBase</span><span class="o">.</span><span class="n">is_spec_locked</span>
 
+    <span class="k">def</span> <span class="nf">configure_parallel</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">use_buffers</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">shared_memory</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">memmap</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">mp_start_method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_sub_threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">non_blocking</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">daemon</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BatchedEnvBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Configure parallel execution parameters before the environment starts.</span>
+
+<span class="sd">        This method allows configuring parameters for parallel environment</span>
+<span class="sd">        execution. It must be called before the environment is started</span>
+<span class="sd">        (i.e., before accessing specs or calling reset/step).</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            use_buffers (bool, optional): whether communication between workers should</span>
+<span class="sd">                occur via circular preallocated memory buffers.</span>
+<span class="sd">            shared_memory (bool, optional): whether the returned tensordict will be</span>
+<span class="sd">                placed in shared memory.</span>
+<span class="sd">            memmap (bool, optional): whether the returned tensordict will be placed</span>
+<span class="sd">                in memory map.</span>
+<span class="sd">            mp_start_method (str, optional): the multiprocessing start method.</span>
+<span class="sd">            num_threads (int, optional): number of threads for this process.</span>
+<span class="sd">            num_sub_threads (int, optional): number of threads of the subprocesses.</span>
+<span class="sd">            non_blocking (bool, optional): if ``True``, device moves will be done using</span>
+<span class="sd">                the ``non_blocking=True`` option.</span>
+<span class="sd">            daemon (bool, optional): whether the processes should be daemonized.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            self: Returns self for method chaining.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            RuntimeError: If called after the environment has already started.</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            &gt;&gt;&gt; env = ParallelEnv(4, lambda: GymEnv(&quot;Pendulum-v1&quot;))</span>
+<span class="sd">            &gt;&gt;&gt; env.configure_parallel(use_buffers=True, num_threads=2)</span>
+<span class="sd">            &gt;&gt;&gt; env.reset()  # Environment starts here</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_closed</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;configure_parallel() cannot be called after the environment has started. &quot;</span>
+                <span class="s2">&quot;Call configure_parallel() before accessing specs or calling reset/step.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">use_buffers</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span> <span class="o">=</span> <span class="n">use_buffers</span>
+        <span class="k">if</span> <span class="n">shared_memory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_share_memory</span> <span class="o">=</span> <span class="n">shared_memory</span>
+        <span class="k">if</span> <span class="n">memmap</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_memmap</span> <span class="o">=</span> <span class="n">memmap</span>
+        <span class="k">if</span> <span class="n">mp_start_method</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_mp_start_method</span> <span class="o">=</span> <span class="n">mp_start_method</span>
+        <span class="k">if</span> <span class="n">num_threads</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">num_threads</span> <span class="o">=</span> <span class="n">num_threads</span>
+        <span class="k">if</span> <span class="n">num_sub_threads</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">num_sub_threads</span> <span class="o">=</span> <span class="n">num_sub_threads</span>
+        <span class="k">if</span> <span class="n">non_blocking</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_non_blocking</span> <span class="o">=</span> <span class="n">non_blocking</span>
+        <span class="k">if</span> <span class="n">daemon</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">daemon</span> <span class="o">=</span> <span class="n">daemon</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
     <span class="k">def</span> <span class="nf">select_and_clone</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">tensor</span><span class="p">,</span> <span class="n">selected_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">selected_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">selected_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_selected_step_keys</span>
@@ -2732,6 +2799,26 @@
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">set_seed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_seeds</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
         <span class="k">return</span> <span class="bp">self</span></div>
+
+
+<div class="viewcode-block" id="ParallelEnv.make_parallel">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv.make_parallel">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">make_parallel</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">num_envs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="o">**</span><span class="n">parallel_kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EnvBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Backward-compatible factory matching EnvBase.make_parallel signature.</span>
+
+<span class="sd">        Supports calls like:</span>
+<span class="sd">          ParallelEnv.make_parallel(create_env_fn, num_envs=4, ...)</span>
+<span class="sd">        or the constructor form:</span>
+<span class="sd">          ParallelEnv.make_parallel(num_workers, create_env_fn, ...)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">1</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">parallel_kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">create_env_fn</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">other_args</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
+            <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">num_envs</span><span class="p">),</span> <span class="n">create_env_fn</span><span class="p">,</span> <span class="o">*</span><span class="n">other_args</span><span class="p">,</span> <span class="o">**</span><span class="n">parallel_kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">num_envs</span><span class="p">),</span> <span class="o">**</span><span class="n">parallel_kwargs</span><span class="p">)</span></div>
 </div>
 
 
