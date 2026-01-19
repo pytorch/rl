@@ -17,7 +17,9 @@ import numpy as np
 import torch
 from packaging import version
 from tensordict import TensorDict, TensorDictBase
-from torch.utils._pytree import tree_map
+from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
+
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.data.tensor_specs import (
@@ -438,13 +440,15 @@ def convert_multidiscrete_spec(
     remap_state_to_observation=None,
     batch_size=None,
 ):
+    # Only use MultiCategorical/MultiOneHot for heterogeneous nvec (e.g., [3, 5, 7]).
+    # Homogeneous nvec like [2, 2] typically represents independent actions
+    # (e.g., vectorized envs with same Discrete(n) per env) and should use stacking.
     if len(spec.nvec.shape) == 1 and len(np.unique(spec.nvec)) > 1:
         dtype = (
             numpy_to_torch_dtype_dict[spec.dtype]
             if categorical_action_encoding
             else torch.long
         )
-
         return (
             MultiCategorical(spec.nvec, device=device, dtype=dtype)
             if categorical_action_encoding
@@ -1313,7 +1317,18 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
         self._seed_calls_reset = False
         self._env.seed(seed=seed)
 
-    @implement_for("gym", "0.19.0", None)
+    @implement_for("gym", "0.19.0", "0.21.0")
+    def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
+        # In gym 0.19-0.21, reset() doesn't accept seed kwarg yet,
+        # and VectorEnv.seed uses seeds= (plural) instead of seed=
+        self._seed_calls_reset = False
+        if hasattr(self._env, "num_envs"):
+            # Vector environment uses seeds= (plural)
+            self._env.seed(seeds=seed)
+        else:
+            self._env.seed(seed=seed)
+
+    @implement_for("gym", "0.21.0", None)
     def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
         try:
             self.reset(seed=seed)
@@ -1383,19 +1398,62 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
             return rs
 
     def _make_specs(self, env: gym.Env, batch_size=None) -> None:  # noqa: F821
-        # If batch_size is provided, we se it to tell what batch size must be used
+        # If batch_size is provided, we set it to tell what batch size must be used
         # instead of self.batch_size
         cur_batch_size = self.batch_size if batch_size is None else torch.Size([])
-        action_spec = _gym_to_torchrl_spec_transform(
-            env.action_space,
-            device=self.device,
-            categorical_action_encoding=self._categorical_action_encoding,
-        )
         observation_spec = _gym_to_torchrl_spec_transform(
             env.observation_space,
             device=self.device,
             categorical_action_encoding=self._categorical_action_encoding,
         )
+        action_spec = _gym_to_torchrl_spec_transform(
+            env.action_space,
+            device=self.device,
+            categorical_action_encoding=self._categorical_action_encoding,
+        )
+        # When the action space is MultiDiscrete and an action_mask is present in the
+        # observation with shape matching nvec, we convert to a flattened Categorical/OneHot
+        # so that the mask can be applied directly to all possible action combinations.
+        # This is useful for grid-based games where the mask indicates valid (row, col) positions.
+        gym_spaces = gym_backend("spaces")
+        MultiDiscrete = getattr(gym_spaces, "MultiDiscrete", None)
+        if MultiDiscrete is None:
+            # Fallback for gym versions where MultiDiscrete is in a submodule
+            multi_discrete_module = getattr(gym_spaces, "multi_discrete", None)
+            if multi_discrete_module is not None:
+                MultiDiscrete = getattr(multi_discrete_module, "MultiDiscrete", None)
+        if MultiDiscrete is not None and isinstance(env.action_space, MultiDiscrete):
+            nvec = np.asarray(env.action_space.nvec)
+            if (
+                nvec.ndim == 1
+                and isinstance(observation_spec, Composite)
+                and "action_mask" in observation_spec
+            ):
+                mask_spec = observation_spec["action_mask"]
+                if tuple(mask_spec.shape) == tuple(nvec):
+                    prod_n = int(np.prod(nvec))
+                    dtype = (
+                        numpy_to_torch_dtype_dict[env.action_space.dtype]
+                        if self._categorical_action_encoding
+                        else torch.long
+                    )
+                    # Flattened action: single choice from prod(nvec) options.
+                    # The mask (which has shape matching nvec) will be reshaped
+                    # by Categorical/OneHot.update_mask when applied.
+                    if self._categorical_action_encoding:
+                        action_spec = Categorical(
+                            prod_n,
+                            shape=(),
+                            device=self.device,
+                            dtype=dtype,
+                        )
+                    else:
+                        action_spec = OneHot(
+                            prod_n,
+                            shape=(prod_n,),
+                            device=self.device,
+                            dtype=torch.bool,
+                        )
         if not isinstance(observation_spec, Composite):
             if self.from_pixels:
                 observation_spec = Composite(
@@ -1915,13 +1973,19 @@ class GymEnv(GymWrapper):
             self.batch_size = torch.Size([num_envs, *self.batch_size])
         return env
 
-    @implement_for("gym", None, "0.25.1")
+    @implement_for("gym", None, "0.25.0")
     def _set_gym_default(self, kwargs, from_pixels: bool) -> None:  # noqa: F811
-        # Do nothing for older gym versions.
+        # Do nothing for older gym versions (render_mode was introduced in 0.25.0).
         pass
 
-    @implement_for("gym", "0.25.1", None)
+    @implement_for("gym", "0.25.0", None)
     def _set_gym_default(self, kwargs, from_pixels: bool) -> None:  # noqa: F811
+        if from_pixels:
+            kwargs.setdefault("render_mode", "rgb_array")
+
+    @implement_for("gymnasium", None, "0.27.0")
+    def _set_gym_default(self, kwargs, from_pixels: bool) -> None:  # noqa: F811
+        # gymnasium < 0.27.0 also supports render_mode (forked from gym 0.26+)
         if from_pixels:
             kwargs.setdefault("render_mode", "rgb_array")
 
@@ -2114,7 +2178,16 @@ class terminal_obs_reader(default_info_dict_reader):
                 zero_like = tree_map(lambda x: np.zeros_like(x), nparray[nz])
                 for idx in is_none.nonzero()[0]:
                     nparray[idx] = zero_like
-            return tree_map(lambda *x: np.stack(x), *nparray)
+            # tree_map with multiple trees was added in PyTorch 2.2
+            if TORCH_VERSION >= version.parse("2.2"):
+                return tree_map(lambda *x: np.stack(x), *nparray)
+            else:
+                # For older PyTorch versions, manually flatten/unflatten
+                flat_lists_specs = [tree_flatten(tree) for tree in nparray]
+                flat_lists = [fl for fl, _ in flat_lists_specs]
+                spec = flat_lists_specs[0][1]
+                stacked = [np.stack(elems) for elems in zip(*flat_lists)]
+                return tree_unflatten(stacked, spec)
 
         info_dict = tree_map(replace_none, info_dict)
         # convert info_dict to a tensordict

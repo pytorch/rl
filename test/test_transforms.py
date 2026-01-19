@@ -12091,6 +12091,72 @@ class TestActionMask(TransformBase):
         # no inverse transform
         return
 
+    @pytest.mark.skipif(not _has_gymnasium, reason="gymnasium required for this test")
+    @pytest.mark.parametrize("categorical_action_encoding", [True, False])
+    def test_multidiscrete_action_mask_gym(self, categorical_action_encoding):
+        """Test that ActionMask works with MultiDiscrete action space when mask shape matches nvec.
+
+        This tests the fix for issue #3242: when an environment has a MultiDiscrete action space
+        (e.g., [5, 5]) and provides an action_mask with matching shape (5, 5), the action spec
+        is converted to a flattened Categorical/OneHot so the mask can represent all 25 possible
+        action combinations.
+        """
+        import gymnasium as gym
+        from gymnasium import spaces
+
+        from torchrl.envs import GymWrapper, TransformedEnv
+        from torchrl.envs.transforms import ActionMask
+        from torchrl.envs.utils import check_env_specs
+
+        class MultiDiscreteActionMaskEnv(gym.Env):
+            """Minimal environment with MultiDiscrete action space and 2D action mask."""
+
+            def __init__(self):
+                super().__init__()
+                self.action_space = spaces.MultiDiscrete([5, 5])
+                self.observation_space = spaces.Dict(
+                    {
+                        "observation": spaces.Box(
+                            low=0, high=1, shape=(5, 5), dtype=float
+                        ),
+                        "action_mask": spaces.Box(
+                            low=0, high=1, shape=(5, 5), dtype=bool
+                        ),
+                    }
+                )
+
+            def reset(self, seed=None, options=None):
+                super().reset(seed=seed)
+                obs = {
+                    "observation": self.observation_space["observation"].sample(),
+                    "action_mask": np.ones((5, 5), dtype=bool),
+                }
+                return obs, {}
+
+            def step(self, action):
+                obs = {
+                    "observation": self.observation_space["observation"].sample(),
+                    "action_mask": np.ones((5, 5), dtype=bool),
+                }
+                return obs, 0.0, False, False, {}
+
+        # Wrap the environment
+        env = GymWrapper(
+            MultiDiscreteActionMaskEnv(),
+            categorical_action_encoding=categorical_action_encoding,
+        )
+
+        # Apply ActionMask transform
+        env = TransformedEnv(env, ActionMask())
+
+        # This would fail before the fix with:
+        # RuntimeError: Cannot expand mask to the desired shape.
+        check_env_specs(env)
+
+        # Verify we can do a rollout
+        td = env.rollout(3)
+        assert td is not None
+
 
 class TestDeviceCastTransformPart(TransformBase):
     @pytest.fixture(scope="class")
