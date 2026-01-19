@@ -192,6 +192,20 @@ class Storage:
     def checkpointer(self):
         return self._checkpointer
 
+    def register_save_hook(self, hook):
+        """Register a save hook for this storage.
+
+        The hook is forwarded to the checkpointer.
+        """
+        self._checkpointer.register_save_hook(hook)
+
+    def register_load_hook(self, hook):
+        """Register a load hook for this storage.
+
+        The hook is forwarded to the checkpointer.
+        """
+        self._checkpointer.register_load_hook(hook)
+
     @checkpointer.setter
     def checkpointer(self, value: StorageCheckpointerBase | None) -> None:
         if value is None:
