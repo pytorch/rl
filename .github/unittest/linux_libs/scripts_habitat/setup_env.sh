@@ -49,7 +49,6 @@ conda deactivate && conda activate "${env_dir}"
 pip3 install "cython<3"
 conda install -c anaconda cython="<3.0.0" -y
 
-
 # 3. Install git LFS
 mkdir git_lfs
 wget https://github.com/git-lfs/git-lfs/releases/download/v2.9.0/git-lfs-linux-amd64-v2.9.0.tar.gz --directory-prefix git_lfs
@@ -69,7 +68,21 @@ pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
 
-conda install habitat-sim withbullet headless -c conda-forge -c aihabitat -y
+# 5. Install habitat-sim from source (conda packages don't support Python 3.10+)
+# Install build dependencies
+pip3 install cmake ninja numpy
+
+# Clone and build habitat-sim from source
+cd "${root_dir}"
+git clone --branch stable https://github.com/facebookresearch/habitat-sim.git --recursive
+cd habitat-sim
+
+# Build with headless (EGL) and bullet physics support
+pip3 install . --no-build-isolation
+
+cd "${root_dir}"
+
+# Install habitat-lab
 git clone https://github.com/facebookresearch/habitat-lab.git
 cd habitat-lab
 pip3 install -e habitat-lab
