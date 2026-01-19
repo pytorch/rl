@@ -9738,7 +9738,19 @@
 <span class="sd">    It reads the mask from the input tensordict after the step is executed,</span>
 <span class="sd">    and adapts the mask of the finite action spec.</span>
 
-<span class="sd">      .. note:: This transform will fail when used without an environment.</span>
+<span class="sd">    .. note:: This transform will fail when used without an environment.</span>
+
+<span class="sd">    .. note:: **MultiDiscrete action spaces with 2D masks (e.g., board games)**</span>
+
+<span class="sd">        When wrapping a Gym environment with a ``MultiDiscrete`` action space</span>
+<span class="sd">        (e.g., ``MultiDiscrete([5, 5])``) and an ``action_mask`` observation whose</span>
+<span class="sd">        shape matches the ``nvec`` (e.g., shape ``(5, 5)``), the :class:`~torchrl.envs.GymWrapper`</span>
+<span class="sd">        automatically converts the action space to a flattened ``Categorical(n=25)``</span>
+<span class="sd">        or ``OneHot(n=25)``. This allows the mask to represent all possible action</span>
+<span class="sd">        combinations (25 in this example) rather than independent sub-actions.</span>
+
+<span class="sd">        This is particularly useful for grid-based games where the mask indicates</span>
+<span class="sd">        which (row, column) positions are valid moves.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        action_key (NestedKey, optional): the key where the action tensor can be found.</span>

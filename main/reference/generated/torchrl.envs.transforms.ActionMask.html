@@ -256,12 +256,22 @@
 respect legal actions, by masking the action specs.
 It reads the mask from the input tensordict after the step is executed,
 and adapts the mask of the finite action spec.</p>
-<blockquote>
-<div><div class="admonition note">
+<div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>This transform will fail when used without an environment.</p>
 </div>
-</div></blockquote>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>MultiDiscrete action spaces with 2D masks (e.g., board games)</strong></p>
+<p>When wrapping a Gym environment with a <code class="docutils literal notranslate"><span class="pre">MultiDiscrete</span></code> action space
+(e.g., <code class="docutils literal notranslate"><span class="pre">MultiDiscrete([5,</span> <span class="pre">5])</span></code>) and an <code class="docutils literal notranslate"><span class="pre">action_mask</span></code> observation whose
+shape matches the <code class="docutils literal notranslate"><span class="pre">nvec</span></code> (e.g., shape <code class="docutils literal notranslate"><span class="pre">(5,</span> <span class="pre">5)</span></code>), the <a class="reference internal" href="torchrl.envs.GymWrapper.html#torchrl.envs.GymWrapper" title="torchrl.envs.GymWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">GymWrapper</span></code></a>
+automatically converts the action space to a flattened <code class="docutils literal notranslate"><span class="pre">Categorical(n=25)</span></code>
+or <code class="docutils literal notranslate"><span class="pre">OneHot(n=25)</span></code>. This allows the mask to represent all possible action
+combinations (25 in this example) rather than independent sub-actions.</p>
+<p>This is particularly useful for grid-based games where the mask indicates
+which (row, column) positions are valid moves.</p>
+</div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
