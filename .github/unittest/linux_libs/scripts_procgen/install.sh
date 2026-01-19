@@ -7,6 +7,9 @@ unset PYTORCH_VERSION
 
 set -e
 
+# Ensure uv is in PATH
+export PATH="$HOME/.local/bin:$PATH"
+
 # Activate the virtual environment
 source ./env/bin/activate
 
