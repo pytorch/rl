@@ -8961,7 +8961,19 @@ class ActionMask(Transform):
     It reads the mask from the input tensordict after the step is executed,
     and adapts the mask of the finite action spec.
 
-      .. note:: This transform will fail when used without an environment.
+    .. note:: This transform will fail when used without an environment.
+
+    .. note:: **MultiDiscrete action spaces with 2D masks (e.g., board games)**
+
+        When wrapping a Gym environment with a ``MultiDiscrete`` action space
+        (e.g., ``MultiDiscrete([5, 5])``) and an ``action_mask`` observation whose
+        shape matches the ``nvec`` (e.g., shape ``(5, 5)``), the :class:`~torchrl.envs.GymWrapper`
+        automatically converts the action space to a flattened ``Categorical(n=25)``
+        or ``OneHot(n=25)``. This allows the mask to represent all possible action
+        combinations (25 in this example) rather than independent sub-actions.
+
+        This is particularly useful for grid-based games where the mask indicates
+        which (row, column) positions are valid moves.
 
     Args:
         action_key (NestedKey, optional): the key where the action tensor can be found.
@@ -10395,6 +10407,21 @@ class ActionDiscretizer(Transform):
         >>> assert (r["action"] < base_env.action_spec.high).all()
         >>> assert (r["action"] > base_env.action_spec.low).all()
 
+    .. note:: Custom Sampling Strategies
+
+        To implement a custom sampling strategy beyond the built-in options
+        (``MEDIAN``, ``LOW``, ``HIGH``, ``RANDOM``), subclass ``ActionDiscretizer``
+        and override the :meth:`~ActionDiscretizer.custom_arange` method. This
+        method computes the normalized interval positions (values in ``[0, 1)``)
+        that determine where each discrete action maps within the continuous
+        action interval.
+
+        Example:
+            >>> class LogSpacedActionDiscretizer(ActionDiscretizer):
+            ...     def custom_arange(self, nint, device):
+            ...         # Use logarithmic spacing instead of linear
+            ...         return torch.logspace(-2, 0, nint, device=device) - 0.01
+
     """
 
     class SamplingStrategy(IntEnum):
@@ -10441,7 +10468,33 @@ class ActionDiscretizer(Transform):
             f"\n{_indent(out_action_key)},\n{_indent(sampling)},\n{_indent(categorical)})"
         )
 
-    def _custom_arange(self, nint, device):
+    def custom_arange(self, nint, device):
+        """Compute the normalized interval positions for discretization.
+
+        This method generates values in the range [0, 1) that determine where
+        each discrete action maps within the continuous action interval.
+
+        Override this method in a subclass to implement custom sampling
+        strategies beyond the built-in ``MEDIAN``, ``LOW``, ``HIGH``, and
+        ``RANDOM`` strategies.
+
+        Args:
+            nint (int): the number of intervals (discrete actions) for this
+                action dimension.
+            device (torch.device): the device on which to create the tensor.
+
+        Returns:
+            torch.Tensor: a 1D tensor of shape ``(nint,)`` with values in
+                ``[0, 1)`` representing the normalized positions within each
+                interval.
+
+        Example:
+            >>> class CustomActionDiscretizer(ActionDiscretizer):
+            ...     def custom_arange(self, nint, device):
+            ...         # Custom sampling: use logarithmic spacing
+            ...         return torch.logspace(-2, 0, nint, device=device) - 0.01
+
+        """
         result = torch.arange(
             start=0.0,
             end=1.0,
@@ -10491,7 +10544,7 @@ class ActionDiscretizer(Transform):
 
             if isinstance(num_intervals, int):
                 arange = (
-                    self._custom_arange(num_intervals, action_spec.device).expand(
+                    self.custom_arange(num_intervals, action_spec.device).expand(
                         (*n_act, num_intervals)
                     )
                     * interval
@@ -10502,7 +10555,7 @@ class ActionDiscretizer(Transform):
                 self.register_buffer("intervals", low + arange)
             else:
                 arange = [
-                    self._custom_arange(_num_intervals, action_spec.device) * interval
+                    self.custom_arange(_num_intervals, action_spec.device) * interval
                     for _num_intervals, interval in zip(
                         num_intervals.tolist(), interval.unbind(-2)
                     )
