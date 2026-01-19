@@ -87,6 +87,11 @@ pip3 install . --no-build-isolation
 
 cd "${root_dir}"
 
+# 6. Download required Habitat test datasets
+python -m habitat_sim.utils.datasets_download --uids replica_cad_dataset --data-path data/
+# Download the rearrange dataset as well
+python -m habitat_sim.utils.datasets_download --uids rearrange_task_assets --data-path data/
+
 # Install habitat-lab
 git clone https://github.com/facebookresearch/habitat-lab.git
 cd habitat-lab
