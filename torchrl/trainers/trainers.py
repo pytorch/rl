@@ -32,7 +32,7 @@ from torchrl._utils import (
     timeit,
     VERBOSE,
 )
-from torchrl.collectors import DataCollectorBase
+from torchrl.collectors import BaseCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.replay_buffers import (
     PrioritizedSampler,
@@ -175,7 +175,7 @@ class Trainer:
     def __init__(
         self,
         *,
-        collector: DataCollectorBase,
+        collector: BaseCollector,
         total_frames: int,
         frame_skip: int,
         optim_steps_per_batch: int,
@@ -260,7 +260,12 @@ class Trainer:
 
         # Optimization-related hook collections
         self._pre_optim_ops = []  # Before optimization steps (e.g., cache clearing)
-        self._post_loss_ops = []  # After loss computation (e.g., priority updates)
+        self._post_loss_ops = (
+            []
+        )  # After loss computation, operates on batch (e.g., priority updates)
+        self._process_loss_ops = (
+            []
+        )  # Transform loss values before optimizer (e.g., scaling, clipping)
         self._optimizer_ops = []  # During optimization (e.g., gradient clipping)
         self._process_optim_batch_ops = (
             []
@@ -407,11 +412,11 @@ class Trainer:
         np.random.seed(seed)
 
     @property
-    def collector(self) -> DataCollectorBase:
+    def collector(self) -> BaseCollector:
         return self._collector
 
     @collector.setter
-    def collector(self, collector: DataCollectorBase) -> None:
+    def collector(self, collector: BaseCollector) -> None:
         self._collector = collector
 
     def register_op(
@@ -421,6 +426,7 @@ class Trainer:
             "pre_optim_steps",
             "process_optim_batch",
             "post_loss",
+            "process_loss",
             "optimizer",
             "post_steps",
             "post_optim",
@@ -466,6 +472,12 @@ class Trainer:
                 op, input=TensorDictBase, output=TensorDictBase
             )
             self._post_loss_ops.append((timed_op, kwargs))
+
+        elif dest == "process_loss":
+            _check_input_output_typehint(
+                op, input=TensorDictBase, output=TensorDictBase
+            )
+            self._process_loss_ops.append((timed_op, kwargs))
 
         elif dest == "optimizer":
             _check_input_output_typehint(
@@ -522,7 +534,8 @@ class Trainer:
         else:
             raise RuntimeError(
                 f"The hook collection {dest} is not recognised. Choose from:"
-                f"(batch_process, pre_steps, pre_step, post_loss, post_steps, "
+                f"(batch_process, pre_optim_steps, process_optim_batch, post_loss, "
+                f"process_loss, optimizer, post_steps, post_optim, pre_steps_log, "
                 f"post_steps_log, post_optim_log, pre_epoch_log, post_epoch_log, "
                 f"pre_epoch, post_epoch)"
             )
@@ -570,6 +583,30 @@ class Trainer:
             if isinstance(out, TensorDictBase):
                 batch = out
         return batch
+
+    def _process_loss_hook(
+        self, sub_batch: TensorDictBase, losses_td: TensorDictBase
+    ) -> TensorDictBase:
+        """Apply registered loss transformation hooks before optimization.
+
+        Unlike ``post_loss`` hooks which operate on the batch (e.g., for priority updates),
+        ``process_loss`` hooks transform the loss TensorDict itself. These hooks receive
+        both the sub_batch and the losses, and should return the modified losses.
+
+        Use cases include loss scaling, clipping, or applying importance weights.
+
+        Args:
+            sub_batch: The batch of data used to compute the losses.
+            losses_td: The TensorDict containing loss components from the loss module.
+
+        Returns:
+            The (possibly modified) losses TensorDict.
+        """
+        for op, kwargs in self._process_loss_ops:
+            out = op(sub_batch, losses_td, **kwargs)
+            if isinstance(out, TensorDictBase):
+                losses_td = out
+        return losses_td
 
     def _optimizer_hook(self, batch):
         for i, (op, kwargs) in enumerate(self._optimizer_ops):
@@ -754,6 +791,8 @@ class Trainer:
                     break
                 losses_td = self.loss_module(sub_batch)
                 self._post_loss_hook(sub_batch)
+
+                losses_td = self._process_loss_hook(sub_batch, losses_td)
 
                 losses_detached = self._optimizer_hook(losses_td)
                 self._post_optim_hook()
@@ -1792,7 +1831,7 @@ class UpdateWeights(TrainerHookBase):
     intervals. If the devices match, this will result in a no-op.
 
     Args:
-        collector (DataCollectorBase): A data collector where the policy weights
+        collector (BaseCollector): A data collector where the policy weights
             must be synced.
         update_weights_interval (int): Interval (in terms of number of batches
             collected) where the sync must take place.
@@ -1801,8 +1840,7 @@ class UpdateWeights(TrainerHookBase):
             weight_update_map are provided, weight_update_map takes precedence.
         weight_update_map (dict[str, str], optional): A mapping from destination paths
             (keys in collector's weight_sync_schemes) to source paths on the trainer.
-            Example: {"policy": "loss_module.actor_network",
-                     "replay_buffer.transforms[0]": "loss_module.critic_network"}
+            Example: ``{"policy": "loss_module.actor_network", "replay_buffer.transforms[0]": "loss_module.critic_network"}``.
         trainer (Trainer, optional): The trainer instance, required when using
             weight_update_map to resolve source paths.
 
@@ -1829,7 +1867,7 @@ class UpdateWeights(TrainerHookBase):
 
     def __init__(
         self,
-        collector: DataCollectorBase,
+        collector: BaseCollector,
         update_weights_interval: int,
         policy_weights_getter: Callable[[Any], Any] | None = None,
         weight_update_map: dict[str, str] | None = None,
@@ -1881,7 +1919,7 @@ class UpdateWeights(TrainerHookBase):
                 and destination in self.collector._weight_sync_schemes
             ):
                 scheme = self.collector._weight_sync_schemes[destination]
-                strategy = WeightStrategy(extract_as=scheme.strategy)
+                strategy = WeightStrategy(extract_as=scheme.strategy_str)
                 weights = strategy.extract_weights(source_module)
             else:
                 # Fallback: use TensorDict extraction if no scheme found

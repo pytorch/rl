@@ -335,21 +335,22 @@ class PrioritizedSampler(Sampler):
             the maximum value since the instantiation of the sampler.
 
     **Parameter Guidelines**:
-    - **:math:`\alpha` (alpha)**: Controls how much to prioritize high-error experiences
-        - 0.4-0.7: Good balance between learning speed and stability
-        - 1.0: Maximum prioritization (may be unstable)
-        - 0.0: Uniform sampling (no prioritization benefit)
 
-    - **:math:`\beta` (beta)**: Controls importance sampling correction
-        - Start at 0.4-0.6 for training stability
-        - Anneal to 1.0 over training to reduce bias
-        - Lower values = more stable but biased
-        - Higher values = less biased but potentially unstable
+    - **:math:`\alpha` (alpha)**: Controls how much to prioritize high-error experiences.
+      0.4-0.7: Good balance between learning speed and stability.
+      1.0: Maximum prioritization (may be unstable).
+      0.0: Uniform sampling (no prioritization benefit).
 
-    - **:math:`\epsilon`**: Small constant to prevent zero priorities
-        - 1e-8: Good default value
-        - Too small: may cause numerical issues
-        - Too large: reduces prioritization effect
+    - **:math:`\beta` (beta)**: Controls importance sampling correction.
+      Start at 0.4-0.6 for training stability.
+      Anneal to 1.0 over training to reduce bias.
+      Lower values = more stable but biased.
+      Higher values = less biased but potentially unstable.
+
+    - **:math:`\epsilon`**: Small constant to prevent zero priorities.
+      1e-8: Good default value.
+      Too small: may cause numerical issues.
+      Too large: reduces prioritization effect.
 
     Examples:
         >>> from torchrl.data.replay_buffers import ReplayBuffer, LazyTensorStorage, PrioritizedSampler
@@ -1154,10 +1155,10 @@ class SliceSampler(Sampler):
     def __getstate__(self):
         if get_spawning_popen() is not None and self.cache_values:
             logger.warning(
-                f"It seems you are sharing a {type(self).__name__} across processes with"
+                f"It seems you are sharing a {type(self).__name__} across processes with "
                 f"cache_values=True. "
                 f"While this isn't forbidden and could perfectly work if your dataset "
-                f"is unaltered on both processes, remember that calling extend/add on"
+                f"is unaltered on both processes, remember that calling extend/add on "
                 f"one process will NOT erase the cache on another process's sampler, "
                 f"which will cause synchronization issues."
             )
@@ -1959,21 +1960,22 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             "median" or "mean".
 
     **Parameter Guidelines**:
-    - **:math:`\alpha` (alpha)**: Controls how much to prioritize high-error trajectory regions
-        - 0.4-0.7: Good balance between learning speed and stability
-        - 1.0: Maximum prioritization (may be unstable)
-        - 0.0: Uniform sampling (no prioritization benefit)
 
-    - **:math:`\beta` (beta)**: Controls importance sampling correction
-        - Start at 0.4-0.6 for training stability
-        - Anneal to 1.0 over training to reduce bias
-        - Lower values = more stable but biased
-        - Higher values = less biased but potentially unstable
+    - **:math:`\alpha` (alpha)**: Controls how much to prioritize high-error trajectory regions.
+      0.4-0.7: Good balance between learning speed and stability.
+      1.0: Maximum prioritization (may be unstable).
+      0.0: Uniform sampling (no prioritization benefit).
 
-    - **:math:`\\epsilon`**: Small constant to prevent zero priorities
-        - 1e-8: Good default value
-        - Too small: may cause numerical issues
-        - Too large: reduces prioritization effect
+    - **:math:`\beta` (beta)**: Controls importance sampling correction.
+      Start at 0.4-0.6 for training stability.
+      Anneal to 1.0 over training to reduce bias.
+      Lower values = more stable but biased.
+      Higher values = less biased but potentially unstable.
+
+    - **:math:`\\epsilon`**: Small constant to prevent zero priorities.
+      1e-8: Good default value.
+      Too small: may cause numerical issues.
+      Too large: reduces prioritization effect.
 
     Keyword Args:
         num_slices (int): the number of slices to be sampled. The batch-size

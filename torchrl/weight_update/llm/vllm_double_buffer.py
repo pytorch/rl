@@ -69,12 +69,7 @@ from typing import Any, Literal
 
 from tensordict import TensorDict, TensorDictBase
 from torchrl._utils import logger
-from torchrl.weight_update.weight_sync_schemes import (
-    WeightReceiver,
-    WeightSender,
-    WeightStrategy,
-    WeightSyncScheme,
-)
+from torchrl.weight_update.weight_sync_schemes import WeightStrategy, WeightSyncScheme
 
 
 class VLLMDoubleBufferTransport:
@@ -117,20 +112,31 @@ class VLLMDoubleBufferTransport:
         weights.memmap(self.remote_addr, num_threads=self.num_threads)
         logger.info(f"Weights written successfully to {self.remote_addr}")
 
-    def receive_weights(self, timeout: float = 1.0) -> TensorDict:
+    def receive_weights(
+        self,
+        timeout: float | None = None,
+        *,
+        weights: Any = None,
+        model: Any = None,
+        strategy: Any = None,
+    ) -> Any | None:
         """Reads the weights from the shared directory.
 
         Args:
-            timeout: Not used for file-based transport (kept for API compatibility).
+            timeout: Ignored (file-based transport is instant).
+            weights: Ignored.
+            model: Ignored.
+            strategy: Ignored.
 
         Returns:
             TensorDict with flattened keys containing the weights.
         """
+        # Timeout is ignored since file-based transport doesn't involve waiting
         logger.info(f"Reading weights from {self.local_addr}")
-        weights = TensorDict.load_memmap(self.local_addr)
-        weights = weights.flatten_keys(".")
+        received_weights = TensorDict.load_memmap(self.local_addr)
+        received_weights = received_weights.flatten_keys(".")
         logger.info(f"Weights read successfully from {self.local_addr}")
-        return weights
+        return received_weights
 
     def check_connection(self) -> bool:
         """Check if the transport is ready.
@@ -187,13 +193,11 @@ class VLLMDoubleBufferSyncScheme(WeightSyncScheme):
         self.num_threads = num_threads
         self.strategy_name = strategy
 
-    def create_transport(
-        self, pipe_or_context: Any = None
-    ) -> VLLMDoubleBufferTransport:
+    def create_transport(self, **kwargs) -> VLLMDoubleBufferTransport:
         """Create transport for double-buffered storage.
 
         Args:
-            pipe_or_context: Not used for file-based transport (kept for API compatibility).
+            **kwargs: Not used for file-based transport (kept for API compatibility).
 
         Returns:
             A VLLMDoubleBufferTransport instance.
@@ -217,7 +221,7 @@ class VLLMDoubleBufferSyncScheme(WeightSyncScheme):
         return VLLMDoubleBufferWeightReceiver(self, vllm_engine)
 
 
-class VLLMDoubleBufferWeightSender(WeightSender):
+class VLLMDoubleBufferWeightSender:
     """Sends weights to vLLM workers using double-buffered storage.
 
     This sender extracts weights from a training model and writes them to
@@ -278,7 +282,7 @@ class VLLMDoubleBufferWeightSender(WeightSender):
         self._transport.send_weights("vllm_model", weights)
 
 
-class VLLMDoubleBufferWeightReceiver(WeightReceiver):
+class VLLMDoubleBufferWeightReceiver:
     """Receives weights in a vLLM worker using double-buffered storage.
 
     This receiver reads weights from a shared directory and loads them into
@@ -301,7 +305,7 @@ class VLLMDoubleBufferWeightReceiver(WeightReceiver):
             f"Initialized double-buffer receiver reading from {self._scheme.local_addr}"
         )
 
-    def apply_weights(self, weights: TensorDict) -> None:
+    def apply_weights(self, weights: TensorDict, inplace: bool = True) -> None:
         """Apply weights to vLLM engine using RPC.
 
         This method uses RPC to tell all vLLM workers to load weights from
@@ -310,7 +314,10 @@ class VLLMDoubleBufferWeightReceiver(WeightReceiver):
 
         Args:
             weights: TensorDict with flattened keys containing weights.
+            inplace: Whether to apply weights in place. Default is `True`.
         """
+        if not inplace:
+            raise ValueError("Cannot apply weights out of place for vLLM double-buffer")
         logger.info("Applying weights to vLLM engine via RPC")
 
         # Convert TensorDict to list of (name, tensor) tuples
@@ -357,6 +364,7 @@ class VLLMDoubleBufferWeightReceiver(WeightReceiver):
         Returns:
             True if weights were successfully read and applied, False otherwise.
         """
-        weights = self._transport.receive_weights(timeout=timeout)
+        # timeout is not used by file-based transport but kept for API compatibility
+        weights = self._transport.receive_weights()
         self.apply_weights(weights)
         return True

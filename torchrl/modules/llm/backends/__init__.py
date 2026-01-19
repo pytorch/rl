@@ -2,25 +2,15 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+"""LLM backends.
+
+These backends can be optional and may rely on native extensions. We avoid
+importing them at module import time and lazily load on attribute access.
+"""
+
 from __future__ import annotations
 
-# Import everything from the vllm subfolder for backwards compatibility
-from .vllm import (
-    # Asynchronous vLLM
-    _AsyncLLMEngine,
-    _AsyncvLLMWorker,
-    AsyncVLLM,
-    # Synchronous vLLM
-    LocalLLMWrapper,
-    make_async_vllm_engine,
-    make_vllm_worker,
-    RayLLMWorker,
-    # Base classes and interfaces
-    RLvLLMEngine,
-    # Utilities
-    stateless_init_process_group,
-    stateless_init_process_group_async,
-)
+from typing import Any
 
 __all__ = [
     # Base classes
@@ -38,3 +28,38 @@ __all__ = [
     "stateless_init_process_group",
     "stateless_init_process_group_async",
 ]
+
+_LAZY_ATTRS: dict[str, tuple[str, str]] = {
+    # Base classes and interfaces
+    "RLvLLMEngine": ("torchrl.modules.llm.backends.vllm", "RLvLLMEngine"),
+    # Sync vLLM
+    "make_vllm_worker": ("torchrl.modules.llm.backends.vllm", "make_vllm_worker"),
+    "RayLLMWorker": ("torchrl.modules.llm.backends.vllm", "RayLLMWorker"),
+    "LocalLLMWrapper": ("torchrl.modules.llm.backends.vllm", "LocalLLMWrapper"),
+    # Async vLLM
+    "_AsyncvLLMWorker": ("torchrl.modules.llm.backends.vllm", "_AsyncvLLMWorker"),
+    "_AsyncLLMEngine": ("torchrl.modules.llm.backends.vllm", "_AsyncLLMEngine"),
+    "AsyncVLLM": ("torchrl.modules.llm.backends.vllm", "AsyncVLLM"),
+    "make_async_vllm_engine": (
+        "torchrl.modules.llm.backends.vllm",
+        "make_async_vllm_engine",
+    ),
+    # Utilities
+    "stateless_init_process_group": (
+        "torchrl.modules.llm.backends.vllm",
+        "stateless_init_process_group",
+    ),
+    "stateless_init_process_group_async": (
+        "torchrl.modules.llm.backends.vllm",
+        "stateless_init_process_group_async",
+    ),
+}
+
+
+def __getattr__(name: str) -> Any:  # noqa: ANN401
+    target = _LAZY_ATTRS.get(name)
+    if target is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attr_name = target
+    module = __import__(module_name, fromlist=[attr_name])
+    return getattr(module, attr_name)

@@ -16,13 +16,11 @@ import torch.nn as nn
 from tensordict import TensorDict, TensorDictBase
 
 from torchrl._utils import as_remote, logger as torchrl_logger
-from torchrl.collectors.collectors import (
-    DataCollectorBase,
-    DEFAULT_EXPLORATION_TYPE,
-    MultiaSyncDataCollector,
-    MultiSyncDataCollector,
-    SyncDataCollector,
-)
+from torchrl.collectors._base import BaseCollector
+from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
+from torchrl.collectors._multi_async import MultiAsyncCollector
+from torchrl.collectors._multi_sync import MultiSyncCollector
+from torchrl.collectors._single import Collector
 from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
 from torchrl.collectors.weight_update import RayWeightUpdater, WeightUpdaterBase
 from torchrl.data import ReplayBuffer
@@ -74,10 +72,10 @@ def print_remote_collector_info(self):
         f"{get_node_ip_address()} using gpus {ray.get_gpu_ids()}"
     )
     # torchrl_logger.warning(s)
-    torchrl_logger.info(s)
+    torchrl_logger.debug(s)
 
 
-class RayCollector(DataCollectorBase):
+class RayCollector(BaseCollector):
     """Distributed data collector with `Ray <https://docs.ray.io/>`_ backend.
 
     This Python class serves as a ray-based solution to instantiate and coordinate multiple
@@ -216,11 +214,11 @@ class RayCollector(DataCollectorBase):
             ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``
             or ``torchrl.envs.utils.ExplorationType.MEAN``.
         collector_class (Python class or constructor): a collector class to be remotely instantiated. Can be
-            :class:`~torchrl.collectors.SyncDataCollector`,
-            :class:`~torchrl.collectors.MultiSyncDataCollector`,
-            :class:`~torchrl.collectors.MultiaSyncDataCollector`
+            :class:`~torchrl.collectors.Collector`,
+            :class:`~torchrl.collectors.MultiSyncCollector`,
+            :class:`~torchrl.collectors.MultiAsyncCollector`
             or a derived class of these.
-            Defaults to :class:`~torchrl.collectors.SyncDataCollector`.
+            Defaults to :class:`~torchrl.collectors.Collector`.
         collector_kwargs (dict or list, optional): a dictionary of parameters to be passed to the
             remote data-collector. If a list is provided, each element will
             correspond to an individual set of keyword arguments for the
@@ -267,10 +265,25 @@ class RayCollector(DataCollectorBase):
             If not provided, a :class:`~torchrl.collectors.RayWeightUpdater` will be used by default, leveraging
             Ray's distributed capabilities.
             Consider using a constructor if the updater needs to be serialized.
-        weight_sync_schemes (dict[str, WeightSyncScheme], optional): Dictionary mapping model identifiers to
-            :class:`~torchrl.weight_update.weight_sync_schemes.WeightSyncScheme` instances.
-            This is the recommended way to configure weight synchronization. If not provided,
+        weight_sync_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for
+            SENDING weights to remote collector workers. Keys are model identifiers (e.g., "policy")
+            and values are WeightSyncScheme instances configured to send weights via Ray.
+            This is the recommended way to configure weight synchronization for propagating weights
+            from the main process to remote collectors. If not provided,
             defaults to ``{"policy": RayWeightSyncScheme()}``.
+
+            .. note:: Weight synchronization is lazily initialized. When using ``policy_factory``
+                without a central ``policy``, weight sync is deferred until the first call to
+                :meth:`~torchrl.collectors.DataCollector.update_policy_weights_` with actual weights.
+                This allows sub-collectors to each have their own independent policies created via
+                the factory. If you have a central policy and want to sync its weights to remote
+                collectors, call ``update_policy_weights_(policy)`` before starting iteration.
+
+        weight_recv_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for
+            RECEIVING weights from a parent process or training loop. Keys are model identifiers (e.g., "policy")
+            and values are WeightSyncScheme instances configured to receive weights.
+            This is typically used when RayCollector is itself a worker in a larger distributed setup.
+            Defaults to ``None``.
         use_env_creator (bool, optional): if ``True``, the environment constructor functions will be wrapped
             in :class:`~torchrl.envs.EnvCreator`. This is useful for multiprocessed settings where shared memory
             needs to be managed, but Ray has its own object storage mechanism, so this is typically not needed.
@@ -280,14 +293,14 @@ class RayCollector(DataCollectorBase):
         >>> from torch import nn
         >>> from tensordict.nn import TensorDictModule
         >>> from torchrl.envs.libs.gym import GymEnv
-        >>> from torchrl.collectors import SyncDataCollector
+        >>> from torchrl.collectors import Collector
         >>> from torchrl.collectors.distributed import RayCollector
         >>> env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
         >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
         >>> distributed_collector = RayCollector(
         ...     create_env_fn=[env_maker],
         ...     policy=policy,
-        ...     collector_class=SyncDataCollector,
+        ...     collector_class=Collector,
         ...     max_frames_per_traj=50,
         ...     init_random_frames=-1,
         ...     reset_at_each_iter=-False,
@@ -326,7 +339,7 @@ class RayCollector(DataCollectorBase):
         postproc=None,
         split_trajs=False,
         exploration_type=DEFAULT_EXPLORATION_TYPE,
-        collector_class: Callable[[TensorDict], TensorDict] = SyncDataCollector,
+        collector_class: Callable[[TensorDict], TensorDict] = Collector,
         collector_kwargs: dict[str, Any] | list[dict] | None = None,
         num_workers_per_collector: int = 1,
         sync: bool = False,
@@ -340,6 +353,7 @@ class RayCollector(DataCollectorBase):
         | Callable[[], WeightUpdaterBase]
         | None = None,
         weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
+        weight_recv_schemes: dict[str, WeightSyncScheme] | None = None,
         use_env_creator: bool = False,
         no_cuda_sync: bool | None = None,
     ):
@@ -433,17 +447,15 @@ class RayCollector(DataCollectorBase):
 
         # Define collector_class, monkey patch it with as_remote and print_remote_collector_info methods
         if collector_class == "async":
-            collector_class = MultiaSyncDataCollector
+            collector_class = MultiAsyncCollector
         elif collector_class == "sync":
-            collector_class = MultiSyncDataCollector
+            collector_class = MultiSyncCollector
         elif collector_class == "single":
-            collector_class = SyncDataCollector
+            collector_class = Collector
         elif not isinstance(collector_class, type) or not issubclass(
-            collector_class, DataCollectorBase
+            collector_class, BaseCollector
         ):
-            raise TypeError(
-                "The collector_class must be an instance of DataCollectorBase."
-            )
+            raise TypeError("The collector_class must be an instance of BaseCollector.")
         if not hasattr(collector_class, "as_remote"):
             collector_class.as_remote = as_remote
         if not hasattr(collector_class, "print_remote_collector_info"):
@@ -541,31 +553,42 @@ class RayCollector(DataCollectorBase):
         # Set up weight synchronization - prefer new schemes over legacy updater
         if weight_updater is None and weight_sync_schemes is None:
             # Default to Ray weight sync scheme for Ray collectors
-            from torchrl.weight_update.weight_sync_schemes import RayWeightSyncScheme
+            from torchrl.weight_update import RayWeightSyncScheme
 
             weight_sync_schemes = {"policy": RayWeightSyncScheme()}
 
         if weight_sync_schemes is not None:
+            torchrl_logger.debug("RayCollector: Using weight sync schemes")
             # Use new weight synchronization system
             self._weight_sync_schemes = weight_sync_schemes
-            self._weight_senders = {}
 
-            # Set up weight senders using the new simplified API
+            # Initialize schemes on the sender (main process) side
+            # Pass remote collectors as the "workers" for Ray schemes
             for model_id, scheme in self._weight_sync_schemes.items():
-                # Initialize the scheme on the sender (main process) side
-                # Pass remote collectors as the "workers" for Ray schemes
+                torchrl_logger.debug(
+                    f"RayCollector: Initializing sender for model '{model_id}'"
+                )
                 scheme.init_on_sender(
                     model_id=model_id,
                     remote_collectors=self.remote_collectors,
-                    source_model=self.policy if model_id == "policy" else None,
+                    model=self.policy if model_id == "policy" else None,
+                    context=self,
                 )
 
-                # Get the configured sender from the scheme
-                sender = scheme.get_sender()
-                self._weight_senders[model_id] = sender
+            # Set up receiver schemes on remote collectors
+            # This enables the remote collectors to receive weight updates
+            for remote_collector in self.remote_collectors:
+                torchrl_logger.debug(
+                    f"RayCollector: Registering scheme receiver for remote collector {remote_collector}"
+                )
+                fut = remote_collector.register_scheme_receiver.remote(
+                    self._weight_sync_schemes, synchronize_weights=False
+                )
+                ray.get(fut)
 
             self.weight_updater = None  # Don't use legacy system
         else:
+            torchrl_logger.debug("RayCollector: Using legacy weight updater system")
             # Fall back to legacy weight updater system
             if weight_updater is None:
                 weight_updater = RayWeightUpdater(
@@ -575,11 +598,112 @@ class RayCollector(DataCollectorBase):
                 )
             self.weight_updater = weight_updater
             self._weight_sync_schemes = None
-            self._weight_senders = {}
+
+        # Always initialize this flag - legacy system doesn't need lazy init
+        # but we set it for consistency
+        self._weight_sync_initialized = False
+
+        # Set up weight receivers if provided
+        if weight_recv_schemes is not None:
+            torchrl_logger.debug("RayCollector: Setting up weight receivers...")
+            self.register_scheme_receiver(weight_recv_schemes)
+
+        if not self._weight_sync_initialized:
+            self._lazy_initialize_weight_sync()
 
         # Print info of all remote workers (fire and forget - no need to wait)
         for e in self.remote_collectors:
             e.print_remote_collector_info.remote()
+
+    def _lazy_initialize_weight_sync(self) -> None:
+        """Initialize weight synchronization lazily on first update_policy_weights_() call.
+
+        This method performs the initial weight synchronization that was deferred from __init__.
+        It must be called before collection begins if weights need to be synced from a central policy.
+
+        The synchronization is done here (not in __init__) because:
+        1. When using policy_factory, there may be no central policy to sync from
+        2. Users may want to train the policy first before syncing weights
+        3. Different sub-collectors may have different policies via policy_factory
+        """
+        if self._weight_sync_initialized:
+            return
+
+        if self._weight_sync_schemes is None:
+            # Legacy weight updater system doesn't use lazy init
+            self._weight_sync_initialized = True
+            return
+
+        torchrl_logger.debug("RayCollector: Performing lazy weight synchronization")
+
+        # Cascade synchronize_weights to remote collectors
+        torchrl_logger.debug(
+            "RayCollector: Cascading synchronize_weights to remote collectors"
+        )
+        self._sync_futures = []
+        for remote_collector in self.remote_collectors:
+            for model_id in self._weight_sync_schemes:
+                self._sync_futures.append(
+                    remote_collector.cascade_execute.remote(
+                        f"_receiver_schemes['{model_id}'].connect"
+                    )
+                )
+
+        # Synchronize weights for each scheme
+        for model_id, scheme in self._weight_sync_schemes.items():
+            torchrl_logger.debug(
+                f"RayCollector: Synchronizing weights for model '{model_id}'"
+            )
+            scheme.connect()
+
+        # Block sync
+        torchrl_logger.debug(
+            "RayCollector: Waiting for weight synchronization to finish"
+        )
+        ray.get(self._sync_futures)
+        self._weight_sync_initialized = True
+        torchrl_logger.debug("RayCollector: Weight synchronization complete")
+
+    def _weight_update_impl(
+        self,
+        policy_or_weights: TensorDictBase | nn.Module | dict | None = None,
+        *,
+        worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
+        model_id: str | None = None,
+        weights_dict: dict[str, Any] | None = None,
+        **kwargs,
+    ) -> None:
+        """Override to trigger lazy weight sync initialization on first call.
+
+        When using policy_factory without a central policy, weight synchronization
+        is deferred until this method is called with actual weights.
+        """
+        # Trigger lazy initialization if not already done
+        if not self._weight_sync_initialized:
+            self._lazy_initialize_weight_sync()
+
+        # Call parent implementation
+        return super()._weight_update_impl(
+            policy_or_weights=policy_or_weights,
+            worker_ids=worker_ids,
+            model_id=model_id,
+            weights_dict=weights_dict,
+            **kwargs,
+        )
+
+    # def _send_weights_scheme(self, *, scheme, processed_weights, worker_ids, model_id):
+    #     if not worker_ids:
+    #         worker_ids = list(range(self.num_collectors))
+    #     futures = []
+    #     for worker_id in worker_ids:
+    #         torchrl_logger.debug(f"RayCollector: Sending weights to remote worker {worker_id}")
+    #         # Call irecv
+    #         fut = self.remote_collectors[worker_id].cascade_execute.remote(f"_receiver_schemes['{model_id}'].receive")
+    #         futures.append(fut)
+    #     torchrl_logger.debug(f"RayCollector: calling isend")
+    #     scheme.send(weights=processed_weights, worker_ids=worker_ids)
+    #     torchrl_logger.debug(f"RayCollector: Waiting for {len(futures)} irecv calls to finish")
+    #     ray.get(futures)
 
     def _extract_weights_if_needed(self, weights: Any, model_id: str) -> Any:
         """Extract weights from a model if needed.
@@ -594,17 +718,13 @@ class RayCollector(DataCollectorBase):
         )
 
         if weights is None and scheme is not None:
-            # Extract fresh weights from the source model
-            sender = self._weight_senders.get(model_id)
-            if (
-                sender
-                and hasattr(sender, "_source_model")
-                and sender._source_model is not None
-            ):
+            # Extract fresh weights from the scheme's model
+            model = scheme.model
+            if model is not None:
                 from torchrl.weight_update.weight_sync_schemes import WeightStrategy
 
-                strategy = WeightStrategy(extract_as=scheme.strategy)
-                return strategy.extract_weights(sender._source_model)
+                strategy = WeightStrategy(extract_as=scheme.strategy_str)
+                return strategy.extract_weights(model)
 
         # Fall back to base class behavior
         return super()._extract_weights_if_needed(weights, model_id)
@@ -678,9 +798,13 @@ class RayCollector(DataCollectorBase):
         remote_configs,
     ):
         """Creates and adds a number of remote collectors to the set."""
-        for env_maker, other_params, remote_config in zip(
-            create_env_fn, collector_kwargs, remote_configs
+        for i, (env_maker, other_params, remote_config) in enumerate(
+            zip(create_env_fn, collector_kwargs, remote_configs)
         ):
+            # Add worker_idx to params so remote collectors know their index
+            other_params = dict(other_params)  # Make a copy to avoid mutating original
+            other_params["worker_idx"] = i
+
             cls = self.collector_class.as_remote(remote_config).remote
             collector = self._make_collector(
                 cls,
@@ -688,7 +812,7 @@ class RayCollector(DataCollectorBase):
                 if num_envs > 1
                 or (
                     isinstance(self.collector_class, type)
-                    and not issubclass(self.collector_class, SyncDataCollector)
+                    and not issubclass(self.collector_class, Collector)
                 )
                 else env_maker,
                 policy=policy,
@@ -715,6 +839,17 @@ class RayCollector(DataCollectorBase):
             )  # This will interrupt any running tasks on the actor, causing them to fail immediately
 
     def iterator(self):
+        # Warn if weight sync wasn't initialized before collection starts
+        if not self._weight_sync_initialized and self._weight_sync_schemes is not None:
+            warnings.warn(
+                "RayCollector iteration started before weight synchronization was initialized. "
+                "Call update_policy_weights_(policy_or_weights) before iterating to sync weights "
+                "from a central policy to remote collectors. If using policy_factory with "
+                "independent policies on each collector, you can ignore this warning.",
+                UserWarning,
+                stacklevel=2,
+            )
+
         def proc(data):
             # When using RayReplayBuffer, sub-collectors write directly to buffer
             # and return None, so skip processing
@@ -757,7 +892,7 @@ class RayCollector(DataCollectorBase):
             self.collected_frames < self.total_frames and not self._stop_event.is_set()
         ):
             if self.update_after_each_batch or self.max_weight_update_interval > -1:
-                torchrl_logger.info("Updating weights on all workers")
+                torchrl_logger.debug("Updating weights on all workers")
                 self.update_policy_weights_()
 
             # Ask for batches to all remote workers.
@@ -874,7 +1009,7 @@ class RayCollector(DataCollectorBase):
             yield out_td
 
             if self.update_after_each_batch or self.max_weight_update_interval > -1:
-                torchrl_logger.info(f"Updating weights on worker {collector_index}")
+                torchrl_logger.debug(f"Updating weights on worker {collector_index}")
                 self.update_policy_weights_(worker_ids=collector_index + 1)
 
             # Schedule a new collection task
@@ -936,6 +1071,19 @@ class RayCollector(DataCollectorBase):
                 timeout=timeout if timeout is not None else 5.0
             )
         self.stop_remote_collectors()
+
+        # Clean up weight sync schemes AFTER workers have exited
+        if getattr(self, "_weight_sync_schemes", None) is not None:
+            torchrl_logger.debug("shutting down weight sync schemes")
+            for scheme in self._weight_sync_schemes.values():
+                try:
+                    scheme.shutdown()
+                except Exception as e:
+                    torchrl_logger.warning(
+                        f"Error shutting down weight sync scheme: {e}"
+                    )
+            self._weight_sync_schemes = None
+
         if shutdown_ray:
             ray.shutdown()
 

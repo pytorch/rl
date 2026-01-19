@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-import os
+from functools import partial
 
 import pytest
 import torch
@@ -17,6 +17,7 @@ from tensordict.nn import NormalParamExtractor
 from torch import autograd, nn
 from torch.utils._pytree import tree_map
 from torchrl.modules import (
+    IndependentNormal,
     OneHotCategorical,
     OneHotOrdinal,
     Ordinal,
@@ -36,10 +37,7 @@ from torchrl.modules.distributions.discrete import (
     LLMMaskedCategorical,
 )
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import get_default_devices
-else:
-    from _utils_internal import get_default_devices
+from torchrl.testing import get_default_devices
 
 _has_scipy = importlib.util.find_spec("scipy", None) is not None
 
@@ -172,6 +170,184 @@ class TestTanhNormal:
             event_dims,
             exp_shape,
         )
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize(
+        "callable_scale",
+        [torch.ones_like, partial(torch.full_like, fill_value=0.5)],
+        ids=["ones_like", "full_like_partial"],
+    )
+    def test_tanhnormal_callable_scale(self, device, callable_scale):
+        """Test that TanhNormal supports callable scale for compile-friendliness.
+
+        Using a callable scale (e.g., torch.ones_like or partial(torch.full_like, fill_value=...))
+        avoids explicit device transfers and prevents graph breaks in torch.compile.
+        """
+        torch.manual_seed(0)
+        loc = torch.randn(3, 4, device=device)
+
+        # Create distribution with callable scale
+        dist = TanhNormal(loc=loc, scale=callable_scale, low=-1, high=1)
+
+        # Check that the scale was properly resolved
+        expected_scale = callable_scale(loc)
+        torch.testing.assert_close(dist.scale, expected_scale)
+
+        # Test sampling
+        sample = dist.sample()
+        assert sample.shape == loc.shape
+        assert sample.device == loc.device
+        assert (sample >= -1).all()
+        assert (sample <= 1).all()
+
+        # Test log_prob
+        log_prob = dist.log_prob(sample)
+        assert torch.isfinite(log_prob).all()
+
+        # Test rsample with gradient
+        loc_grad = torch.randn(3, 4, device=device, requires_grad=True)
+        dist_grad = TanhNormal(loc=loc_grad, scale=callable_scale, low=-1, high=1)
+        sample_grad = dist_grad.rsample()
+        loss = sample_grad.sum()
+        loss.backward()
+        assert loc_grad.grad is not None
+        assert torch.isfinite(loc_grad.grad).all()
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_tanhnormal_callable_scale_update(self, device):
+        """Test that TanhNormal.update() works with callable scale."""
+        torch.manual_seed(0)
+        loc = torch.randn(3, 4, device=device)
+        callable_scale = torch.ones_like
+
+        dist = TanhNormal(loc=loc, scale=callable_scale, low=-1, high=1)
+
+        # Update with new loc and callable scale
+        new_loc = torch.randn(3, 4, device=device)
+        dist.update(new_loc, callable_scale)
+
+        # Check that scale was properly resolved
+        torch.testing.assert_close(dist.scale, torch.ones_like(new_loc))
+
+        # Verify distribution works after update
+        sample = dist.sample()
+        assert sample.shape == new_loc.shape
+        assert torch.isfinite(dist.log_prob(sample)).all()
+
+
+class TestIndependentNormal:
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize(
+        "callable_scale",
+        [torch.ones_like, partial(torch.full_like, fill_value=0.5)],
+        ids=["ones_like", "full_like_partial"],
+    )
+    def test_independentnormal_callable_scale(self, device, callable_scale):
+        """Test that IndependentNormal supports callable scale for compile-friendliness.
+
+        Using a callable scale (e.g., torch.ones_like or partial(torch.full_like, fill_value=...))
+        avoids explicit device transfers and prevents graph breaks in torch.compile.
+        """
+        torch.manual_seed(0)
+        loc = torch.randn(3, 4, device=device)
+
+        # Create distribution with callable scale
+        dist = IndependentNormal(loc=loc, scale=callable_scale)
+
+        # Check that the scale was properly resolved
+        expected_scale = callable_scale(loc)
+        torch.testing.assert_close(dist.base_dist.scale, expected_scale)
+
+        # Test sampling
+        sample = dist.sample()
+        assert sample.shape == loc.shape
+        assert sample.device == loc.device
+
+        # Test log_prob
+        log_prob = dist.log_prob(sample)
+        assert torch.isfinite(log_prob).all()
+
+        # Test rsample with gradient
+        loc_grad = torch.randn(3, 4, device=device, requires_grad=True)
+        dist_grad = IndependentNormal(loc=loc_grad, scale=callable_scale)
+        sample_grad = dist_grad.rsample()
+        loss = sample_grad.sum()
+        loss.backward()
+        assert loc_grad.grad is not None
+        assert torch.isfinite(loc_grad.grad).all()
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_independentnormal_callable_scale_update(self, device):
+        """Test that IndependentNormal.update() works with callable scale."""
+        torch.manual_seed(0)
+        loc = torch.randn(3, 4, device=device)
+        callable_scale = torch.ones_like
+
+        dist = IndependentNormal(loc=loc, scale=callable_scale)
+
+        # Update with new loc and callable scale
+        new_loc = torch.randn(3, 4, device=device)
+        dist.update(new_loc, callable_scale)
+
+        # Check that scale was properly resolved
+        torch.testing.assert_close(dist.base_dist.scale, torch.ones_like(new_loc))
+
+        # Verify distribution works after update
+        sample = dist.sample()
+        assert sample.shape == new_loc.shape
+        assert torch.isfinite(dist.log_prob(sample)).all()
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("scale_type", ["tensor", "float", "callable"])
+    def test_independentnormal_scale_types(self, device, scale_type):
+        """Test that IndependentNormal supports all scale types: tensor, float, callable."""
+        torch.manual_seed(0)
+        loc = torch.randn(3, 4, device=device)
+
+        if scale_type == "tensor":
+            scale = torch.ones(3, 4, device=device)
+        elif scale_type == "float":
+            scale = 1.0
+        else:  # callable
+            scale = torch.ones_like
+
+        dist = IndependentNormal(loc=loc, scale=scale)
+
+        # Test sampling
+        sample = dist.sample()
+        assert sample.shape == loc.shape
+        assert sample.device == loc.device
+
+        # Test log_prob
+        log_prob = dist.log_prob(sample)
+        assert torch.isfinite(log_prob).all()
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("scale_type", ["tensor", "float", "callable"])
+    def test_tanhnormal_scale_types(self, device, scale_type):
+        """Test that TanhNormal supports all scale types: tensor, float, callable."""
+        torch.manual_seed(0)
+        loc = torch.randn(3, 4, device=device)
+
+        if scale_type == "tensor":
+            scale = torch.ones(3, 4, device=device)
+        elif scale_type == "float":
+            scale = 1.0
+        else:  # callable
+            scale = torch.ones_like
+
+        dist = TanhNormal(loc=loc, scale=scale, low=-1, high=1)
+
+        # Test sampling
+        sample = dist.sample()
+        assert sample.shape == loc.shape
+        assert sample.device == loc.device
+        assert (sample >= -1).all()
+        assert (sample <= 1).all()
+
+        # Test log_prob
+        log_prob = dist.log_prob(sample)
+        assert torch.isfinite(log_prob).all()
 
 
 class TestTruncatedNormal:

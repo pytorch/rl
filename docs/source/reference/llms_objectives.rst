@@ -1,3 +1,5 @@
+:orphan:
+
 .. currentmodule:: torchrl.objectives.llm
 
 LLM Objectives

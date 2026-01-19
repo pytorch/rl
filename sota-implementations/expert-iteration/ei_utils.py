@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import time
-
 from typing import Any, Literal
 
 import torch
@@ -612,7 +611,6 @@ def get_wandb_run_id(wandb_logger):
     """
     try:
         # Wait a bit for wandb to initialize
-        import time
 
         max_attempts = 10
         for attempt in range(max_attempts):

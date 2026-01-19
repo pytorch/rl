@@ -2814,12 +2814,12 @@ class NonTensor(TensorSpec):
         return eq
 
     def _project(self) -> Any:
-        raise NotImplementedError("Cannot project a NonTensorSpec.")
+        raise NotImplementedError("Cannot project a NonTensor spec.")
 
     def index(
         self, index: INDEX_TYPING, tensor_to_index: torch.Tensor | TensorDictBase
     ) -> torch.Tensor | TensorDictBase:
-        raise NotImplementedError("Cannot use index with a NonTensorSpec.")
+        raise NotImplementedError("Cannot use index with a NonTensor spec.")
 
     def cardinality(self) -> Any:
         raise NotImplementedError("Cannot enumerate a NonTensor spec.")
@@ -5016,7 +5016,7 @@ class Composite(TensorSpec):
     Args:
         *args: if an unnamed argument is passed, it must be a dictionary with keys
             matching the expected keys to be found in the :obj:`Composite` object.
-            This is useful to build nested CompositeSpecs with tuple indices.
+            This is useful to build nested Composite specs with tuple indices.
         **kwargs (key (str): value (TensorSpec)): dictionary of tensorspecs
             to be stored. Values can be None, in which case is_in will be assumed
             to be ``True`` for the corresponding tensors, and :obj:`project()` will have no
@@ -7098,147 +7098,6 @@ def _remove_neg_shapes(*shape):
             shape = (int(shape),)
         return _remove_neg_shapes(*shape)
     return _size([int(d) if d >= 0 else 1 for d in shape])
-
-
-##############
-# Legacy
-#
-class _LegacySpecMeta(abc.ABCMeta):
-    def __call__(cls, *args, **kwargs):
-        warnings.warn(
-            f"The {cls.__name__} has been deprecated and will be removed in v0.8. Please use "
-            f"{cls.__bases__[-1].__name__} instead.",
-            category=DeprecationWarning,
-        )
-        instance = super().__call__(*args, **kwargs)
-        if (
-            type(instance) in (UnboundedDiscreteTensorSpec, UnboundedDiscrete)
-            and instance.domain == "continuous"
-        ):
-            instance.__class__ = UnboundedContinuous
-        elif (
-            type(instance) in (UnboundedContinuousTensorSpec, UnboundedContinuous)
-            and instance.domain == "discrete"
-        ):
-            instance.__class__ = UnboundedDiscrete
-        return instance
-
-    def __instancecheck__(cls, instance):
-        check0 = super().__instancecheck__(instance)
-        if check0:
-            return True
-        parent_cls = cls.__bases__[-1]
-        return isinstance(instance, parent_cls)
-
-
-class CompositeSpec(Composite, metaclass=_LegacySpecMeta):
-    """Deprecated version of :class:`torchrl.data.Composite`."""
-
-    ...
-
-
-class OneHotDiscreteTensorSpec(OneHot, metaclass=_LegacySpecMeta):
-    """Deprecated version of :class:`torchrl.data.OneHot`."""
-
-    ...
-
-
-class MultiOneHotDiscreteTensorSpec(MultiOneHot, metaclass=_LegacySpecMeta):
-    """Deprecated version of :class:`torchrl.data.MultiOneHot`."""
-
-    ...
-
-
-class NonTensorSpec(NonTensor, metaclass=_LegacySpecMeta):
-    """Deprecated version of :class:`torchrl.data.NonTensor`."""
-
-    ...
-
-
-class MultiDiscreteTensorSpec(MultiCategorical, metaclass=_LegacySpecMeta):
-    """Deprecated version of :class:`torchrl.data.MultiCategorical`."""
-
-    ...
-
-
-class LazyStackedTensorSpec(Stacked, metaclass=_LegacySpecMeta):
-    """Deprecated version of :class:`torchrl.data.Stacked`."""
-
-    ...
-
-
-class LazyStackedCompositeSpec(StackedComposite, metaclass=_LegacySpecMeta):
-    """Deprecated version of :class:`torchrl.data.StackedComposite`."""
-
-    ...
-
-
-class DiscreteTensorSpec(Categorical, metaclass=_LegacySpecMeta):
-    """Deprecated version of :class:`torchrl.data.Categorical`."""
-
-    ...
-
-
-class BinaryDiscreteTensorSpec(Binary, metaclass=_LegacySpecMeta):
-    """Deprecated version of :class:`torchrl.data.Binary`."""
-
-    ...
-
-
-_BoundedLegacyMeta = type("_BoundedLegacyMeta", (_LegacySpecMeta, _BoundedMeta), {})
-
-
-class BoundedTensorSpec(Bounded, metaclass=_BoundedLegacyMeta):
-    """Deprecated version of :class:`torchrl.data.Bounded`."""
-
-    ...
-
-
-class _UnboundedContinuousMetaclass(_UnboundedMeta):
-    def __instancecheck__(cls, instance):
-        return isinstance(instance, Unbounded) and instance.domain == "continuous"
-
-
-_LegacyUnboundedContinuousMetaclass = type(
-    "_LegacyUnboundedDiscreteMetaclass",
-    (_UnboundedContinuousMetaclass, _LegacySpecMeta),
-    {},
-)
-
-
-class UnboundedContinuousTensorSpec(
-    Unbounded, metaclass=_LegacyUnboundedContinuousMetaclass
-):
-    """Deprecated version of :class:`torchrl.data.Unbounded` with continuous space."""
-
-    ...
-
-
-class _UnboundedDiscreteMetaclass(_UnboundedMeta):
-    def __instancecheck__(cls, instance):
-        return isinstance(instance, Unbounded) and instance.domain == "discrete"
-
-
-_LegacyUnboundedDiscreteMetaclass = type(
-    "_LegacyUnboundedDiscreteMetaclass",
-    (_UnboundedDiscreteMetaclass, _LegacySpecMeta),
-    {},
-)
-
-
-class UnboundedDiscreteTensorSpec(
-    Unbounded, metaclass=_LegacyUnboundedDiscreteMetaclass
-):
-    """Deprecated version of :class:`torchrl.data.Unbounded` with discrete space."""
-
-    def __init__(
-        self,
-        shape: torch.Size | int = _DEFAULT_SHAPE,
-        device: DEVICE_TYPING | None = None,
-        dtype: str | torch.dtype | None = torch.int64,
-        **kwargs,
-    ):
-        super().__init__(shape=shape, device=device, dtype=dtype, **kwargs)
 
 
 def _reduce_funcs(funcs):

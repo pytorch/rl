@@ -233,6 +233,36 @@ class TensorDictModuleConfig(ModelConfig):
 
 
 @dataclass
+class TensorDictSequentialConfig(ModelConfig):
+    """A class to configure a TensorDictSequential.
+
+    Example:
+        >>> cfg = TensorDictSequentialConfig(
+        ...     modules=[
+        ...         TensorDictModuleConfig(module=MLPConfig(in_features=10, out_features=10, depth=2, num_cells=32), in_keys=["observation"], out_keys=["hidden"]),
+        ...         TensorDictModuleConfig(module=MLPConfig(in_features=10, out_features=5, depth=2, num_cells=32), in_keys=["hidden"], out_keys=["action"])
+        ...     ]
+        ... )
+        >>> seq = instantiate(cfg)
+        >>> assert isinstance(seq, TensorDictSequential)
+
+    .. seealso:: :class:`tensordict.nn.TensorDictSequential`
+    """
+
+    modules: Any | None = None
+    partial_tolerant: bool = False
+    selected_out_keys: Any | None = None
+    inplace: bool | str | None = None
+    _target_: str = (
+        "torchrl.trainers.algorithms.configs.modules._make_tensordict_sequential"
+    )
+    _partial_: bool = False
+
+    def __post_init__(self) -> None:
+        return super().__post_init__()
+
+
+@dataclass
 class TanhNormalModelConfig(ModelConfig):
     """A class to configure a TanhNormal model.
 
@@ -294,6 +324,66 @@ class ValueModelConfig(ModelConfig):
         super().__post_init__()
 
 
+@dataclass
+class TanhModuleConfig(ModelConfig):
+    """A class to configure a TanhModule.
+
+    Example:
+        >>> cfg = TanhModuleConfig(in_keys=["action"], out_keys=["action"], low=-1.0, high=1.0)
+        >>> module = instantiate(cfg)
+        >>> assert isinstance(module, TanhModule)
+
+    .. seealso:: :class:`torchrl.modules.TanhModule`
+    """
+
+    spec: Any = None
+    low: Any = None
+    high: Any = None
+    clamp: bool = False
+    _target_: str = "torchrl.trainers.algorithms.configs.modules._make_tanh_module"
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for TanhModule configurations."""
+        super().__post_init__()
+
+
+@dataclass
+class AdditiveGaussianModuleConfig(ModelConfig):
+    """A class to configure an AdditiveGaussianModule.
+
+    Example:
+        >>> cfg = AdditiveGaussianModuleConfig(
+        ...     spec=None,
+        ...     sigma_init=1.0,
+        ...     sigma_end=0.1,
+        ...     mean=0.0,
+        ...     std=1.0,
+        ...     action_key="action",
+        ... )
+        >>> module = instantiate(cfg)
+        >>> assert isinstance(module, AdditiveGaussianModule)
+
+    .. seealso:: :class:`torchrl.modules.AdditiveGaussianModule`
+    """
+
+    spec: Any = None
+    sigma_init: float = 1.0
+    sigma_end: float = 0.1
+    annealing_num_steps: int = 1000
+    mean: float = 0.0
+    std: float = 1.0
+    action_key: Any = "action"
+    safe: bool = False
+    device: Any = None
+    _target_: str = (
+        "torchrl.trainers.algorithms.configs.modules._make_additive_gaussian_module"
+    )
+    _partial_: bool = False
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+
+
 def _make_tensordict_module(*args, **kwargs):
     """Helper function to create a TensorDictModule."""
     from hydra.utils import instantiate
@@ -316,6 +406,50 @@ def _make_tensordict_module(*args, **kwargs):
         tensordict_module = tensordict_module.share_memory()
 
     return tensordict_module
+
+
+def _make_tensordict_sequential(*args, **kwargs):
+    """Helper function to create a TensorDictSequential."""
+    from hydra.utils import instantiate
+    from omegaconf import DictConfig, ListConfig
+    from tensordict.nn import TensorDictSequential
+
+    modules = kwargs.pop("modules")
+    shared = kwargs.pop("shared", False)
+    partial_tolerant = kwargs.pop("partial_tolerant", False)
+    selected_out_keys = kwargs.pop("selected_out_keys", None)
+    inplace = kwargs.pop("inplace", None)
+
+    def _instantiate_module(module):
+        if hasattr(module, "_target_"):
+            return instantiate(module)
+        elif callable(module) and hasattr(module, "func"):
+            return module()
+        else:
+            return module
+
+    if isinstance(modules, (dict, DictConfig)):
+        instantiated_modules = {
+            key: _instantiate_module(module) for key, module in modules.items()
+        }
+    elif isinstance(modules, (list, ListConfig)):
+        instantiated_modules = [_instantiate_module(module) for module in modules]
+    else:
+        raise ValueError(
+            f"modules must be a dict or list, got {type(modules).__name__}"
+        )
+
+    tensordict_sequential = TensorDictSequential(
+        instantiated_modules,
+        partial_tolerant=partial_tolerant,
+        selected_out_keys=selected_out_keys,
+        inplace=inplace,
+    )
+
+    if shared:
+        tensordict_sequential = tensordict_sequential.share_memory()
+
+    return tensordict_sequential
 
 
 def _make_tanh_normal_model(*args, **kwargs):
@@ -398,3 +532,39 @@ def _make_value_model(*args, **kwargs):
         value_operator = value_operator.share_memory()
 
     return value_operator
+
+
+def _make_tanh_module(*args, **kwargs):
+    """Helper function to create a TanhModule."""
+    from omegaconf import ListConfig
+
+    from torchrl.modules import TanhModule
+
+    kwargs.pop("shared", False)
+
+    if "in_keys" in kwargs and isinstance(kwargs["in_keys"], ListConfig):
+        kwargs["in_keys"] = list(kwargs["in_keys"])
+    if "out_keys" in kwargs and isinstance(kwargs["out_keys"], ListConfig):
+        kwargs["out_keys"] = list(kwargs["out_keys"])
+
+    return TanhModule(**kwargs)
+
+
+def _make_additive_gaussian_module(*args, **kwargs):
+    """Helper function to create an AdditiveGaussianModule."""
+    from omegaconf import ListConfig
+
+    from torchrl.modules.tensordict_module.exploration import AdditiveGaussianModule
+
+    kwargs.pop("shared", False)
+    kwargs.pop("in_keys", None)
+    kwargs.pop("out_keys", None)
+
+    if "action_key" in kwargs and isinstance(kwargs["action_key"], ListConfig):
+        action_key_list = list(kwargs["action_key"])
+        if len(action_key_list) == 1:
+            kwargs["action_key"] = action_key_list[0]
+        else:
+            kwargs["action_key"] = tuple(action_key_list)
+
+    return AdditiveGaussianModule(**kwargs)

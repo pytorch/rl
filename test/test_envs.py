@@ -9,10 +9,12 @@ import contextlib
 import functools
 import gc
 import importlib
-import os.path
+import os
 import pickle
 import random
 import re
+import signal
+import threading
 import time
 from collections import defaultdict
 from functools import partial
@@ -40,7 +42,7 @@ from tensordict.utils import _unravel_key_to_tuple
 from torch import nn
 
 from torchrl import set_auto_unwrap_transformed_env
-from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
+from torchrl.collectors import Collector, MultiSyncCollector
 from torchrl.data.tensor_specs import Categorical, Composite, NonTensor, Unbounded
 from torchrl.envs import (
     AsyncEnvPool,
@@ -78,10 +80,16 @@ from torchrl.envs.utils import (
     check_marl_grouping,
     make_composite_from_td,
     MarlGroupMapType,
-    RandomPolicy,
     step_mdp,
 )
-from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
+from torchrl.modules import (
+    Actor,
+    ActorCriticOperator,
+    MLP,
+    RandomPolicy,
+    SafeModule,
+    ValueOperator,
+)
 from torchrl.modules.tensordict_module import WorldModelWrapper
 
 pytestmark = [
@@ -91,6 +99,62 @@ pytestmark = [
     ),
     pytest.mark.filterwarnings("ignore:unclosed file"),
 ]
+
+_has_ale = importlib.util.find_spec("ale_py") is not None
+_has_mujoco = importlib.util.find_spec("mujoco") is not None
+
+
+@pytest.fixture(autouse=False)  # Turn to True to enable
+def check_no_lingering_multiprocessing_resources(request):
+    """Fixture that checks for leftover multiprocessing resources after each test.
+
+    This helps detect test pollution where one test leaves behind resource_sharer
+    threads, zombie processes, or other multiprocessing state that can cause
+    deadlocks in subsequent tests (especially with fork start method on Linux).
+
+    See: https://bugs.python.org/issue30289
+    """
+    # Record state before test
+    threads_before = {t.name for t in threading.enumerate()}
+    # Count resource_sharer threads specifically
+    resource_sharer_before = sum(
+        1
+        for t in threading.enumerate()
+        if "_serve" in t.name or "resource_sharer" in t.name.lower()
+    )
+
+    yield
+
+    # Give a brief moment for cleanup
+    gc.collect()
+    time.sleep(0.05)
+
+    # Check for new resource_sharer threads
+    resource_sharer_after = sum(
+        1
+        for t in threading.enumerate()
+        if "_serve" in t.name or "resource_sharer" in t.name.lower()
+    )
+
+    # Only warn (not fail) for now - this is informational to help debug
+    if resource_sharer_after > resource_sharer_before:
+        new_threads = {t.name for t in threading.enumerate()} - threads_before
+        resource_sharer_threads = [
+            t.name
+            for t in threading.enumerate()
+            if "_serve" in t.name or "resource_sharer" in t.name.lower()
+        ]
+        import warnings
+
+        warnings.warn(
+            f"Test {request.node.name} left behind {resource_sharer_after - resource_sharer_before} "
+            f"resource_sharer thread(s): {resource_sharer_threads}. "
+            f"New threads: {new_threads}. "
+            "This can cause deadlocks in subsequent tests with fork start method.",
+            UserWarning,
+            stacklevel=1,
+        )
+
 
 gym_version = None
 if _has_gym:
@@ -110,92 +174,48 @@ except FileNotFoundError:
     _atari_found = False
     atari_confs = defaultdict(str)
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import (
-        _make_envs,
-        CARTPOLE_VERSIONED,
-        check_rollout_consistency_multikey_env,
-        decorate_thread_sub_func,
-        get_default_devices,
-        HALFCHEETAH_VERSIONED,
-        PENDULUM_VERSIONED,
-        PONG_VERSIONED,
-        rand_reset,
-    )
-    from pytorch.rl.test.mocking_classes import (
-        ActionObsMergeLinear,
-        AutoResetHeteroCountingEnv,
-        AutoResettingCountingEnv,
-        ContinuousActionConvMockEnv,
-        ContinuousActionConvMockEnvNumpy,
-        ContinuousActionVecMockEnv,
-        CountingBatchedEnv,
-        CountingEnv,
-        CountingEnvCountPolicy,
-        DiscreteActionConvMockEnv,
-        DiscreteActionConvMockEnvNumpy,
-        DiscreteActionVecMockEnv,
-        DummyModelBasedEnvBase,
-        EnvThatDoesNothing,
-        EnvThatErrorsBecauseOfStack,
-        EnvWithDynamicSpec,
-        EnvWithMetadata,
-        EnvWithTensorClass,
-        HeterogeneousCountingEnv,
-        HeterogeneousCountingEnvPolicy,
-        HistoryTransform,
-        MockBatchedLockedEnv,
-        MockBatchedUnLockedEnv,
-        MockNestedResetEnv,
-        MockSerialEnv,
-        MultiKeyCountingEnv,
-        MultiKeyCountingEnvPolicy,
-        NestedCountingEnv,
-        Str2StrEnv,
-    )
-else:
-    from _utils_internal import (
-        _make_envs,
-        CARTPOLE_VERSIONED,
-        check_rollout_consistency_multikey_env,
-        decorate_thread_sub_func,
-        get_default_devices,
-        HALFCHEETAH_VERSIONED,
-        PENDULUM_VERSIONED,
-        PONG_VERSIONED,
-        rand_reset,
-    )
-    from mocking_classes import (
-        ActionObsMergeLinear,
-        AutoResetHeteroCountingEnv,
-        AutoResettingCountingEnv,
-        ContinuousActionConvMockEnv,
-        ContinuousActionConvMockEnvNumpy,
-        ContinuousActionVecMockEnv,
-        CountingBatchedEnv,
-        CountingEnv,
-        CountingEnvCountPolicy,
-        DiscreteActionConvMockEnv,
-        DiscreteActionConvMockEnvNumpy,
-        DiscreteActionVecMockEnv,
-        DummyModelBasedEnvBase,
-        EnvThatDoesNothing,
-        EnvThatErrorsBecauseOfStack,
-        EnvWithDynamicSpec,
-        EnvWithMetadata,
-        EnvWithTensorClass,
-        HeterogeneousCountingEnv,
-        HeterogeneousCountingEnvPolicy,
-        HistoryTransform,
-        MockBatchedLockedEnv,
-        MockBatchedUnLockedEnv,
-        MockNestedResetEnv,
-        MockSerialEnv,
-        MultiKeyCountingEnv,
-        MultiKeyCountingEnvPolicy,
-        NestedCountingEnv,
-        Str2StrEnv,
-    )
+from torchrl.testing import (
+    CARTPOLE_VERSIONED,
+    check_rollout_consistency_multikey_env,
+    get_default_devices,
+    HALFCHEETAH_VERSIONED,
+    make_envs as _make_envs,
+    PENDULUM_VERSIONED,
+    PONG_VERSIONED,
+    rand_reset,
+)
+from torchrl.testing.mocking_classes import (
+    ActionObsMergeLinear,
+    AutoResetHeteroCountingEnv,
+    AutoResettingCountingEnv,
+    ContinuousActionConvMockEnv,
+    ContinuousActionConvMockEnvNumpy,
+    ContinuousActionVecMockEnv,
+    CountingBatchedEnv,
+    CountingEnv,
+    CountingEnvCountPolicy,
+    DiscreteActionConvMockEnv,
+    DiscreteActionConvMockEnvNumpy,
+    DiscreteActionVecMockEnv,
+    DummyModelBasedEnvBase,
+    EnvThatDoesNothing,
+    EnvThatErrorsBecauseOfStack,
+    EnvWithDynamicSpec,
+    EnvWithMetadata,
+    EnvWithTensorClass,
+    HeterogeneousCountingEnv,
+    HeterogeneousCountingEnvPolicy,
+    HistoryTransform,
+    MockBatchedLockedEnv,
+    MockBatchedUnLockedEnv,
+    MockNestedResetEnv,
+    MockSerialEnv,
+    MultiKeyCountingEnv,
+    MultiKeyCountingEnvPolicy,
+    NestedCountingEnv,
+    Str2StrEnv,
+)
+
 IS_OSX = platform == "darwin"
 IS_WIN = platform == "win32"
 if IS_WIN:
@@ -856,6 +876,8 @@ class TestRollout:
     @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED, PONG_VERSIONED])
     @pytest.mark.parametrize("frame_skip", [1, 4])
     def test_rollout(self, env_name, frame_skip, seed=0):
+        if env_name is PONG_VERSIONED and not _has_ale:
+            pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
         if env_name is PONG_VERSIONED and version.parse(
             gym_backend().__version__
         ) < version.parse("0.19"):
@@ -1231,6 +1253,32 @@ class TestParallel:
                 mp_start_method=start_method,
             )
             assert isinstance(env, ParallelEnv)
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_lambda_wrapping(self, maybe_fork_ParallelEnv):
+        """Test that ParallelEnv automatically wraps lambda functions with EnvCreator.
+
+        Lambda functions cannot be pickled with standard pickle (required for spawn
+        start method), but EnvCreator uses cloudpickle which can handle them.
+        This test verifies that lambda functions work correctly with ParallelEnv.
+        """
+        # Test single lambda function
+        env = maybe_fork_ParallelEnv(2, lambda: ContinuousActionVecMockEnv())
+        try:
+            rollout = env.rollout(3)
+            assert rollout.shape[0] == 2
+            assert rollout.shape[1] == 3
+        finally:
+            env.close(raise_if_closed=False)
+
+        # Test list of lambda functions (heterogeneous envs)
+        env1 = lambda: ContinuousActionVecMockEnv()
+        env2 = lambda: ContinuousActionVecMockEnv()
+        env = maybe_fork_ParallelEnv(2, [env1, env2])
+        try:
+            rollout = env.rollout(3)
+            assert rollout.shape[0] == 2
         finally:
             env.close(raise_if_closed=False)
 
@@ -2522,9 +2570,7 @@ class TestStepMdp:
             env = ContinuousActionVecMockEnv()
         env.set_spec_lock_()
         env.rollout(10)
-        c = SyncDataCollector(
-            env, env.rand_action, frames_per_batch=10, total_frames=20
-        )
+        c = Collector(env, env.rand_action, frames_per_batch=10, total_frames=20)
         for data in c:  # noqa: B007
             pass
         assert ("collector", "traj_ids") in data.keys(True)
@@ -2535,9 +2581,7 @@ class TestStepMdp:
             env = SerialEnv(2, ContinuousActionVecMockEnv)
         else:
             env = ContinuousActionVecMockEnv()
-        c = SyncDataCollector(
-            env, env.rand_action, frames_per_batch=10, total_frames=20
-        )
+        c = Collector(env, env.rand_action, frames_per_batch=10, total_frames=20)
         for data in c:  # noqa: B007
             pass
 
@@ -2550,6 +2594,10 @@ class TestInfoDict:
     )
     @pytest.mark.parametrize("device", get_default_devices())
     def test_info_dict_reader(self, device, seed=0):
+        if not _has_mujoco:
+            pytest.skip(
+                "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+            )
         try:
             import gymnasium as gym
         except ModuleNotFoundError:
@@ -2586,6 +2634,10 @@ class TestInfoDict:
             ),
             [Unbounded((), dtype=torch.float64)],
         ):
+            if not _has_mujoco:
+                pytest.skip(
+                    "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+                )
             env2 = GymWrapper(gym.make("HalfCheetah-v5"))
             env2.set_info_dict_reader(
                 default_info_dict_reader(["x_position"], spec=spec)
@@ -2608,6 +2660,10 @@ class TestInfoDict:
     )
     @pytest.mark.parametrize("device", get_default_devices())
     def test_auto_register(self, device, maybe_fork_ParallelEnv):
+        if not _has_mujoco:
+            pytest.skip(
+                "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+            )
         try:
             import gymnasium as gym
         except ModuleNotFoundError:
@@ -2741,7 +2797,7 @@ class TestConcurrentEnvs:
         ]
         spec = make_envs[0]().action_spec
         policy = TestConcurrentEnvs.Policy(Composite(action=spec))
-        collector = MultiSyncDataCollector(
+        collector = MultiSyncCollector(
             make_envs,
             policy,
             frames_per_batch=n_workers * 100,
@@ -2752,7 +2808,7 @@ class TestConcurrentEnvs:
             cat_results=-1,
         )
         single_collectors = [
-            SyncDataCollector(
+            Collector(
                 make_envs[i](),
                 policy,
                 frames_per_batch=n_workers * 100,
@@ -3361,25 +3417,28 @@ class TestLibThreading:
     )
     def test_num_threads(self):
         gc.collect()
-        from torchrl.envs import batched_envs
-
-        _run_worker_pipe_shared_mem_save = batched_envs._run_worker_pipe_shared_mem
-        batched_envs._run_worker_pipe_shared_mem = decorate_thread_sub_func(
-            batched_envs._run_worker_pipe_shared_mem, num_threads=3
-        )
         num_threads = torch.get_num_threads()
+        main_pid = os.getpid()
         try:
-            env = ParallelEnv(
-                2, ContinuousActionVecMockEnv, num_sub_threads=3, num_threads=7
-            )
+            # Wrap the env factory to check thread count inside the subprocess.
+            # The env is created AFTER torch.set_num_threads() is called in the worker.
+            # Note: the factory is also called in the main process to get metadata,
+            # so we only check thread count when running in a subprocess.
+            def make_env():
+                if os.getpid() != main_pid:
+                    # Only check thread count in subprocess, not during metadata extraction
+                    assert (
+                        torch.get_num_threads() == 3
+                    ), f"Expected 3 threads, got {torch.get_num_threads()}"
+                return ContinuousActionVecMockEnv()
+
+            env = ParallelEnv(2, make_env, num_sub_threads=3, num_threads=7)
             # We could test that the number of threads isn't changed until we start the procs.
             # Even though it's unlikely that we have 7 threads, we still disable this for safety
             # assert torch.get_num_threads() != 7
             env.rollout(3)
             assert torch.get_num_threads() == 7
         finally:
-            # reset vals
-            batched_envs._run_worker_pipe_shared_mem = _run_worker_pipe_shared_mem_save
             torch.set_num_threads(num_threads)
 
     @pytest.mark.skipif(
@@ -3825,6 +3884,7 @@ class TestNonTensorEnv:
         r = env.rollout(N, break_when_any_done=bwad)
         assert r.get("non_tensor").tolist() == [list(range(N))] * 2
 
+    # @pytest.mark.forked  # Run in isolated subprocess to avoid resource_sharer pollution from other tests
     @pytest.mark.parametrize("bwad", [True, False])
     @pytest.mark.parametrize("use_buffers", [False, True])
     def test_parallel(self, bwad, use_buffers, maybe_fork_ParallelEnv):
@@ -3834,6 +3894,56 @@ class TestNonTensorEnv:
             r = env.rollout(N, break_when_any_done=bwad)
             assert r.get("non_tensor").tolist() == [list(range(N))] * 2
         finally:
+            env.close(raise_if_closed=False)
+            del env
+            time.sleep(0.1)
+            gc.collect()
+
+    @pytest.mark.skipif(
+        platform == "win32", reason="signal-based timeout not supported."
+    )
+    def test_parallel_large_non_tensor_does_not_deadlock(self, maybe_fork_ParallelEnv):
+        """Regression test: large non-tensor payloads must not deadlock ParallelEnv in buffer mode.
+
+        In shared-buffer mode, non-tensor leaves are sent over the Pipe. If the worker
+        blocks on `send()` (pipe buffer full) before setting its completion event,
+        the parent can hang forever waiting for that event. We guard against this by
+        using a signal alarm and a very large non-tensor payload.
+        """
+
+        class _LargeNonTensorEnv(EnvWithMetadata):
+            def __init__(self, payload_size: int = 5_000_000):
+                super().__init__()
+                self._payload = b"x" * payload_size
+
+            def _reset(self, tensordict):
+                data = self._saved_obs_spec.zero()
+                data.set_non_tensor("non_tensor", self._payload)
+                data.update(self.full_done_spec.zero())
+                return data
+
+            def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+                data = self._saved_obs_spec.zero()
+                data.set_non_tensor("non_tensor", self._payload)
+                data.update(self.full_done_spec.zero())
+                data.update(self._saved_full_reward_spec.zero())
+                return data
+
+        def _alarm_handler(signum, frame):
+            raise TimeoutError(
+                "ParallelEnv deadlocked while waiting for workers with large non-tensor payloads."
+            )
+
+        old_handler = signal.signal(signal.SIGALRM, _alarm_handler)
+        signal.alarm(15)
+        env = maybe_fork_ParallelEnv(2, _LargeNonTensorEnv, use_buffers=True)
+        try:
+            td = env.reset()
+            td = td.set("action", torch.zeros(2, 1))
+            _ = env.step(td)
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old_handler)
             env.close(raise_if_closed=False)
             del env
             time.sleep(0.1)
@@ -4658,7 +4768,7 @@ class TestEnvWithHistory:
             env.close(raise_if_closed=False)
 
     @pytest.mark.parametrize("device_env", [None, "cpu"])
-    @pytest.mark.parametrize("collector_cls", [SyncDataCollector])
+    @pytest.mark.parametrize("collector_cls", [Collector])
     def test_env_history_base_collector(self, device_env, collector_cls):
         env = self._make_env(device_env)
         collector = collector_cls(
@@ -4671,7 +4781,7 @@ class TestEnvWithHistory:
                 )
 
     @pytest.mark.parametrize("device_env", [None, "cpu"])
-    @pytest.mark.parametrize("collector_cls", [SyncDataCollector])
+    @pytest.mark.parametrize("collector_cls", [Collector])
     def test_skipping_history_env_collector(self, device_env, collector_cls):
         env = self._make_skipping_env(device_env, max_steps=10)
         collector = collector_cls(

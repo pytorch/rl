@@ -5,21 +5,25 @@
 from __future__ import annotations
 
 import warnings
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
-from tensordict import TensorDictBase
+from tensordict import NestedKey, TensorDictBase
 from tensordict.nn import (
     TensorDictModule,
     TensorDictModuleBase,
     TensorDictModuleWrapper,
 )
-from tensordict.utils import expand_as_right, expand_right, NestedKey
+from tensordict.utils import expand_as_right, expand_right
 from torch import nn
 
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.envs.utils import exploration_type, ExplorationType
 from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
+
+if TYPE_CHECKING:
+    from torchrl.envs import EnvBase
 
 __all__ = [
     "EGreedyWrapper",
@@ -27,6 +31,7 @@ __all__ = [
     "AdditiveGaussianModule",
     "OrnsteinUhlenbeckProcessModule",
     "OrnsteinUhlenbeckProcessWrapper",
+    "set_exploration_modules_spec_from_env",
 ]
 
 
@@ -248,8 +253,13 @@ class AdditiveGaussianModule(TensorDictModuleBase):
     """Additive Gaussian PO module.
 
     Args:
-        spec (TensorSpec): the spec used for sampling actions. The sampled
+        spec (TensorSpec, optional): the spec used for sampling actions. The sampled
             action will be projected onto the valid action space once explored.
+            Can be ``None`` for delayed initialization, in which case the spec
+            must be set via the :attr:`spec` property setter before calling
+            :meth:`forward`. This is useful for config-based workflows where the
+            spec depends on the environment.
+            default: None
         sigma_init (scalar, optional): initial epsilon value.
             default: 1.0
         sigma_end (scalar, optional): final epsilon value.
@@ -257,9 +267,9 @@ class AdditiveGaussianModule(TensorDictModuleBase):
         annealing_num_steps (int, optional): number of steps it will take for
             sigma to reach the :obj:`sigma_end` value.
             default: 1000
-        mean (:obj:`float`, optional): mean of each output element’s normal distribution.
+        mean (:obj:`float`, optional): mean of each output element's normal distribution.
             default: 0.0
-        std (:obj:`float`, optional): standard deviation of each output element’s normal distribution.
+        std (:obj:`float`, optional): standard deviation of each output element's normal distribution.
             default: 1.0
 
     Keyword Args:
@@ -284,7 +294,7 @@ class AdditiveGaussianModule(TensorDictModuleBase):
 
     def __init__(
         self,
-        spec: TensorSpec,
+        spec: TensorSpec | None = None,
         sigma_init: float = 1.0,
         sigma_end: float = 0.1,
         annealing_num_steps: int = 1000,
@@ -315,11 +325,11 @@ class AdditiveGaussianModule(TensorDictModuleBase):
             "sigma", torch.tensor(sigma_init, dtype=torch.float32, device=device)
         )
 
+        # spec can be None for delayed initialization
+        # In this case, spec must be set before forward() is called
         if spec is not None:
             if not isinstance(spec, Composite) and len(self.out_keys) >= 1:
                 spec = Composite({action_key: spec}, shape=spec.shape[:-1])
-        else:
-            raise RuntimeError("spec cannot be None.")
         self._spec = spec
         self.safe = safe
         if self.safe:
@@ -328,6 +338,23 @@ class AdditiveGaussianModule(TensorDictModuleBase):
     @property
     def spec(self):
         return self._spec
+
+    @spec.setter
+    def spec(self, value: TensorSpec) -> None:
+        """Set the action spec.
+
+        This setter allows delayed initialization of the spec, which is useful
+        when the spec depends on environment information that is not available
+        at module construction time.
+
+        Args:
+            value (TensorSpec): The action spec to set. Cannot be None.
+        """
+        if value is None:
+            raise RuntimeError("spec cannot be set to None.")
+        if not isinstance(value, Composite) and len(self.out_keys) >= 1:
+            value = Composite({self.action_key: value}, shape=value.shape[:-1])
+        self._spec = value
 
     def step(self, frames: int = 1) -> None:
         """A step of sigma decay.
@@ -350,6 +377,11 @@ class AdditiveGaussianModule(TensorDictModuleBase):
             )
 
     def _add_noise(self, action: torch.Tensor) -> torch.Tensor:
+        if self._spec is None:
+            raise RuntimeError(
+                "spec has not been set. The spec must be provided either at construction "
+                "time or set via the `spec` property before calling forward(). "
+            )
         sigma = self.sigma
         mean = self.mean.expand(action.shape)
         std = self.std.expand(action.shape)
@@ -743,3 +775,93 @@ class _OrnsteinUhlenbeckProcess(nn.Module):
     def current_sigma(self, n_steps: torch.Tensor) -> torch.Tensor:
         sigma = (self.m * n_steps + self.c).clamp_min(self.sigma_min)
         return sigma
+
+
+class RandomPolicy:
+    """A random policy for data collectors.
+
+    This is a wrapper around the action_spec.rand method.
+
+    Args:
+        action_spec: TensorSpec object describing the action specs
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data.tensor_specs import Bounded
+        >>> action_spec = Bounded(-torch.ones(3), torch.ones(3))
+        >>> actor = RandomPolicy(action_spec=action_spec)
+        >>> td = actor(TensorDict()) # selects a random action in the cube [-1; 1]
+    """
+
+    def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
+        super().__init__()
+        self.action_spec = action_spec.clone()
+        self.action_key = action_key
+
+    def __call__(self, td: TensorDictBase) -> TensorDictBase:
+        if isinstance(self.action_spec, Composite):
+            return td.update(self.action_spec.rand())
+        else:
+            return td.set(self.action_key, self.action_spec.rand())
+
+
+def set_exploration_modules_spec_from_env(
+    policy: nn.Module | None, env: EnvBase
+) -> None:
+    """Set spec on exploration modules in a policy with action_spec from environment.
+
+    This helper function automatically sets the action_spec on exploration modules
+    (like AdditiveGaussianModule) that were instantiated without a spec. This
+    enables delayed initialization when using config systems where the spec
+    depends on the environment and should be set inside the collector.
+
+    Args:
+        policy: The policy module (may contain exploration modules). Can be None.
+        env: The environment to extract action_spec from.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict.nn import TensorDictSequential
+        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.modules import AdditiveGaussianModule, Actor, set_exploration_modules_spec_from_env
+        >>> # Create environment
+        >>> env = GymEnv("Pendulum-v1")
+        >>> # Create policy with exploration module without spec
+        >>> actor = Actor(
+        ...     module=torch.nn.Linear(3, 1),
+        ...     in_keys=["observation"],
+        ...     out_keys=["action"],
+        ... )
+        >>> exploration = AdditiveGaussianModule(spec=None)  # spec will be set later
+        >>> policy = TensorDictSequential(actor, exploration)
+        >>> # Set spec from environment
+        >>> set_exploration_modules_spec_from_env(policy, env)
+        >>> assert exploration._spec is not None  # spec is now set
+        >>> env.close()
+
+    """
+    if policy is None:
+        return
+
+    # Only process nn.Module policies that have .modules() method
+    if not isinstance(policy, nn.Module):
+        return
+
+    if hasattr(env, "action_spec_unbatched"):
+        action_spec = env.action_spec_unbatched
+    elif hasattr(env, "action_spec"):
+        action_spec = env.action_spec
+    else:
+        return
+
+    if action_spec is None:
+        return
+
+    # Types of exploration modules that support delayed spec initialization.
+    # More exploration modules can be added when they support delayed spec setting.
+    exploration_module_types = (AdditiveGaussianModule,)
+
+    for submodule in policy.modules():
+        if isinstance(submodule, exploration_module_types):
+            if hasattr(submodule, "_spec") and submodule._spec is None:
+                submodule.spec = action_spec

@@ -548,7 +548,7 @@ print(info)
 #   tensordict passed to the loss module, making it possible to update the
 #   weights without effort:
 #
-#   ..code - block::Python
+#   .. code-block:: python
 #
 #      >>> data = replay_buffer.sample()
 #      >>> loss_val = loss_module(data)
@@ -637,7 +637,7 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     TransformedEnv,
 )
-from torchrl.envs.utils import RandomPolicy
+from torchrl.modules import RandomPolicy
 
 env = TransformedEnv(
     GymEnv("CartPole-v1", from_pixels=True),

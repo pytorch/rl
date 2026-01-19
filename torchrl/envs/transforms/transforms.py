@@ -241,20 +241,42 @@ class Transform(nn.Module):
 
     def __init__(
         self,
-        in_keys: Sequence[NestedKey] = None,
+        in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
         in_keys_inv: Sequence[NestedKey] | None = None,
         out_keys_inv: Sequence[NestedKey] | None = None,
     ):
         super().__init__()
-        self.in_keys = in_keys
-        self.out_keys = out_keys
-        self.in_keys_inv = in_keys_inv
-        self.out_keys_inv = out_keys_inv
+        if in_keys is not None:
+            self.in_keys = in_keys
+        if out_keys is not None:
+            self.out_keys = out_keys
+        if in_keys_inv is not None:
+            self.in_keys_inv = in_keys_inv
+        if out_keys_inv is not None:
+            self.out_keys_inv = out_keys_inv
         self._missing_tolerance = False
         # we use __dict__ to avoid having nn.Module placing these objects in the module list
         self.__dict__["_container"] = None
         self.__dict__["_parent"] = None
+
+    def _getattr(self, val, *args, **kwargs):
+        if args:
+            if len(args) > 1:
+                raise TypeError(
+                    f"Expected at most 1 positional argument, got {len(args)}"
+                )
+            default = args[0]
+            return getattr(self, val, default)
+        if kwargs:
+            try:
+                default = kwargs.pop("default")
+            except KeyError:
+                raise TypeError("Only 'default' keyword argument is supported")
+            if args:
+                raise TypeError("Got two values for keyword argument 'default'")
+            return getattr(self, val, default)
+        return getattr(self, val)
 
     def _ready(self):
         # Used to block ray until the actor is ready, see RayTransform
@@ -324,7 +346,7 @@ class Transform(nn.Module):
         self._out_keys_inv = value
 
     @property
-    def collector(self) -> DataCollectorBase | None:  # noqa: F821 # type: ignore
+    def collector(self) -> BaseCollector | None:  # noqa: F821 # type: ignore
         """Returns the collector associated with the container, if it exists.
 
         This can be used whenever the transform needs to be made aware of the collector or the policy associated with it.
@@ -592,13 +614,11 @@ class Transform(nn.Module):
         in_keys = {unravel_key(k) for k in self.in_keys}
         for key in out_keys - in_keys:
             if unravel_key(key) not in output_spec_keys:
-                warnings.warn(
+                raise KeyError(
                     f"The key '{key}' is unaccounted for by the transform (expected keys {output_spec_keys}). "
                     f"Every new entry in the tensordict resulting from a call to a transform must be "
                     f"registered in the specs for torchrl rollouts to be consistently built. "
-                    f"Make sure transform_output_spec/transform_observation_spec/... is coded correctly. "
-                    "This warning will trigger a KeyError in v0.9, make sure to adapt your code accordingly.",
-                    category=FutureWarning,
+                    f"Make sure transform_output_spec/transform_observation_spec/... is coded correctly."
                 )
         return output_spec
 
@@ -2011,8 +2031,8 @@ class ClipTransform(Transform):
     Args:
         in_keys (list of NestedKeys): input entries (read)
         out_keys (list of NestedKeys): input entries (write)
-        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`inv` calls.
-        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`inv` calls.
+        in_keys_inv (list of NestedKeys): input entries (read) during ``inv`` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during ``inv`` calls.
 
     Keyword Args:
         low (scalar, optional): the lower bound of the clipped space.
@@ -2778,8 +2798,8 @@ class UnsqueezeTransform(Transform):
         in_keys (list of NestedKeys): input entries (read).
         out_keys (list of NestedKeys): input entries (write). Defaults to ``in_keys`` if
             not provided.
-        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`inv` calls.
-        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls.
+        in_keys_inv (list of NestedKeys): input entries (read) during ``inv`` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during ``inv`` calls.
             Defaults to ``in_keys_in`` if not provided.
     """
 
@@ -2948,8 +2968,8 @@ class PermuteTransform(Transform):
         in_keys (list of NestedKeys): input entries (read).
         out_keys (list of NestedKeys): input entries (write). Defaults to ``in_keys`` if
             not provided.
-        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`~.inv` calls.
-        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls. Defaults to ``in_keys_in`` if
+        in_keys_inv (list of NestedKeys): input entries (read) during ``inv`` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during ``inv`` calls. Defaults to ``in_keys_in`` if
             not provided.
 
     Examples:
@@ -3461,7 +3481,7 @@ class CatFrames(ObservationTransform):
 
     When used within a transformed environment,
     :class:`CatFrames` is a stateful class, and it can be reset to its native state by
-    calling the :meth:`~.reset` method. This method accepts tensordicts with a
+    calling the ``reset`` method. This method accepts tensordicts with a
     ``"_reset"`` entry that indicates which buffer to reset.
 
     Args:
@@ -3501,8 +3521,8 @@ class CatFrames(ObservationTransform):
     gives the complete picture, together with the usage of a :class:`torchrl.data.ReplayBuffer`:
 
     Examples:
-        >>> from torchrl.envs.utils import RandomPolicy        >>> from torchrl.envs import UnsqueezeTransform, CatFrames
-        >>> from torchrl.collectors import SyncDataCollector
+        >>> from torchrl.modules import RandomPolicy        >>>         >>>         >>> from torchrl.envs import UnsqueezeTransform, CatFrames
+        >>> from torchrl.collectors import Collector
         >>> # Create a transformed environment with CatFrames: notice the usage of UnsqueezeTransform to create an extra dimension
         >>> env = TransformedEnv(
         ...     GymEnv("CartPole-v1", from_pixels=True),
@@ -3515,7 +3535,7 @@ class CatFrames(ObservationTransform):
         ...     )
         ... )
         >>> # we design a collector
-        >>> collector = SyncDataCollector(
+        >>> collector = Collector(
         ...     env,
         ...     RandomPolicy(env.action_spec),
         ...     frames_per_batch=10,
@@ -5306,6 +5326,7 @@ class Hash(UnaryTransform):
             transform instantiation and these modifications will be reflected in
             the map. Missing hashes will be mapped to ``None``. Default: ``None``
 
+    Examples:
         >>> from torchrl.envs import GymEnv, UnaryTransform, Hash
         >>> env = GymEnv("Pendulum-v1")
         >>> # Add a string output
@@ -5813,10 +5834,10 @@ class Stack(Transform):
     Args:
         in_keys (sequence of NestedKey): keys to be stacked.
         out_key (NestedKey): key of the resulting stacked entry.
-        in_key_inv (NestedKey, optional): key to unstack during :meth:`~.inv`
+        in_key_inv (NestedKey, optional): key to unstack during ``inv``
             calls. Default is ``None``.
         out_keys_inv (sequence of NestedKey, optional): keys of the resulting
-            unstacked entries after :meth:`~.inv` calls. Default is ``None``.
+            unstacked entries after ``inv`` calls. Default is ``None``.
         dim (int, optional): dimension to insert. Default is ``-1``.
         allow_positive_dim (bool, optional): if ``True``, positive dimensions
             are accepted.  Defaults to ``False``, ie. non-negative dimensions are
@@ -6729,7 +6750,7 @@ def _sum_left(val, dest):
 class gSDENoise(TensorDictPrimer):
     """A gSDE noise initializer.
 
-    See the :func:`~torchrl.modules.models.exploration.gSDEModule' for more info.
+    See the :func:`~torchrl.modules.models.exploration.gSDEModule` for more info.
     """
 
     def __init__(
@@ -6851,6 +6872,22 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
             "This class is to be deprecated in favor of :class:`~torchrl.envs.VecNormV2`.",
             category=FutureWarning,
         )
+
+        # Warn about shared memory limitations on older PyTorch
+        from packaging.version import parse as parse_version
+
+        if (
+            parse_version(torch.__version__).base_version < "2.8.0"
+            and shared_td is not None
+        ):
+            warnings.warn(
+                "VecNorm with shared memory (shared_td) may not synchronize correctly "
+                "across processes on PyTorch < 2.8 when using the 'spawn' multiprocessing "
+                "start method. This is due to limitations in PyTorch's shared memory "
+                "implementation with the 'file_system' sharing strategy. "
+                "Consider upgrading to PyTorch >= 2.8 for full shared memory support.",
+                category=UserWarning,
+            )
 
         if lock is None:
             lock = mp.Lock()
@@ -8402,7 +8439,7 @@ class InitTracker(Transform):
     """Reset tracker.
 
     This transform populates the step/reset tensordict with a reset tracker entry
-    that is set to ``True`` whenever :meth:`~.reset` is called.
+    that is set to ``True`` whenever ``reset`` is called.
 
     Args:
          init_key (NestedKey, optional): the key to be used for the tracker entry.
@@ -8800,11 +8837,11 @@ class Reward2GoTransform(Transform):
     append the `inv` method of the transform.
 
     Examples:
-        >>> from torchrl.envs.utils import RandomPolicy        >>> from torchrl.collectors import SyncDataCollector
+        >>> from torchrl.modules import RandomPolicy        >>>         >>>         >>> from torchrl.collectors import Collector
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> t = Reward2GoTransform(gamma=0.99, out_keys=["reward_to_go"])
         >>> env = GymEnv("Pendulum-v1")
-        >>> collector = SyncDataCollector(
+        >>> collector = Collector(
         ...     env,
         ...     RandomPolicy(env.action_spec),
         ...     frames_per_batch=200,
@@ -9367,8 +9404,8 @@ class SignTransform(Transform):
     Args:
         in_keys (list of NestedKeys): input entries (read)
         out_keys (list of NestedKeys): input entries (write)
-        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`~.inv` calls.
-        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls.
+        in_keys_inv (list of NestedKeys): input entries (read) during ``inv`` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during ``inv`` calls.
 
     Examples:
         >>> from torchrl.envs import GymEnv, TransformedEnv, SignTransform
@@ -9851,8 +9888,8 @@ class BatchSizeTransform(Transform):
     This transform can be used to deploy non-batch-locked environments within data
     collectors:
 
-        >>> from torchrl.collectors import SyncDataCollector
-        >>> collector = SyncDataCollector(env, lambda td: env.rand_action(td), frames_per_batch=10, total_frames=-1)
+        >>> from torchrl.collectors import Collector
+        >>> collector = Collector(env, lambda td: env.rand_action(td), frames_per_batch=10, total_frames=-1)
         >>> for data in collector:
         ...     print(data)
         ...     break
@@ -10358,6 +10395,21 @@ class ActionDiscretizer(Transform):
         >>> assert (r["action"] < base_env.action_spec.high).all()
         >>> assert (r["action"] > base_env.action_spec.low).all()
 
+    .. note:: Custom Sampling Strategies
+
+        To implement a custom sampling strategy beyond the built-in options
+        (``MEDIAN``, ``LOW``, ``HIGH``, ``RANDOM``), subclass ``ActionDiscretizer``
+        and override the :meth:`~ActionDiscretizer.custom_arange` method. This
+        method computes the normalized interval positions (values in ``[0, 1)``)
+        that determine where each discrete action maps within the continuous
+        action interval.
+
+        Example:
+            >>> class LogSpacedActionDiscretizer(ActionDiscretizer):
+            ...     def custom_arange(self, nint, device):
+            ...         # Use logarithmic spacing instead of linear
+            ...         return torch.logspace(-2, 0, nint, device=device) - 0.01
+
     """
 
     class SamplingStrategy(IntEnum):
@@ -10404,7 +10456,33 @@ class ActionDiscretizer(Transform):
             f"\n{_indent(out_action_key)},\n{_indent(sampling)},\n{_indent(categorical)})"
         )
 
-    def _custom_arange(self, nint, device):
+    def custom_arange(self, nint, device):
+        """Compute the normalized interval positions for discretization.
+
+        This method generates values in the range [0, 1) that determine where
+        each discrete action maps within the continuous action interval.
+
+        Override this method in a subclass to implement custom sampling
+        strategies beyond the built-in ``MEDIAN``, ``LOW``, ``HIGH``, and
+        ``RANDOM`` strategies.
+
+        Args:
+            nint (int): the number of intervals (discrete actions) for this
+                action dimension.
+            device (torch.device): the device on which to create the tensor.
+
+        Returns:
+            torch.Tensor: a 1D tensor of shape ``(nint,)`` with values in
+                ``[0, 1)`` representing the normalized positions within each
+                interval.
+
+        Example:
+            >>> class CustomActionDiscretizer(ActionDiscretizer):
+            ...     def custom_arange(self, nint, device):
+            ...         # Custom sampling: use logarithmic spacing
+            ...         return torch.logspace(-2, 0, nint, device=device) - 0.01
+
+        """
         result = torch.arange(
             start=0.0,
             end=1.0,
@@ -10454,7 +10532,7 @@ class ActionDiscretizer(Transform):
 
             if isinstance(num_intervals, int):
                 arange = (
-                    self._custom_arange(num_intervals, action_spec.device).expand(
+                    self.custom_arange(num_intervals, action_spec.device).expand(
                         (*n_act, num_intervals)
                     )
                     * interval
@@ -10465,7 +10543,7 @@ class ActionDiscretizer(Transform):
                 self.register_buffer("intervals", low + arange)
             else:
                 arange = [
-                    self._custom_arange(_num_intervals, action_spec.device) * interval
+                    self.custom_arange(_num_intervals, action_spec.device) * interval
                     for _num_intervals, interval in zip(
                         num_intervals.tolist(), interval.unbind(-2)
                     )

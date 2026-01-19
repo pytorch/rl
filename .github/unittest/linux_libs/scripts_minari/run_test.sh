@@ -21,5 +21,5 @@ lib_dir="${env_dir}/lib"
 python -c "import minari"
 
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestMinari --error-for-skips --runslow
-coverage combine
+coverage combine -q
 coverage xml -i

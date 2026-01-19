@@ -6,8 +6,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import os
-import warnings
 
 import numpy as np
 import pytest
@@ -27,45 +25,23 @@ from torchrl._utils import _make_ordinal_device
 from torchrl.data.tensor_specs import (
     _keys_to_empty_composite_spec,
     Binary,
-    BinaryDiscreteTensorSpec,
     Bounded,
-    BoundedTensorSpec,
     Categorical,
     Choice,
     Composite,
-    CompositeSpec,
     ContinuousBox,
-    DiscreteTensorSpec,
     MultiCategorical,
-    MultiDiscreteTensorSpec,
     MultiOneHot,
-    MultiOneHotDiscreteTensorSpec,
     NonTensor,
-    NonTensorSpec,
     OneHot,
-    OneHotDiscreteTensorSpec,
     StackedComposite,
     TensorSpec,
     Unbounded,
-    UnboundedContinuous,
-    UnboundedContinuousTensorSpec,
     UnboundedDiscrete,
-    UnboundedDiscreteTensorSpec,
 )
 from torchrl.data.utils import check_no_exclusive_keys, consolidate_spec
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import (
-        get_available_devices,
-        get_default_devices,
-        set_global_var,
-    )
-else:
-    from _utils_internal import (
-        get_available_devices,
-        get_default_devices,
-        set_global_var,
-    )
+from torchrl.testing import get_available_devices, get_default_devices, set_global_var
 
 pytestmark = [
     pytest.mark.filterwarnings("error"),
@@ -4072,181 +4048,6 @@ class TestBatchSizeBox:
         assert spec.space.high.shape == (10, 2)
         assert spec.space._low.shape == (10, 2)
         assert spec.space._high.shape == (10, 2)
-
-
-class TestLegacy:
-    def test_one_hot(self):
-        with pytest.warns(
-            DeprecationWarning,
-            match="The OneHotDiscreteTensorSpec has been deprecated and will be removed in v0.8. Please use OneHot instead.",
-        ):
-            one_hot = OneHotDiscreteTensorSpec(n=4)
-        assert isinstance(one_hot, OneHotDiscreteTensorSpec)
-        assert isinstance(one_hot, OneHot)
-        assert not isinstance(one_hot, Categorical)
-        one_hot = OneHot(n=4)
-        assert isinstance(one_hot, OneHotDiscreteTensorSpec)
-        assert isinstance(one_hot, OneHot)
-        assert not isinstance(one_hot, Categorical)
-
-    def test_discrete(self):
-        with pytest.warns(
-            DeprecationWarning,
-            match="The DiscreteTensorSpec has been deprecated and will be removed in v0.8. Please use Categorical instead.",
-        ):
-            discrete = DiscreteTensorSpec(n=4)
-        assert isinstance(discrete, DiscreteTensorSpec)
-        assert isinstance(discrete, Categorical)
-        assert not isinstance(discrete, OneHot)
-        discrete = Categorical(n=4)
-        assert isinstance(discrete, DiscreteTensorSpec)
-        assert isinstance(discrete, Categorical)
-        assert not isinstance(discrete, OneHot)
-
-    def test_unbounded(self):
-
-        unbounded_continuous_impl = Unbounded(dtype=torch.float)
-        assert isinstance(unbounded_continuous_impl, Unbounded)
-        assert isinstance(unbounded_continuous_impl, UnboundedContinuous)
-        assert isinstance(unbounded_continuous_impl, UnboundedContinuousTensorSpec)
-        assert not isinstance(unbounded_continuous_impl, UnboundedDiscreteTensorSpec)
-
-        unbounded_discrete_impl = Unbounded(dtype=torch.int)
-        assert isinstance(unbounded_discrete_impl, Unbounded)
-        assert isinstance(unbounded_discrete_impl, UnboundedDiscrete)
-        assert isinstance(unbounded_discrete_impl, UnboundedDiscreteTensorSpec)
-        assert not isinstance(unbounded_discrete_impl, UnboundedContinuousTensorSpec)
-
-        with pytest.warns(
-            DeprecationWarning,
-            match="The UnboundedContinuousTensorSpec has been deprecated and will be removed in v0.8. Please use Unbounded instead.",
-        ):
-            unbounded_continuous = UnboundedContinuousTensorSpec()
-        assert isinstance(unbounded_continuous, Unbounded)
-        assert isinstance(unbounded_continuous, UnboundedContinuous)
-        assert isinstance(unbounded_continuous, UnboundedContinuousTensorSpec)
-        assert not isinstance(unbounded_continuous, UnboundedDiscreteTensorSpec)
-
-        with warnings.catch_warnings():
-            unbounded_continuous = UnboundedContinuous()
-
-        with pytest.warns(
-            DeprecationWarning,
-            match="The UnboundedDiscreteTensorSpec has been deprecated and will be removed in v0.8. Please use Unbounded instead.",
-        ):
-            unbounded_discrete = UnboundedDiscreteTensorSpec()
-        assert isinstance(unbounded_discrete, Unbounded)
-        assert isinstance(unbounded_discrete, UnboundedDiscrete)
-        assert isinstance(unbounded_discrete, UnboundedDiscreteTensorSpec)
-        assert not isinstance(unbounded_discrete, UnboundedContinuousTensorSpec)
-
-        with warnings.catch_warnings():
-            unbounded_discrete = UnboundedDiscrete()
-
-        # What if we mess with dtypes?
-        with pytest.warns(DeprecationWarning):
-            unbounded_continuous_fake = UnboundedContinuousTensorSpec(dtype=torch.int32)
-        assert isinstance(unbounded_continuous_fake, Unbounded)
-        assert not isinstance(unbounded_continuous_fake, UnboundedContinuous)
-        assert not isinstance(unbounded_continuous_fake, UnboundedContinuousTensorSpec)
-        assert isinstance(unbounded_continuous_fake, UnboundedDiscrete)
-        assert isinstance(unbounded_continuous_fake, UnboundedDiscreteTensorSpec)
-
-        with pytest.warns(DeprecationWarning):
-            unbounded_discrete_fake = UnboundedDiscreteTensorSpec(dtype=torch.float32)
-        assert isinstance(unbounded_discrete_fake, Unbounded)
-        assert isinstance(unbounded_discrete_fake, UnboundedContinuous)
-        assert isinstance(unbounded_discrete_fake, UnboundedContinuousTensorSpec)
-        assert not isinstance(unbounded_discrete_fake, UnboundedDiscrete)
-        assert not isinstance(unbounded_discrete_fake, UnboundedDiscreteTensorSpec)
-
-    def test_multi_one_hot(self):
-        with pytest.warns(
-            DeprecationWarning,
-            match="The MultiOneHotDiscreteTensorSpec has been deprecated and will be removed in v0.8. Please use MultiOneHot instead.",
-        ):
-            one_hot = MultiOneHotDiscreteTensorSpec(nvec=[4, 3])
-        assert isinstance(one_hot, MultiOneHotDiscreteTensorSpec)
-        assert isinstance(one_hot, MultiOneHot)
-        assert not isinstance(one_hot, MultiCategorical)
-        one_hot = MultiOneHot(nvec=[4, 3])
-        assert isinstance(one_hot, MultiOneHotDiscreteTensorSpec)
-        assert isinstance(one_hot, MultiOneHot)
-        assert not isinstance(one_hot, MultiCategorical)
-
-    def test_multi_categorical(self):
-        with pytest.warns(
-            DeprecationWarning,
-            match="The MultiDiscreteTensorSpec has been deprecated and will be removed in v0.8. Please use MultiCategorical instead.",
-        ):
-            categorical = MultiDiscreteTensorSpec(nvec=[4, 3])
-        assert isinstance(categorical, MultiDiscreteTensorSpec)
-        assert isinstance(categorical, MultiCategorical)
-        assert not isinstance(categorical, MultiOneHot)
-        categorical = MultiCategorical(nvec=[4, 3])
-        assert isinstance(categorical, MultiDiscreteTensorSpec)
-        assert isinstance(categorical, MultiCategorical)
-        assert not isinstance(categorical, MultiOneHot)
-
-    def test_binary(self):
-        with pytest.warns(
-            DeprecationWarning,
-            match="The BinaryDiscreteTensorSpec has been deprecated and will be removed in v0.8. Please use Binary instead.",
-        ):
-            binary = BinaryDiscreteTensorSpec(5)
-        assert isinstance(binary, BinaryDiscreteTensorSpec)
-        assert isinstance(binary, Binary)
-        assert not isinstance(binary, MultiOneHot)
-        binary = Binary(5)
-        assert isinstance(binary, BinaryDiscreteTensorSpec)
-        assert isinstance(binary, Binary)
-        assert not isinstance(binary, MultiOneHot)
-
-    def test_bounded(self):
-        with pytest.warns(
-            DeprecationWarning,
-            match="The BoundedTensorSpec has been deprecated and will be removed in v0.8. Please use Bounded instead.",
-        ):
-            bounded = BoundedTensorSpec(-2, 2, shape=())
-        assert isinstance(bounded, BoundedTensorSpec)
-        assert isinstance(bounded, Bounded)
-        assert not isinstance(bounded, MultiOneHot)
-        bounded = Bounded(-2, 2, shape=())
-        assert isinstance(bounded, BoundedTensorSpec)
-        assert isinstance(bounded, Bounded)
-        assert not isinstance(bounded, MultiOneHot)
-
-    def test_composite(self):
-        with (
-            pytest.warns(
-                DeprecationWarning,
-                match="The CompositeSpec has been deprecated and will be removed in v0.8. Please use Composite instead.",
-            )
-        ):
-            composite = CompositeSpec()
-        assert isinstance(composite, CompositeSpec)
-        assert isinstance(composite, Composite)
-        assert not isinstance(composite, MultiOneHot)
-        composite = Composite()
-        assert isinstance(composite, CompositeSpec)
-        assert isinstance(composite, Composite)
-        assert not isinstance(composite, MultiOneHot)
-
-    def test_non_tensor(self):
-        with (
-            pytest.warns(
-                DeprecationWarning,
-                match="The NonTensorSpec has been deprecated and will be removed in v0.8. Please use NonTensor instead.",
-            )
-        ):
-            non_tensor = NonTensorSpec()
-        assert isinstance(non_tensor, NonTensorSpec)
-        assert isinstance(non_tensor, NonTensor)
-        assert not isinstance(non_tensor, MultiOneHot)
-        non_tensor = NonTensor()
-        assert isinstance(non_tensor, NonTensorSpec)
-        assert isinstance(non_tensor, NonTensor)
-        assert not isinstance(non_tensor, MultiOneHot)
 
 
 class TestSpecEnumerate:

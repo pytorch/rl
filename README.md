@@ -1089,6 +1089,14 @@ pip install -e tensordict
 pip install -e rl
 ```
 
+If you use `uv` (instead of `pip`) and you have already installed a specific PyTorch build (e.g. nightly),
+make sure `uv` doesn't re-resolve dependencies (which can downgrade PyTorch). Use `--no-deps` for the local installs:
+
+```bash
+uv pip install --no-deps -e tensordict
+uv pip install --no-deps -e rl
+```
+
 Note that tensordict local build requires `cmake` to be installed via [homebrew](https://brew.sh/) (MacOS) or another package manager
 such as `apt`, `apt-get`, `conda` or `yum` but NOT `pip`, as well as `pip install "pybind11[global]"`.   
 

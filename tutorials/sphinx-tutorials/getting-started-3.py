@@ -60,7 +60,7 @@ import torch
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.envs import GymEnv
-from torchrl.envs.utils import RandomPolicy
+from torchrl.modules import RandomPolicy
 
 torch.manual_seed(0)
 
@@ -100,7 +100,7 @@ print(data["collector", "traj_ids"])
 # the environment (the ``total_frames`` argument in the collector).
 # For this reason, most training loops in our examples look like this:
 #
-#   ..code - block::Python
+#   .. code-block:: python
 #
 #     >>> for data in collector:
 #     ...     # your algorithm here
@@ -116,7 +116,7 @@ print(data["collector", "traj_ids"])
 # temporarily and cleared after a little while given some heuristic:
 # first-in first-out or other. A typical pseudo-code would look like this:
 #
-# ..code - block::Python
+# .. code-block:: python
 #
 #   >>> for data in collector:
 #   ...     storage.store(data)

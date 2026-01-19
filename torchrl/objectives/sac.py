@@ -17,6 +17,7 @@ from tensordict.nn import (
     composite_lp_aggregate,
     CompositeDistribution,
     dispatch,
+    ProbabilisticTensorDictSequential,
     set_composite_lp_aggregate,
     TensorDictModule,
 )
@@ -26,7 +27,6 @@ from torch import Tensor
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import ProbabilisticActor
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
@@ -67,7 +67,7 @@ class SACLoss(LossModule):
     and "Soft Actor-Critic Algorithms and Applications" https://arxiv.org/abs/1812.05905
 
     Args:
-        actor_network (ProbabilisticActor): stochastic actor
+        actor_network (ProbabilisticTensorDictSequential): stochastic actor
         qvalue_network (TensorDictModule): Q(s, a) parametric model.
             This module typically outputs a ``"state_action_value"`` entry.
             If a single instance of `qvalue_network` is provided, it will be duplicated ``num_qvalue_nets``
@@ -75,7 +75,7 @@ class SACLoss(LossModule):
             parameters will be stacked unless they share the same identity (in which case
             the original parameter will be expanded).
 
-            .. warning:: When a list of parameters if passed, it will __not__ be compared against the policy parameters
+            .. warning:: When a list of parameters if passed, it will **not** be compared against the policy parameters
               and all the parameters will be considered as untied.
 
         value_network (TensorDictModule, optional): V(s) parametric model.
@@ -317,7 +317,7 @@ class SACLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: ProbabilisticActor,
+        actor_network: ProbabilisticTensorDictSequential,
         qvalue_network: TensorDictModule | list[TensorDictModule],
         value_network: TensorDictModule | None = None,
         *,
@@ -498,9 +498,25 @@ class SACLoss(LossModule):
                 action_container_shape = action_spec[self.tensor_keys.action[:-1]].shape
             else:
                 action_container_shape = action_spec.shape
-            target_entropy = -float(
-                action_spec.shape[len(action_container_shape) :].numel()
-            )
+            action_spec_leaf = action_spec[self.tensor_keys.action]
+            if action_spec_leaf is None:
+                raise RuntimeError(
+                    "Cannot infer the dimensionality of the action. The action spec "
+                    f"for key '{self.tensor_keys.action}' is None. This can happen when "
+                    "using composite action distributions. Consider providing the "
+                    "'action_spec' or 'target_entropy' argument explicitly to the loss."
+                )
+            if isinstance(action_spec_leaf, Composite):
+                # For composite action specs, sum the numel of all leaf specs
+                target_entropy = -float(
+                    self._compute_composite_spec_numel(
+                        action_spec_leaf, action_container_shape
+                    )
+                )
+            else:
+                target_entropy = -float(
+                    action_spec_leaf.shape[len(action_container_shape) :].numel()
+                )
         delattr(self, "_target_entropy")
         self.register_buffer(
             "_target_entropy", torch.tensor(target_entropy, device=device)
@@ -509,6 +525,24 @@ class SACLoss(LossModule):
 
     state_dict = _delezify(LossModule.state_dict)
     load_state_dict = _delezify(LossModule.load_state_dict)
+
+    def _compute_composite_spec_numel(
+        self, spec: Composite, container_shape: torch.Size
+    ) -> int:
+        """Compute the total number of action elements in a Composite spec.
+
+        This handles composite action distributions where multiple sub-actions
+        are grouped together.
+        """
+        total = 0
+        for subspec in spec.values():
+            if subspec is None:
+                continue
+            if isinstance(subspec, Composite):
+                total += self._compute_composite_spec_numel(subspec, container_shape)
+            else:
+                total += subspec.shape[len(container_shape) :].numel()
+        return total
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -918,7 +952,7 @@ class DiscreteSACLoss(LossModule):
     """Discrete SAC Loss module.
 
     Args:
-        actor_network (ProbabilisticActor): the actor to be trained
+        actor_network (ProbabilisticTensorDictSequential): the actor to be trained
         qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
         action_space (str or TensorSpec): Action space. Must be one of
             ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
@@ -938,7 +972,9 @@ class DiscreteSACLoss(LossModule):
             Default is None (no maximum value).
         fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is ``False``.
         target_entropy_weight (:obj:`float`, optional): weight for the target entropy term.
-        target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
+        target_entropy (Union[str, Number], optional): Target entropy for the
+            stochastic policy. Default is "auto", where target entropy is
+            computed as :obj:`-target_entropy_weight * log(1 / num_actions)`.
         delay_qvalue (bool, optional): Whether to separate the target Q value networks from the Q value networks used
             for data collection. Default is ``False``.
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
@@ -1012,8 +1048,7 @@ class DiscreteSACLoss(LossModule):
     the expected keyword arguments are:
     ``["action", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and qvalue network.
     The return value is a tuple of tensors in the following order:
-    ``["loss_actor", "loss_qvalue", "loss_alpha",
-       "alpha", "entropy"]``
+    ``["loss_actor", "loss_qvalue", "loss_alpha", "alpha", "entropy"]``.
     The output keys can also be filtered using :meth:`DiscreteSACLoss.select_out_keys` method.
 
     Examples:
@@ -1117,7 +1152,7 @@ class DiscreteSACLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: ProbabilisticActor,
+        actor_network: ProbabilisticTensorDictSequential,
         qvalue_network: TensorDictModule,
         *,
         action_space: str | TensorSpec = None,

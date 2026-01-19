@@ -10,7 +10,6 @@ import functools
 import importlib.util
 import itertools
 import operator
-import os
 import sys
 import warnings
 from copy import deepcopy
@@ -155,24 +154,14 @@ from torchrl.objectives.value.utils import (
     _split_and_pad_sequence,
 )
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import (  # noqa
-        _call_value_nets,
-        dtype_fixture,
-        get_available_devices,
-        get_default_devices,
-        PENDULUM_VERSIONED,
-    )
-    from pytorch.rl.test.mocking_classes import ContinuousActionConvMockEnv
-else:
-    from _utils_internal import (  # noqa
-        _call_value_nets,
-        dtype_fixture,
-        get_available_devices,
-        get_default_devices,
-        PENDULUM_VERSIONED,
-    )
-    from mocking_classes import ContinuousActionConvMockEnv
+from torchrl.testing import (  # noqa
+    call_value_nets as _call_value_nets,
+    dtype_fixture,
+    get_available_devices,
+    get_default_devices,
+    PENDULUM_VERSIONED,
+)
+from torchrl.testing.mocking_classes import ContinuousActionConvMockEnv
 
 _has_functorch = True
 try:
@@ -201,6 +190,8 @@ pytestmark = [
     pytest.mark.filterwarnings(
         "ignore:The PyTorch API of nested tensors is in prototype"
     ),
+    pytest.mark.filterwarnings("ignore:unclosed event loop:ResourceWarning"),
+    pytest.mark.filterwarnings("ignore:unclosed.*socket:ResourceWarning"),
 ]
 
 
@@ -478,7 +469,7 @@ class TestDQN(LossModuleTestBase):
         elif action_spec_type == "categorical":
             action_spec = Categorical(action_dim)
         # elif action_spec_type == "nd_bounded":
-        #     action_spec = BoundedTensorSpec(
+        #     action_spec = Bounded(
         #         -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         #     )
         else:
@@ -1121,6 +1112,7 @@ class TestDQN(LossModuleTestBase):
             value_network=value, action_space="categorical", reduction="mean"
         )
         loss_fn.make_value_estimator()
+        softupdate = SoftUpdate(loss_fn, eps=0.5)
 
         # Create prioritized replay buffer
         rb = TensorDictPrioritizedReplayBuffer(
@@ -1174,6 +1166,7 @@ class TestDQN(LossModuleTestBase):
             reduction="none",
             use_prioritized_weights=False,
         )
+        softupdate = SoftUpdate(loss_fn_no_reduction, eps=0.5)
         loss_fn_no_reduction.make_value_estimator()
         loss_fn_no_reduction.target_value_network_params = (
             loss_fn.target_value_network_params
@@ -1673,6 +1666,7 @@ class TestQMixer(LossModuleTestBase):
         loss_fn = DQNLoss(
             value_network=value, action_space="categorical", reduction="mean"
         )
+        softupdate = SoftUpdate(loss_fn, eps=0.5)
         loss_fn.make_value_estimator()
 
         # Create prioritized replay buffer
@@ -1727,6 +1721,7 @@ class TestQMixer(LossModuleTestBase):
             reduction="none",
             use_prioritized_weights=False,
         )
+        softupdate = SoftUpdate(loss_fn_no_reduction, eps=0.5)
         loss_fn_no_reduction.make_value_estimator()
         loss_fn_no_reduction.target_value_network_params = (
             loss_fn.target_value_network_params
@@ -2396,6 +2391,7 @@ class TestDDPG(LossModuleTestBase):
 
         # Create DDPG loss
         loss_fn = DDPGLoss(actor_network=actor, value_network=qvalue)
+        softupdate = SoftUpdate(loss_fn, eps=0.5)
         loss_fn.make_value_estimator()
 
         # Create prioritized replay buffer
@@ -2449,6 +2445,7 @@ class TestDDPG(LossModuleTestBase):
             value_network=qvalue,
             use_prioritized_weights=False,
         )
+        softupdate = SoftUpdate(loss_fn_no_weights, eps=0.5)
         loss_fn_no_weights.make_value_estimator()
         loss_fn_no_weights.value_network_params = loss_fn.value_network_params
         loss_fn_no_weights.target_value_network_params = (
@@ -3303,6 +3300,7 @@ class TestTD3(LossModuleTestBase):
                 low=-torch.ones(n_act), high=torch.ones(n_act), shape=(n_act,)
             ),
         )
+        softupdate = SoftUpdate(loss_fn, eps=0.5)
         loss_fn.make_value_estimator()
 
         # Create prioritized replay buffer
@@ -3360,6 +3358,7 @@ class TestTD3(LossModuleTestBase):
             ),
             use_prioritized_weights=False,
         )
+        softupdate = SoftUpdate(loss_fn_no_weights, eps=0.5)
         loss_fn_no_weights.make_value_estimator()
         loss_fn_no_weights.qvalue_network_params = loss_fn.qvalue_network_params
         loss_fn_no_weights.target_qvalue_network_params = (
@@ -4128,6 +4127,7 @@ class TestSAC(LossModuleTestBase):
         observation_key="observation",
         action_key="action",
         composite_action_dist=False,
+        return_action_spec=False,
     ):
         # Actor
         action_spec = Bounded(
@@ -4162,7 +4162,10 @@ class TestSAC(LossModuleTestBase):
             spec=action_spec,
         )
         assert actor.log_prob_keys
-        return actor.to(device)
+        actor = actor.to(device)
+        if return_action_spec:
+            return actor, action_spec
+        return actor
 
     def _create_mock_qvalue(
         self,
@@ -4420,9 +4423,19 @@ class TestSAC(LossModuleTestBase):
             device=device, composite_action_dist=composite_action_dist
         )
 
-        actor = self._create_mock_actor(
-            device=device, composite_action_dist=composite_action_dist
-        )
+        # For composite action distributions, we need to pass the action_spec
+        # explicitly because ProbabilisticActor doesn't preserve it properly
+        if composite_action_dist:
+            actor, action_spec = self._create_mock_actor(
+                device=device,
+                composite_action_dist=composite_action_dist,
+                return_action_spec=True,
+            )
+        else:
+            actor = self._create_mock_actor(
+                device=device, composite_action_dist=composite_action_dist
+            )
+            action_spec = None
         qvalue = self._create_mock_qvalue(device=device)
         if version == 1:
             value = self._create_mock_value(device=device)
@@ -4443,6 +4456,7 @@ class TestSAC(LossModuleTestBase):
             value_network=value,
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
+            action_spec=action_spec,
             **kwargs,
         )
 
@@ -4685,9 +4699,19 @@ class TestSAC(LossModuleTestBase):
 
         torch.manual_seed(self.seed)
 
-        actor = self._create_mock_actor(
-            device=device, composite_action_dist=composite_action_dist
-        )
+        # For composite action distributions, we need to pass the action_spec
+        # explicitly because ProbabilisticActor doesn't preserve it properly
+        if composite_action_dist:
+            actor, action_spec = self._create_mock_actor(
+                device=device,
+                composite_action_dist=composite_action_dist,
+                return_action_spec=True,
+            )
+        else:
+            actor = self._create_mock_actor(
+                device=device, composite_action_dist=composite_action_dist
+            )
+            action_spec = None
         qvalue = self._create_mock_qvalue(device=device)
         if version == 1:
             value = self._create_mock_value(device=device)
@@ -4708,6 +4732,7 @@ class TestSAC(LossModuleTestBase):
             value_network=value,
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
+            action_spec=action_spec,
             **kwargs,
         )
         sd = loss_fn.state_dict()
@@ -4717,6 +4742,7 @@ class TestSAC(LossModuleTestBase):
             value_network=value,
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
+            action_spec=action_spec,
             **kwargs,
         )
         loss_fn2.load_state_dict(sd)
@@ -4842,9 +4868,19 @@ class TestSAC(LossModuleTestBase):
             device=device, composite_action_dist=composite_action_dist
         )
 
-        actor = self._create_mock_actor(
-            device=device, composite_action_dist=composite_action_dist
-        )
+        # For composite action distributions, we need to pass the action_spec
+        # explicitly because ProbabilisticActor doesn't preserve it properly
+        if composite_action_dist:
+            actor, action_spec = self._create_mock_actor(
+                device=device,
+                composite_action_dist=composite_action_dist,
+                return_action_spec=True,
+            )
+        else:
+            actor = self._create_mock_actor(
+                device=device, composite_action_dist=composite_action_dist
+            )
+            action_spec = None
         qvalue = self._create_mock_qvalue(device=device)
         if version == 1:
             value = self._create_mock_value(device=device)
@@ -4865,6 +4901,7 @@ class TestSAC(LossModuleTestBase):
             value_network=value,
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
+            action_spec=action_spec,
             **kwargs,
         )
 
@@ -4999,7 +5036,16 @@ class TestSAC(LossModuleTestBase):
     def test_sac_tensordict_keys(self, td_est, version, composite_action_dist):
         td = self._create_mock_data_sac(composite_action_dist=composite_action_dist)
 
-        actor = self._create_mock_actor(composite_action_dist=composite_action_dist)
+        # For composite action distributions, we need to pass the action_spec
+        # explicitly because ProbabilisticActor doesn't preserve it properly
+        if composite_action_dist:
+            actor, action_spec = self._create_mock_actor(
+                composite_action_dist=composite_action_dist,
+                return_action_spec=True,
+            )
+        else:
+            actor = self._create_mock_actor(composite_action_dist=composite_action_dist)
+            action_spec = None
         qvalue = self._create_mock_qvalue()
         if version == 1:
             value = self._create_mock_value()
@@ -5012,6 +5058,7 @@ class TestSAC(LossModuleTestBase):
             value_network=value,
             num_qvalue_nets=2,
             loss_function="l2",
+            action_spec=action_spec,
         )
 
         default_keys = {
@@ -5246,6 +5293,48 @@ class TestSAC(LossModuleTestBase):
         )
         loss.load_state_dict(state)
 
+    @pytest.mark.parametrize("action_dim", [1, 2, 4, 8])
+    def test_sac_target_entropy_auto(self, version, action_dim):
+        """Regression test for issue #3291: target_entropy='auto' should be -dim(A)."""
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(action_dim=action_dim)
+        qvalue = self._create_mock_qvalue(action_dim=action_dim)
+        if version == 1:
+            value = self._create_mock_value(action_dim=action_dim)
+        else:
+            value = None
+
+        loss_fn = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+        )
+        # target_entropy="auto" should compute -action_dim
+        assert (
+            loss_fn.target_entropy.item() == -action_dim
+        ), f"target_entropy should be -{action_dim}, got {loss_fn.target_entropy.item()}"
+
+    @pytest.mark.parametrize("target_entropy", [-1.0, -2.0, -5.0, 0.0])
+    def test_sac_target_entropy_explicit(self, version, target_entropy):
+        """Regression test for explicit target_entropy values."""
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        if version == 1:
+            value = self._create_mock_value()
+        else:
+            value = None
+
+        loss_fn = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            target_entropy=target_entropy,
+        )
+        assert (
+            loss_fn.target_entropy.item() == target_entropy
+        ), f"target_entropy should be {target_entropy}, got {loss_fn.target_entropy.item()}"
+
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
     @pytest.mark.parametrize("composite_action_dist", [True, False])
     def test_sac_reduction(self, reduction, version, composite_action_dist):
@@ -5258,9 +5347,19 @@ class TestSAC(LossModuleTestBase):
         td = self._create_mock_data_sac(
             device=device, composite_action_dist=composite_action_dist
         )
-        actor = self._create_mock_actor(
-            device=device, composite_action_dist=composite_action_dist
-        )
+        # For composite action distributions, we need to pass the action_spec
+        # explicitly because ProbabilisticActor doesn't preserve it properly
+        if composite_action_dist:
+            actor, action_spec = self._create_mock_actor(
+                device=device,
+                composite_action_dist=composite_action_dist,
+                return_action_spec=True,
+            )
+        else:
+            actor = self._create_mock_actor(
+                device=device, composite_action_dist=composite_action_dist
+            )
+            action_spec = None
         qvalue = self._create_mock_qvalue(device=device)
         if version == 1:
             value = self._create_mock_value(device=device)
@@ -5275,6 +5374,7 @@ class TestSAC(LossModuleTestBase):
             delay_actor=False,
             delay_value=False,
             reduction=reduction,
+            action_spec=action_spec,
         )
         loss_fn.make_value_estimator()
         loss = loss_fn(td)
@@ -5287,6 +5387,122 @@ class TestSAC(LossModuleTestBase):
                 if not key.startswith("loss"):
                     continue
                 assert loss[key].shape == torch.Size([])
+
+    def test_sac_prioritized_weights(self, version):
+        """Test SAC with prioritized replay buffer weighted loss reduction."""
+        if version != 2:
+            pytest.skip("Test not implemented for version 1.")
+        n_obs = 4
+        n_act = 2
+        batch_size = 32
+        buffer_size = 100
+
+        # Actor network
+        actor_net = nn.Sequential(
+            nn.Linear(n_obs, 64),
+            nn.ReLU(),
+            nn.Linear(64, 2 * n_act),
+            NormalParamExtractor(),
+        )
+        actor_module = TensorDictModule(
+            actor_net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
+        actor = ProbabilisticActor(
+            module=actor_module,
+            in_keys=["loc", "scale"],
+            distribution_class=TanhNormal,
+            return_log_prob=True,
+            spec=Bounded(
+                low=-torch.ones(n_act), high=torch.ones(n_act), shape=(n_act,)
+            ),
+        )
+
+        # Q-value network
+        qvalue_net = MLP(in_features=n_obs + n_act, out_features=1, num_cells=[64, 64])
+        qvalue = ValueOperator(module=qvalue_net, in_keys=["observation", "action"])
+
+        # Value network for SAC v1
+        value_net = MLP(in_features=n_obs, out_features=1, num_cells=[64, 64])
+        value = ValueOperator(module=value_net, in_keys=["observation"])
+
+        # Create SAC loss
+        loss_fn = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=2,
+        )
+        SoftUpdate(loss_fn, eps=0.5)
+        loss_fn.make_value_estimator()
+
+        # Create prioritized replay buffer
+        rb = TensorDictPrioritizedReplayBuffer(
+            alpha=0.7,
+            beta=0.9,
+            storage=LazyTensorStorage(buffer_size),
+            batch_size=batch_size,
+            priority_key="td_error",
+        )
+
+        # Create initial data
+        initial_data = TensorDict(
+            {
+                "observation": torch.randn(buffer_size, n_obs),
+                "action": torch.randn(buffer_size, n_act).clamp(-1, 1),
+                ("next", "observation"): torch.randn(buffer_size, n_obs),
+                ("next", "reward"): torch.randn(buffer_size, 1),
+                ("next", "done"): torch.zeros(buffer_size, 1, dtype=torch.bool),
+                ("next", "terminated"): torch.zeros(buffer_size, 1, dtype=torch.bool),
+            },
+            batch_size=[buffer_size],
+        )
+        rb.extend(initial_data)
+
+        # Sample (weights should all be identical initially)
+        sample1 = rb.sample()
+        assert "priority_weight" in sample1.keys()
+        weights1 = sample1["priority_weight"]
+        assert torch.allclose(weights1, weights1[0], atol=1e-5)
+
+        # Run loss to get priorities
+        loss_fn(sample1)
+        assert "td_error" in sample1.keys()
+
+        # Update replay buffer with new priorities
+        rb.update_tensordict_priority(sample1)
+
+        # Sample again - weights should now be non-equal
+        sample2 = rb.sample()
+        weights2 = sample2["priority_weight"]
+        assert weights2.std() > 1e-5
+
+        # Run loss again with varied weights
+        loss_out2 = loss_fn(sample2)
+        assert torch.isfinite(loss_out2["loss_qvalue"])
+
+        # Verify weighted vs unweighted differ
+        loss_fn_no_weights = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=2,
+            use_prioritized_weights=False,
+        )
+        SoftUpdate(loss_fn_no_weights, eps=0.5)
+        loss_fn_no_weights.make_value_estimator()
+        loss_fn_no_weights.qvalue_network_params = loss_fn.qvalue_network_params
+        loss_fn_no_weights.target_qvalue_network_params = (
+            loss_fn.target_qvalue_network_params
+        )
+        loss_fn_no_weights.actor_network_params = loss_fn.actor_network_params
+        loss_fn_no_weights.value_network_params = loss_fn.value_network_params
+        loss_fn_no_weights.target_value_network_params = (
+            loss_fn.target_value_network_params
+        )
+
+        loss_out_no_weights = loss_fn_no_weights(sample2)
+        # Weighted and unweighted should differ (in general)
+        assert torch.isfinite(loss_out_no_weights["loss_qvalue"])
 
 
 @pytest.mark.skipif(
@@ -5688,6 +5904,29 @@ class TestDiscreteSAC(LossModuleTestBase):
             **kwargs,
         )
         loss_fn2.load_state_dict(sd)
+
+    @pytest.mark.parametrize("action_dim", [2, 4, 8])
+    @pytest.mark.parametrize("target_entropy_weight", [0.5, 0.98])
+    def test_discrete_sac_target_entropy_auto(self, action_dim, target_entropy_weight):
+        """Regression test for target_entropy='auto' in DiscreteSACLoss."""
+        import numpy as np
+
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(action_dim=action_dim)
+        qvalue = self._create_mock_qvalue(action_dim=action_dim)
+
+        loss_fn = DiscreteSACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_actions=action_dim,
+            target_entropy_weight=target_entropy_weight,
+            action_space="one-hot",
+        )
+        # target_entropy="auto" should compute -log(1/num_actions) * target_entropy_weight
+        expected = -float(np.log(1.0 / action_dim) * target_entropy_weight)
+        assert (
+            abs(loss_fn.target_entropy.item() - expected) < 1e-5
+        ), f"target_entropy should be {expected}, got {loss_fn.target_entropy.item()}"
 
     @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
@@ -6762,6 +7001,38 @@ class TestCrossQ(LossModuleTestBase):
         )
         loss.load_state_dict(state)
 
+    @pytest.mark.parametrize("action_dim", [1, 2, 4, 8])
+    def test_crossq_target_entropy_auto(self, action_dim):
+        """Regression test for target_entropy='auto' should be -dim(A)."""
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(action_dim=action_dim)
+        qvalue = self._create_mock_qvalue(action_dim=action_dim)
+
+        loss_fn = CrossQLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+        )
+        # target_entropy="auto" should compute -action_dim
+        assert (
+            loss_fn.target_entropy.item() == -action_dim
+        ), f"target_entropy should be -{action_dim}, got {loss_fn.target_entropy.item()}"
+
+    @pytest.mark.parametrize("target_entropy", [-1.0, -2.0, -5.0, 0.0])
+    def test_crossq_target_entropy_explicit(self, target_entropy):
+        """Regression test for issue #3309: explicit target_entropy should work."""
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+
+        loss_fn = CrossQLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            target_entropy=target_entropy,
+        )
+        assert (
+            loss_fn.target_entropy.item() == target_entropy
+        ), f"target_entropy should be {target_entropy}, got {loss_fn.target_entropy.item()}"
+
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
     def test_crossq_reduction(self, reduction):
         torch.manual_seed(self.seed)
@@ -7164,6 +7435,22 @@ class TestREDQ(LossModuleTestBase):
             delay_qvalue=delay_qvalue,
         )
         loss_fn2.load_state_dict(sd)
+
+    @pytest.mark.parametrize("action_dim", [1, 2, 4, 8])
+    def test_redq_target_entropy_auto(self, action_dim):
+        """Regression test for target_entropy='auto' should be -dim(A)."""
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(action_dim=action_dim)
+        qvalue = self._create_mock_qvalue(action_dim=action_dim)
+
+        loss_fn = REDQLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+        )
+        # target_entropy="auto" should compute -action_dim
+        assert (
+            loss_fn.target_entropy.item() == -action_dim
+        ), f"target_entropy should be -{action_dim}, got {loss_fn.target_entropy.item()}"
 
     @pytest.mark.parametrize("separate_losses", [False, True])
     def test_redq_separate_losses(self, separate_losses):
@@ -7767,118 +8054,6 @@ class TestREDQ(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
-    def test_sac_prioritized_weights(self):
-        """Test SAC with prioritized replay buffer weighted loss reduction."""
-        n_obs = 4
-        n_act = 2
-        batch_size = 32
-        buffer_size = 100
-
-        # Actor network
-        actor_net = nn.Sequential(
-            nn.Linear(n_obs, 64),
-            nn.ReLU(),
-            nn.Linear(64, 2 * n_act),
-            NormalParamExtractor(),
-        )
-        actor_module = TensorDictModule(
-            actor_net, in_keys=["observation"], out_keys=["loc", "scale"]
-        )
-        actor = ProbabilisticActor(
-            module=actor_module,
-            in_keys=["loc", "scale"],
-            distribution_class=TanhNormal,
-            return_log_prob=True,
-            spec=Bounded(
-                low=-torch.ones(n_act), high=torch.ones(n_act), shape=(n_act,)
-            ),
-        )
-
-        # Q-value network
-        qvalue_net = MLP(in_features=n_obs + n_act, out_features=1, num_cells=[64, 64])
-        qvalue = ValueOperator(module=qvalue_net, in_keys=["observation", "action"])
-
-        # Value network for SAC v1
-        value_net = MLP(in_features=n_obs, out_features=1, num_cells=[64, 64])
-        value = ValueOperator(module=value_net, in_keys=["observation"])
-
-        # Create SAC loss
-        loss_fn = SACLoss(
-            actor_network=actor,
-            qvalue_network=qvalue,
-            value_network=value,
-            num_qvalue_nets=2,
-        )
-        loss_fn.make_value_estimator()
-
-        # Create prioritized replay buffer
-        rb = TensorDictPrioritizedReplayBuffer(
-            alpha=0.7,
-            beta=0.9,
-            storage=LazyTensorStorage(buffer_size),
-            batch_size=batch_size,
-            priority_key="td_error",
-        )
-
-        # Create initial data
-        initial_data = TensorDict(
-            {
-                "observation": torch.randn(buffer_size, n_obs),
-                "action": torch.randn(buffer_size, n_act).clamp(-1, 1),
-                ("next", "observation"): torch.randn(buffer_size, n_obs),
-                ("next", "reward"): torch.randn(buffer_size, 1),
-                ("next", "done"): torch.zeros(buffer_size, 1, dtype=torch.bool),
-                ("next", "terminated"): torch.zeros(buffer_size, 1, dtype=torch.bool),
-            },
-            batch_size=[buffer_size],
-        )
-        rb.extend(initial_data)
-
-        # Sample (weights should all be identical initially)
-        sample1 = rb.sample()
-        assert "priority_weight" in sample1.keys()
-        weights1 = sample1["priority_weight"]
-        assert torch.allclose(weights1, weights1[0], atol=1e-5)
-
-        # Run loss to get priorities
-        loss_fn(sample1)
-        assert "td_error" in sample1.keys()
-
-        # Update replay buffer with new priorities
-        rb.update_tensordict_priority(sample1)
-
-        # Sample again - weights should now be non-equal
-        sample2 = rb.sample()
-        weights2 = sample2["priority_weight"]
-        assert weights2.std() > 1e-5
-
-        # Run loss again with varied weights
-        loss_out2 = loss_fn(sample2)
-        assert torch.isfinite(loss_out2["loss_qvalue"])
-
-        # Verify weighted vs unweighted differ
-        loss_fn_no_weights = SACLoss(
-            actor_network=actor,
-            qvalue_network=qvalue,
-            value_network=value,
-            num_qvalue_nets=2,
-            use_prioritized_weights=False,
-        )
-        loss_fn_no_weights.make_value_estimator()
-        loss_fn_no_weights.qvalue_network_params = loss_fn.qvalue_network_params
-        loss_fn_no_weights.target_qvalue_network_params = (
-            loss_fn.target_qvalue_network_params
-        )
-        loss_fn_no_weights.actor_network_params = loss_fn.actor_network_params
-        loss_fn_no_weights.value_network_params = loss_fn.value_network_params
-        loss_fn_no_weights.target_value_network_params = (
-            loss_fn.target_value_network_params
-        )
-
-        loss_out_no_weights = loss_fn_no_weights(sample2)
-        # Weighted and unweighted should differ (in general)
-        assert torch.isfinite(loss_out_no_weights["loss_qvalue"])
-
 
 class TestCQL(LossModuleTestBase):
     seed = 0
@@ -8353,6 +8528,22 @@ class TestCQL(LossModuleTestBase):
             **kwargs,
         )
         loss_fn2.load_state_dict(sd)
+
+    @pytest.mark.parametrize("action_dim", [1, 2, 4, 8])
+    def test_cql_target_entropy_auto(self, action_dim):
+        """Regression test for target_entropy='auto' should be -dim(A)."""
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(action_dim=action_dim)
+        qvalue = self._create_mock_qvalue(action_dim=action_dim)
+
+        loss_fn = CQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+        )
+        # target_entropy="auto" should compute -action_dim
+        assert (
+            loss_fn.target_entropy.item() == -action_dim
+        ), f"target_entropy should be -{action_dim}, got {loss_fn.target_entropy.item()}"
 
     @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("delay_actor", (True, False))
@@ -12365,6 +12556,18 @@ class TestOnlineDT(LossModuleTestBase):
         sd = loss_fn.state_dict()
         loss_fn2 = OnlineDTLoss(actor)
         loss_fn2.load_state_dict(sd)
+
+    @pytest.mark.parametrize("action_dim", [1, 2, 4, 8])
+    def test_odt_target_entropy_auto(self, action_dim):
+        """Regression test for target_entropy='auto' should be -dim(A)."""
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(action_dim=action_dim)
+
+        loss_fn = OnlineDTLoss(actor)
+        # target_entropy="auto" should compute -action_dim
+        assert (
+            loss_fn.target_entropy.item() == -action_dim
+        ), f"target_entropy should be -{action_dim}, got {loss_fn.target_entropy.item()}"
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_seq_odt(self, device):
@@ -17858,77 +18061,6 @@ class TestBuffer:
                 assert p.device == dest
             for p in mod.value_params.values(True, True):
                 assert p.device == dest
-
-
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.5.0"), reason="requires torch>=2.5"
-)
-@pytest.mark.skipif(IS_WINDOWS, reason="windows tests do not support compile")
-@set_composite_lp_aggregate(False)
-def test_exploration_compile():
-    try:
-        torch._dynamo.reset_code_caches()
-    except Exception:
-        # older versions of PT don't have that function
-        pass
-    m = ProbabilisticTensorDictModule(
-        in_keys=["loc", "scale"],
-        out_keys=["sample"],
-        distribution_class=torch.distributions.Normal,
-    )
-
-    # class set_exploration_type_random(set_exploration_type):
-    #     __init__ = object.__init__
-    #     type = ExplorationType.RANDOM
-    it = exploration_type()
-
-    @torch.compile(fullgraph=True)
-    def func(t):
-        with set_exploration_type(ExplorationType.RANDOM):
-            t0 = m(t.clone())
-            t1 = m(t.clone())
-        return t0, t1
-
-    t = TensorDict(loc=torch.randn(3), scale=torch.rand(3))
-    t0, t1 = func(t)
-    assert (t0["sample"] != t1["sample"]).any()
-    assert it == exploration_type()
-
-    @torch.compile(fullgraph=True)
-    def func(t):
-        with set_exploration_type(ExplorationType.MEAN):
-            t0 = m(t.clone())
-            t1 = m(t.clone())
-        return t0, t1
-
-    t = TensorDict(loc=torch.randn(3), scale=torch.rand(3))
-    t0, t1 = func(t)
-    assert (t0["sample"] == t1["sample"]).all()
-    assert it == exploration_type()
-
-    @torch.compile(fullgraph=True)
-    @set_exploration_type(ExplorationType.RANDOM)
-    def func(t):
-        t0 = m(t.clone())
-        t1 = m(t.clone())
-        return t0, t1
-
-    t = TensorDict(loc=torch.randn(3), scale=torch.rand(3))
-    t0, t1 = func(t)
-    assert (t0["sample"] != t1["sample"]).any()
-    assert it == exploration_type()
-
-    @torch.compile(fullgraph=True)
-    @set_exploration_type(ExplorationType.MEAN)
-    def func(t):
-        t0 = m(t.clone())
-        t1 = m(t.clone())
-        return t0, t1
-
-    t = TensorDict(loc=torch.randn(3), scale=torch.rand(3))
-    t0, t1 = func(t)
-    assert (t0["sample"] == t1["sample"]).all()
-    assert it == exploration_type()
 
 
 @set_composite_lp_aggregate(False)

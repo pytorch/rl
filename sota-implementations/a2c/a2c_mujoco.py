@@ -23,7 +23,7 @@ def main(cfg: DictConfig):  # noqa: F821
     from tensordict import from_module
     from tensordict.nn import CudaGraphModule
 
-    from torchrl._utils import timeit
+    from torchrl._utils import get_available_device, timeit
     from torchrl.collectors import SyncDataCollector
     from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -36,11 +36,9 @@ def main(cfg: DictConfig):  # noqa: F821
 
     # Define paper hyperparameters
 
-    device = cfg.loss.device
-    if not device:
-        device = torch.device("cpu" if not torch.cuda.is_available() else "cuda:0")
-    else:
-        device = torch.device(device)
+    device = (
+        torch.device(cfg.loss.device) if cfg.loss.device else get_available_device()
+    )
 
     num_mini_batches = cfg.collector.frames_per_batch // cfg.loss.mini_batch_size
     total_network_updates = (

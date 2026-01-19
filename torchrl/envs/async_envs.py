@@ -474,7 +474,6 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         self._current_step_reset = 0
 
         num_threads = self.num_envs
-        assert num_threads > 0
         self.threads = []
         for i in range(num_threads):
             # thread = threading.Thread(target=_env_exec, kwargs={"i": i, "env_or_factory": self.env_maker[i], "input_queue": self.input_queue[i], "step_queue": self.step_queue, "reset_queue": self.reset_queue})
@@ -541,7 +540,6 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             )
         r = self._wait_for_one_and_get(self.step_queue, min_get)
         self._current_step = self._current_step - len(r)
-        assert self._current_step >= 0
         r, idx = self._sort_results(r)
         self._busy.difference_update(idx)
         return self._stack_func(r)

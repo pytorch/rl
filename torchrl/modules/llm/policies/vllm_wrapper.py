@@ -5,9 +5,11 @@
 from __future__ import annotations
 
 import collections
+
+import importlib.util
 import threading
 import warnings
-from typing import Any, Literal
+from typing import Any, Literal, TYPE_CHECKING
 
 import torch
 from tensordict import (
@@ -25,7 +27,6 @@ from torch import distributions as D
 from torch.nn.utils.rnn import pad_sequence
 
 from torchrl.envs.utils import _classproperty
-from torchrl.modules.llm.backends.vllm import AsyncVLLM
 from torchrl.modules.llm.policies.common import (
     _batching,
     _extract_responses_from_full_histories,
@@ -38,17 +39,39 @@ from torchrl.modules.llm.policies.common import (
 )
 from torchrl.modules.utils.utils import _unpad_tensors
 
-# Type imports
-try:
-    import transformers
-    import vllm
-    from vllm.outputs import RequestOutput
-    from vllm.sampling_params import SamplingParams
-except ImportError:
-    vllm = None
-    transformers = None
+
+_HAS_VLLM = importlib.util.find_spec("vllm") is not None
+_HAS_TRANSFORMERS = importlib.util.find_spec("transformers") is not None
+
+if TYPE_CHECKING:
+    from vllm.outputs import RequestOutput  # type: ignore[import-not-found]
+    from vllm.sampling_params import SamplingParams  # type: ignore[import-not-found]
+else:
     SamplingParams = Any  # type: ignore
     RequestOutput = Any  # type: ignore
+
+
+def _require_transformers() -> None:
+    if not _HAS_TRANSFORMERS:
+        raise ImportError(
+            "transformers is required for vLLMWrapper. Please install it with `pip install transformers`."
+        )
+
+
+def _require_vllm():
+    """Import vLLM lazily.
+
+    We intentionally avoid importing vLLM at module import time because importing vLLM can
+    load native extensions that may hard-crash the interpreter on some platforms.
+    """
+    if not _HAS_VLLM:
+        raise ImportError(
+            "vllm is required for vLLMWrapper. Please install it with `pip install vllm`."
+        )
+    import vllm as _vllm  # local import is intentional / required
+
+    return _vllm
+
 
 # Import async vLLM engines
 
@@ -98,7 +121,7 @@ class vLLMWrapper(LLMWrapperBase):
             - `("tokens", "prompt")` for `"tokens"` when `generate=True`, `("tokens", "full")` for `"tokens"` when `generate=False`
         attention_mask_key (str, optional): The key for attention masks (used in `"tokens"` mode). Defaults to `"attention_mask"`.
 
-                    .. warning:: This argument is under development and may change in the future.
+            .. warning:: This argument is under development and may change in the future.
 
         generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on the input.
             If `False`, only log probabilities will be computed. Defaults to `True`.
@@ -171,13 +194,16 @@ class vLLMWrapper(LLMWrapperBase):
         tokens_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Tokens` object. Defaults to `"tokens"`.
         masks_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Masks` object. Defaults to `"masks"`.
         history_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.ChatHistory` object. Defaults to `"history"`.
-        batching (bool, optional): Whether to enable batching. Defaults to `False`. See :ref:`ref_batching` below for more details.
-        min_batch_size (int | None, optional): The minimum batch size to use for batching. See :ref:`ref_batching` below for more details.
-        max_batch_size (int | None, optional): The maximum batch size to use for batching. See :ref:`ref_batching` below for more details.
-        batching_timeout (float, optional): The timeout for batching. See :ref:`ref_batching` below for more details.
+        batching (bool, optional): Whether to enable batching. Defaults to `False`. See `Batching`_ below for more details.
+        min_batch_size (int | None, optional): The minimum batch size to use for batching. See `Batching`_ below for more details.
+        max_batch_size (int | None, optional): The maximum batch size to use for batching. See `Batching`_ below for more details.
+        batching_timeout (float, optional): The timeout for batching. See `Batching`_ below for more details.
 
-    .. _ref_batching:
-        Batching is a feature that allows the module to process multiple inputs in a single call.
+    .. _Batching:
+
+    **Batching**
+
+    Batching is a feature that allows the module to process multiple inputs in a single call.
         It is designed to work in a multi-threaded environment.
         To enable batching, it suffices to set `batching=True` which will set `min_batch_size` to 1 if not provided.
         If you want to set a different value for `min_batch_size` or `max_batch_size` for a fine-grained control,
@@ -210,16 +236,15 @@ class vLLMWrapper(LLMWrapperBase):
         - **Masks**: Always returned (`masks_key`, defaults to `"masks"`)
         - **Log Probs**: Returned when `return_log_probs=True` (`log_probs_key`, defaults to `"log_probs"`)
 
-        Example output structure for `input_mode="history"`:
-        ```
-        TensorDict(
-            text=Text(prompt=..., response=..., full=...),
-            masks=Masks(all_attention_mask=..., all_assistant_mask=...),
-            tokens=Tokens(prompt=..., response=..., full=...),
-            log_probs=LogProbs(prompt=..., response=..., full=...),
-            history=ChatHistory(prompt=..., response=..., full=...)
-        )
-        ```
+        Example output structure for `input_mode="history"`::
+
+            TensorDict(
+                text=Text(prompt=..., response=..., full=...),
+                masks=Masks(all_attention_mask=..., all_assistant_mask=...),
+                tokens=Tokens(prompt=..., response=..., full=...),
+                log_probs=LogProbs(prompt=..., response=..., full=...),
+                history=ChatHistory(prompt=..., response=..., full=...)
+            )
 
     Example:
         >>> from vllm import LLM
@@ -259,8 +284,8 @@ class vLLMWrapper(LLMWrapperBase):
         collector: The collector associated with the module, if it exists.
 
     .. seealso::
-        - :class:`~torchrl.modules.llm.policies.LLMWrapperBase` (see :ref:`ref_categorical_sequential`)
-        - :class:`~torchrl.modules.llm.policies.TransformersWrapper` (see :ref:`ref_transformers_wrapper`)
+        - :class:`~torchrl.modules.llm.policies.LLMWrapperBase`
+        - :class:`~torchrl.modules.llm.policies.TransformersWrapper`
     """
 
     def __init__(
@@ -321,19 +346,26 @@ class vLLMWrapper(LLMWrapperBase):
         else:
             self._batching_lock = None
 
-        if vllm is None:
-            raise ImportError("vllm is required for vLLMWrapper")
-        if transformers is None:
-            raise ImportError("transformers is required for vLLMWrapper")
+        _require_transformers()
 
         # Detect and initialize model
         if isinstance(model, str):
+            # Import lazily to avoid importing vLLM backends unless actually needed.
+            from torchrl.modules.llm.backends.vllm import (  # local import is intentional / required
+                AsyncVLLM,
+            )
+
             model = AsyncVLLM.from_pretrained(model)
 
         # Validate model type
-        if isinstance(model, AsyncVLLM):
+        model_type = type(model)
+        model_module = getattr(model_type, "__module__", "")
+        model_name = getattr(model_type, "__name__", "")
+        if model_name == "AsyncVLLM" and model_module.startswith(
+            "torchrl.modules.llm.backends.vllm"
+        ):
             self._model_type = "async_vllm"
-        elif vllm is not None and isinstance(model, vllm.LLM):
+        elif model_name == "LLM" and model_module.startswith("vllm"):
             self._model_type = "sync_vllm"
         elif hasattr(model, "generate") and hasattr(model, "remote"):
             # Ray actor with generate method
@@ -347,8 +379,10 @@ class vLLMWrapper(LLMWrapperBase):
             from transformers import AutoTokenizer
 
             tokenizer = AutoTokenizer.from_pretrained(tokenizer)
-
-        from vllm import SamplingParams
+        # Import vLLM lazily: only needed if we are going to interact with vLLM types.
+        # (This keeps importing this module safe even if vLLM hard-crashes on import.)
+        if self._model_type in ("sync_vllm",):
+            _require_vllm()
 
         # Validate input_mode
         if input_mode not in ["history", "text", "tokens"]:
@@ -1918,12 +1952,11 @@ class vLLMWrapper(LLMWrapperBase):
 
     @_classproperty
     def CompletionOutput_tc(cls):
-        if vllm is None:
-            raise ImportError("vllm is required for CompletionOutput_tc")
+        _vllm = _require_vllm()
 
         if hasattr(cls, "_CompletionOutput_tc"):
             return cls._CompletionOutput_tc
-        CompletionOutput_tc = from_dataclass(vllm.outputs.CompletionOutput)  # type: ignore
+        CompletionOutput_tc = from_dataclass(_vllm.outputs.CompletionOutput)  # type: ignore
         cls._CompletionOutput_tc = CompletionOutput_tc
         return CompletionOutput_tc
 

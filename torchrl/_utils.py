@@ -29,11 +29,90 @@ from pyvers import implement_for  # noqa: F401
 from tensordict import unravel_key
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp, Tensor
+from torch.autograd.profiler import record_function
 
 try:
     from torch.compiler import is_compiling
 except ImportError:
     from torch._dynamo import is_compiling
+
+
+def _get_default_mp_start_method() -> str:
+    """Returns TorchRL's preferred multiprocessing start method.
+
+    If the user has explicitly set a global start method via ``mp.set_start_method()``,
+    that method is returned. Otherwise, defaults to ``"spawn"`` for improved safety
+    across backends and to avoid known issues with ``fork`` in multi-threaded programs.
+    """
+    # Check if user has explicitly set a global start method
+    try:
+        current = mp.get_start_method(allow_none=True)
+        if current is not None:
+            return current
+    except (TypeError, RuntimeError):
+        pass
+    return "spawn"
+
+
+def _get_mp_ctx(start_method: str | None = None):
+    """Return a multiprocessing context with TorchRL's preferred start method.
+
+    This is intentionally context-based (instead of relying on global
+    ``mp.set_start_method``) so that TorchRL components can consistently allocate
+    primitives (Queue/Pipe/Lock/Process) with a matching context.
+    """
+    if start_method is None:
+        start_method = _get_default_mp_start_method()
+    try:
+        return mp.get_context(start_method)
+    except ValueError:
+        # Best effort fallback if a start method isn't supported on this platform.
+        return mp.get_context("spawn")
+
+
+def _set_mp_start_method_if_unset(start_method: str | None = None) -> str | None:
+    """Set the global start method only if it hasn't been set yet.
+
+    Returns the (possibly pre-existing) start method, or ``None`` if it cannot be
+    determined.
+    """
+    if start_method is None:
+        start_method = _get_default_mp_start_method()
+
+    current = None
+    try:
+        current = mp.get_start_method(allow_none=True)
+    except TypeError:
+        # Older python/torch wrappers may not accept allow_none.
+        try:
+            current = mp.get_start_method()
+        except Exception:
+            current = None
+    except Exception:
+        current = None
+
+    if current is None:
+        try:
+            mp.set_start_method(start_method, force=False)
+            current = start_method
+        except Exception:
+            # If another library already touched the context, we should not
+            # override it here.
+            pass
+    return current
+
+
+@implement_for("torch", None, "2.8")
+def _mp_sharing_strategy_for_spawn() -> str | None:
+    # On older torch stacks, pickling Process objects for "spawn" can end up
+    # passing file descriptors for shared storages; using "file_system" reduces
+    # FD passing and avoids spawn-time failures on some old Python versions.
+    return "file_system"
+
+
+@implement_for("torch", "2.8")
+def _mp_sharing_strategy_for_spawn() -> str | None:  # noqa: F811
+    return None
 
 
 def strtobool(val: Any) -> bool:
@@ -52,7 +131,7 @@ def strtobool(val: Any) -> bool:
 
 LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "INFO")
 logger = logging.getLogger("torchrl")
-logger.setLevel(getattr(logging, LOGGING_LEVEL))
+logger.setLevel(LOGGING_LEVEL)
 logger.propagate = False
 # Clear existing handlers
 while logger.hasHandlers():
@@ -85,7 +164,9 @@ class _CustomFormatter(logging.Formatter):
 console_handler = logging.StreamHandler(stream=stream_handler)
 console_handler.setFormatter(_CustomFormatter())
 logger.addHandler(console_handler)
-console_handler.setLevel(logging.INFO)
+
+console_handler.setLevel(LOGGING_LEVEL)
+logger.debug(f"Logging level: {logger.getEffectiveLevel()}")
 
 VERBOSE = strtobool(os.environ.get("VERBOSE", str(logger.isEnabledFor(logging.DEBUG))))
 _os_is_windows = sys.platform == "win32"
@@ -94,6 +175,7 @@ if RL_WARNINGS:
     warnings.filterwarnings("once", category=DeprecationWarning, module="torchrl")
 
 BATCHED_PIPE_TIMEOUT = float(os.environ.get("BATCHED_PIPE_TIMEOUT", "10000.0"))
+WEIGHT_SYNC_TIMEOUT = float(os.environ.get("WEIGHT_SYNC_TIMEOUT", "60.0"))
 
 _TORCH_DTYPES = (
     torch.bfloat16,
@@ -143,6 +225,21 @@ class timeit:
         >>> with timeit("my_other_function"):
         ...     my_other_function()
         >>> timeit.print()  # prints the state of the timer for each function
+
+        The timer can also be queried mid-execution using the :meth:`elapsed` method:
+
+        >>> with timeit("my_function") as timer:
+        ...     # do some work
+        ...     print(f"Elapsed so far: {timer.elapsed():.3f}s")
+        ...     # do more work
+
+        For long-running processes where a context manager isn't practical,
+        use the :meth:`start` method:
+
+        >>> timer = timeit("long_process").start()
+        >>> for i in range(100):
+        ...     # do work
+        ...     print(f"Elapsed: {timer.elapsed():.3f}s")
     """
 
     _REG = {}
@@ -159,11 +256,47 @@ class timeit:
 
         return decorated_fn
 
-    def __enter__(self) -> None:
+    def __enter__(self) -> timeit:
         self.t0 = time.time()
+        return self
+
+    def start(self) -> timeit:
+        """Starts the timer without using a context manager.
+
+        This is useful when you need to track elapsed time over a long-running
+        loop or process where a context manager isn't practical.
+
+        Returns:
+            timeit: Returns self for method chaining.
+
+        Examples:
+            >>> timer = timeit("my_long_process").start()
+            >>> for i in range(100):
+            ...     # do work
+            ...     if i % 10 == 0:
+            ...         print(f"Elapsed: {timer.elapsed():.3f}s")
+        """
+        self.t0 = time.time()
+        return self
+
+    def elapsed(self) -> float:
+        """Returns the elapsed time in seconds since the timer was started.
+
+        This can be called during execution to query the current elapsed time.
+
+        Returns:
+            float: Elapsed time in seconds.
+
+        Examples:
+            >>> with timeit("my_function") as timer:
+            ...     # do some work
+            ...     print(f"Elapsed so far: {timer.elapsed():.3f}s")
+            ...     # do more work
+        """
+        return time.time() - self.t0
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        t = time.time() - self.t0
+        t = self.elapsed()
         val = self._REG.setdefault(self.name, [0.0, 0.0, 0])
 
         count = val[2]
@@ -259,6 +392,76 @@ class timeit:
         .. seealso:: :meth:`erase`
         """
         cls.erase()
+
+
+# Global flag to enable detailed profiling instrumentation.
+# When False (default), _maybe_record_function returns nullcontext() immediately
+# to avoid overhead in hot code paths.
+_PROFILING_ENABLED = False
+
+# Singleton nullcontext to avoid repeated object creation
+_NULL_CONTEXT = nullcontext()
+
+
+def set_profiling_enabled(enabled: bool) -> None:
+    """Enable or disable detailed profiling instrumentation.
+
+    When disabled (default), `_maybe_record_function` and `_maybe_timeit`
+    return immediately with minimal overhead. Enable only when actively
+    profiling to avoid performance regression.
+
+    Args:
+        enabled: If True, enable profiling instrumentation.
+    """
+    global _PROFILING_ENABLED
+    _PROFILING_ENABLED = enabled
+
+
+def _maybe_timeit(name):
+    """Return timeit context if not compiling, nullcontext otherwise.
+
+    torch.compiler.is_compiling() returns True when inside a compiled region,
+    and timeit uses time.time() which dynamo cannot trace.
+    """
+    if is_compiling():
+        return _NULL_CONTEXT
+    return timeit(name)
+
+
+def _maybe_record_function(name):
+    """Return record_function context if profiling enabled and not compiling.
+
+    When _PROFILING_ENABLED is False (default), returns immediately with
+    minimal overhead to avoid performance regression in hot code paths.
+    """
+    if not _PROFILING_ENABLED:
+        return _NULL_CONTEXT
+    if is_compiling():
+        return _NULL_CONTEXT
+
+    return record_function(name)
+
+
+def _maybe_record_function_decorator(name: str) -> Callable[[Callable], Callable]:
+    """Decorator version of :func:`_maybe_record_function`.
+
+    This is preferred over sprinkling many context managers in hot code paths,
+    as it reduces Python overhead while keeping a useful profiler structure.
+
+    When _PROFILING_ENABLED is False (default), the decorator is a no-op.
+    """
+
+    def decorator(fn: Callable) -> Callable:
+        @wraps(fn)
+        def wrapped(*args, **kwargs):
+            if not _PROFILING_ENABLED:
+                return fn(*args, **kwargs)
+            with _maybe_record_function(name):
+                return fn(*args, **kwargs)
+
+        return wrapped
+
+    return decorator
 
 
 def _check_for_faulty_process(processes):
@@ -570,8 +773,48 @@ def get_trace():
     traceback.print_stack()
 
 
+def _make_process_no_warn_cls(ctx=None):
+    """Create a _ProcessNoWarn class that inherits from the appropriate Process class.
+
+    When using multiprocessing contexts (e.g., fork or spawn), the Process class
+    used must match the context to ensure synchronization primitives like locks
+    work correctly. This factory function creates a _ProcessNoWarn class that
+    inherits from the context's Process class.
+
+    Args:
+        ctx: A multiprocessing context (e.g., from mp.get_context('fork')).
+            If None, uses the default mp.Process.
+
+    Returns:
+        A _ProcessNoWarn class that inherits from the appropriate Process base.
+
+    .. note::
+        For the "spawn" start method, this returns pre-defined module-level classes
+        to ensure they can be pickled correctly.
+    """
+    if ctx is None:
+        return _ProcessNoWarn
+
+    start_method = ctx.get_start_method()
+    if start_method == "fork":
+        return _ProcessNoWarnFork
+    elif start_method == "spawn":
+        return _ProcessNoWarnSpawn
+    elif start_method == "forkserver":
+        return _ProcessNoWarnForkserver
+    else:
+        # For unknown start methods, fall back to default
+        return _ProcessNoWarn
+
+
+# Keep the old class name as a default for backwards compatibility
 class _ProcessNoWarn(mp.Process):
-    """A private Process class that shuts down warnings on the subprocess and controls the number of threads in the subprocess."""
+    """A private Process class that shuts down warnings on the subprocess and controls the number of threads in the subprocess.
+
+    .. note::
+        When using multiprocessing contexts with synchronization primitives (locks, etc.),
+        use :func:`_make_process_no_warn_cls` with the context to ensure compatibility.
+    """
 
     @wraps(mp.Process.__init__)
     def __init__(self, *args, num_threads=None, _start_method=None, **kwargs):
@@ -593,6 +836,81 @@ class _ProcessNoWarn(mp.Process):
                 warnings.simplefilter("ignore")
                 return mp.Process.run(self, *args, **kwargs)
         return mp.Process.run(self, *args, **kwargs)
+
+
+# Pre-defined _ProcessNoWarn classes for different multiprocessing start methods.
+# These must be defined at module level to be picklable with the "spawn" start method.
+#
+# We use a mixin pattern to avoid code duplication while still having
+# distinct module-level classes that can be pickled.
+
+
+class _ProcessNoWarnMixin:
+    """Mixin class providing the common functionality for _ProcessNoWarn variants."""
+
+    def _init_process_no_warn(self, num_threads=None, _start_method=None):
+        import torchrl
+
+        self.filter_warnings_subprocess = torchrl.filter_warnings_subprocess
+        self.num_threads = num_threads
+        if _start_method is not None:
+            self._start_method = _start_method
+
+    def run(self, *args, **kwargs):
+        if self.num_threads is not None:
+            torch.set_num_threads(self.num_threads)
+        if self.filter_warnings_subprocess:
+            import warnings
+
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                return super().run(*args, **kwargs)
+        return super().run(*args, **kwargs)
+
+
+# Spawn-specific class (for macOS default and Windows)
+try:
+    _spawn_ctx = mp.get_context("spawn")
+
+    class _ProcessNoWarnSpawn(_ProcessNoWarnMixin, _spawn_ctx.Process):
+        """_ProcessNoWarn for the 'spawn' multiprocessing context."""
+
+        def __init__(self, *args, num_threads=None, _start_method=None, **kwargs):
+            self._init_process_no_warn(num_threads, _start_method)
+            super().__init__(*args, **kwargs)
+
+except ValueError:
+    _ProcessNoWarnSpawn = _ProcessNoWarn
+
+
+# Fork-specific class (for Linux default, not available on Windows)
+try:
+    _fork_ctx = mp.get_context("fork")
+
+    class _ProcessNoWarnFork(_ProcessNoWarnMixin, _fork_ctx.Process):
+        """_ProcessNoWarn for the 'fork' multiprocessing context."""
+
+        def __init__(self, *args, num_threads=None, _start_method=None, **kwargs):
+            self._init_process_no_warn(num_threads, _start_method)
+            super().__init__(*args, **kwargs)
+
+except ValueError:
+    _ProcessNoWarnFork = _ProcessNoWarn
+
+
+# Forkserver-specific class (not available on Windows)
+try:
+    _forkserver_ctx = mp.get_context("forkserver")
+
+    class _ProcessNoWarnForkserver(_ProcessNoWarnMixin, _forkserver_ctx.Process):
+        """_ProcessNoWarn for the 'forkserver' multiprocessing context."""
+
+        def __init__(self, *args, num_threads=None, _start_method=None, **kwargs):
+            self._init_process_no_warn(num_threads, _start_method)
+            super().__init__(*args, **kwargs)
+
+except ValueError:
+    _ProcessNoWarnForkserver = _ProcessNoWarn
 
 
 def print_directory_tree(path, indent="", display_metadata=True):
@@ -714,6 +1032,46 @@ def _make_ordinal_device(device: torch.device):
     if device.type == "mps" and device.index is None:
         return torch.device("mps", index=0)
     return device
+
+
+def get_available_device(return_str: bool = False) -> torch.device | str:
+    """Return the available accelerator device, or CPU if none is found.
+
+    Checks for accelerator availability in the following order: CUDA, NPU, MPS.
+    Returns the first available accelerator, or CPU if none are present.
+
+    .. note::
+        PyTorch generally assumes a single accelerator type per system.
+        Running with multiple accelerator types (e.g., both CUDA and NPU)
+        is not officially supported. This function simply returns the first
+        available accelerator it finds.
+
+    Args:
+        return_str: If ``True``, returns a string representation of the device
+            instead of a :class:`~torch.device` object. Defaults to ``False``.
+
+    Returns:
+        The available accelerator device as a :class:`~torch.device` object,
+        or as a string if ``return_str`` is ``True``. Falls back to CPU if
+        no accelerator is available.
+
+    Examples:
+        >>> from torchrl._utils import get_available_device
+        >>> device = get_available_device()
+        >>> # Use with config fallback:
+        >>> device = cfg.device or get_available_device()
+    """
+    if torch.cuda.is_available():
+        device = "cuda:0"
+    elif hasattr(torch, "npu") and torch.npu.is_available():
+        device = "npu:0"
+    elif torch.backends.mps.is_available():
+        device = "mps:0"
+    else:
+        device = "cpu"
+    if return_str:
+        return device
+    return torch.device(device)
 
 
 class _ContextManager:
@@ -1045,9 +1403,13 @@ def merge_ray_runtime_env(ray_init_config: dict[str, Any]) -> dict[str, Any]:
 
     """
     default_runtime_env = get_ray_default_runtime_env()
-    runtime_env = ray_init_config.setdefault("runtime_env", {})
+    runtime_env = ray_init_config.get("runtime_env")
 
-    if not isinstance(runtime_env, dict):
+    # Handle None or missing runtime_env
+    if runtime_env is None:
+        runtime_env = {}
+        ray_init_config["runtime_env"] = runtime_env
+    elif not isinstance(runtime_env, dict):
         runtime_env = dict(runtime_env)
         ray_init_config["runtime_env"] = runtime_env
 

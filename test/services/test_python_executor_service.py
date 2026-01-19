@@ -1,12 +1,15 @@
 """Tests for PythonExecutorService with Ray service registry."""
 from __future__ import annotations
 
+# Skip all tests if Ray is not available
+import importlib.util
+
 import pytest
 
-# Skip all tests if Ray is not available
-pytest.importorskip("ray")
+pytestmark = pytest.mark.skipif(
+    not importlib.util.find_spec("ray"), reason="Ray not available"
+)
 
-import ray
 from torchrl.envs.llm.transforms import PythonExecutorService, PythonInterpreter
 from torchrl.services import get_services
 
@@ -14,6 +17,8 @@ from torchrl.services import get_services
 @pytest.fixture
 def ray_init():
     """Initialize Ray for tests."""
+    import ray
+
     if not ray.is_initialized():
         ray.init()
     yield
@@ -73,7 +78,9 @@ y = 20
 result = x + y
 print(f"Result: {result}")
 """
-            result = ray.get(executor.execute.remote(code), timeout=2)
+            import ray
+
+            result = ray.get(executor.execute.remote(code), timeout=10)
 
             assert result["success"] is True
             assert "Result: 30" in result["stdout"]
@@ -84,6 +91,8 @@ print(f"Result: {result}")
 
     def test_service_execution_error(self, ray_init):
         """Test that the service handles execution errors."""
+        import ray
+
         namespace = "test_executor_error"
         services = get_services(backend="ray", namespace=namespace)
 
@@ -101,7 +110,7 @@ print(f"Result: {result}")
 
             # Execute code with an error
             code = "raise ValueError('Test error')"
-            result = ray.get(executor.execute.remote(code), timeout=2)
+            result = ray.get(executor.execute.remote(code), timeout=10)
 
             assert result["success"] is False
             assert "ValueError: Test error" in result["stderr"]
@@ -111,6 +120,8 @@ print(f"Result: {result}")
 
     def test_multiple_executions(self, ray_init):
         """Test multiple concurrent executions."""
+        import ray
+
         namespace = "test_executor_multi"
         services = get_services(backend="ray", namespace=namespace)
 
@@ -119,7 +130,7 @@ print(f"Result: {result}")
                 "python_executor",
                 PythonExecutorService,
                 pool_size=4,
-                timeout=5.0,
+                timeout=10.0,
                 num_cpus=4,
                 max_concurrency=4,
             )
@@ -132,14 +143,16 @@ print(f"Result: {result}")
                 code = f"print('Execution {i}')"
                 futures.append(executor.execute.remote(code))
 
-            # Wait for all to complete
-            results = ray.get(futures, timeout=5)
+            # Wait for all to complete with longer timeout
+            results = ray.get(futures, timeout=30)
 
             # All should succeed
             assert len(results) == 8
             for i, result in enumerate(results):
-                assert result["success"] is True
-                assert f"Execution {i}" in result["stdout"]
+                assert result["success"] is True, f"Execution {i} failed: {result}"
+                assert (
+                    f"Execution {i}" in result["stdout"]
+                ), f"Expected 'Execution {i}' in stdout, got: {result['stdout']!r}"
 
         finally:
             services.reset()

@@ -71,8 +71,6 @@ To add a new RPC backend (e.g., torch.distributed.rpc):
 
 **Current Implementation (Ray Backend)**
 
-The test suite in ``test_weightsync.py`` demonstrates the Ray-based RPC:
-
 .. code-block:: python
 
     # Trainer actor (provides RPC endpoint)
@@ -101,6 +99,8 @@ In this setup:
 
 from __future__ import annotations
 
+import time
+
 from typing import Any, Literal
 
 import torch
@@ -109,12 +109,7 @@ from tensordict import TensorDictBase
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.modules.llm.backends import stateless_init_process_group
-from torchrl.weight_update.weight_sync_schemes import (
-    WeightReceiver,
-    WeightSender,
-    WeightStrategy,
-    WeightSyncScheme,
-)
+from torchrl.weight_update.weight_sync_schemes import WeightStrategy, WeightSyncScheme
 
 # ============================================================================
 # vLLM Transport using Collective Communication
@@ -189,13 +184,13 @@ class VLLMCollectiveTransport:
 
         if self.rank == 0:
             # Trainer side - initialize process group
-            torchrl_logger.info(
+            torchrl_logger.debug(
                 f"Initializing trainer collective group: rank={self.rank}, world_size={self.world_size}, device={self.device}"
             )
             # Ray sets CUDA_VISIBLE_DEVICES, so we always use device 0
             # Set CUDA device before initializing NCCL to avoid segfaults
             torch.cuda.set_device(self.device)
-            torchrl_logger.info(f"Set CUDA device to {self.device}")
+            torchrl_logger.debug(f"Set CUDA device to {self.device}")
 
             self._comm_group = stateless_init_process_group(
                 self.master_address,
@@ -204,13 +199,13 @@ class VLLMCollectiveTransport:
                 self.world_size,
                 device=self.device,
             )
-            torchrl_logger.info("Trainer collective group initialized successfully")
+            torchrl_logger.debug("Trainer collective group initialized successfully")
         else:
             # vLLM worker side - initialize through engine
             if self.vllm_engine is None:
                 raise ValueError("vllm_engine must be provided for worker ranks")
 
-            torchrl_logger.info(
+            torchrl_logger.debug(
                 "Initializing vLLM worker collective group through engine"
             )
             # Call vLLM engine's init method - it returns futures for all workers
@@ -224,18 +219,17 @@ class VLLMCollectiveTransport:
             import ray
 
             ray.get(refs)
-            torchrl_logger.info(
+            torchrl_logger.debug(
                 f"All {len(refs)} vLLM workers have dispatched NCCL init RPCs"
             )
 
             # Small delay to ensure worker background threads have entered the NCCL collective
             # This prevents a race where the trainer starts NCCL before workers are ready
-            import time
 
             time.sleep(0.2)
 
             self._comm_group = True  # Mark as initialized
-            torchrl_logger.info(
+            torchrl_logger.debug(
                 "vLLM workers should now be blocked in NCCL collective, ready for trainer"
             )
 
@@ -283,7 +277,7 @@ class VLLMCollectiveTransport:
         else:
             weights_dict = weights
 
-        torchrl_logger.info(
+        torchrl_logger.debug(
             f"Broadcasting {len(weights_dict)} weights for model '{model_id}'"
         )
 
@@ -314,13 +308,26 @@ class VLLMCollectiveTransport:
             del tensor
 
         torch.cuda.synchronize()
-        torchrl_logger.info(f"Broadcast complete for model '{model_id}'")
+        torchrl_logger.debug(f"Broadcast complete for model '{model_id}'")
 
-    def receive_weights(self, timeout: float = 1.0) -> tuple[str, Any] | None:
+    def receive_weights(
+        self,
+        timeout: float | None = None,
+        *,
+        weights: Any = None,
+        model: Any = None,
+        strategy: Any = None,
+    ) -> Any | None:
         """Receive weights from broadcaster.
 
         This should only be called from worker ranks (rank > 0).
         This method is called by vLLM engine internally through collective operations.
+
+        Args:
+            timeout: Ignored (vLLM handles synchronization internally).
+            weights: Ignored.
+            model: Ignored.
+            strategy: Ignored.
 
         Returns:
             None - vLLM handles weight application internally via collectives.
@@ -441,7 +448,7 @@ class VLLMWeightSyncScheme(WeightSyncScheme):
                     s.bind(("", 0))
                     self.master_port = s.getsockname()[1]
 
-    def create_transport(self, pipe_or_context: Any) -> VLLMCollectiveTransport:
+    def create_transport(self, **kwargs) -> VLLMCollectiveTransport:
         """Create transport for collective communication.
 
         For vLLM, this creates a transport but requires additional setup via init_all_workers_group().
@@ -449,7 +456,7 @@ class VLLMWeightSyncScheme(WeightSyncScheme):
         is more complex and typically handled by sender/receiver initialization.
 
         Args:
-            pipe_or_context: Not used for vLLM (kept for API compatibility).
+            **kwargs: Not used for vLLM (kept for API compatibility).
 
         Returns:
             A VLLMCollectiveTransport instance (needs init_all_workers_group() to be called).
@@ -478,7 +485,7 @@ class VLLMWeightSyncScheme(WeightSyncScheme):
         return VLLMWeightReceiver(self, vllm_engine)
 
 
-class VLLMWeightSender(WeightSender):
+class VLLMWeightSender:
     """Sends weights to vLLM workers using collective communication.
 
     **RPC + Collective Implementation**
@@ -546,7 +553,7 @@ class VLLMWeightSender(WeightSender):
             device=self._scheme.device,
             vllm_engine=vllm_engine,
         )
-        torchrl_logger.info(
+        torchrl_logger.debug(
             f"Initializing transport from sender with world_size={world_size}"
         )
         self._transport.init_all_workers_group(model_metadata)
@@ -578,7 +585,7 @@ class VLLMWeightSender(WeightSender):
         self._transport.send_weights("vllm_model", weights)
 
 
-class VLLMWeightReceiver(WeightReceiver):
+class VLLMWeightReceiver:
     """Receives weights in a vLLM worker using collective communication.
 
     **RPC + Collective Implementation**
@@ -642,13 +649,17 @@ class VLLMWeightReceiver(WeightReceiver):
             device=self._scheme.device,
             vllm_engine=self._vllm_engine,
         )
-        torchrl_logger.info(
+        torchrl_logger.debug(
             f"Initializing transport from receiver with world_size={world_size}."
         )
         self._transport.init_all_workers_group(model_metadata)
 
-    def apply_weights(self, weights: Any) -> None:
+    def apply_weights(self, weights: Any, inplace: bool = True) -> None:
         """Apply weights to vLLM engine.
+
+        Args:
+            weights: The weights to apply.
+            inplace: Whether to apply weights in place. Default is `True`.
 
         Note: For vLLM, weights are applied automatically during the collective
         broadcast operation. This method is a no-op but kept for API consistency.

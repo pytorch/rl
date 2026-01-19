@@ -2,35 +2,50 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import os
+import warnings
 import weakref
 from warnings import warn
 
 import torch
 
-from tensordict import set_lazy_legacy
+# Silence noisy dependency warning triggered at import time on older torch stacks.
+# (Emitted by tensordict when registering pytree nodes.)
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message=r"torch\.utils\._pytree\._register_pytree_node is deprecated\.",
+)
 
-from torch import multiprocessing as mp
-from torch.distributions.transforms import _InverseTransform, ComposeTransform
+from tensordict import set_lazy_legacy  # noqa: E402
+
+from torch import multiprocessing as mp  # noqa: E402
+from torch.distributions.transforms import (  # noqa: E402
+    _InverseTransform,
+    ComposeTransform,
+)
 
 torch._C._log_api_usage_once("torchrl")
 
 set_lazy_legacy(False).set()
 
-if torch.cuda.device_count() > 1:
-    n = torch.cuda.device_count() - 1
-    os.environ["MUJOCO_EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
+from ._extension import _init_extension  # noqa: E402
 
-from ._extension import _init_extension
-
-
+__version__ = None  # type: ignore
 try:
-    from .version import __version__
-except ImportError:
+    try:
+        from importlib.metadata import version as _dist_version
+    except ImportError:  # pragma: no cover
+        from importlib_metadata import version as _dist_version  # type: ignore
+
+    __version__ = _dist_version("torchrl")
+except Exception:
     try:
         from ._version import __version__
-    except ImportError:
-        __version__ = "0.0.0+unknown"
+    except Exception:
+        try:
+            from .version import __version__
+        except Exception:
+            __version__ = None  # type: ignore
 
 try:
     from torch.compiler import is_dynamo_compiling
@@ -39,19 +54,8 @@ except ImportError:
 
 _init_extension()
 
-try:
-    mp.set_start_method("spawn")
-except RuntimeError as err:
-    if str(err).startswith("context has already been set"):
-        mp_start_method = mp.get_start_method()
-        if mp_start_method != "spawn":
-            warn(
-                f"failed to set start method to spawn, "
-                f"and current start method for mp is {mp_start_method}."
-            )
-
-
-from torchrl._utils import (
+from torchrl._utils import (  # noqa: E402
+    _get_default_mp_start_method,
     auto_unwrap_transformed_env,
     compile_with_warmup,
     get_ray_default_runtime_env,
@@ -59,10 +63,25 @@ from torchrl._utils import (
     logger,
     merge_ray_runtime_env,
     set_auto_unwrap_transformed_env,
+    set_profiling_enabled,
     timeit,
 )
 
 logger = logger
+
+# TorchRL's multiprocessing default.
+_preferred_start_method = _get_default_mp_start_method()
+if _preferred_start_method == "spawn":
+    try:
+        mp.set_start_method("spawn")
+    except RuntimeError as err:
+        if str(err).startswith("context has already been set"):
+            mp_start_method = mp.get_start_method()
+            if mp_start_method != "spawn":
+                warn(
+                    f"failed to set start method to spawn, "
+                    f"and current start method for mp is {mp_start_method}."
+                )
 
 # Filter warnings in subprocesses: True by default given the multiple optional
 # deps of the library. This can be turned on via `torchrl.filter_warnings_subprocess = False`.

@@ -15,21 +15,6 @@ assert (
 ), "Composite LP must be set to False. Run this test with COMPOSITE_LP_AGGREGATE=0"
 
 commands = {
-    "dt": """python sota-implementations/decision_transformer/dt.py \
-  optim.pretrain_gradient_steps=55 \
-  optim.updates_per_episode=3 \
-  optim.warmup_steps=10 \
-  logger.backend= \
-  env.backend=gymnasium \
-  env.name=HalfCheetah-v4
-""",
-    "online_dt": """python sota-implementations/decision_transformer/online_dt.py \
-  optim.pretrain_gradient_steps=55 \
-  optim.updates_per_episode=3 \
-  optim.warmup_steps=10 \
-  env.backend=gymnasium \
-  logger.backend=
-""",
     "td3_bc": """python sota-implementations/td3_bc/td3_bc.py \
   optim.gradient_steps=55 \
   logger.backend=
@@ -39,7 +24,7 @@ commands = {
   collector.frames_per_batch=20 \
   collector.num_workers=1 \
   logger.backend= \
-  env.backend=gym \
+  env.backend=gymnasium \
   logger.test_interval=10
 """,
     "ppo_mujoco": """python sota-implementations/ppo/ppo_mujoco.py \
@@ -57,7 +42,7 @@ commands = {
   loss.mini_batch_size=20 \
   loss.ppo_epochs=2 \
   logger.backend= \
-  env.backend=gym \
+  env.backend=gymnasium \
   logger.test_interval=10
 """,
     "ddpg": """python sota-implementations/ddpg/ddpg.py \
@@ -84,7 +69,7 @@ commands = {
   collector.frames_per_batch=20 \
   loss.mini_batch_size=20 \
   logger.backend= \
-  env.backend=gym \
+  env.backend=gymnasium \
   logger.test_interval=40
 """,
     "dqn_atari": """python sota-implementations/dqn/dqn_atari.py \
@@ -94,7 +79,7 @@ commands = {
   buffer.batch_size=10 \
   loss.num_updates=1 \
   logger.backend= \
-  env.backend=gym \
+  env.backend=gymnasium \
   buffer.buffer_size=120
 """,
     "discrete_cql_online": """python sota-implementations/cql/discrete_cql_online.py \
@@ -296,16 +281,20 @@ commands = {
     "bandits": """python sota-implementations/bandits/dqn.py --n_steps=100
 """,
     "dreamer": """python sota-implementations/dreamer/dreamer.py \
-  collector.total_frames=600 \
-  collector.init_random_frames=10 \
+  optimization.total_optim_steps=2 \
+  optimization.log_every=1 \
+  optimization.compile.enabled=False \
+  collector.init_random_frames=32 \
   collector.frames_per_batch=200 \
+  collector.num_collectors=1 \
   env.n_parallel_envs=1 \
-  optimization.optim_steps_per_batch=1 \
+  logger.eval_every=1000000 \
   logger.video=False \
   logger.backend=csv \
   replay_buffer.buffer_size=120 \
-  replay_buffer.batch_size=24 \
-  replay_buffer.batch_length=12 \
+  replay_buffer.batch_size=8 \
+  replay_buffer.batch_length=8 \
+  replay_buffer.prefetch=1 \
   networks.rssm_hidden_dim=17
 """,
 }

@@ -50,7 +50,7 @@ from tensordict.nn import (
 from torch import nn
 
 from torchrl._utils import implement_for, logger as torchrl_logger
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.collectors.distributed import RayCollector
 from torchrl.data import (
     Binary,
@@ -65,7 +65,7 @@ from torchrl.data import (
     ReplayBuffer,
     ReplayBufferEnsemble,
     Unbounded,
-    UnboundedDiscreteTensorSpec,
+    UnboundedDiscrete,
 )
 from torchrl.data.datasets.atari_dqn import AtariDQNExperienceReplay
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
@@ -123,49 +123,32 @@ from torchrl.envs.libs.unity_mlagents import (
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 
 from torchrl.envs.transforms import ActionMask, TransformedEnv
-from torchrl.envs.utils import (
-    check_env_specs,
-    ExplorationType,
-    MarlGroupMapType,
-    RandomPolicy,
-)
+from torchrl.envs.utils import check_env_specs, ExplorationType, MarlGroupMapType
 from torchrl.modules import (
     ActorCriticOperator,
     MaskedCategorical,
     MLP,
+    RandomPolicy,
     SafeModule,
     ValueOperator,
 )
 
 _has_ray = importlib.util.find_spec("ray") is not None
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import (
-        _make_multithreaded_env,
-        CARTPOLE_VERSIONED,
-        CLIFFWALKING_VERSIONED,
-        get_available_devices,
-        get_default_devices,
-        HALFCHEETAH_VERSIONED,
-        PENDULUM_VERSIONED,
-        PONG_VERSIONED,
-        rand_reset,
-        retry,
-        rollout_consistency_assertion,
-    )
-else:
-    from _utils_internal import (
-        _make_multithreaded_env,
-        CARTPOLE_VERSIONED,
-        CLIFFWALKING_VERSIONED,
-        get_available_devices,
-        get_default_devices,
-        HALFCHEETAH_VERSIONED,
-        PENDULUM_VERSIONED,
-        PONG_VERSIONED,
-        rand_reset,
-        retry,
-        rollout_consistency_assertion,
-    )
+_has_ale = importlib.util.find_spec("ale_py") is not None
+_has_mujoco = importlib.util.find_spec("mujoco") is not None
+from torchrl.testing import (
+    CARTPOLE_VERSIONED,
+    CLIFFWALKING_VERSIONED,
+    get_available_devices,
+    get_default_devices,
+    HALFCHEETAH_VERSIONED,
+    make_multithreaded_env as _make_multithreaded_env,
+    PENDULUM_VERSIONED,
+    PONG_VERSIONED,
+    rand_reset,
+    retry,
+    rollout_consistency_assertion,
+)
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
@@ -320,7 +303,7 @@ class TestGym:
             d=cat(5, shape=cat_shape, dtype=torch.int64),
             e=multicat([2, 3], shape=(*batch_size, multicat_shape), dtype=torch.int64),
             f=Bounded(-3, 4, shape=(*batch_size, 1)),
-            # g=UnboundedDiscreteTensorSpec(shape=(*batch_size, 1), dtype=torch.long),
+            # g=UnboundedDiscrete(shape=(*batch_size, 1), dtype=torch.long),
             h=Binary(n=5, shape=(*batch_size, 5)),
             shape=batch_size,
         )
@@ -335,7 +318,7 @@ class TestGym:
             d=cat(5, shape=cat_shape, dtype=torch.int64),
             e=multicat([2, 3], shape=(*batch_size, multicat_shape), dtype=torch.int64),
             f=Bounded(-3, 4, shape=(*batch_size, 1)),
-            g=UnboundedDiscreteTensorSpec(shape=(*batch_size, 1), dtype=torch.long),
+            g=UnboundedDiscrete(shape=(*batch_size, 1), dtype=torch.long),
             h=Binary(n=5, shape=(*batch_size, 5)),
             shape=batch_size,
         )
@@ -350,7 +333,7 @@ class TestGym:
             d=cat(5, shape=cat_shape, dtype=torch.int64),
             e=multicat([2, 3], shape=(*batch_size, multicat_shape), dtype=torch.int64),
             f=Bounded(-3, 4, shape=(*batch_size, 1)),
-            g=UnboundedDiscreteTensorSpec(shape=(*batch_size, 1), dtype=torch.long),
+            g=UnboundedDiscrete(shape=(*batch_size, 1), dtype=torch.long),
             h=Binary(n=5, shape=(*batch_size, 5)),
             shape=batch_size,
         )
@@ -365,7 +348,7 @@ class TestGym:
             d=cat(5, shape=cat_shape, dtype=torch.int64),
             e=multicat([2, 3], shape=(*batch_size, multicat_shape), dtype=torch.int64),
             f=Bounded(-3, 4, shape=(*batch_size, 1)),
-            g=UnboundedDiscreteTensorSpec(shape=(*batch_size, 1), dtype=torch.long),
+            g=UnboundedDiscrete(shape=(*batch_size, 1), dtype=torch.long),
             h=Binary(n=5, shape=(*batch_size, 5)),
             shape=batch_size,
         )
@@ -824,6 +807,13 @@ class TestGym:
         ],
     )
     def test_gym(self, env_name, frame_skip, from_pixels, pixels_only):
+        if env_name == PONG_VERSIONED() and not _has_ale:
+            pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
+        if env_name == HALFCHEETAH_VERSIONED() and not _has_mujoco:
+            pytest.skip(
+                "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+            )
+
         if env_name == PONG_VERSIONED() and not from_pixels:
             # raise pytest.skip("already pixel")
             # we don't skip because that would raise an exception
@@ -941,6 +931,13 @@ class TestGym:
         ],
     )
     def test_gym_fake_td(self, env_name, frame_skip, from_pixels, pixels_only):
+        if env_name == PONG_VERSIONED() and not _has_ale:
+            pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
+        if env_name == HALFCHEETAH_VERSIONED() and not _has_mujoco:
+            pytest.skip(
+                "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+            )
+
         if env_name == PONG_VERSIONED() and not from_pixels:
             # raise pytest.skip("already pixel")
             return
@@ -1073,6 +1070,13 @@ class TestGym:
     def test_vecenvs_wrapper(self, envname):
         import gymnasium
 
+        if envname.startswith("ALE/") and not _has_ale:
+            pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
+        if "HalfCheetah" in envname and not _has_mujoco:
+            pytest.skip(
+                "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+            )
+
         with set_gym_backend("gymnasium"):
             self._test_vecenvs_wrapper(
                 envname,
@@ -1087,6 +1091,13 @@ class TestGym:
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_wrapper(self, envname):  # noqa
+        if envname.startswith("ALE/") and not _has_ale:
+            pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
+        if "HalfCheetah" in envname and not _has_mujoco:
+            pytest.skip(
+                "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+            )
+
         with set_gym_backend("gymnasium"):
             self._test_vecenvs_wrapper(envname)
 
@@ -1120,6 +1131,12 @@ class TestGym:
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_env(self, envname):
+        if envname.startswith("ALE/") and not _has_ale:
+            pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
+        if "HalfCheetah" in envname and not _has_mujoco:
+            pytest.skip(
+                "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+            )
         self._test_vecenvs_env(envname)
 
     @implement_for("gymnasium", None, "1.0.0")
@@ -1131,6 +1148,12 @@ class TestGym:
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_env(self, envname):  # noqa
+        if envname.startswith("ALE/") and not _has_ale:
+            pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
+        if "HalfCheetah" in envname and not _has_mujoco:
+            pytest.skip(
+                "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+            )
         self._test_vecenvs_env(envname)
 
     def _test_vecenvs_env(self, envname):
@@ -1365,7 +1388,7 @@ class TestGym:
         # same with collector
         env = GymEnv("CartPole-v0", num_envs=2)
         env.set_seed(0)
-        c = SyncDataCollector(
+        c = Collector(
             env, RandomPolicy(env.action_spec), total_frames=2000, frames_per_batch=200
         )
         for rollout in c:
@@ -1390,7 +1413,7 @@ class TestGym:
         # same with collector
         env = GymEnv("CartPole-v0", num_envs=2)
         env.set_seed(0)
-        c = SyncDataCollector(
+        c = Collector(
             env, RandomPolicy(env.action_spec), total_frames=2000, frames_per_batch=200
         )
         for rollout in c:
@@ -1422,7 +1445,7 @@ class TestGym:
         # same with collector
         env = GymEnv("CartPole-v1", num_envs=2)
         env.set_seed(0)
-        c = SyncDataCollector(
+        c = Collector(
             env, RandomPolicy(env.action_spec), total_frames=2000, frames_per_batch=200
         )
         for rollout in c:
@@ -1920,6 +1943,64 @@ class TestDMControl:
         assert final_seed0 == final_seed2
         assert_allclose_td(rollout0, rollout2)
 
+    def test_num_envs_returns_lazy_parallel_env(self):
+        """Ensure DMControlEnv with num_envs > 1 returns a lazy ParallelEnv."""
+        from torchrl.envs.batched_envs import ParallelEnv
+
+        # When num_envs > 1, should return ParallelEnv directly (lazy)
+        env = DMControlEnv("cheetah", "run", num_envs=3)
+        try:
+            assert isinstance(env, ParallelEnv)
+            assert env.num_workers == 3
+            # ParallelEnv should be lazy (not started yet)
+            assert env.is_closed
+
+            # configure_parallel should work before env starts
+            env.configure_parallel(use_buffers=False)
+            assert env._use_buffers is False
+
+            # After reset, env is started
+            env.reset()
+            assert not env.is_closed
+            assert env.batch_size == torch.Size([3])
+        finally:
+            env.close()
+
+    def test_set_seed_and_reset_works(self):
+        """Smoke test that setting seed and reset works (seed forwarded into build)."""
+        env = DMControlEnv("cheetah", "run")
+        final_seed = env.set_seed(0)
+        assert final_seed is not None
+        td = env.reset()
+        from tensordict import TensorDict
+
+        assert isinstance(td, TensorDict)
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires cuda")
+    def test_dmcontrol_kwargs_preserved_with_seed(self):
+        """Test that kwargs like camera_id are preserved when seed is provided.
+
+        Regression test for a bug where `kwargs = {"random": ...}` replaced
+        all kwargs instead of updating them when _seed was not None.
+        """
+        # Create env with custom camera_id and from_pixels=True
+        # The camera_id should be preserved even when seed is set internally
+        env = DMControlEnv(
+            "cheetah",
+            "run",
+            from_pixels=True,
+            pixels_only=True,
+            camera_id=1,  # Non-default camera_id
+        )
+        try:
+            # Verify the render_kwargs were set correctly
+            assert env.render_kwargs["camera_id"] == 1
+            # Verify env works
+            td = env.reset()
+            assert "pixels" in td.keys()
+        finally:
+            env.close()
+
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires cuda")
     @pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
     @pytest.mark.parametrize("frame_skip", [1, 3])
@@ -1994,11 +2075,15 @@ if _has_dmc:
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
     ]
 if _has_gym:
-    params += [
-        # [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": True}],
-        [GymEnv, (HALFCHEETAH_VERSIONED(),), {"from_pixels": False}],
-        [GymEnv, (PONG_VERSIONED(),), {}],
-    ]
+    if _has_mujoco:
+        params += [
+            # [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": True}],
+            [GymEnv, (HALFCHEETAH_VERSIONED(),), {"from_pixels": False}],
+        ]
+    if _has_ale:
+        params += [
+            [GymEnv, (PONG_VERSIONED(),), {}],
+        ]
 
 
 @pytest.mark.skipif(
@@ -2041,11 +2126,12 @@ if _has_dmc:
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
     ]
 if _has_gym:
-    params += [
-        # [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": True}],
-        [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": False}],
-        # [GymEnv, (PONG_VERSIONED,), {}],  # 1226: skipping
-    ]
+    if _has_mujoco:
+        params += [
+            # [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": True}],
+            [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": False}],
+            # [GymEnv, (PONG_VERSIONED,), {}],  # 1226: skipping
+        ]
 
 
 # @pytest.mark.skipif(IS_OSX, reason="rendering unstable on osx, skipping")
@@ -2076,7 +2162,7 @@ class TestCollectorLib:
 
         # env = ParallelEnv(3, env_fn)
         frames_per_batch = 21
-        collector = SyncDataCollector(  # 1226: not using MultiaSync for perf reasons
+        collector = Collector(  # 1226: not using MultiaSync for perf reasons
             create_env_fn=env,
             policy=RandomPolicy(action_spec=env.action_spec),
             total_frames=-1,
@@ -2262,7 +2348,11 @@ class TestEnvPool:
     def test_env_wrapper_creation(self, env_name):
         env_name = env_name.replace("ALE/", "")  # EnvPool naming convention
         envpool_env = envpool.make(
-            task_id=env_name, env_type="gym", num_envs=4, gym_reset_return_info=True
+            task_id=env_name,
+            env_type="gym",
+            num_envs=4,
+            gym_reset_return_info=True,
+            max_num_players=1,  # Required for single-player environments
         )
         env = MultiThreadedEnvWrapper(envpool_env)
         env.reset()
@@ -2275,6 +2365,12 @@ class TestEnvPool:
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_out", [False, True])
     def test_specs(self, env_name, frame_skip, transformed_out, T=10, N=3):
+        if "MountainCar" in env_name:
+            pytest.skip(
+                "EnvPool MountainCar returns incorrect observations "
+                "(duplicated position instead of [position, velocity]). "
+                "See https://github.com/sail-sg/envpool/issues/XXX"
+            )
         env_multithreaded = _make_multithreaded_env(
             env_name,
             frame_skip,
@@ -2447,6 +2543,7 @@ class TestEnvPool:
         )
         action = env.action_spec.rand()
         env.set_seed(seed)
+        torch.manual_seed(seed)  # Seed torch for reproducible random actions
         td0a = env.reset()
         td1a = env.step(td0a.clone().set("action", action))
         td2a = env.rollout(max_steps=10)
@@ -2459,6 +2556,7 @@ class TestEnvPool:
             N=N,
         )
         env.set_seed(seed)
+        torch.manual_seed(seed)  # Seed torch for reproducible random actions
         td0b = env.reset()
         td1b = env.step(td0b.clone().set("action", action))
         td2b = env.rollout(max_steps=10)
@@ -3123,7 +3221,7 @@ class TestVmas:
             spec=env.full_action_spec[env.action_key],
             safe=True,
         )
-        ccollector = SyncDataCollector(
+        ccollector = Collector(
             create_env_fn=env,
             policy=policy,
             frames_per_batch=frames_per_batch,
@@ -3170,7 +3268,7 @@ class TestVmas:
         )
         torch.manual_seed(1)
 
-        ccollector = SyncDataCollector(
+        ccollector = Collector(
             create_env_fn=env,
             policy=None,
             frames_per_batch=frames_per_batch,
@@ -4377,7 +4475,7 @@ class TestIsaacGym:
     #
     # def test_collector(self, task, num_envs, device):
     #     env = IsaacGymEnv(task=task, num_envs=num_envs, device=device)
-    #     collector = SyncDataCollector(
+    #     collector = Collector(
     #         env,
     #         policy=SafeModule(nn.LazyLinear(out_features=env.observation_spec['obs'].shape[-1]), in_keys=["obs"], out_keys=["action"]),
     #         frames_per_batch=20,
@@ -4665,7 +4763,7 @@ class TestPettingZoo:
                 max_cycles=1000,
             )
 
-        collector = SyncDataCollector(
+        collector = Collector(
             lambda: maybe_fork_ParallelEnv(
                 num_workers=2,
                 create_env_fn=base_env_fn,
@@ -4691,7 +4789,7 @@ class TestPettingZoo:
             seed=0,
             use_mask=not parallel,
         )
-        collector = SyncDataCollector(
+        collector = Collector(
             create_env_fn=env_fun, frames_per_batch=30, total_frames=60, policy=None
         )
         for _ in collector:
@@ -4817,9 +4915,7 @@ class TestSmacv2:
         )
         actor = TensorDictSequential(module, prob)
 
-        collector = SyncDataCollector(
-            env, policy=actor, frames_per_batch=20, total_frames=40
-        )
+        collector = Collector(env, policy=actor, frames_per_batch=20, total_frames=40)
         for _ in collector:
             break
         collector.shutdown()
@@ -5174,7 +5270,7 @@ class TestIsaacLab:
         assert (flat_ranges == arange).all()
 
     def test_isaac_collector(self, env):
-        col = SyncDataCollector(
+        col = Collector(
             env, env.rand_action, frames_per_batch=1000, total_frames=100_000_000
         )
         try:

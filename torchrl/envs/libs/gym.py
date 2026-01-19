@@ -19,7 +19,7 @@ from packaging import version
 from tensordict import TensorDict, TensorDictBase
 from torch.utils._pytree import tree_map
 
-from torchrl._utils import implement_for
+from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.data.tensor_specs import (
     _minmax_dtype,
     Binary,
@@ -164,15 +164,34 @@ class set_gym_backend(_DecoratorContextManager):
         self._call()
 
     def __enter__(self):
-        # we save a complete list of setters as well as whether they should be set.
-        # we want the full list because we want to be able to nest the calls to set_gym_backend.
-        # we also want to keep track of which ones are set to reproduce what was set before.
-        self._setters_saved = copy(implement_for._implementations)
+        global DEFAULT_GYM
+        # Save the current DEFAULT_GYM so we can restore it on exit
+        self._default_gym_saved = DEFAULT_GYM
         self._call()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        implement_for.reset(setters_dict=self._setters_saved)
-        delattr(self, "_setters_saved")
+        global DEFAULT_GYM
+        # Restore the previous DEFAULT_GYM
+        saved_gym = self._default_gym_saved
+        DEFAULT_GYM = saved_gym
+        delattr(self, "_default_gym_saved")
+        # Re-activate the implementations for the original backend
+        # If saved_gym was None, we need to determine the default backend
+        # by calling gym_backend() which will initialize DEFAULT_GYM
+        if saved_gym is None:
+            # Initialize DEFAULT_GYM with the default backend (gymnasium first, then gym)
+            saved_gym = gym_backend()
+        # Re-apply the original backend's implementations
+        for setter in copy(implement_for._setters):
+            check_module = (
+                callable(setter.module_name)
+                and setter.module_name.__name__ == saved_gym.__name__
+            ) or setter.module_name == saved_gym.__name__
+            check_version = setter.check_version(
+                saved_gym.__version__, setter.from_version, setter.to_version
+            )
+            if check_module and check_version:
+                setter.module_set()
 
     def clone(self):
         # override this method if your children class takes __init__ parameters
@@ -1819,6 +1838,13 @@ class GymEnv(GymWrapper):
             # to find the config that works.
             try:
                 with warnings.catch_warnings(record=True) as w:
+                    if env_name.startswith("ALE/"):
+                        try:
+                            import ale_py  # noqa: F401
+                        except ImportError as err:
+                            torchrl_logger.warning(
+                                f"ale_py not found, this may cause issues with ALE environments: {err}"
+                            )
                     # we catch warnings as they may cause silent bugs
                     env = self.lib.make(env_name, **kwargs)
                     if len(w) and "frameskip" in str(w[-1].message):

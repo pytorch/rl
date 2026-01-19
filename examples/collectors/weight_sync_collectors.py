@@ -17,7 +17,7 @@ single collectors, multiple collectors, multiple models, and no synchronization.
 import torch.nn as nn
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
-from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
+from torchrl.collectors import Collector, MultiSyncCollector
 from torchrl.envs import GymEnv
 from torchrl.weight_update import (
     MultiProcessWeightSyncScheme,
@@ -46,7 +46,7 @@ def example_single_collector_multiprocess():
     scheme = MultiProcessWeightSyncScheme(strategy="state_dict")
 
     print("Creating collector with multiprocess weight sync...")
-    collector = SyncDataCollector(
+    collector = Collector(
         create_env_fn=lambda: GymEnv("CartPole-v1"),
         policy=policy,
         frames_per_batch=64,
@@ -90,10 +90,10 @@ def example_multi_collector_shared_memory():
     env.close()
 
     # Shared memory is more efficient for frequent updates
-    scheme = SharedMemWeightSyncScheme(strategy="tensordict", auto_register=True)
+    scheme = SharedMemWeightSyncScheme(strategy="tensordict")
 
     print("Creating multi-collector with shared memory...")
-    collector = MultiSyncDataCollector(
+    collector = MultiSyncCollector(
         create_env_fn=[
             lambda: GymEnv("CartPole-v1"),
             lambda: GymEnv("CartPole-v1"),

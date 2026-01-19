@@ -70,7 +70,8 @@ class CISPOLossOutput(LLMLossOutput):
 class GRPOLoss(LossModule):
     """GRPO loss.
 
-    The clipped importance weighted loss is computed as follows:
+    The clipped importance weighted loss is computed as follows::
+
         loss = -min( weight * advantage, min(max(weight, 1-eps), 1+eps) * advantage)
 
     Args:
@@ -718,11 +719,12 @@ class DAPO(GRPOLoss):
         return coeff * kl_penalty, kl_penalty
 
 
-class CISPO(GRPOLoss):
+class CISPOLoss(GRPOLoss):
     """CISPO (Clipped Importance Sampling Policy Optimization).
 
     Inherits the GRPO pipeline (masking, ESS, entropy, optional KL penalties) but
-    replaces the PPO-style min with a clipped-importance objective:
+    replaces the PPO-style min with a clipped-importance objective::
+
         loss = - clip(weight, [1 - eps_low, 1 + eps_high]) * advantage
 
     See the `MiniMax-M1 (CISPO) <https://arxiv.org/html/2506.13585>`_ paper.

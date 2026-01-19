@@ -18,7 +18,7 @@ from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import EnvCreator, GymEnv, ParallelEnv, StepCounter, TransformedEnv
 from torchrl.envs.libs.dm_control import DMControlEnv
-from torchrl.envs.utils import RandomPolicy
+from torchrl.modules import RandomPolicy
 
 
 def single_collector_setup():

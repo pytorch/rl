@@ -7,9 +7,11 @@ from __future__ import annotations
 import argparse
 import gc
 import importlib.util
-
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, wait
 from functools import partial
+from typing import Any, TYPE_CHECKING
 
 import pytest
 import torch
@@ -29,17 +31,20 @@ from torchrl.modules.llm.policies.common import (
 )
 from torchrl.modules.llm.policies.transformers_wrapper import TransformersWrapper
 from torchrl.modules.llm.policies.vllm_wrapper import vLLMWrapper
-from transformers import AutoTokenizer
 
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
-_has_datasets = importlib.util.find_spec("datasets") is not None
 _has_ray = importlib.util.find_spec("ray") is not None
+# _has_datasets = importlib.util.find_spec("datasets") is not None
 
 TransformersWrapperMaxTokens = partial(
     TransformersWrapper, generate_kwargs={"max_new_tokens": 10, "do_sample": True}
 )
+
+if TYPE_CHECKING:
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from vllm import LLM
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -60,9 +65,7 @@ def set_list_to_stack_fixture():
 
 
 @pytest.fixture(scope="module")
-def vllm_instance() -> tuple[
-    vllm.LLM, transformers.AutoTokenizer  # noqa # type: ignore
-]:  # noqa # type: ignore
+def vllm_instance() -> tuple[LLM, AutoTokenizer]:  # noqa # type: ignore
     """Create vLLM model and tokenizer for testing."""
     if not _has_vllm:
         pytest.skip("vllm not available")
@@ -81,6 +84,8 @@ def vllm_instance() -> tuple[
             max_model_len=32768,
             gpu_memory_utilization=0.3,  # Limit to 30% GPU memory to avoid OOM with multiple engines
         )
+        from transformers import AutoTokenizer
+
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
         tokenizer.pad_token = tokenizer.eos_token
         return model, tokenizer
@@ -90,7 +95,7 @@ def vllm_instance() -> tuple[
 
 @pytest.fixture(scope="module")
 def async_vllm_instance() -> tuple[
-    Any, transformers.AutoTokenizer  # noqa # type: ignore
+    Any, AutoTokenizer  # noqa # type: ignore
 ]:  # noqa # type: ignore
     """Create async vLLM engine and tokenizer for testing."""
     if not _has_vllm:
@@ -112,6 +117,8 @@ def async_vllm_instance() -> tuple[
             max_num_batched_tokens=32768,
             gpu_memory_utilization=0.3,  # Limit to 30% GPU memory to avoid OOM with multiple engines
         )
+        from transformers import AutoTokenizer
+
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
         tokenizer.pad_token = tokenizer.eos_token
         return async_engine, tokenizer
@@ -121,7 +128,7 @@ def async_vllm_instance() -> tuple[
 
 @pytest.fixture(scope="module")
 def transformers_instance() -> tuple[
-    transformers.AutoModelForCausalLM, transformers.AutoTokenizer  # noqa # type: ignore
+    AutoModelForCausalLM, AutoTokenizer  # noqa # type: ignore
 ]:  # noqa # type: ignore
     """Create transformers model and tokenizer for testing."""
     if not _has_transformers:
@@ -412,8 +419,6 @@ def monkey_patch_forward_for_timing():
 @pytest.fixture
 def monkey_patch_forward_for_instrumentation():
     """Fixture to monkey patch the forward method to add detailed processing event tracking."""
-    import threading
-    import time
 
     # Track processing events
     processing_events = []
@@ -2706,8 +2711,6 @@ class TestBatching:
         monkey_patch_forward_for_timing,
     ):
         """Test that with min_batch_size=1, first request is processed immediately and subsequent ones are grouped."""
-        import time
-        from concurrent.futures import ThreadPoolExecutor, wait
 
         # Create wrapper using helper function
         wrapper = create_batching_test_wrapper(

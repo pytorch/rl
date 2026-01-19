@@ -1,5 +1,14 @@
 [build-system]
-requires = ["setuptools", "wheel", "torch", "ninja", "numpy", "pybind11[global]", "cmake"]
+requires = [
+    "setuptools",
+    "wheel",
+    "setuptools_scm",
+    "torch",
+    "ninja",
+    "numpy",
+    "pybind11[global]",
+    "cmake",
+]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -16,11 +25,11 @@ maintainers = [
 ]
 keywords = ["reinforcement-learning", "pytorch", "rl", "machine-learning"]
 classifiers = [
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Operating System :: OS Independent",
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -48,6 +57,7 @@ tests = [
     "pyyaml",
     "pytest-instafail",
     "scipy",
+    "psutil",
     "pytest-mock",
     "pytest-cov",
     "pytest-asyncio",
@@ -55,6 +65,9 @@ tests = [
     "pytest-rerunfailures",
     "pytest-error-for-skips",
     "pytest-timeout",
+    "pytest-forked",
+    "pytest-random-order",
+    "pytest-repeat",
 ]
 utils = [
     "tensorboard",
@@ -126,8 +139,13 @@ linkedin = "https://www.linkedin.com/company/torchrl"
 discord = "https://discord.gg/cZs26Qq3Dd"
 benchmark = "https://docs.pytorch.org/rl/dev/bench/"
 
-[tool.setuptools.dynamic]
-version = {file = "version.txt"}
+[tool.setuptools_scm]
+# Use SETUPTOOLS_SCM_PRETEND_VERSION=M.Major.Minor to set the version for stable releases.
+version_scheme = "post-release"
+# Local scheme is handled by setup.py (appends +g<sha> unless on release/v<version> branch)
+local_scheme = "no-local-version"
+version_file = "torchrl/_version.py"
+fallback_version = "0.10.0"
 
 [tool.setuptools.packages.find]
 exclude = [
