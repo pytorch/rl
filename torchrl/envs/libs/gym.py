@@ -438,13 +438,15 @@ def convert_multidiscrete_spec(
     remap_state_to_observation=None,
     batch_size=None,
 ):
+    # Only use MultiCategorical/MultiOneHot for heterogeneous nvec (e.g., [3, 5, 7]).
+    # Homogeneous nvec like [2, 2] typically represents independent actions
+    # (e.g., vectorized envs with same Discrete(n) per env) and should use stacking.
     if len(spec.nvec.shape) == 1 and len(np.unique(spec.nvec)) > 1:
         dtype = (
             numpy_to_torch_dtype_dict[spec.dtype]
             if categorical_action_encoding
             else torch.long
         )
-
         return (
             MultiCategorical(spec.nvec, device=device, dtype=dtype)
             if categorical_action_encoding
@@ -1370,19 +1372,62 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
             return rs
 
     def _make_specs(self, env: gym.Env, batch_size=None) -> None:  # noqa: F821
-        # If batch_size is provided, we se it to tell what batch size must be used
+        # If batch_size is provided, we set it to tell what batch size must be used
         # instead of self.batch_size
         cur_batch_size = self.batch_size if batch_size is None else torch.Size([])
-        action_spec = _gym_to_torchrl_spec_transform(
-            env.action_space,
-            device=self.device,
-            categorical_action_encoding=self._categorical_action_encoding,
-        )
         observation_spec = _gym_to_torchrl_spec_transform(
             env.observation_space,
             device=self.device,
             categorical_action_encoding=self._categorical_action_encoding,
         )
+        action_spec = _gym_to_torchrl_spec_transform(
+            env.action_space,
+            device=self.device,
+            categorical_action_encoding=self._categorical_action_encoding,
+        )
+        # When the action space is MultiDiscrete and an action_mask is present in the
+        # observation with shape matching nvec, we convert to a flattened Categorical/OneHot
+        # so that the mask can be applied directly to all possible action combinations.
+        # This is useful for grid-based games where the mask indicates valid (row, col) positions.
+        gym_spaces = gym_backend("spaces")
+        MultiDiscrete = getattr(gym_spaces, "MultiDiscrete", None)
+        if MultiDiscrete is None:
+            # Fallback for gym versions where MultiDiscrete is in a submodule
+            multi_discrete_module = getattr(gym_spaces, "multi_discrete", None)
+            if multi_discrete_module is not None:
+                MultiDiscrete = getattr(multi_discrete_module, "MultiDiscrete", None)
+        if MultiDiscrete is not None and isinstance(env.action_space, MultiDiscrete):
+            nvec = np.asarray(env.action_space.nvec)
+            if (
+                nvec.ndim == 1
+                and isinstance(observation_spec, Composite)
+                and "action_mask" in observation_spec
+            ):
+                mask_spec = observation_spec["action_mask"]
+                if tuple(mask_spec.shape) == tuple(nvec):
+                    prod_n = int(np.prod(nvec))
+                    dtype = (
+                        numpy_to_torch_dtype_dict[env.action_space.dtype]
+                        if self._categorical_action_encoding
+                        else torch.long
+                    )
+                    # Flattened action: single choice from prod(nvec) options.
+                    # The mask (which has shape matching nvec) will be reshaped
+                    # by Categorical/OneHot.update_mask when applied.
+                    if self._categorical_action_encoding:
+                        action_spec = Categorical(
+                            prod_n,
+                            shape=(),
+                            device=self.device,
+                            dtype=dtype,
+                        )
+                    else:
+                        action_spec = OneHot(
+                            prod_n,
+                            shape=(prod_n,),
+                            device=self.device,
+                            dtype=torch.bool,
+                        )
         if not isinstance(observation_spec, Composite):
             if self.from_pixels:
                 observation_spec = Composite(
