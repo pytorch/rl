@@ -79,8 +79,10 @@ class LLMEnv(EnvBase):
             is written during calls to `step()`. Defaults to ``False``.
         assign_done (bool, optional): If ``True``, a zero-valued done and terminated state of shape equal to the
             action shape is written during calls to `step()`. Defaults to ``False``.
+
             .. note:: Regardless of the value assigned to `assign_done`, a done state will be written at the root
-                as it is a requirement for all TorchRL environments.
+               as it is a requirement for all TorchRL environments.
+
         batch_size (int or torch.Size, optional): Batch size of the environment.
             If left empty, an empty batch-size is assumed.
             The batch size can be null (`torch.Size([])`) or one-dimensional. Batchless environments are not supported.

@@ -44,7 +44,7 @@ class REDQLoss_deprecated(LossModule):
             parameters will be stacked unless they share the same identity (in which case
             the original parameter will be expanded).
 
-            .. warning:: When a list of parameters if passed, it will __not__ be compared against the policy parameters
+            .. warning:: When a list of parameters if passed, it will **not** be compared against the policy parameters
               and all the parameters will be considered as untied.
 
     Keyword Args:
