@@ -845,16 +845,28 @@
 <span class="sd">        this method.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            value_type (ValueEstimators): A :class:`~torchrl.objectives.utils.ValueEstimators`</span>
-<span class="sd">                enum type indicating the value function to use. If none is provided,</span>
-<span class="sd">                the default stored in the ``default_value_estimator``</span>
-<span class="sd">                attribute will be used. The resulting value estimator class</span>
-<span class="sd">                will be registered in ``self.value_type``, allowing</span>
-<span class="sd">                future refinements.</span>
+<span class="sd">            value_type (ValueEstimators, ValueEstimatorBase, or type): The value</span>
+<span class="sd">                estimator to use. This can be one of the following:</span>
+
+<span class="sd">                - A :class:`~torchrl.objectives.utils.ValueEstimators` enum type</span>
+<span class="sd">                  indicating which value function to use. If none is provided,</span>
+<span class="sd">                  the default stored in the ``default_value_estimator``</span>
+<span class="sd">                  attribute will be used.</span>
+<span class="sd">                - A :class:`~torchrl.objectives.value.ValueEstimatorBase` instance,</span>
+<span class="sd">                  which will be used directly as the value estimator.</span>
+<span class="sd">                - A :class:`~torchrl.objectives.value.ValueEstimatorBase` subclass,</span>
+<span class="sd">                  which will be instantiated with the provided ``hyperparams``.</span>
+
+<span class="sd">                The resulting value estimator class will be registered in</span>
+<span class="sd">                ``self.value_type``, allowing future refinements.</span>
 <span class="sd">            **hyperparams: hyperparameters to use for the value function.</span>
 <span class="sd">                If not provided, the value indicated by</span>
 <span class="sd">                :func:`~torchrl.objectives.utils.default_value_kwargs` will be</span>
-<span class="sd">                used.</span>
+<span class="sd">                used. When passing a ``ValueEstimatorBase`` subclass, these</span>
+<span class="sd">                hyperparameters are passed directly to the class constructor.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            self: Returns the loss module for method chaining.</span>
 
 <span class="sd">        Examples:</span>
 <span class="sd">            &gt;&gt;&gt; from torchrl.objectives import DQNLoss</span>
@@ -869,9 +881,35 @@
 <span class="sd">            &gt;&gt;&gt; # if we want to change the gamma value</span>
 <span class="sd">            &gt;&gt;&gt; dqn_loss.make_value_estimator(dqn_loss.value_type, gamma=0.9)</span>
 
+<span class="sd">            Using a :class:`~torchrl.objectives.value.ValueEstimatorBase` subclass:</span>
+
+<span class="sd">            &gt;&gt;&gt; from torchrl.objectives.value import TD0Estimator</span>
+<span class="sd">            &gt;&gt;&gt; dqn_loss.make_value_estimator(TD0Estimator, gamma=0.99, value_network=value_net)</span>
+
+<span class="sd">            Using a :class:`~torchrl.objectives.value.ValueEstimatorBase` instance:</span>
+
+<span class="sd">            &gt;&gt;&gt; from torchrl.objectives.value import GAE</span>
+<span class="sd">            &gt;&gt;&gt; gae = GAE(gamma=0.99, lmbda=0.95, value_network=value_net)</span>
+<span class="sd">            &gt;&gt;&gt; ppo_loss.make_value_estimator(gae)</span>
+
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">value_type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">value_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_value_estimator</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value_type</span><span class="p">,</span> <span class="n">ValueEstimatorBase</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_value_estimator</span> <span class="o">=</span> <span class="n">value_type</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">value_type</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">value_type</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value_type</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">value_type</span><span class="p">,</span> <span class="n">ValueEstimatorBase</span><span class="p">):</span>
+            <span class="k">if</span> <span class="s2">&quot;device&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">hyperparams</span><span class="p">:</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_device</span>
+                <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">hyperparams</span><span class="p">[</span><span class="s2">&quot;device&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">device</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_value_estimator</span> <span class="o">=</span> <span class="n">value_type</span><span class="p">(</span><span class="o">**</span><span class="n">hyperparams</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">value_type</span> <span class="o">=</span> <span class="n">value_type</span>
+            <span class="k">return</span> <span class="bp">self</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">value_type</span> <span class="o">=</span> <span class="n">value_type</span>
         <span class="k">if</span> <span class="n">value_type</span> <span class="o">==</span> <span class="n">ValueEstimators</span><span class="o">.</span><span class="n">TD1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>

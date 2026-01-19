@@ -402,17 +402,33 @@ this method.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>value_type</strong> (<a class="reference internal" href="torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators" title="torchrl.objectives.ValueEstimators"><em>ValueEstimators</em></a>) – A <a class="reference internal" href="torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators" title="torchrl.objectives.utils.ValueEstimators"><code class="xref py py-class docutils literal notranslate"><span class="pre">ValueEstimators</span></code></a>
-enum type indicating the value function to use. If none is provided,
+<li><p><strong>value_type</strong> (<a class="reference internal" href="torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators" title="torchrl.objectives.ValueEstimators"><em>ValueEstimators</em></a><em>, </em><a class="reference internal" href="torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase" title="torchrl.objectives.value.ValueEstimatorBase"><em>ValueEstimatorBase</em></a><em>, or </em><em>type</em>) – <p>The value
+estimator to use. This can be one of the following:</p>
+<ul>
+<li><p>A <a class="reference internal" href="torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators" title="torchrl.objectives.utils.ValueEstimators"><code class="xref py py-class docutils literal notranslate"><span class="pre">ValueEstimators</span></code></a> enum type
+indicating which value function to use. If none is provided,
 the default stored in the <code class="docutils literal notranslate"><span class="pre">default_value_estimator</span></code>
-attribute will be used. The resulting value estimator class
-will be registered in <code class="docutils literal notranslate"><span class="pre">self.value_type</span></code>, allowing
-future refinements.</p></li>
+attribute will be used.</p></li>
+<li><p>A <a class="reference internal" href="torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase" title="torchrl.objectives.value.ValueEstimatorBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">ValueEstimatorBase</span></code></a> instance,
+which will be used directly as the value estimator.</p></li>
+<li><p>A <a class="reference internal" href="torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase" title="torchrl.objectives.value.ValueEstimatorBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">ValueEstimatorBase</span></code></a> subclass,
+which will be instantiated with the provided <code class="docutils literal notranslate"><span class="pre">hyperparams</span></code>.</p></li>
+</ul>
+<p>The resulting value estimator class will be registered in
+<code class="docutils literal notranslate"><span class="pre">self.value_type</span></code>, allowing future refinements.</p>
+</p></li>
 <li><p><strong>**hyperparams</strong> – hyperparameters to use for the value function.
 If not provided, the value indicated by
 <code class="xref py py-func docutils literal notranslate"><span class="pre">default_value_kwargs()</span></code> will be
-used.</p></li>
+used. When passing a <code class="docutils literal notranslate"><span class="pre">ValueEstimatorBase</span></code> subclass, these
+hyperparameters are passed directly to the class constructor.</p></li>
 </ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Returns the loss module for method chaining.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>self</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -427,6 +443,17 @@ used.</p></li>
 <span class="gp">... </span>    <span class="n">gamma</span><span class="o">=</span><span class="mf">0.9</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># if we want to change the gamma value</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">dqn_loss</span><span class="o">.</span><span class="n">make_value_estimator</span><span class="p">(</span><span class="n">dqn_loss</span><span class="o">.</span><span class="n">value_type</span><span class="p">,</span> <span class="n">gamma</span><span class="o">=</span><span class="mf">0.9</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Using a <a class="reference internal" href="torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase" title="torchrl.objectives.value.ValueEstimatorBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">ValueEstimatorBase</span></code></a> subclass:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.objectives.value</span> <span class="kn">import</span> <span class="n">TD0Estimator</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dqn_loss</span><span class="o">.</span><span class="n">make_value_estimator</span><span class="p">(</span><span class="n">TD0Estimator</span><span class="p">,</span> <span class="n">gamma</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span> <span class="n">value_network</span><span class="o">=</span><span class="n">value_net</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Using a <a class="reference internal" href="torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase" title="torchrl.objectives.value.ValueEstimatorBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">ValueEstimatorBase</span></code></a> instance:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.objectives.value</span> <span class="kn">import</span> <span class="n">GAE</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">gae</span> <span class="o">=</span> <span class="n">GAE</span><span class="p">(</span><span class="n">gamma</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span> <span class="n">lmbda</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span> <span class="n">value_network</span><span class="o">=</span><span class="n">value_net</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ppo_loss</span><span class="o">.</span><span class="n">make_value_estimator</span><span class="p">(</span><span class="n">gae</span><span class="p">)</span>
 </pre></div>
 </div>
 </dd></dl>
