@@ -1,17 +1,27 @@
+# NOTE: Habitat tests are temporarily disabled.
+# 
+# Reason: tensordict now requires Python >= 3.10, but habitat-sim conda packages
+# only support Python < 3.10. Building habitat-sim from source is problematic:
+# - CMake 4.x compatibility issues with old CMake files
+# - Dataset downloads via git-lfs are extremely slow (prune operations take hours)
+# 
+# Re-enable this workflow when habitat-sim officially supports Python 3.10+ via conda.
+# Track progress at: https://github.com/facebookresearch/habitat-sim/issues/2289
+
 name: Habitat Tests on Linux
 
 on:
-  pull_request:
-  push:
-    branches:
-      - nightly
-      - main
-      - release/*
+  # Disabled - only run manually
   workflow_dispatch:
+  # Commented out triggers:
+  # pull_request:
+  # push:
+  #   branches:
+  #     - nightly
+  #     - main
+  #     - release/*
 
 concurrency:
-  # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
-  # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
   cancel-in-progress: true
 
@@ -21,6 +31,8 @@ permissions:
 
 jobs:
   tests:
+    # Skip for now - habitat-sim doesn't support Python 3.10+ via conda
+    if: false
     strategy:
       matrix:
         python_version: ["3.10"]
@@ -45,11 +57,8 @@ jobs:
 
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
-        # Commenting these out for now because the GPU test are not working inside docker
         export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
         export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
-        # Remove the following line when the GPU tests are working inside docker, and uncomment the above lines
-        #export CU_VERSION="cpu"
         export TD_GET_DEFAULTS_TO_NONE=1
 
         bash .github/unittest/linux_libs/scripts_habitat/run_all.sh
