@@ -498,7 +498,7 @@ def gen_params(g=10.0, batch_size=None) -> TensorDictBase:
         {
             "params": TensorDict(
                 {
-                    "max_speed": 8,
+                    "max_speed": 8.0,
                     "max_torque": 2.0,
                     "dt": 0.05,
                     "g": g,

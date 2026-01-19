@@ -1803,6 +1803,30 @@ def test_batch_errors():
     rb.sample()
 
 
+def test_storage_save_hook(tmpdir):
+    observed = {}
+
+    class SaveHook:
+        shift = None
+        is_full = None
+
+        def __call__(self, data, path=None):
+            observed["shift"] = self.shift
+            observed["is_full"] = self.is_full
+            return data
+
+    hook = SaveHook()
+    rb = ReplayBuffer(storage=LazyMemmapStorage(10))
+    rb.register_save_hook(hook)
+    rb.extend(torch.arange(5))
+    rb.dumps(tmpdir)
+
+    assert hook.shift == 5, f"Expected shift=5, got {hook.shift}"
+    assert hook.is_full is False, f"Expected is_full=False, got {hook.is_full}"
+    assert observed["shift"] == 5
+    assert observed["is_full"] is False
+
+
 @pytest.mark.skipif(not torchrl._utils.RL_WARNINGS, reason="RL_WARNINGS is not set")
 def test_add_warning():
     from torchrl._utils import rl_warnings
