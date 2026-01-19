@@ -198,7 +198,7 @@ jobs:
   unittests-gym:
     strategy:
       matrix:
-        python_version: ["3.9"]
+        python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -218,7 +218,7 @@ jobs:
         fi
 
         set -euxo pipefail
-        export PYTHON_VERSION="3.9"
+        export PYTHON_VERSION="3.10"
         # export CU_VERSION="${{ inputs.gpu-arch-version }}"
         export CU_VERSION="11.4"
         export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/work/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin"
@@ -226,9 +226,7 @@ jobs:
         export BATCHED_PIPE_TIMEOUT=60
         export TD_GET_DEFAULTS_TO_NONE=1
 
-        ./.github/unittest/linux_libs/scripts_gym/setup_env.sh
-        ./.github/unittest/linux_libs/scripts_gym/batch_scripts.sh
-        ./.github/unittest/linux_libs/scripts_gym/post_process.sh
+        ./.github/unittest/linux_libs/scripts_gym/run_all.sh
 
   unittests-isaaclab:
     strategy:
@@ -537,6 +535,45 @@ jobs:
         bash .github/unittest/linux_libs/scripts_pettingzoo/install.sh
         bash .github/unittest/linux_libs/scripts_pettingzoo/run_test.sh
         bash .github/unittest/linux_libs/scripts_pettingzoo/post_process.sh
+
+  unittests-procgen:
+    strategy:
+      matrix:
+        python_version: ["3.10"]
+        cuda_arch_version: ["12.8"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      gpu-arch-type: cuda
+      gpu-arch-version: "12.8"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.10"
+        export CU_VERSION="12.8"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+        export TD_GET_DEFAULTS_TO_NONE=1
+
+        nvidia-smi
+
+        bash .github/unittest/linux_libs/scripts_procgen/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_procgen/install.sh
+        bash .github/unittest/linux_libs/scripts_procgen/run_test.sh
+        bash .github/unittest/linux_libs/scripts_procgen/post_process.sh
 
   unittests-robohive:
     strategy:
