@@ -94,6 +94,16 @@ class ProcgenWrapper(_EnvWrapper):
     def _build_env(self, env, **_) -> procgen.ProcgenEnv:
         return env
 
+    @property
+    def observation_space(self):
+        # gym3 uses ob_space instead of observation_space
+        return getattr(self._env, "observation_space", None) or self._env.ob_space
+
+    @property
+    def action_space(self):
+        # gym3 uses ac_space instead of action_space
+        return getattr(self._env, "action_space", None) or self._env.ac_space
+
     def _make_specs(self, env) -> None:
         with set_gym_backend("gym"):
             self.observation_spec = _gym_to_torchrl_spec_transform(
@@ -163,8 +173,8 @@ class ProcgenWrapper(_EnvWrapper):
 
     def _step(self, tensordict: TensorDict, **kwargs) -> TensorDict:
         action = tensordict.get("action")
-        # Procgen expects numpy arrays, not PyTorch tensors
-        action_np = action.cpu().numpy()
+        # Procgen expects numpy arrays with shape (num_envs,)
+        action_np = action.cpu().numpy().flatten()
         obs, reward, done, info = self._env.step(action_np)
 
         rgb = torch.from_numpy(obs["rgb"]).to(self.device).permute(0, 3, 1, 2)
