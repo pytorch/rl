@@ -23,11 +23,11 @@ from .meltingpot import MeltingpotEnv, MeltingpotWrapper
 from .openml import OpenMLEnv
 from .openspiel import OpenSpielEnv, OpenSpielWrapper
 from .pettingzoo import PettingZooEnv, PettingZooWrapper
+from .procgen import ProcgenEnv, ProcgenWrapper
 from .robohive import RoboHiveEnv
 from .smacv2 import SMACv2Env, SMACv2Wrapper
 from .unity_mlagents import UnityMLAgentsEnv, UnityMLAgentsWrapper
 from .vmas import VmasEnv, VmasWrapper
-from .procgen import ProcgenEnv, ProcgenWrapper
 
 __all__ = [
     "BraxEnv",

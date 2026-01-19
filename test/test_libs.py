@@ -122,7 +122,6 @@ from torchrl.envs.libs.unity_mlagents import (
     UnityMLAgentsWrapper,
 )
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
-from torchrl.envs.libs.procgen import ProcgenEnv
 
 from torchrl.envs.transforms import ActionMask, TransformedEnv
 from torchrl.envs.utils import check_env_specs, ExplorationType, MarlGroupMapType
@@ -5416,6 +5415,7 @@ class TestIsaacLab:
         # Check that done obs are None
         assert not r["next", "policy"][r["next", "done"].squeeze(-1)].isfinite().any()
 
+
 @pytest.mark.skipif(not _has_procgen, reason="Procgen not found")
 class TestProcgen:
     @pytest.mark.parametrize("envname", ["coinrun", "starpilot"])
@@ -5469,6 +5469,7 @@ class TestProcgen:
         assert "observation" in out
         assert "reward" in out
         assert "done" in out
+
 
 @pytest.mark.skipif(not _has_procgen, reason="Procgen not found")
 class TestProcgen:

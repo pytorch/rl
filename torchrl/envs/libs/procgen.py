@@ -33,6 +33,7 @@ def _get_procgen_envs() -> list[str]:
     except Exception:
         return list(getattr(procgen, "ENV_NAMES", []))
 
+
 class ProcgenWrapper(_EnvWrapper):
     """OpenAI Procgen environment wrapper.
 
