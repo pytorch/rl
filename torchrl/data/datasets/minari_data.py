@@ -336,7 +336,7 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                             seen.add(match)
                             if key in ("observations", "state", "infos"):
                                 val = episode[key]
-                                if any(
+                                if is_tensor_collection(val) and any(
                                     isinstance(
                                         val.get(k), (NonTensorData, NonTensorStack)
                                     )
