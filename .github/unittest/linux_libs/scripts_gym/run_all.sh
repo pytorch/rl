@@ -242,9 +242,12 @@ uv pip install 'gym[atari]==0.25' 'mujoco>=2.1.3,<2.3'
 # EGL requires proper NVIDIA EGL setup which may not be available in all CI environments
 # mujoco-py and new mujoco package have conflicting EGL requirements
 export MUJOCO_GL_OLD=$MUJOCO_GL
+export PYOPENGL_PLATFORM_OLD=$PYOPENGL_PLATFORM
 export MUJOCO_GL=osmesa
+export PYOPENGL_PLATFORM=osmesa
 run_tests "gym==0.25" || true
 export MUJOCO_GL=$MUJOCO_GL_OLD
+export PYOPENGL_PLATFORM=$PYOPENGL_PLATFORM_OLD
 uv pip uninstall gym mujoco || true
 
 # Test gym 0.26 (uses new mujoco bindings for HalfCheetah-v4)
