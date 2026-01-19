@@ -833,7 +833,7 @@ Here's an example of how you can use AOTInductor to export your policy, inspired
 
  .. code-block:: none
 
-    pkg_path /tmp/tmp0_atv7ky/model.pt2
+    pkg_path /tmp/tmpd6vnrg0w/model.pt2
     tensor(1)
 
 
@@ -992,8 +992,8 @@ Exporting to ONNX is quite similar the Export/AOTI above:
     [torch.onnx] Run decomposition... ✅
     [torch.onnx] Translate the graph into ONNX...
     [torch.onnx] Translate the graph into ONNX... ✅
-    ONNX rollout took 645.9131 msec (total =  0.6459 sec since last reset).
-    TorchRL version took 1921.5443 msec (total =  1.9215 sec since last reset).
+    ONNX rollout took 660.3246 msec (total =  0.6603 sec since last reset).
+    TorchRL version took 1939.8293 msec (total =  1.9398 sec since last reset).
 
 
 
@@ -1030,7 +1030,7 @@ Further reading and learning steps:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 21.401 seconds)
+   **Total running time of the script:** (0 minutes 21.469 seconds)
 
 
 .. _sphx_glr_download_tutorials_export.py:
