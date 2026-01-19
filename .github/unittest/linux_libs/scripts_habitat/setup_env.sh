@@ -109,7 +109,7 @@ git clone --progress --depth 1 --branch v1.6 \
   https://huggingface.co/datasets/ai-habitat/ReplicaCAD_dataset.git \
   data/versioned_data/replica_cad_dataset
 cd data/versioned_data/replica_cad_dataset
-time git lfs pull --progress
+time git lfs pull
 cd "${root_dir}"
 
 # Create symlink expected by habitat
@@ -121,7 +121,7 @@ git clone --progress --depth 1 \
   https://huggingface.co/datasets/ai-habitat/ycb.git \
   data/objects/ycb
 cd data/objects/ycb
-time git lfs pull --progress
+time git lfs pull
 cd "${root_dir}"
 
 echo "$(date): Starting hab_fetch robot download..."
@@ -130,7 +130,7 @@ git clone --progress --depth 1 \
   https://huggingface.co/datasets/ai-habitat/hab_fetch.git \
   data/robots/hab_fetch
 cd data/robots/hab_fetch
-time git lfs pull --progress
+time git lfs pull
 cd "${root_dir}"
 
 echo "$(date): Dataset downloads complete!"
