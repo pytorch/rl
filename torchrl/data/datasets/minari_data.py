@@ -416,14 +416,18 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                                 val_next = val[1:].clone()
                                 val_copy = val[:-1].clone()
 
-                                non_tensors_next = _extract_nontensor_fields(val_next)
-                                non_tensors_now = _extract_nontensor_fields(val_copy)
-
                                 data_view["next", match].copy_(val_next)
                                 data_view[match].copy_(val_copy)
 
-                                data_view["next", match].update_(non_tensors_next)
-                                data_view[match].update_(non_tensors_now)
+                                if is_tensor_collection(val_next):
+                                    non_tensors_next = _extract_nontensor_fields(
+                                        val_next
+                                    )
+                                    non_tensors_now = _extract_nontensor_fields(
+                                        val_copy
+                                    )
+                                    data_view["next", match].update_(non_tensors_next)
+                                    data_view[match].update_(non_tensors_now)
 
                             elif key not in ("terminations", "truncations", "rewards"):
                                 if steps is None:
