@@ -103,37 +103,39 @@ mkdir -p data/versioned_data
 mkdir -p data/objects
 mkdir -p data/robots
 
-echo "Downloading replica_cad_dataset..."
-git clone --depth 1 --branch v1.6 \
+echo "$(date): Starting replica_cad_dataset download..."
+git clone --progress --depth 1 --branch v1.6 \
   -c filter.lfs.smudge= -c filter.lfs.required=false \
   https://huggingface.co/datasets/ai-habitat/ReplicaCAD_dataset.git \
   data/versioned_data/replica_cad_dataset
 cd data/versioned_data/replica_cad_dataset
-git lfs pull
+time git lfs pull --progress
 cd "${root_dir}"
 
 # Create symlink expected by habitat
 ln -sf versioned_data/replica_cad_dataset data/replica_cad
 
-echo "Downloading YCB objects..."
-git clone --depth 1 \
+echo "$(date): Starting YCB objects download..."
+git clone --progress --depth 1 \
   -c filter.lfs.smudge= -c filter.lfs.required=false \
   https://huggingface.co/datasets/ai-habitat/ycb.git \
   data/objects/ycb
 cd data/objects/ycb
-git lfs pull
+time git lfs pull --progress
 cd "${root_dir}"
 
-echo "Downloading hab_fetch robot..."
-git clone --depth 1 \
+echo "$(date): Starting hab_fetch robot download..."
+git clone --progress --depth 1 \
   -c filter.lfs.smudge= -c filter.lfs.required=false \
   https://huggingface.co/datasets/ai-habitat/hab_fetch.git \
   data/robots/hab_fetch
 cd data/robots/hab_fetch
-git lfs pull
+time git lfs pull --progress
 cd "${root_dir}"
 
-echo "Dataset downloads complete!"
+echo "$(date): Dataset downloads complete!"
+echo "Total data size:"
+du -sh data/
 
 # Install habitat-lab
 git clone https://github.com/facebookresearch/habitat-lab.git
