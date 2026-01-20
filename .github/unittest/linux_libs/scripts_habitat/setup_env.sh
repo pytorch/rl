@@ -49,16 +49,25 @@ conda deactivate && conda activate "${env_dir}"
 pip3 install "cython<3"
 conda install -c anaconda cython="<3.0.0" -y
 
-
-# 3. Install git LFS
-mkdir git_lfs
-wget https://github.com/git-lfs/git-lfs/releases/download/v2.9.0/git-lfs-linux-amd64-v2.9.0.tar.gz --directory-prefix git_lfs
-cd git_lfs
-tar -xf git-lfs-linux-amd64-v2.9.0.tar.gz
-chmod 755 install.sh
-./install.sh
-cd ..
+# 3. Install git LFS (newer version that supports git lfs prune -f)
+mkdir -p git_lfs_tmp
+cd git_lfs_tmp
+wget https://github.com/git-lfs/git-lfs/releases/download/v3.4.0/git-lfs-linux-amd64-v3.4.0.tar.gz
+tar -xf git-lfs-linux-amd64-v3.4.0.tar.gz
+# The binary is in git-lfs-3.4.0/git-lfs
+chmod 755 git-lfs-3.4.0/git-lfs
+# Install to /usr/local/bin so it's available system-wide
+cp git-lfs-3.4.0/git-lfs /usr/local/bin/
+cd "${root_dir}"
 git lfs install
+
+# Configure git-lfs for better performance (higher timeouts, more concurrent transfers)
+git config --global lfs.activitytimeout 600
+git config --global lfs.dialtimeout 60
+git config --global lfs.tlstimeout 60
+git config --global lfs.concurrenttransfers 8
+git config --global http.version HTTP/1.1
+rm -rf git_lfs_tmp
 
 # 4. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
@@ -69,7 +78,37 @@ pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
 
-conda install habitat-sim withbullet headless -c conda-forge -c aihabitat -y
+# 5. Install habitat-sim from source (conda packages don't support Python 3.10+)
+# Install build dependencies
+pip3 install ninja numpy
+
+# Clone and build habitat-sim from source
+cd "${root_dir}"
+git clone --branch stable https://github.com/facebookresearch/habitat-sim.git --recursive
+cd habitat-sim
+
+# Build with headless (EGL) and bullet physics support
+# Ensure system cmake is used (pip cmake 4.x is incompatible with habitat-sim's CMake files)
+# Put /usr/bin at the front of PATH to prefer system cmake over any pip-installed cmake
+export PATH="/usr/bin:$PATH"
+# Also set CMAKE_EXECUTABLE to explicitly use system cmake
+export CMAKE_EXECUTABLE=/usr/bin/cmake
+pip3 install . --no-build-isolation
+
+cd "${root_dir}"
+
+# 6. Download required Habitat test datasets
+# Use datasets_download with git-lfs configured for better performance
+echo "$(date): Starting dataset downloads..."
+
+# Download all rearrange task assets (includes replica_cad, ycb, robots, and episode data)
+python -m habitat_sim.utils.datasets_download --uids rearrange_task_assets --data-path data/ --no-prune
+
+echo "$(date): Dataset downloads complete!"
+echo "Total data size:"
+du -sh data/
+
+# Install habitat-lab
 git clone https://github.com/facebookresearch/habitat-lab.git
 cd habitat-lab
 pip3 install -e habitat-lab
