@@ -35,32 +35,32 @@ cd "${root_dir}"
 
 # Check the existing Python environment
 echo "* Checking existing Python environment:"
-which python
-python --version
-python -c "import platform; print(f'Implementation: {platform.python_implementation()}')"
+which python3
+python3 --version
+python3 -c "import platform; print(f'Implementation: {platform.python_implementation()}')"
 
 # Check if isaaclab is already available
 echo "* Checking for existing isaaclab installation:"
-python -c "import isaaclab; print(f'IsaacLab version: {isaaclab.__version__}')" || echo "WARNING: isaaclab not found"
+python3 -c "import isaaclab; print(f'IsaacLab version: {isaaclab.__version__}')" || echo "WARNING: isaaclab not found"
 
 # Install tensordict and torchrl
 echo "* Installing tensordict from source..."
 if [[ "$RELEASE" == 0 ]]; then
-  python -m pip install "pybind11[global]" --disable-pip-version-check
-  python -m pip install git+https://github.com/pytorch/tensordict.git --disable-pip-version-check
+  python3 -m pip install "pybind11[global]" --disable-pip-version-check
+  python3 -m pip install git+https://github.com/pytorch/tensordict.git --disable-pip-version-check
 else
-  python -m pip install tensordict --disable-pip-version-check
+  python3 -m pip install tensordict --disable-pip-version-check
 fi
 
 # smoke test
-python -c "import tensordict; print(f'TensorDict imported successfully')"
+python3 -c "import tensordict; print(f'TensorDict imported successfully')"
 
 printf "* Installing torchrl\n"
-python -m pip install -e . --no-build-isolation --disable-pip-version-check
-python -c "import torchrl; print(f'TorchRL imported successfully')"
+python3 -m pip install -e . --no-build-isolation --disable-pip-version-check
+python3 -c "import torchrl; print(f'TorchRL imported successfully')"
 
 # Install pytest
-python -m pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio --disable-pip-version-check
+python3 -m pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio --disable-pip-version-check
 
 # Run tests
-python -m pytest test/test_libs.py -k isaac -s
+python3 -m pytest test/test_libs.py -k isaac -s
