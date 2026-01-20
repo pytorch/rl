@@ -42,10 +42,15 @@ class TestLLMCollector:
         except ImportError:
             pytest.skip(reason="missing vllm")
 
-        llm_model = vllm.LLM("gpt2")
+        llm_model = vllm.LLM("gpt2", gpu_memory_utilization=0.4)
         tokenizer = llm_model.get_tokenizer()
         tokenizer.pad_token = tokenizer.eos_token
-        return llm_model
+        yield llm_model
+        # Cleanup
+        del llm_model
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
 
     @pytest.fixture(scope="module")
     def vllm_instance_opt(self):
@@ -54,10 +59,15 @@ class TestLLMCollector:
         except ImportError:
             pytest.skip(reason="missing vllm")
 
-        llm_model = vllm.LLM("facebook/opt-125m")
+        llm_model = vllm.LLM("facebook/opt-125m", gpu_memory_utilization=0.4)
         tokenizer = llm_model.get_tokenizer()
         tokenizer.pad_token = tokenizer.eos_token
-        return llm_model
+        yield llm_model
+        # Cleanup
+        del llm_model
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
 
     @pytest.fixture(scope="module")
     def transformers_instance(self):
@@ -213,7 +223,6 @@ class TestLLMCollector:
             collector.async_shutdown(timeout=10)
 
     @pytest.mark.slow
-    @pytest.mark.xfail(reason="May fail due to GPU memory constraints in CI")
     @pytest.mark.parametrize("rb", [False, True], ids=["rb_false", "rb_true"])
     @pytest.mark.parametrize(
         "yield_only_last_steps",
