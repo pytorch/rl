@@ -117,9 +117,9 @@ def _robust_to_tensor(array: float | np.ndarray) -> torch.Tensor:
 
 
 class _DMControlMeta(_EnvPostInit):
-    """Metaclass for DMControlEnv that returns a lazy ParallelEnv when num_envs > 1.
+    """Metaclass for DMControlEnv that returns a lazy ParallelEnv when num_workers > 1.
 
-    When `DMControlEnv(..., num_envs=4)` is called, this metaclass intercepts the
+    When `DMControlEnv(..., num_workers=4)` is called, this metaclass intercepts the
     call and returns a `ParallelEnv` instead. The ParallelEnv is lazy - workers
     are not started until the environment is actually used (e.g., via reset/step
     or accessing specs).
@@ -128,16 +128,15 @@ class _DMControlMeta(_EnvPostInit):
     before the environment starts.
     """
 
-    def __call__(cls, *args, num_envs: int | None = None, **kwargs):
-        # Extract num_envs from explicit kwarg or kwargs dict
-        if num_envs is None:
-            num_envs = kwargs.pop("num_envs", 1)
+    def __call__(cls, *args, num_workers: int | None = None, **kwargs):
+        # Extract num_workers from explicit kwarg or kwargs dict
+        if num_workers is None:
+            num_workers = kwargs.pop("num_workers", 1)
         else:
-            kwargs.pop("num_envs", None)
+            kwargs.pop("num_workers", None)
 
-        num_envs = int(num_envs) if num_envs is not None else 1
-
-        if cls.__name__ == "DMControlEnv" and num_envs > 1:
+        num_workers = int(num_workers) if num_workers is not None else 1
+        if cls.__name__ == "DMControlEnv" and num_workers > 1:
             from torchrl.envs import ParallelEnv
 
             # Extract env_name and task_name from args
@@ -152,10 +151,10 @@ class _DMControlMeta(_EnvPostInit):
 
             # Create factory function that builds single DMControlEnv instances
             def make_env(_env_name=env_name, _task_name=task_name, _kwargs=env_kwargs):
-                return cls(_env_name, _task_name, num_envs=1, **_kwargs)
+                return cls(_env_name, _task_name, num_workers=1, **_kwargs)
 
             # Return lazy ParallelEnv (workers not started yet)
-            return ParallelEnv(num_envs, make_env)
+            return ParallelEnv(num_workers, make_env)
 
         return super().__call__(*args, **kwargs)
 
@@ -397,8 +396,8 @@ class DMControlEnv(DMControlWrapper, metaclass=_DMControlMeta):
     Args:
         env_name (str): name of the environment.
         task_name (str): name of the task.
-        num_envs (int, optional): number of parallel environments. Defaults to 1.
-            When ``num_envs > 1``, a lazy :class:`~torchrl.envs.ParallelEnv` is
+        num_workers (int, optional): number of parallel environments. Defaults to 1.
+            When ``num_workers > 1``, a lazy :class:`~torchrl.envs.ParallelEnv` is
             returned instead of a single environment. The parallel environment
             is not started until it is actually used (e.g., via reset/step or
             accessing specs). Use :meth:`~torchrl.envs.BatchedEnvBase.configure_parallel`
@@ -459,7 +458,7 @@ class DMControlEnv(DMControlWrapper, metaclass=_DMControlMeta):
         >>> print(env.available_envs)
         [('acrobot', ['swingup', 'swingup_sparse']), ...]
         >>> # For running multiple envs in parallel (returns a lazy ParallelEnv)
-        >>> env = DMControlEnv("cheetah", "run", num_envs=4)
+        >>> env = DMControlEnv("cheetah", "run", num_workers=4)
         >>> # Configure parallel parameters before the env starts
         >>> env.configure_parallel(use_buffers=True, num_threads=2)
         >>> # Environment starts when first used

@@ -2045,12 +2045,12 @@ class TestDMControl:
         assert final_seed0 == final_seed2
         assert_allclose_td(rollout0, rollout2)
 
-    def test_num_envs_returns_lazy_parallel_env(self):
-        """Ensure DMControlEnv with num_envs > 1 returns a lazy ParallelEnv."""
+    def test_num_workers_returns_lazy_parallel_env(self):
+        """Ensure DMControlEnv with num_workers > 1 returns a lazy ParallelEnv."""
         from torchrl.envs.batched_envs import ParallelEnv
 
-        # When num_envs > 1, should return ParallelEnv directly (lazy)
-        env = DMControlEnv("cheetah", "run", num_envs=3)
+        # When num_workers > 1, should return ParallelEnv directly (lazy)
+        env = DMControlEnv("cheetah", "run", num_workers=3)
         try:
             assert isinstance(env, ParallelEnv)
             assert env.num_workers == 3
