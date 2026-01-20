@@ -56,6 +56,9 @@ if [[ -f "${ISAACLAB_PYTHON}" ]]; then
         "${ISAACLAB_PYTHON}" -p -m pip install tensordict --disable-pip-version-check
     fi
     
+    # Restore compatible packaging version for isaaclab-rl
+    "${ISAACLAB_PYTHON}" -p -m pip install "packaging<24" --disable-pip-version-check
+    
     # smoke test
     "${ISAACLAB_PYTHON}" -p -c "import tensordict; print(f'TensorDict imported successfully')"
     
