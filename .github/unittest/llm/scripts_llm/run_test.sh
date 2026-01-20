@@ -23,4 +23,9 @@ lib_dir="${env_dir}/lib"
 
 conda deactivate && conda activate ./env
 
-pytest test/llm -vvv --instafail --durations 600 --capture no --error-for-skips
+# Run pytest with:
+# - --runslow: Run slow tests that would otherwise skip
+# - --ignore: Exclude tests requiring unavailable dependencies (mlgym not on PyPI)
+pytest test/llm -vvv --instafail --durations 600 --capture no --error-for-skips \
+    --runslow \
+    --ignore=test/llm/libs/test_mlgym.py

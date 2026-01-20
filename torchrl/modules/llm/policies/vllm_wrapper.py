@@ -46,9 +46,12 @@ _HAS_TRANSFORMERS = importlib.util.find_spec("transformers") is not None
 if TYPE_CHECKING:
     from vllm.outputs import RequestOutput  # type: ignore[import-not-found]
     from vllm.sampling_params import SamplingParams  # type: ignore[import-not-found]
+elif _HAS_VLLM:
+    from vllm.outputs import RequestOutput
+    from vllm.sampling_params import SamplingParams
 else:
-    SamplingParams = Any  # type: ignore
-    RequestOutput = Any  # type: ignore
+    SamplingParams = None  # Will error at usage if vLLM not available
+    RequestOutput = None
 
 
 def _require_transformers() -> None:
