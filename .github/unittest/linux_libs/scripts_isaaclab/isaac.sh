@@ -75,7 +75,7 @@ if [[ -f "${ISAACLAB_PYTHON}" ]]; then
     
     # Run tests
     cd "${root_dir}"
-    "${ISAACLAB_PYTHON}" -p -m pytest test/test_libs.py -k isaac -s
+    "${ISAACLAB_PYTHON}" -p -m pytest test/test_libs.py -k isaac -s || exit $?
 else
     echo "ERROR: Could not find isaaclab.sh at ${ISAACLAB_PYTHON}"
     echo "* Listing /workspace contents:"
