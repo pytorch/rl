@@ -218,6 +218,7 @@ class LLMCollector(Collector):
         self.yield_completed_trajectories = yield_completed_trajectories
         self.yield_only_last_steps = yield_only_last_steps
         self.verbose = verbose
+        self._shuttle = None  # Initialize shuttle for rollout
         if self.yield_completed_trajectories:
             if len(self.env.batch_size) != 1:
                 raise ValueError(
