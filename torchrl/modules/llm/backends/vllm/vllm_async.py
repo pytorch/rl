@@ -2042,9 +2042,9 @@ def make_async_vllm_engine(
     # Disabled by default in GRPO since it can cause issues during training
     if "compilation_config" not in kwargs:
         if compile:
-            kwargs["compilation_config"] = {"enabled": True}
+            kwargs["compilation_config"] = {"level": 3}  # PIECEWISE compilation
         else:
-            kwargs["compilation_config"] = {"enabled": False}
+            kwargs["compilation_config"] = {"level": 0}  # NO_COMPILATION
 
     engine_args = AsyncEngineArgs(
         model=model_name,
