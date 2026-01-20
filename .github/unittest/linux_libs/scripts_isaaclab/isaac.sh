@@ -3,13 +3,8 @@
 set -e
 set -v
 
-#if [[ "${{ github.ref }}" =~ release/* ]]; then
-#  export RELEASE=1
-#  export TORCH_VERSION=stable
-#else
 export RELEASE=0
 export TORCH_VERSION=nightly
-#fi
 
 set -euo pipefail
 export PYTHON_VERSION="3.10"
@@ -32,77 +27,40 @@ apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb libegl-dev lib
 
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
-conda_dir="${root_dir}/conda"
-env_dir="${root_dir}/env"
-lib_dir="${env_dir}/lib"
 
 cd "${root_dir}"
 
-# install conda
-printf "* Installing conda\n"
-wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh"
-bash ./miniconda.sh -b -f -p "${conda_dir}"
-eval "$(${conda_dir}/bin/conda shell.bash hook)"
+# The Isaac Lab Docker image already has isaacsim and isaaclab installed
+# We just need to install tensordict and torchrl
 
+# Check the existing Python environment
+echo "* Checking existing Python environment:"
+which python
+python --version
+python -c "import platform; print(f'Implementation: {platform.python_implementation()}')"
 
-conda create --prefix ${env_dir} python=3.10 -y
-conda activate ${env_dir}
+# Check if isaaclab is already available
+echo "* Checking for existing isaaclab installation:"
+python -c "import isaaclab; print(f'IsaacLab version: {isaaclab.__version__}')" || echo "WARNING: isaaclab not found"
 
-# Ensure conda Python is first in PATH to prevent GraalVM Python from being used in subprocesses
-export PATH=${env_dir}/bin:${conda_dir}/bin:$PATH
-hash -r  # Clear command hash table
-
-# Set LD_LIBRARY_PATH to prioritize conda environment libraries
-export LD_LIBRARY_PATH=${lib_dir}:${LD_LIBRARY_PATH:-}
-
-# Install a compatible version of expat (< 2.6.0 to avoid XML_SetReparseDeferralEnabled symbol issues)
-conda install -c conda-forge "expat<2.6" -y
-
-# Reinstall Python to ensure it's properly linked against the conda expat
-conda install --force-reinstall python=3.10 -y
-
-# Re-export PATH after Python reinstall to ensure correct Python is used
-export PATH=${env_dir}/bin:${conda_dir}/bin:$PATH
-hash -r
-
-# Verify the expat linkage
-# Verify we are using CPython, not GraalVM
-echo "* Verifying Python implementation:"
-${env_dir}/bin/python -c "import platform; impl=platform.python_implementation(); print(f'Python implementation: {impl}'); assert impl == 'CPython', f'Expected CPython, got {impl}'"
-
-echo "* Checking pyexpat linkage:"
-${env_dir}/bin/python -c "import pyexpat; print('pyexpat imported successfully')" || echo "WARNING: pyexpat import failed"
-
-# Pin pytorch to 2.5.1 for IsaacLab
-conda install pytorch==2.5.1 torchvision==0.20.1 pytorch-cuda=12.4 -c pytorch -c nvidia -y
-
-${env_dir}/bin/python -m pip install --upgrade pip --disable-pip-version-check
-${env_dir}/bin/python -m pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com --disable-pip-version-check
-conda install conda-forge::"cmake>3.22" -y
-
-git clone https://github.com/isaac-sim/IsaacLab.git
-cd IsaacLab
-./isaaclab.sh --install sb3
-cd ../
-
-# install tensordict
+# Install tensordict and torchrl
+echo "* Installing tensordict from source..."
 if [[ "$RELEASE" == 0 ]]; then
-  conda install "anaconda::cmake>=3.22" -y
-  ${env_dir}/bin/python -m pip install "pybind11[global]" --disable-pip-version-check
-  ${env_dir}/bin/python -m pip install git+https://github.com/pytorch/tensordict.git --disable-pip-version-check
+  python -m pip install "pybind11[global]" --disable-pip-version-check
+  python -m pip install git+https://github.com/pytorch/tensordict.git --disable-pip-version-check
 else
-  ${env_dir}/bin/python -m pip install tensordict --disable-pip-version-check
+  python -m pip install tensordict --disable-pip-version-check
 fi
 
 # smoke test
-${env_dir}/bin/python -c "import tensordict"
+python -c "import tensordict; print(f'TensorDict imported successfully')"
 
 printf "* Installing torchrl\n"
-${env_dir}/bin/python -m pip install -e . --no-build-isolation --disable-pip-version-check
-${env_dir}/bin/python -c "import torchrl"
+python -m pip install -e . --no-build-isolation --disable-pip-version-check
+python -c "import torchrl; print(f'TorchRL imported successfully')"
 
 # Install pytest
-${env_dir}/bin/python -m pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio --disable-pip-version-check
+python -m pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio --disable-pip-version-check
 
 # Run tests
-${env_dir}/bin/python -m pytest test/test_libs.py -k isaac -s
+python -m pytest test/test_libs.py -k isaac -s
