@@ -42,7 +42,7 @@ class TestLLMCollector:
         except ImportError:
             pytest.skip(reason="missing vllm")
 
-        llm_model = vllm.LLM("gpt2", gpu_memory_utilization=0.4)
+        llm_model = vllm.LLM("Qwen/Qwen2.5-0.5B", gpu_memory_utilization=0.4)
         tokenizer = llm_model.get_tokenizer()
         tokenizer.pad_token = tokenizer.eos_token
         yield llm_model
@@ -60,7 +60,7 @@ class TestLLMCollector:
         except ImportError:
             pytest.skip(reason="missing vllm")
 
-        llm_model = vllm.LLM("facebook/opt-125m", gpu_memory_utilization=0.4)
+        llm_model = vllm.LLM("Qwen/Qwen2.5-0.5B", gpu_memory_utilization=0.4)
         tokenizer = llm_model.get_tokenizer()
         tokenizer.pad_token = tokenizer.eos_token
         yield llm_model
