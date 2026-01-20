@@ -18,6 +18,7 @@ import torch
 from packaging import version
 from tensordict import TensorDict, TensorDictBase
 from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
+from functools import partial
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
@@ -821,15 +822,12 @@ class _GymAsyncMeta(_EnvPostInit):
         num_workers = kwargs.pop("num_workers", 1)
 
         if cls.__name__== "GymEnv" and num_workers > 1:
-            from torchrl.envs import ParallelEnv
+            from torchrl.envs import ParallelEnv, EnvCreator
             env_name = args[0] if args else kwargs.get("env_name")
             env_kwargs = kwargs.copy()
             env_kwargs.pop("env_name", None)
-
-            def make_env():
-                return cls(env_name, num_workers=1, **env_kwargs)
-
-            return ParallelEnv(num_workers, make_env)
+            make_env = partial(cls, env_name, **env_kwargs)
+            return ParallelEnv(num_workers, EnvCreator(make_env))
             
         instance: GymWrapper = super().__call__(*args, **kwargs)
 
@@ -1971,14 +1969,8 @@ class GymEnv(GymWrapper):
                     raise err
         env = super()._build_env(env, pixels_only=pixels_only, from_pixels=from_pixels)
         if num_envs > 0:
-            try:
-                env = self._async_env([CloudpickleWrapper(lambda: env)] * num_envs)
-            except RuntimeError:
-                # It would fail if the environment is not pickable. In that case,
-                # delegating environment instantiation to each subprocess as a fallback.
-                env = self._async_env(
-                    [lambda: self.lib.make(env_name, **kwargs)] * num_envs
-                )
+            make_fn = partial(self.lib.make, env_name, **kwargs)
+            env = self._async_env([make_fn] * num_envs)
             self.batch_size = torch.Size([num_envs, *self.batch_size])
         return env
 
