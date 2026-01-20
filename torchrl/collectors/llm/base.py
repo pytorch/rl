@@ -316,9 +316,10 @@ class LLMCollector(Collector):
             env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
 
             # carry over collector data without messing up devices
-            collector_data = env_output.get("collector").copy()
-            env_next_output.set("collector", collector_data)
-            self._update_traj_ids(env_output)
+            collector_data = env_output.get("collector", default=None)
+            if collector_data is not None:
+                env_next_output.set("collector", collector_data.copy())
+                self._update_traj_ids(env_output)
             trajectory.append(env_output.clone())
             collected_steps += env_output.numel()
             policy_input = self._shuttle = env_next_output
@@ -351,10 +352,10 @@ class LLMCollector(Collector):
             #     print(len(cur_output[i]["text"]) < len(cur_output[i]["next", "text"]))
 
             # carry over collector data without messing up devices
-            self._update_traj_ids(cur_output)
-
-            collector_data = cur_output.get("collector").copy()
-            next_output.set("collector", collector_data)
+            collector_data = cur_output.get("collector", default=None)
+            if collector_data is not None:
+                self._update_traj_ids(cur_output)
+                next_output.set("collector", collector_data.copy())
 
             # if the loop is interrupted
             self._shuttle = next_output
@@ -414,10 +415,10 @@ class LLMCollector(Collector):
             env_ids = cur_output.get(self.env._env_idx_key).tolist()
 
             # carry over collector data without messing up devices
-            self._update_traj_ids(cur_output)
-
-            collector_data = cur_output.get("collector").copy()
-            next_output.set("collector", collector_data)
+            collector_data = cur_output.get("collector", default=None)
+            if collector_data is not None:
+                self._update_traj_ids(cur_output)
+                next_output.set("collector", collector_data.copy())
 
             collected_steps += next_output.numel()
             dones.fill_(False)
