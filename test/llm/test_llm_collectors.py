@@ -49,6 +49,7 @@ class TestLLMCollector:
         # Cleanup
         del llm_model
         import gc
+
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -66,6 +67,7 @@ class TestLLMCollector:
         # Cleanup
         del llm_model
         import gc
+
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -92,14 +94,18 @@ class TestLLMCollector:
     def test_llm_collector_with_vllm(self, rb, queue, total_steps, vllm_instance):
         # NOTE: if VLLM fails with CUDA multiprocessing, try setting
         # `export VLLM_WORKER_MULTIPROC_METHOD=spawn`
-        policy = vLLMWrapper(vllm_instance)
+        policy = vLLMWrapper(
+            vllm_instance, generate_kwargs={"max_new_tokens": 20, "ignore_eos": True}
+        )
         tokenizer = vllm_instance.get_tokenizer()
         self._run_collector_test(total_steps, rb, queue, policy, tokenizer)
 
     @pytest.mark.slow
     @pytest.mark.parametrize("rb,queue", [[True, False], [False, True], [False, False]])
     @pytest.mark.parametrize("total_steps", [1, 10, 20])
-    @pytest.mark.xfail(reason="TransformersWrapper history output not populated correctly in collector - needs investigation")
+    @pytest.mark.xfail(
+        reason="TransformersWrapper history output not populated correctly in collector - needs investigation"
+    )
     def test_llm_collector_with_transformers(
         self, rb, queue, total_steps, transformers_instance
     ):
@@ -179,7 +185,9 @@ class TestLLMCollector:
     @pytest.mark.skip_if_nightly
     def test_llm_collector_start(self, vllm_instance):
         total_steps = 20
-        policy = vLLMWrapper(vllm_instance)
+        policy = vLLMWrapper(
+            vllm_instance, generate_kwargs={"max_new_tokens": 20, "ignore_eos": True}
+        )
         vllm_instance.get_tokenizer()
         bsz = 4
         dataloader = DummyStrDataLoader(bsz)
@@ -223,7 +231,6 @@ class TestLLMCollector:
             collector.async_shutdown(timeout=10)
 
     @pytest.mark.slow
-    @pytest.mark.xfail(reason="LLM may generate zero tokens causing history length mismatch - needs investigation")
     @pytest.mark.parametrize("rb", [False, True], ids=["rb_false", "rb_true"])
     @pytest.mark.parametrize(
         "yield_only_last_steps",
@@ -239,7 +246,10 @@ class TestLLMCollector:
         self, vllm_instance_opt, rb, yield_only_last_steps, dialog_turns_per_batch
     ):
         torch.manual_seed(0)
-        policy = vLLMWrapper(vllm_instance_opt)
+        policy = vLLMWrapper(
+            vllm_instance_opt,
+            generate_kwargs={"max_new_tokens": 20, "ignore_eos": True},
+        )
         vllm_instance_opt.get_tokenizer()
         bsz = 4
         total_steps = 20
@@ -343,7 +353,10 @@ class TestLLMCollector:
         self, vllm_instance_opt, rb, yield_only_last_steps
     ):
         torch.manual_seed(0)
-        policy = vLLMWrapper(vllm_instance_opt)
+        policy = vLLMWrapper(
+            vllm_instance_opt,
+            generate_kwargs={"max_new_tokens": 20, "ignore_eos": True},
+        )
         vllm_instance_opt.get_tokenizer()
         bsz = 4
         total_steps = 20
