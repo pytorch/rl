@@ -366,7 +366,7 @@ class TestLLMCollector:
         def env_maker():
             env = ChatEnv.from_dataloader(
                 dataloader=dataloader,
-                from_text=True,
+                input_mode="history",
                 batch_size=(),
                 group_repeats=True,
             )
@@ -493,7 +493,7 @@ class TestUpdate:
         # Wrap
         policy = vLLMWrapper(
             inference_server,
-            from_text=True,
+            input_mode="history",
             return_log_probs=True,
             generate_kwargs={
                 "max_tokens": 1024,
