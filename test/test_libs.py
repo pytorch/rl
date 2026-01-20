@@ -5400,11 +5400,20 @@ class TestIsaacLab:
     @pytest.fixture(scope="function")
     def clean_ray(self):
         import ray
+        import torch.distributed as dist
+
+        # Clean up any existing process group from previous tests
+        if dist.is_initialized():
+            dist.destroy_process_group()
 
         ray.shutdown()
         ray.init(ignore_reinit_error=True)
         yield
         ray.shutdown()
+
+        # Clean up process group after test
+        if dist.is_initialized():
+            dist.destroy_process_group()
 
     @pytest.mark.skipif(not _has_ray, reason="Ray not found")
     @pytest.mark.parametrize("use_rb", [False, True], ids=["rb_false", "rb_true"])
