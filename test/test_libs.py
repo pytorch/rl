@@ -4097,11 +4097,16 @@ class TestMinari:
                 os.environ["MINARI_DATASETS_PATH"] = MINARI_DATASETS_PATH
 
     def test_correct_categorical_missions(self):
-        exp_replay = MinariExperienceReplay(
-            dataset_id="minigrid/BabyAI-Pickup/optimal-v0",
-            batch_size=1,
-            root=None,
-        )
+        try:
+            exp_replay = MinariExperienceReplay(
+                dataset_id="minigrid/BabyAI-Pickup/optimal-v0",
+                batch_size=1,
+                root=None,
+            )
+        except Exception as e:
+            if "429" in str(e) or "Too Many Requests" in str(e) or "not found locally" in str(e):
+                pytest.skip(f"Skipping due to download failure (likely rate limiting): {e}")
+            raise
         assert isinstance(exp_replay[0][("observation", "mission")], (bytes, str))
 
 
