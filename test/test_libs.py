@@ -1943,12 +1943,13 @@ class TestGym:
         finally:
             penv.close()
 
-    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires cuda")
     def test_gym_kwargs_preserved_with_seed(self):
         """Test that kwargs like frame_skip are preserved when seed is provided.
         Regression test for a bug where `kwargs` were overwritten when `_seed` was not None.
         """
-        env = GymEnv("CartPole-v1", frame_skip=4, from_pixels=False)
+        # Use Pendulum-v1 instead of CartPole-v1 because CartPole can terminate
+        # early due to pole falling, especially with frame_skip=4
+        env = GymEnv("Pendulum-v1", frame_skip=4, from_pixels=False)
         try:
             td = env.reset()
             rollout = env.rollout(max_steps=5)
