@@ -231,14 +231,14 @@ jobs:
   unittests-isaaclab:
     strategy:
       matrix:
-        python_version: ["3.10"]
+        python_version: ["3.11"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments/Isaac') }}
     uses: vmoens/test-infra/.github/workflows/isaac_linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvcr.io/nvidia/isaac-lab:2.1.0"
+      docker-image: "nvcr.io/nvidia/isaac-lab:2.3.0"
       test-infra-repository: vmoens/test-infra
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"

@@ -21,3 +21,4 @@ dependencies:
     - hydra-core
     - huggingface_hub
     - tqdm
+    - requests
