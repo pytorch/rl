@@ -361,10 +361,8 @@ class VecNormV2(Transform):
         if self.stateful and self._loc is not None:
             self._loc = self._loc.apply(fn)
             self._var = self._var.apply(fn)
-            if isinstance(self._count, TensorDictBase):
-                self._count = self._count.apply(fn)
-            else:
-                self._count = fn(self._count)
+            # Move _count to same device as _loc (but preserve its int dtype)
+            self._count = self._count.to(device=self._loc.device)
 
         return self
 

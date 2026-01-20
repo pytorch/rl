@@ -10025,13 +10025,12 @@ class TestVecNormV2:
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     @pytest.mark.skipif(not _has_gym, reason="gym not available")
     def test_vecnorm_gpu_device_handling(self):
-        """Test that VecNormV2 properly handles device movement to GPU.
+        """Test that VecNorm(new_api=True) properly handles device movement to GPU.
 
         This test ensures that when an environment with VecNormV2 is moved to GPU,
         the internal statistics (_loc, _var, _count) are also moved to GPU to avoid
         device mismatch errors during normalization.
         """
-        from torchrl.envs import GymEnv
 
         def assert_stats_on_cuda(transform, stage=""):
             """Helper to verify VecNorm statistics are on CUDA."""
@@ -10040,6 +10039,16 @@ class TestVecNormV2:
                 assert val.device.type == "cuda", f"{prefix}_loc[{key}] not on CUDA"
             for key, val in transform._var.items():
                 assert val.device.type == "cuda", f"{prefix}_var[{key}] not on CUDA"
+            # _count can be a TensorDict or a plain tensor
+            if isinstance(transform._count, TensorDictBase):
+                for key, val in transform._count.items():
+                    assert (
+                        val.device.type == "cuda"
+                    ), f"{prefix}_count[{key}] not on CUDA"
+            else:
+                assert (
+                    transform._count.device.type == "cuda"
+                ), f"{prefix}_count not on CUDA"
 
         env = GymEnv("CartPole-v1")
         env = env.append_transform(
@@ -10056,6 +10065,7 @@ class TestVecNormV2:
         assert td_reset["observation_norm"].device.type == "cuda"
 
         vecnorm_transform = env.transform
+        assert isinstance(vecnorm_transform, VecNormV2)
         assert vecnorm_transform.initialized
         assert_stats_on_cuda(vecnorm_transform, "After initialization")
 
@@ -10063,7 +10073,7 @@ class TestVecNormV2:
             action = env.rand_action(td_reset)
             td_step = env.step(td_reset.update(action))
             assert td_step["next", "observation_norm"].device.type == "cuda"
-            td_reset = td_step.get("next")
+            td_reset = td_step["next"]
 
         assert_stats_on_cuda(vecnorm_transform, "After updates")
 
