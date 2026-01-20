@@ -48,6 +48,10 @@ eval "$(${conda_dir}/bin/conda shell.bash hook)"
 conda create --prefix ${env_dir} python=3.10 -y
 conda activate ${env_dir}
 
+# Ensure conda Python is first in PATH to prevent GraalVM Python from being used in subprocesses
+export PATH=${env_dir}/bin:${conda_dir}/bin:$PATH
+hash -r  # Clear command hash table
+
 # Set LD_LIBRARY_PATH to prioritize conda environment libraries
 export LD_LIBRARY_PATH=${lib_dir}:${LD_LIBRARY_PATH:-}
 
@@ -57,7 +61,15 @@ conda install -c conda-forge "expat<2.6" -y
 # Reinstall Python to ensure it's properly linked against the conda expat
 conda install --force-reinstall python=3.10 -y
 
+# Re-export PATH after Python reinstall to ensure correct Python is used
+export PATH=${env_dir}/bin:${conda_dir}/bin:$PATH
+hash -r
+
 # Verify the expat linkage
+# Verify we are using CPython, not GraalVM
+echo "* Verifying Python implementation:"
+${env_dir}/bin/python -c "import platform; impl=platform.python_implementation(); print(f'Python implementation: {impl}'); assert impl == 'CPython', f'Expected CPython, got {impl}'"
+
 echo "* Checking pyexpat linkage:"
 ${env_dir}/bin/python -c "import pyexpat; print('pyexpat imported successfully')" || echo "WARNING: pyexpat import failed"
 
