@@ -285,7 +285,7 @@ class TestLLMCollector:
             **kwargs,
         )
         if not dialog_turns_per_batch:
-            assert collector.dialog_turns_per_batch == 1
+            assert collector.dialog_turns_per_batch == bsz
         assert collector.yield_completed_trajectories
         assert collector.yield_only_last_steps is yield_only_last_steps
 
