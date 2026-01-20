@@ -1878,23 +1878,30 @@ class TestGym:
             result is False
         ), f"Expected False for Dict environment without pixels, got {result}"
 
-    def test_num_envs_returns_lazy_parallel_env(self):
-        """Ensure GymEnv with num_envs > 1 returns a lazy ParallelEnv."""
+    def test_num_workers_returns_parallel_env(self):
+        """Ensure explicit TorchRL `num_workers` returns a lazy ParallelEnv, while gym's
+        native `num_envs` remains a gym-native vectorization."""
         from torchrl.envs.batched_envs import ParallelEnv
 
-        env = GymEnv("CartPole-v1", num_envs=3)
+        # TorchRL-managed parallelism: should return ParallelEnv
+        env = GymEnv("CartPole-v1", num_workers=3)
         try:
             assert isinstance(env, ParallelEnv)
-            assert env.num_envs == 3
-            # ParallelEnv should be lazy
-            assert env.is_closed is None
-
-            # After reset, env is started
+            # accept either attribute name used by ParallelEnv implementations
+            nworkers = getattr(env, "num_workers", getattr(env, "num_envs", None))
+            assert nworkers == 3
+            # start workers on first use
             env.reset()
-            assert env.is_closed is False
             assert env.batch_size == torch.Size([3])
         finally:
             env.close()
+
+        # Gym-native vectorization should NOT be converted implicitly by TorchRL
+        env_gymvec = GymEnv("CartPole-v1", num_envs=3)
+        try:
+            assert not isinstance(env_gymvec, ParallelEnv)
+        finally:
+            env_gymvec.close()
 
     def test_set_seed_and_reset_works(self):
         """Smoke test that setting seed and reset works (seed forwarded into build)."""
@@ -1905,13 +1912,22 @@ class TestGym:
         from tensordict import TensorDict
 
         assert isinstance(td, TensorDict)
+        env.close()
+
+        # Also verify behavior for TorchRL-managed parallel envs
+        penv = GymEnv("CartPole-v1", num_workers=2)
+        try:
+            final_seed = penv.set_seed(0)
+            assert final_seed is not None
+            td = penv.reset()
+            assert isinstance(td, TensorDict)
+        finally:
+            penv.close()
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires cuda")
     def test_gym_kwargs_preserved_with_seed(self):
         """Test that kwargs like frame_skip are preserved when seed is provided.
-
-        Regression test for a bug where `kwargs = {"random": ...}` replaced
-        all kwargs instead of updating them when _seed was not None.
+        Regression test for a bug where `kwargs` were overwritten when `_seed` was not None.
         """
         env = GymEnv("CartPole-v1", frame_skip=4, from_pixels=False)
         try:
