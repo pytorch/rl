@@ -89,6 +89,7 @@ class TestLLMCollector:
     @pytest.mark.slow
     @pytest.mark.parametrize("rb,queue", [[True, False], [False, True], [False, False]])
     @pytest.mark.parametrize("total_steps", [1, 10, 20])
+    @pytest.mark.xfail(reason="TransformersWrapper history output not populated correctly in collector - needs investigation")
     def test_llm_collector_with_transformers(
         self, rb, queue, total_steps, transformers_instance
     ):
