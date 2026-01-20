@@ -1882,9 +1882,9 @@ class TestGym:
         env = GymEnv("CartPole-v1", num_envs=3)
         try:
             assert isinstance(env, ParallelEnv)
-            assert env.num_envs == 3
-            # ParallelEnv should be lazy
-            assert env.is_closed is None
+            assert env.num_workers == 3
+            # ParallelEnv should be lazy (is_closed=True before start)
+            assert env.is_closed is True
 
             # After reset, env is started
             env.reset()
@@ -1903,14 +1903,14 @@ class TestGym:
 
         assert isinstance(td, TensorDict)
 
-    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires cuda")
     def test_gym_kwargs_preserved_with_seed(self):
         """Test that kwargs like frame_skip are preserved when seed is provided.
 
         Regression test for a bug where `kwargs = {"random": ...}` replaced
         all kwargs instead of updating them when _seed was not None.
         """
-        env = GymEnv("CartPole-v1", frame_skip=4, from_pixels=False)
+        # Use Pendulum-v1 instead of CartPole-v1 because it doesn't terminate early
+        env = GymEnv("Pendulum-v1", frame_skip=4, from_pixels=False)
         try:
             td = env.reset()
             rollout = env.rollout(max_steps=5)
