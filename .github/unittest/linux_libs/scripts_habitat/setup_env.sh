@@ -97,41 +97,12 @@ pip3 install . --no-build-isolation
 
 cd "${root_dir}"
 
-# 6. Download required Habitat test datasets manually (faster than datasets_download)
-# Using smudge-disabled clone + git lfs pull for better performance
-mkdir -p data/versioned_data
-mkdir -p data/objects
-mkdir -p data/robots
+# 6. Download required Habitat test datasets
+# Use datasets_download with git-lfs configured for better performance
+echo "$(date): Starting dataset downloads..."
 
-echo "$(date): Starting replica_cad_dataset download..."
-git clone --progress --depth 1 --branch v1.6 \
-  -c filter.lfs.smudge= -c filter.lfs.required=false \
-  https://huggingface.co/datasets/ai-habitat/ReplicaCAD_dataset.git \
-  data/versioned_data/replica_cad_dataset
-cd data/versioned_data/replica_cad_dataset
-time git lfs pull
-cd "${root_dir}"
-
-# Create symlink expected by habitat
-ln -sf versioned_data/replica_cad_dataset data/replica_cad
-
-echo "$(date): Starting YCB objects download..."
-git clone --progress --depth 1 \
-  -c filter.lfs.smudge= -c filter.lfs.required=false \
-  https://huggingface.co/datasets/ai-habitat/ycb.git \
-  data/objects/ycb
-cd data/objects/ycb
-time git lfs pull
-cd "${root_dir}"
-
-echo "$(date): Starting hab_fetch robot download..."
-git clone --progress --depth 1 \
-  -c filter.lfs.smudge= -c filter.lfs.required=false \
-  https://huggingface.co/datasets/ai-habitat/hab_fetch.git \
-  data/robots/hab_fetch
-cd data/robots/hab_fetch
-time git lfs pull
-cd "${root_dir}"
+# Download all rearrange task assets (includes replica_cad, ycb, robots, and episode data)
+python -m habitat_sim.utils.datasets_download --uids rearrange_task_assets --data-path data/ --no-prune
 
 echo "$(date): Dataset downloads complete!"
 echo "Total data size:"
