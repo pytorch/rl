@@ -119,13 +119,14 @@ def _robust_to_tensor(array: float | np.ndarray) -> torch.Tensor:
 class _DMControlMeta(_EnvPostInit):
     """Metaclass for DMControlEnv that returns a lazy ParallelEnv when num_workers > 1.
 
-    When `DMControlEnv(..., num_workers=4)` is called, this metaclass intercepts the
-    call and returns a `ParallelEnv` instead. The ParallelEnv is lazy - workers
-    are not started until the environment is actually used (e.g., via reset/step
-    or accessing specs).
+    When ``DMControlEnv(..., num_workers=4)`` is called, this metaclass intercepts the
+    call and returns a :class:`~torchrl.envs.ParallelEnv` instead. The returned
+    ParallelEnv is lazy — workers are not started until the environment is actually used
+    (e.g., via :meth:`torchrl.envs.batched_envs.BatchedEnvBase.reset` / :meth:`torchrl.envs.batched_envs.BatchedEnvBase.step`
+    or when accessing specs).
 
-    Users can call `env.configure_parallel(...)` to set ParallelEnv parameters
-    before the environment starts.
+    Users can call :meth:`torchrl.envs.batched_envs.BatchedEnvBase.configure_parallel`
+    to set ParallelEnv parameters before the environment starts.
     """
 
     def __call__(cls, *args, num_workers: int | None = None, **kwargs):
