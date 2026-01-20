@@ -2719,7 +2719,7 @@ class TestPreemptiveThreshold:
         collector.shutdown()
         del collector
 
-    def test_multisync_split_trajs_set_seed():
+    def test_multisync_split_trajs_set_seed(self):
         """Test that MultiSyncCollector with split_trajs=True and set_seed works without errors."""
         from torchrl.testing.mocking_classes import CountingEnv
         env_maker = lambda: CountingEnv(max_steps=100)

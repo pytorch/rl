@@ -435,7 +435,21 @@ class MultiSyncCollector(MultiCollector):
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
                 if excluded_keys:
                     out = out.exclude(*excluded_keys)
-            yield out
+            # Ensure traj_ids are globally unique within the returned batch when splitting trajectories
+            if self.split_trajs:
+                try:
+                    traj_ids = self.out_buffer.get(("collector", "traj_ids"), None)
+                    if traj_ids is not None:
+                        flat = traj_ids.reshape(-1)
+                        new_ids = torch.arange(flat.numel(), device=flat.device, dtype=flat.dtype).view(
+                            traj_ids.shape
+                        )
+                        self.out_buffer.set_(("collector", "traj_ids"), new_ids)
+                except Exception:
+                    # do not raise further errors during collection
+                    pass
+
+            yield self.out_buffer
             del out
 
         del self.buffers
