@@ -47,24 +47,27 @@ if [[ -f "${ISAACLAB_PYTHON}" ]]; then
     echo "* Checking for existing isaaclab installation:"
     "${ISAACLAB_PYTHON}" -p -c "import isaaclab; print(f'IsaacLab found')" || echo "WARNING: isaaclab import failed"
     
-    # Install tensordict
-    echo "* Installing tensordict from source..."
+    # Install tensordict with --no-deps to avoid packaging conflicts
+    # Isaac Lab already has torch, numpy, etc. installed
+    echo "* Installing tensordict from source (no-deps to avoid packaging conflicts)..."
     if [[ "$RELEASE" == 0 ]]; then
         "${ISAACLAB_PYTHON}" -p -m pip install "pybind11[global]" --disable-pip-version-check
-        "${ISAACLAB_PYTHON}" -p -m pip install git+https://github.com/pytorch/tensordict.git --disable-pip-version-check
+        "${ISAACLAB_PYTHON}" -p -m pip install git+https://github.com/pytorch/tensordict.git --no-deps --disable-pip-version-check
+        # Install only the missing dependencies that won't conflict
+        "${ISAACLAB_PYTHON}" -p -m pip install cloudpickle orjson --disable-pip-version-check
     else
-        "${ISAACLAB_PYTHON}" -p -m pip install tensordict --disable-pip-version-check
+        "${ISAACLAB_PYTHON}" -p -m pip install tensordict --no-deps --disable-pip-version-check
+        "${ISAACLAB_PYTHON}" -p -m pip install cloudpickle orjson --disable-pip-version-check
     fi
-    
-    # Restore compatible packaging version for isaaclab-rl
-    "${ISAACLAB_PYTHON}" -p -m pip install "packaging<24" --disable-pip-version-check
     
     # smoke test
     "${ISAACLAB_PYTHON}" -p -c "import tensordict; print(f'TensorDict imported successfully')"
     
-    # Install torchrl
+    # Install torchrl with --no-deps to avoid conflicts, then install missing deps
     printf "* Installing torchrl\n"
-    "${ISAACLAB_PYTHON}" -p -m pip install -e "${root_dir}" --no-build-isolation --disable-pip-version-check
+    "${ISAACLAB_PYTHON}" -p -m pip install -e "${root_dir}" --no-build-isolation --no-deps --disable-pip-version-check
+    # Install torchrl dependencies that are likely missing (ray is optional for tests)
+    "${ISAACLAB_PYTHON}" -p -m pip install ray --disable-pip-version-check || echo "WARNING: ray installation failed (optional)"
     "${ISAACLAB_PYTHON}" -p -c "import torchrl; print(f'TorchRL imported successfully')"
     
     # Install pytest
