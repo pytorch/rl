@@ -59,13 +59,13 @@ conda install --force-reinstall python=3.10 -y
 
 # Verify the expat linkage
 echo "* Checking pyexpat linkage:"
-python -c "import pyexpat; print('pyexpat imported successfully')" || echo "WARNING: pyexpat import failed"
+${env_dir}/bin/python -c "import pyexpat; print('pyexpat imported successfully')" || echo "WARNING: pyexpat import failed"
 
 # Pin pytorch to 2.5.1 for IsaacLab
 conda install pytorch==2.5.1 torchvision==0.20.1 pytorch-cuda=12.4 -c pytorch -c nvidia -y
 
-python -m pip install --upgrade pip --disable-pip-version-check
-python -m pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com --disable-pip-version-check
+${env_dir}/bin/python -m pip install --upgrade pip --disable-pip-version-check
+${env_dir}/bin/python -m pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com --disable-pip-version-check
 conda install conda-forge::"cmake>3.22" -y
 
 git clone https://github.com/isaac-sim/IsaacLab.git
@@ -76,21 +76,21 @@ cd ../
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
   conda install "anaconda::cmake>=3.22" -y
-  python -m pip install "pybind11[global]" --disable-pip-version-check
-  python -m pip install git+https://github.com/pytorch/tensordict.git --disable-pip-version-check
+  ${env_dir}/bin/python -m pip install "pybind11[global]" --disable-pip-version-check
+  ${env_dir}/bin/python -m pip install git+https://github.com/pytorch/tensordict.git --disable-pip-version-check
 else
-  python -m pip install tensordict --disable-pip-version-check
+  ${env_dir}/bin/python -m pip install tensordict --disable-pip-version-check
 fi
 
 # smoke test
-python -c "import tensordict"
+${env_dir}/bin/python -c "import tensordict"
 
 printf "* Installing torchrl\n"
-python -m pip install -e . --no-build-isolation --disable-pip-version-check
-python -c "import torchrl"
+${env_dir}/bin/python -m pip install -e . --no-build-isolation --disable-pip-version-check
+${env_dir}/bin/python -c "import torchrl"
 
 # Install pytest
-python -m pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio --disable-pip-version-check
+${env_dir}/bin/python -m pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio --disable-pip-version-check
 
 # Run tests
-python -m pytest test/test_libs.py -k isaac -s
+${env_dir}/bin/python -m pytest test/test_libs.py -k isaac -s
