@@ -30,37 +30,49 @@ root_dir="$(git rev-parse --show-toplevel)"
 
 cd "${root_dir}"
 
-# The Isaac Lab Docker image already has isaacsim and isaaclab installed
-# We just need to install tensordict and torchrl
+# The Isaac Lab Docker image has its Python environment in /workspace/isaaclab
+# We need to use the isaaclab.sh wrapper to access the correct Python
+ISAACLAB_DIR="/workspace/isaaclab"
+ISAACLAB_PYTHON="${ISAACLAB_DIR}/isaaclab.sh"
 
 # Check the existing Python environment
-echo "* Checking existing Python environment:"
-which python3
-python3 --version
-python3 -c "import platform; print(f'Implementation: {platform.python_implementation()}')"
+echo "* Checking IsaacLab environment:"
+ls -la "${ISAACLAB_DIR}" || echo "WARNING: ${ISAACLAB_DIR} not found"
 
-# Check if isaaclab is already available
-echo "* Checking for existing isaaclab installation:"
-python3 -c "import isaaclab; print(f'IsaacLab version: {isaaclab.__version__}')" || echo "WARNING: isaaclab not found"
-
-# Install tensordict and torchrl
-echo "* Installing tensordict from source..."
-if [[ "$RELEASE" == 0 ]]; then
-  python3 -m pip install "pybind11[global]" --disable-pip-version-check
-  python3 -m pip install git+https://github.com/pytorch/tensordict.git --disable-pip-version-check
+# Check if isaaclab.sh exists
+if [[ -f "${ISAACLAB_PYTHON}" ]]; then
+    echo "* Using IsaacLab's Python environment via isaaclab.sh"
+    
+    # Test isaaclab import
+    echo "* Checking for existing isaaclab installation:"
+    "${ISAACLAB_PYTHON}" -p -c "import isaaclab; print(f'IsaacLab found')" || echo "WARNING: isaaclab import failed"
+    
+    # Install tensordict
+    echo "* Installing tensordict from source..."
+    if [[ "$RELEASE" == 0 ]]; then
+        "${ISAACLAB_PYTHON}" -p -m pip install "pybind11[global]" --disable-pip-version-check
+        "${ISAACLAB_PYTHON}" -p -m pip install git+https://github.com/pytorch/tensordict.git --disable-pip-version-check
+    else
+        "${ISAACLAB_PYTHON}" -p -m pip install tensordict --disable-pip-version-check
+    fi
+    
+    # smoke test
+    "${ISAACLAB_PYTHON}" -p -c "import tensordict; print(f'TensorDict imported successfully')"
+    
+    # Install torchrl
+    printf "* Installing torchrl\n"
+    "${ISAACLAB_PYTHON}" -p -m pip install -e "${root_dir}" --no-build-isolation --disable-pip-version-check
+    "${ISAACLAB_PYTHON}" -p -c "import torchrl; print(f'TorchRL imported successfully')"
+    
+    # Install pytest
+    "${ISAACLAB_PYTHON}" -p -m pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio --disable-pip-version-check
+    
+    # Run tests
+    cd "${root_dir}"
+    "${ISAACLAB_PYTHON}" -p -m pytest test/test_libs.py -k isaac -s
 else
-  python3 -m pip install tensordict --disable-pip-version-check
+    echo "ERROR: Could not find isaaclab.sh at ${ISAACLAB_PYTHON}"
+    echo "* Listing /workspace contents:"
+    ls -la /workspace || echo "WARNING: /workspace not found"
+    exit 1
 fi
-
-# smoke test
-python3 -c "import tensordict; print(f'TensorDict imported successfully')"
-
-printf "* Installing torchrl\n"
-python3 -m pip install -e . --no-build-isolation --disable-pip-version-check
-python3 -c "import torchrl; print(f'TorchRL imported successfully')"
-
-# Install pytest
-python3 -m pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio --disable-pip-version-check
-
-# Run tests
-python3 -m pytest test/test_libs.py -k isaac -s
