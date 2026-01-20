@@ -601,6 +601,23 @@
         <span class="k">return</span> <span class="n">other</span></div>
 
 
+    <span class="k">def</span> <span class="nf">_apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="n">recurse</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply device/dtype transformation to the module and its TensorDict state.</span>
+
+<span class="sd">        This method is called internally by PyTorch when using .to(), .cuda(), .cpu(), etc.</span>
+<span class="sd">        In stateful mode, we manually apply the transformation to _loc, _var, and _count</span>
+<span class="sd">        since they are TensorDict instances, not registered buffers.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="n">recurse</span><span class="o">=</span><span class="n">recurse</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stateful</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_loc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loc</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_var</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_var</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+            <span class="c1"># Move _count to same device as _loc (but preserve its int dtype)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_count</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_loc</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span>
+
     <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
