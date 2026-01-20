@@ -21,7 +21,15 @@ _has_ray = importlib.util.find_spec("ray") is not None
 
 if _has_vllm:
     from vllm import LLM, SamplingParams
-    from vllm.utils import get_open_port
+    try:
+        from vllm.utils import get_open_port
+    except ImportError:
+        # In vLLM 0.13+, get_open_port may be in a different location
+        def get_open_port():
+            import socket
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("", 0))
+                return s.getsockname()[1]
 else:
     LLM = None
     SamplingParams = None
