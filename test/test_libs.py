@@ -4104,7 +4104,11 @@ class TestMinari:
                 root=None,
             )
         except Exception as e:
-            if "429" in str(e) or "Too Many Requests" in str(e) or "not found locally" in str(e):
+            err_str = str(e).lower()
+            if any(
+                x in err_str
+                for x in ("429", "too many requests", "not found locally", "download failed")
+            ):
                 pytest.skip(f"Skipping due to download failure (likely rate limiting): {e}")
             raise
         assert isinstance(exp_replay[0][("observation", "mission")], (bytes, str))
