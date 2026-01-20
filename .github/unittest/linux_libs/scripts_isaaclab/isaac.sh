@@ -54,10 +54,10 @@ if [[ -f "${ISAACLAB_PYTHON}" ]]; then
         "${ISAACLAB_PYTHON}" -p -m pip install "pybind11[global]" --disable-pip-version-check
         "${ISAACLAB_PYTHON}" -p -m pip install git+https://github.com/pytorch/tensordict.git --no-deps --disable-pip-version-check
         # Install only the missing dependencies that won't conflict
-        "${ISAACLAB_PYTHON}" -p -m pip install cloudpickle orjson --disable-pip-version-check
+        "${ISAACLAB_PYTHON}" -p -m pip install cloudpickle orjson pyvers --disable-pip-version-check
     else
         "${ISAACLAB_PYTHON}" -p -m pip install tensordict --no-deps --disable-pip-version-check
-        "${ISAACLAB_PYTHON}" -p -m pip install cloudpickle orjson --disable-pip-version-check
+        "${ISAACLAB_PYTHON}" -p -m pip install cloudpickle orjson pyvers --disable-pip-version-check
     fi
     
     # smoke test
