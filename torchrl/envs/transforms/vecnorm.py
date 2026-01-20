@@ -349,6 +349,23 @@ class VecNormV2(Transform):
                 other._count = self._count.clone()
         return other
 
+    def _apply(self, fn, recurse=True):
+        """Apply device/dtype transformation to the module and its TensorDict state.
+
+        This method is called internally by PyTorch when using .to(), .cuda(), .cpu(), etc.
+        In stateful mode, we manually apply the transformation to _loc, _var, and _count
+        since they are TensorDict instances, not registered buffers.
+        """
+        super()._apply(fn, recurse=recurse)
+
+        if self.stateful and self._loc is not None:
+            self._loc = self._loc.apply(fn)
+            self._var = self._var.apply(fn)
+            # Move _count to same device as _loc (but preserve its int dtype)
+            self._count = self._count.to(device=self._loc.device)
+
+        return self
+
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
