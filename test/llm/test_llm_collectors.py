@@ -367,7 +367,7 @@ class TestLLMCollector:
             env = ChatEnv.from_dataloader(
                 dataloader=dataloader,
                 input_mode="history",
-                batch_size=1,
+                batch_size=(),
                 group_repeats=True,
             )
             # To make sure the env breaks at some point
