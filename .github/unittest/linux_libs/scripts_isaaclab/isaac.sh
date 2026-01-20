@@ -7,7 +7,7 @@ export RELEASE=0
 export TORCH_VERSION=nightly
 
 set -euo pipefail
-export PYTHON_VERSION="3.10"
+export PYTHON_VERSION="3.11"
 export CU_VERSION="12.8"
 export TAR_OPTIONS="--no-same-owner"
 export UPLOAD_CHANNEL="nightly"
