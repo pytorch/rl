@@ -332,10 +332,8 @@ class LLMCollector(Collector):
 
     def _rollout_yield_trajs(self) -> TensorDictBase:  # A simplified version of rollout
         if self._shuttle is None:
-            raise RuntimeError("Data shuttle not found")
-            # next_output = self.env.reset()
-        else:
-            next_output = self._shuttle
+            self._shuttle = self.env.reset()
+        next_output = self._shuttle
 
         collected_steps = 0
         dones = torch.zeros(self.env.batch_size, dtype=torch.bool)
@@ -398,6 +396,8 @@ class LLMCollector(Collector):
         self,
     ) -> TensorDictBase:  # A simplified version of rollout
         if not self.started:
+            if self._shuttle is None:
+                self._shuttle = self.env.reset()
             next_output = self._shuttle
             env_input = self.policy(next_output)
             self.env.async_step_and_maybe_reset_send(env_input)
