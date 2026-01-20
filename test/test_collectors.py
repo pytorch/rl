@@ -239,6 +239,9 @@ def make_policy(env):
     else:
         raise NotImplementedError
 
+def _pendulum_env_maker():
+    return GymEnv(PENDULUM_VERSIONED())
+
 
 # def _is_consistent_device_type(
 #     device_type, policy_device_type, storing_device_type, tensordict_device_type
@@ -537,7 +540,7 @@ class TestCollectorGeneric:
 
         policy = SafeModule(**policy_kwargs)
 
-        env_maker = lambda: GymEnv(PENDULUM_VERSIONED())
+        env_maker = _pendulum_env_maker
 
         policy(env_maker().reset())
 
