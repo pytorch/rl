@@ -1732,11 +1732,15 @@ class GymEnv(GymWrapper):
         num_envs (int, optional): the number of envs to run in parallel. Defaults to
             ``None`` (a single env is to be run). :class:`~gym.vector.AsyncVectorEnv`
             will be used by default.
-        num_workers (int, optional): number of worker subprocesses used to create/run multiple
-            top-level :class:`GymEnv` instances in parallel (handled by the metaclass
-            :class:`_GymAsyncMeta`). When both ``num_workers`` and ``num_envs`` are greater than 1,
-            the total number of environments executed in parallel is ``num_workers * num_envs``.
-            Defaults to ``1``.
+        num_workers (int, optional): number of top-level worker subprocesses used to create/run
+            multiple :class:`GymEnv` instances in parallel (handled by the metaclass
+            :class:`_GymAsyncMeta`). When ``num_workers > 1``, a lazy
+            :class:`~torchrl.envs.ParallelEnv` is returned whose factory preserves the original
+            `GymEnv` kwargs. You can modify the ParallelEnv construction/configuration before
+            it starts by calling :meth:`~torchrl.envs.batched_envs.BatchedEnvBase.configure_parallel`
+            on the returned object (for example: ``env.configure_parallel(use_buffers=True, num_threads=2)``).
+            When both ``num_workers`` and ``num_envs`` are greater than 1, the total number of
+            environments executed in parallel is ``num_workers * num_envs``. Defaults to ``1``.
         disable_env_checker (bool, optional): for gym > 0.24 only. If ``True`` (default
             for these versions), the environment checker won't be run.
         from_pixels (bool, optional): if ``True``, an attempt to return the pixel

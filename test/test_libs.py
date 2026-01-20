@@ -133,6 +133,7 @@ from torchrl.modules import (
     SafeModule,
     ValueOperator,
 )
+from torchrl.envs.batched_envs import ParallelEnv
 
 _has_ray = importlib.util.find_spec("ray") is not None
 _has_ale = importlib.util.find_spec("ale_py") is not None
@@ -1881,7 +1882,6 @@ class TestGym:
     def test_num_workers_returns_parallel_env(self):
         """Ensure explicit TorchRL `num_workers` returns a lazy ParallelEnv, while gym's
         native `num_envs` remains a gym-native vectorization."""
-        from torchrl.envs.batched_envs import ParallelEnv
 
         # TorchRL-managed parallelism: should return ParallelEnv
         env = GymEnv("CartPole-v1", num_workers=3)
@@ -1903,13 +1903,30 @@ class TestGym:
         finally:
             env_gymvec.close()
 
+    def test_num_workers_kwargs_modifiable(self):
+        """Ensure the kwargs preserved by the GymEnv factory can be modified via
+        `configure_parallel` before workers start."""
+
+        env = GymEnv("CartPole-v1", num_workers=3)
+        try:
+            # should return a lazy ParallelEnv
+            assert isinstance(env, ParallelEnv)
+
+            # configure_parallel should accept kwargs and be callable before start
+            env.configure_parallel(use_buffers=True, num_threads=1)
+
+            # starting the environment should work after configuring
+            td = env.reset()
+            assert isinstance(td, TensorDict)
+        finally:
+            env.close()
+
     def test_set_seed_and_reset_works(self):
         """Smoke test that setting seed and reset works (seed forwarded into build)."""
         env = GymEnv("CartPole-v1")
         final_seed = env.set_seed(0)
         assert final_seed is not None
         td = env.reset()
-        from tensordict import TensorDict
 
         assert isinstance(td, TensorDict)
         env.close()
