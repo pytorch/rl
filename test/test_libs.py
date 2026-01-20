@@ -1888,7 +1888,9 @@ class TestGym:
         try:
             assert isinstance(env, ParallelEnv)
             # accept either attribute name used by ParallelEnv implementations
-            nworkers = getattr(env, "num_workers", getattr(env, "num_envs", None))
+            nworkers = getattr(env, "num_workers", None)
+            if nworkers is None:
+                nworkers = getattr(env, "num_envs", None)
             assert nworkers == 3
             # start workers on first use
             env.reset()
