@@ -355,27 +355,27 @@
 
 
 <span class="k">class</span> <span class="nc">_DMControlMeta</span><span class="p">(</span><span class="n">_EnvPostInit</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Metaclass for DMControlEnv that returns a lazy ParallelEnv when num_envs &gt; 1.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Metaclass for DMControlEnv that returns a lazy ParallelEnv when num_workers &gt; 1.</span>
 
-<span class="sd">    When `DMControlEnv(..., num_envs=4)` is called, this metaclass intercepts the</span>
-<span class="sd">    call and returns a `ParallelEnv` instead. The ParallelEnv is lazy - workers</span>
-<span class="sd">    are not started until the environment is actually used (e.g., via reset/step</span>
-<span class="sd">    or accessing specs).</span>
+<span class="sd">    When ``DMControlEnv(..., num_workers=4)`` is called, this metaclass intercepts the</span>
+<span class="sd">    call and returns a :class:`~torchrl.envs.ParallelEnv` instead. The returned</span>
+<span class="sd">    ParallelEnv is lazy — workers are not started until the environment is actually used</span>
+<span class="sd">    (e.g., via :meth:`torchrl.envs.batched_envs.BatchedEnvBase.reset` / :meth:`torchrl.envs.batched_envs.BatchedEnvBase.step`</span>
+<span class="sd">    or when accessing specs).</span>
 
-<span class="sd">    Users can call `env.configure_parallel(...)` to set ParallelEnv parameters</span>
-<span class="sd">    before the environment starts.</span>
+<span class="sd">    Users can call :meth:`torchrl.envs.batched_envs.BatchedEnvBase.configure_parallel`</span>
+<span class="sd">    to set ParallelEnv parameters before the environment starts.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">num_envs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="c1"># Extract num_envs from explicit kwarg or kwargs dict</span>
-        <span class="k">if</span> <span class="n">num_envs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">num_envs</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;num_envs&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">num_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="c1"># Extract num_workers from explicit kwarg or kwargs dict</span>
+        <span class="k">if</span> <span class="n">num_workers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">num_workers</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;num_workers&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;num_envs&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;num_workers&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
-        <span class="n">num_envs</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">num_envs</span><span class="p">)</span> <span class="k">if</span> <span class="n">num_envs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">1</span>
-
-        <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;DMControlEnv&quot;</span> <span class="ow">and</span> <span class="n">num_envs</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">num_workers</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">num_workers</span><span class="p">)</span> <span class="k">if</span> <span class="n">num_workers</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;DMControlEnv&quot;</span> <span class="ow">and</span> <span class="n">num_workers</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">ParallelEnv</span>
 
             <span class="c1"># Extract env_name and task_name from args</span>
@@ -390,10 +390,10 @@
 
             <span class="c1"># Create factory function that builds single DMControlEnv instances</span>
             <span class="k">def</span> <span class="nf">make_env</span><span class="p">(</span><span class="n">_env_name</span><span class="o">=</span><span class="n">env_name</span><span class="p">,</span> <span class="n">_task_name</span><span class="o">=</span><span class="n">task_name</span><span class="p">,</span> <span class="n">_kwargs</span><span class="o">=</span><span class="n">env_kwargs</span><span class="p">):</span>
-                <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">_env_name</span><span class="p">,</span> <span class="n">_task_name</span><span class="p">,</span> <span class="n">num_envs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="o">**</span><span class="n">_kwargs</span><span class="p">)</span>
+                <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">_env_name</span><span class="p">,</span> <span class="n">_task_name</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="o">**</span><span class="n">_kwargs</span><span class="p">)</span>
 
             <span class="c1"># Return lazy ParallelEnv (workers not started yet)</span>
-            <span class="k">return</span> <span class="n">ParallelEnv</span><span class="p">(</span><span class="n">num_envs</span><span class="p">,</span> <span class="n">make_env</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">ParallelEnv</span><span class="p">(</span><span class="n">num_workers</span><span class="p">,</span> <span class="n">make_env</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
@@ -640,8 +640,8 @@
 <span class="sd">    Args:</span>
 <span class="sd">        env_name (str): name of the environment.</span>
 <span class="sd">        task_name (str): name of the task.</span>
-<span class="sd">        num_envs (int, optional): number of parallel environments. Defaults to 1.</span>
-<span class="sd">            When ``num_envs &gt; 1``, a lazy :class:`~torchrl.envs.ParallelEnv` is</span>
+<span class="sd">        num_workers (int, optional): number of parallel environments. Defaults to 1.</span>
+<span class="sd">            When ``num_workers &gt; 1``, a lazy :class:`~torchrl.envs.ParallelEnv` is</span>
 <span class="sd">            returned instead of a single environment. The parallel environment</span>
 <span class="sd">            is not started until it is actually used (e.g., via reset/step or</span>
 <span class="sd">            accessing specs). Use :meth:`~torchrl.envs.BatchedEnvBase.configure_parallel`</span>
@@ -702,7 +702,7 @@
 <span class="sd">        &gt;&gt;&gt; print(env.available_envs)</span>
 <span class="sd">        [(&#39;acrobot&#39;, [&#39;swingup&#39;, &#39;swingup_sparse&#39;]), ...]</span>
 <span class="sd">        &gt;&gt;&gt; # For running multiple envs in parallel (returns a lazy ParallelEnv)</span>
-<span class="sd">        &gt;&gt;&gt; env = DMControlEnv(&quot;cheetah&quot;, &quot;run&quot;, num_envs=4)</span>
+<span class="sd">        &gt;&gt;&gt; env = DMControlEnv(&quot;cheetah&quot;, &quot;run&quot;, num_workers=4)</span>
 <span class="sd">        &gt;&gt;&gt; # Configure parallel parameters before the env starts</span>
 <span class="sd">        &gt;&gt;&gt; env.configure_parallel(use_buffers=True, num_threads=2)</span>
 <span class="sd">        &gt;&gt;&gt; # Environment starts when first used</span>
