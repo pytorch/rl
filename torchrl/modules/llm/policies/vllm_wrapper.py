@@ -46,12 +46,19 @@ _HAS_TRANSFORMERS = importlib.util.find_spec("transformers") is not None
 if TYPE_CHECKING:
     from vllm.outputs import RequestOutput  # type: ignore[import-not-found]
     from vllm.sampling_params import SamplingParams  # type: ignore[import-not-found]
+    from vllm.inputs import TokensPrompt  # type: ignore[import-not-found]
 elif _HAS_VLLM:
     from vllm.outputs import RequestOutput
     from vllm.sampling_params import SamplingParams
+    try:
+        from vllm.inputs import TokensPrompt
+    except ImportError:
+        # Fallback for older vLLM versions
+        TokensPrompt = None
 else:
     SamplingParams = None  # Will error at usage if vLLM not available
     RequestOutput = None
+    TokensPrompt = None
 
 
 def _require_transformers() -> None:
@@ -796,7 +803,30 @@ class vLLMWrapper(LLMWrapperBase):
             return None
 
     def _call_generate(self, *args, **kwargs):
-        """Call generate method based on model type."""
+        """Call generate method based on model type.
+        
+        In vLLM 0.14+, prompt_token_ids should be passed as TokensPrompt objects
+        rather than as a keyword argument.
+        """
+        # Convert prompt_token_ids to TokensPrompt format for vLLM 0.14+ compatibility
+        prompt_token_ids = kwargs.pop("prompt_token_ids", None)
+        if prompt_token_ids is not None and TokensPrompt is not None:
+            # Convert list of token ID lists to TokensPrompt objects
+            if isinstance(prompt_token_ids, list) and len(prompt_token_ids) > 0:
+                if isinstance(prompt_token_ids[0], list):
+                    # List of token ID lists -> list of TokensPrompt
+                    prompts = [
+                        TokensPrompt(prompt_token_ids=tids) for tids in prompt_token_ids
+                    ]
+                else:
+                    # Single token ID list -> single TokensPrompt
+                    prompts = TokensPrompt(prompt_token_ids=prompt_token_ids)
+                # Insert prompts as the first positional argument
+                args = (prompts,) + args
+        elif prompt_token_ids is not None:
+            # Fallback for older vLLM versions that still support prompt_token_ids kwarg
+            kwargs["prompt_token_ids"] = prompt_token_ids
+        
         if self._model_type == "ray_actor":
             import ray
 
