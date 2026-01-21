@@ -30,7 +30,6 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # Set vLLM environment variables
-os.environ["VLLM_USE_V1"] = "0"
 
 import torch
 from tensordict import TensorDict
