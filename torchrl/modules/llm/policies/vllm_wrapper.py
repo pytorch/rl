@@ -44,12 +44,13 @@ _HAS_VLLM = importlib.util.find_spec("vllm") is not None
 _HAS_TRANSFORMERS = importlib.util.find_spec("transformers") is not None
 
 if TYPE_CHECKING:
+    from vllm.inputs import TokensPrompt  # type: ignore[import-not-found]
     from vllm.outputs import RequestOutput  # type: ignore[import-not-found]
     from vllm.sampling_params import SamplingParams  # type: ignore[import-not-found]
-    from vllm.inputs import TokensPrompt  # type: ignore[import-not-found]
 elif _HAS_VLLM:
     from vllm.outputs import RequestOutput
     from vllm.sampling_params import SamplingParams
+
     try:
         from vllm.inputs import TokensPrompt
     except ImportError:
@@ -558,6 +559,9 @@ class vLLMWrapper(LLMWrapperBase):
                 elif key == "stop_sequences":
                     vllm_kwargs["stop"] = value
                 elif key == "logprobs":
+                    # vLLM expects int for logprobs, not bool
+                    if isinstance(value, bool):
+                        value = 1 if value else None
                     vllm_kwargs["logprobs"] = value
                 elif key == "do_sample":
                     # do_sample is handled through the sampling parameters
@@ -601,7 +605,8 @@ class vLLMWrapper(LLMWrapperBase):
 
         self.inplace = inplace
 
-        prompt_logprobs = return_log_probs
+        # vLLM expects int for logprobs, not bool. Use 1 if True, None if False.
+        prompt_logprobs = 1 if return_log_probs else None
 
         if not generate:
             # We want only the log-probs, we generate a single token (that we then discard)
@@ -612,7 +617,7 @@ class vLLMWrapper(LLMWrapperBase):
 
         vllm_kwargs.setdefault("detokenize", not pad_output)
         vllm_kwargs.setdefault("prompt_logprobs", prompt_logprobs)
-        vllm_kwargs.setdefault("logprobs", return_log_probs)
+        vllm_kwargs.setdefault("logprobs", 1 if return_log_probs else None)
         vllm_kwargs.setdefault("include_stop_str_in_output", True)
         vllm_kwargs.setdefault("skip_special_tokens", False)
 
@@ -804,7 +809,7 @@ class vLLMWrapper(LLMWrapperBase):
 
     def _call_generate(self, *args, **kwargs):
         """Call generate method based on model type.
-        
+
         In vLLM 0.14+, prompt_token_ids should be passed as TokensPrompt objects
         rather than as a keyword argument.
         """
@@ -826,7 +831,7 @@ class vLLMWrapper(LLMWrapperBase):
         elif prompt_token_ids is not None:
             # Fallback for older vLLM versions that still support prompt_token_ids kwarg
             kwargs["prompt_token_ids"] = prompt_token_ids
-        
+
         if self._model_type == "ray_actor":
             import ray
 
