@@ -3,8 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from torchrl.envs.llm import KLRewardTransform
-
 from .gym_transforms import EndOfLifeTransform
 from .module import ModuleTransform
 from .r3m import R3MTransform
@@ -148,3 +146,11 @@ __all__ = [
     "VecNormV2",
     "gSDENoise",
 ]
+
+
+def __getattr__(name: str):
+    if name == "KLRewardTransform":
+        from torchrl.envs.llm import KLRewardTransform
+
+        return KLRewardTransform
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
