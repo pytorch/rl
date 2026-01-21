@@ -34,7 +34,7 @@ from tensordict import (
     TensorDictBase,
     unravel_key,
 )
-from tensordict.nn import TensorDictModule, TensorDictSequential, WrapModule
+from tensordict.nn import TensorDictModule, WrapModule
 from tensordict.utils import _unravel_key_to_tuple, assert_allclose_td
 from torch import multiprocessing as mp, nn, Tensor
 from torchrl import logger as torchrl_logger
@@ -139,10 +139,7 @@ from torchrl.envs.utils import check_env_specs, MarlGroupMapType, step_mdp
 from torchrl.modules import (
     GRUModule,
     LSTMModule,
-    MLP,
-    ProbabilisticActor,
     RandomPolicy,
-    TanhNormal,
 )
 from torchrl.modules.utils import get_primers_from_module
 from torchrl.record.recorder import VideoRecorder
