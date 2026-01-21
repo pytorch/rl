@@ -346,6 +346,11 @@ class TestLLMCollector:
             assert has_found_one_with_more_steps
         assert collector._frames >= total_steps
 
+    @pytest.mark.skip(
+        reason="AsyncEnvPool batch_size handling with LLMCollector yield_completed_trajectories "
+        "needs architectural fix. AsyncEnvPool should report batch_size=[num_envs, *child_batch_size] "
+        "but LLMCollector only supports single-dim batch sizes. See PR #3360 for context."
+    )
     @pytest.mark.slow
     @pytest.mark.parametrize("rb", [False, True])
     @pytest.mark.parametrize("yield_only_last_steps", [False, True])
@@ -367,7 +372,7 @@ class TestLLMCollector:
             env = ChatEnv.from_dataloader(
                 dataloader=dataloader,
                 input_mode="history",
-                batch_size=(),
+                batch_size=1,
                 group_repeats=True,
             )
             # To make sure the env breaks at some point

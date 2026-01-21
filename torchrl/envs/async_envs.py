@@ -234,9 +234,9 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
 
         # Initialize parent first, then set specs using proper setters
         # This ensures proper propagation of nested specs like full_action_spec
-        # The batch_size should include both the pool dimension and the child env batch_size
-        env_batch_size = self.env_batch_sizes[0]
-        super().__init__(batch_size=[self.num_envs, *env_batch_size])
+        # TODO: batch_size should include child env batch_sizes, but LLMCollector
+        # doesn't support multi-dim batch sizes yet. See issue for details.
+        super().__init__(batch_size=[self.num_envs])
 
         # Use proper spec setters like ParallelEnv does, instead of directly
         # manipulating __dict__. This ensures full_action_spec and other nested
