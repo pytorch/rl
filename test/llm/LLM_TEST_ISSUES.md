@@ -33,7 +33,18 @@ This document tracks known issues with the LLM tests that need to be addressed i
 
 ## Issues Requiring Follow-up PRs
 
-### 1. AsyncEnvPool + LLMCollector yield_completed_trajectories
+### 1. Ray Placement Group Timeout
+- **Files**: `torchrl/modules/llm/backends/vllm/vllm_async.py` (line 652)
+- **Tests**: Any tests using AsyncVLLM with Ray backend
+- **Issue**: 
+  - `ray.get(pg.ready(), timeout=180)` times out
+  - Ray placement group never becomes ready
+  - Causes cascade of pytest-timeout (300s) failures
+- **Error**: `ray.exceptions.GetTimeoutError: Get timed out: some object(s) not ready.`
+- **Workaround**: Tests marked as xfail, increased timeout to 300s
+- **Priority**: Critical - blocks many vLLM tests
+
+### 2. AsyncEnvPool + LLMCollector yield_completed_trajectories
 - **Files**: `torchrl/envs/async_envs.py`, `torchrl/collectors/llm/base.py`
 - **Test**: `test_llm_collector_completed_async`
 - **Issue**: 
@@ -43,7 +54,7 @@ This document tracks known issues with the LLM tests that need to be addressed i
 - **Workaround**: Test marked as xfail with `strict=False` (will pass if fixed)
 - **Priority**: Medium
 
-### 2. vLLM Ray Async Backend - Engine Initialization
+### 3. vLLM Ray Async Backend - Engine Initialization
 - **Files**: `torchrl/modules/llm/backends/vllm/vllm_async.py`
 - **Test**: `test_chat_env_integration_ifeval`
 - **Issue**: 
@@ -53,13 +64,22 @@ This document tracks known issues with the LLM tests that need to be addressed i
 - **Workaround**: Test marked as xfail with `strict=False`
 - **Priority**: High - affects async vLLM usage
 
-### 3. TransformersWrapper History Output in Collector
+### 4. vLLM KL Tests with IFEval
+- **Files**: `test/llm/test_llm_envs.py`
+- **Tests**: 
+  - `test_chat_env_kl[ifeval-tokens-unpadded]`
+  - `test_retrievekl_transform[ifeval]`
+- **Issue**: Tests fail with vLLM integration, likely related to Ray initialization
+- **Workaround**: Tests marked as xfail
+- **Priority**: Medium
+
+### 5. TransformersWrapper History Output in Collector
 - **Test**: `test_llm_collector_with_transformers`
 - **Issue**: TransformersWrapper history output not populated correctly in collector context
 - **Workaround**: Test marked as xfail
 - **Priority**: Medium
 
-### 4. Gated HuggingFace Models
+### 6. Gated HuggingFace Models
 - **Files**: `test/llm/test_data.py`
 - **Issue**: Tests using Llama tokenizer fail because model is gated
 - **Workaround**: Tests marked as xfail
