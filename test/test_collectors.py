@@ -240,6 +240,10 @@ def make_policy(env):
         raise NotImplementedError
 
 
+def _pendulum_env_maker():
+    return GymEnv(PENDULUM_VERSIONED())
+
+
 # def _is_consistent_device_type(
 #     device_type, policy_device_type, storing_device_type, tensordict_device_type
 # ):
@@ -537,7 +541,7 @@ class TestCollectorGeneric:
 
         policy = SafeModule(**policy_kwargs)
 
-        env_maker = lambda: GymEnv(PENDULUM_VERSIONED())
+        env_maker = _pendulum_env_maker
 
         policy(env_maker().reset())
 
@@ -2580,7 +2584,7 @@ class TestAutoWrap:
                 # this does not work now that we force the device of the policy
                 # assert collector.policy.module is policy
 
-            for i, data in enumerate(collector):
+            for i, data in enumerate(collector):  # noqa: B007
                 # Debug: iteration {i}
                 if i == 0:
                     assert (data["action"] != 0).any()
@@ -2618,7 +2622,7 @@ class TestAutoWrap:
     #         assert collector.policy.out_keys == ["action"]
     #         assert collector.policy is policy
     #
-    #     for i, data in enumerate(collector):
+    #     for i, data in enumerate(collector):  # noqa: B007
     #         if i == 0:
     #             assert (data["action"] != 0).any()
     #             for p in policy.parameters():
@@ -2718,6 +2722,42 @@ class TestPreemptiveThreshold:
             assert trajectory_ids[trajectory_ids_mask].numel() < frames_per_batch
         collector.shutdown()
         del collector
+
+    def test_multisync_split_trajs_set_seed(self):
+        """Test that MultiSyncCollector with split_trajs=True and set_seed works without errors."""
+        from torchrl.testing.mocking_classes import CountingEnv
+
+        env_maker = lambda: CountingEnv(max_steps=100)
+        policy = RandomPolicy(env_maker().action_spec)
+        collector = MultiSyncCollector(
+            create_env_fn=[env_maker, env_maker],
+            policy=policy,
+            total_frames=2000,
+            max_frames_per_traj=50,
+            frames_per_batch=200,
+            init_random_frames=-1,
+            reset_at_each_iter=False,
+            device="cpu",
+            storing_device="cpu",
+            cat_results="stack",
+            split_trajs=True,
+        )
+        collector.set_seed(42)
+        try:
+            for i, data in enumerate(collector):  # noqa: B007
+                if i == 2:
+                    break
+            # Check that traj_ids are unique across the batch
+            traj_ids = data.get(("collector", "traj_ids"))
+            # Each row is one trajectory; all elements in a row share the same traj_id
+            # Check that each trajectory has a unique id
+            traj_ids_per_traj = traj_ids.select(-1, 0)
+            assert (
+                traj_ids_per_traj.unique().numel() == traj_ids_per_traj.numel()
+            ), "traj_ids should be unique across trajectories"
+        finally:
+            collector.shutdown()
+            del collector
 
 
 class TestNestedEnvsCollector:
@@ -4299,7 +4339,7 @@ class TestPolicyFactory:
             # When using policy_factory, must pass weights explicitly
             collector.update_policy_weights_(policy_weights)
 
-            for i, data in enumerate(collector):
+            for i, data in enumerate(collector):  # noqa: B007
                 if i == 2:
                     assert (data["action"] != 0).any()
                     # zero the policy
