@@ -102,7 +102,6 @@ __all__ = [
     "GrayScale",
     "Hash",
     "InitTracker",
-    "KLRewardTransform",
     "LineariseRewards",
     "ModuleTransform",
     "MultiAction",
@@ -146,11 +145,3 @@ __all__ = [
     "VecNormV2",
     "gSDENoise",
 ]
-
-
-def __getattr__(name: str):
-    if name == "KLRewardTransform":
-        from torchrl.envs.llm import KLRewardTransform
-
-        return KLRewardTransform
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
