@@ -268,6 +268,15 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <li><p><strong>num_envs</strong> (<em>int</em><em>, </em><em>optional</em>) – the number of envs to run in parallel. Defaults to
 <code class="docutils literal notranslate"><span class="pre">None</span></code> (a single env is to be run). <code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncVectorEnv</span></code>
 will be used by default.</p></li>
+<li><p><strong>num_workers</strong> (<em>int</em><em>, </em><em>optional</em>) – number of top-level worker subprocesses used to create/run
+multiple <a class="reference internal" href="#torchrl.envs.GymEnv" title="torchrl.envs.GymEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">GymEnv</span></code></a> instances in parallel (handled by the metaclass
+<code class="xref py py-class docutils literal notranslate"><span class="pre">_GymAsyncMeta</span></code>). When <code class="docutils literal notranslate"><span class="pre">num_workers</span> <span class="pre">&gt;</span> <span class="pre">1</span></code>, a lazy
+<a class="reference internal" href="torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> is returned whose factory preserves the original
+<cite>GymEnv</cite> kwargs. You can modify the ParallelEnv construction/configuration before
+it starts by calling <code class="xref py py-meth docutils literal notranslate"><span class="pre">configure_parallel()</span></code>
+on the returned object (for example: <code class="docutils literal notranslate"><span class="pre">env.configure_parallel(use_buffers=True,</span> <span class="pre">num_threads=2)</span></code>).
+When both <code class="docutils literal notranslate"><span class="pre">num_workers</span></code> and <code class="docutils literal notranslate"><span class="pre">num_envs</span></code> are greater than 1, the total number of
+environments executed in parallel is <code class="docutils literal notranslate"><span class="pre">num_workers</span> <span class="pre">*</span> <span class="pre">num_envs</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
 <li><p><strong>disable_env_checker</strong> (<em>bool</em><em>, </em><em>optional</em>) – for gym &gt; 0.24 only. If <code class="docutils literal notranslate"><span class="pre">True</span></code> (default
 for these versions), the environment checker won’t be run.</p></li>
 <li><p><strong>from_pixels</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, an attempt to return the pixel
@@ -336,6 +345,40 @@ the nested env:</p>
 <span class="go">[&#39;ALE/Adventure-ram-v5&#39;, &#39;ALE/Adventure-v5&#39;, &#39;ALE/AirRaid-ram-v5&#39;, &#39;ALE/AirRaid-v5&#39;, &#39;ALE/Alien-ram-v5&#39;, &#39;ALE/Alien-v5&#39;,</span>
 </pre></div>
 </div>
+<p>To run multiple environments in parallel:
+&gt;&gt;&gt; from torchrl.envs import GymEnv
+&gt;&gt;&gt; env = GymEnv(“Pendulum-v1”, num_workers=4)
+&gt;&gt;&gt; td_reset = env.reset()
+&gt;&gt;&gt; td = env.rand_step(td_reset)
+&gt;&gt;&gt; print(td)
+TensorDict(</p>
+<blockquote>
+<div><dl>
+<dt>fields={</dt><dd><p>action: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+done: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+next: TensorDict(</p>
+<blockquote>
+<div><dl class="simple">
+<dt>fields={</dt><dd><p>done: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+observation: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+reward: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+terminated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+truncated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</p>
+</dd>
+</dl>
+<p>batch_size=torch.Size([4]),
+device=None,
+is_shared=False),</p>
+</div></blockquote>
+<p>observation: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+terminated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+truncated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</p>
+</dd>
+</dl>
+<p>batch_size=torch.Size([4]),
+device=None,
+is_shared=False)</p>
+</div></blockquote>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>If both <cite>OpenAI/gym</cite> and <cite>gymnasium</cite> are present in the virtual environment,

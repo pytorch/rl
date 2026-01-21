@@ -617,6 +617,19 @@
                     <span class="k">else</span><span class="p">:</span>
                         <span class="n">same_device</span> <span class="o">=</span> <span class="n">same_device</span> <span class="ow">and</span> <span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="n">prev_device</span><span class="p">)</span>
 
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_trajs</span><span class="p">:</span>
+                <span class="n">max_traj_id</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+                <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">buffers</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">traj_ids</span> <span class="o">=</span> <span class="n">buffers</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">))</span>
+                        <span class="k">if</span> <span class="n">traj_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                            <span class="n">buffers</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">set_</span><span class="p">(</span>
+                                <span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">),</span> <span class="n">traj_ids</span> <span class="o">+</span> <span class="n">max_traj_id</span> <span class="o">+</span> <span class="mi">1</span>
+                            <span class="p">)</span>
+                            <span class="n">max_traj_id</span> <span class="o">=</span> <span class="p">(</span>
+                                <span class="n">buffers</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+                            <span class="p">)</span>
+
             <span class="k">if</span> <span class="n">cat_results</span> <span class="o">==</span> <span class="s2">&quot;stack&quot;</span><span class="p">:</span>
                 <span class="n">stack</span> <span class="o">=</span> <span class="p">(</span>
                     <span class="n">torch</span><span class="o">.</span><span class="n">stack</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span> <span class="k">else</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">maybe_dense_stack</span>
@@ -682,7 +695,6 @@
                 <span class="k">if</span> <span class="n">excluded_keys</span><span class="p">:</span>
                     <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="o">*</span><span class="n">excluded_keys</span><span class="p">)</span>
             <span class="k">yield</span> <span class="n">out</span>
-            <span class="k">del</span> <span class="n">out</span>
 
         <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">buffers</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">out_buffer</span> <span class="o">=</span> <span class="kc">None</span>

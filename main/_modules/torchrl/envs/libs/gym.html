@@ -248,6 +248,7 @@
 <span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">contextlib</span> <span class="kn">import</span> <span class="n">nullcontext</span>
 <span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">copy</span>
+<span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">partial</span>
 <span class="kn">from</span> <span class="nn">types</span> <span class="kn">import</span> <span class="n">ModuleType</span>
 <span class="kn">from</span> <span class="nn">warnings</span> <span class="kn">import</span> <span class="n">warn</span>
 
@@ -274,7 +275,6 @@
     <span class="n">Unbounded</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">torchrl.data.utils</span> <span class="kn">import</span> <span class="n">numpy_to_torch_dtype_dict</span><span class="p">,</span> <span class="n">torch_to_numpy_dtype_dict</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs.batched_envs</span> <span class="kn">import</span> <span class="n">CloudpickleWrapper</span>
 <span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">_EnvPostInit</span>
 <span class="kn">from</span> <span class="nn">torchrl.envs.gym_like</span> <span class="kn">import</span> <span class="n">default_info_dict_reader</span><span class="p">,</span> <span class="n">GymLikeEnv</span>
 <span class="kn">from</span> <span class="nn">torchrl.envs.utils</span> <span class="kn">import</span> <span class="n">_classproperty</span>
@@ -1065,6 +1065,17 @@
 <span class="k">class</span> <span class="nc">_GymAsyncMeta</span><span class="p">(</span><span class="n">_EnvPostInit</span><span class="p">):</span>
     <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="n">missing_obs_value</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;missing_obs_value&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">num_workers</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;num_workers&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;GymEnv&quot;</span> <span class="ow">and</span> <span class="n">num_workers</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">EnvCreator</span><span class="p">,</span> <span class="n">ParallelEnv</span>
+
+            <span class="n">env_name</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">args</span> <span class="k">else</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;env_name&quot;</span><span class="p">)</span>
+            <span class="n">env_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="n">env_kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;env_name&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">make_env</span> <span class="o">=</span> <span class="n">partial</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">env_name</span><span class="p">,</span> <span class="o">**</span><span class="n">env_kwargs</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">ParallelEnv</span><span class="p">(</span><span class="n">num_workers</span><span class="p">,</span> <span class="n">EnvCreator</span><span class="p">(</span><span class="n">make_env</span><span class="p">))</span>
+
         <span class="n">instance</span><span class="p">:</span> <span class="n">GymWrapper</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
         <span class="c1"># before gym 0.22, there was no final_observation</span>
@@ -1971,6 +1982,15 @@
 <span class="sd">        num_envs (int, optional): the number of envs to run in parallel. Defaults to</span>
 <span class="sd">            ``None`` (a single env is to be run). :class:`~gym.vector.AsyncVectorEnv`</span>
 <span class="sd">            will be used by default.</span>
+<span class="sd">        num_workers (int, optional): number of top-level worker subprocesses used to create/run</span>
+<span class="sd">            multiple :class:`GymEnv` instances in parallel (handled by the metaclass</span>
+<span class="sd">            :class:`_GymAsyncMeta`). When ``num_workers &gt; 1``, a lazy</span>
+<span class="sd">            :class:`~torchrl.envs.ParallelEnv` is returned whose factory preserves the original</span>
+<span class="sd">            `GymEnv` kwargs. You can modify the ParallelEnv construction/configuration before</span>
+<span class="sd">            it starts by calling :meth:`~torchrl.envs.batched_envs.BatchedEnvBase.configure_parallel`</span>
+<span class="sd">            on the returned object (for example: ``env.configure_parallel(use_buffers=True, num_threads=2)``).</span>
+<span class="sd">            When both ``num_workers`` and ``num_envs`` are greater than 1, the total number of</span>
+<span class="sd">            environments executed in parallel is ``num_workers * num_envs``. Defaults to ``1``.</span>
 <span class="sd">        disable_env_checker (bool, optional): for gym &gt; 0.24 only. If ``True`` (default</span>
 <span class="sd">            for these versions), the environment checker won&#39;t be run.</span>
 <span class="sd">        from_pixels (bool, optional): if ``True``, an attempt to return the pixel</span>
@@ -2035,6 +2055,33 @@
 <span class="sd">            is_shared=False)</span>
 <span class="sd">        &gt;&gt;&gt; print(env.available_envs)</span>
 <span class="sd">        [&#39;ALE/Adventure-ram-v5&#39;, &#39;ALE/Adventure-v5&#39;, &#39;ALE/AirRaid-ram-v5&#39;, &#39;ALE/AirRaid-v5&#39;, &#39;ALE/Alien-ram-v5&#39;, &#39;ALE/Alien-v5&#39;,</span>
+
+<span class="sd">        To run multiple environments in parallel:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import GymEnv</span>
+<span class="sd">        &gt;&gt;&gt; env = GymEnv(&quot;Pendulum-v1&quot;, num_workers=4)</span>
+<span class="sd">        &gt;&gt;&gt; td_reset = env.reset()</span>
+<span class="sd">        &gt;&gt;&gt; td = env.rand_step(td_reset)</span>
+<span class="sd">        &gt;&gt;&gt; print(td)</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                done: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                next: TensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        done: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        observation: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                        reward: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                        terminated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        truncated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                    batch_size=torch.Size([4]),</span>
+<span class="sd">                    device=None,</span>
+<span class="sd">                    is_shared=False),</span>
+<span class="sd">                observation: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                terminated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                truncated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([4]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False)</span>
 
 <span class="sd">    .. note::</span>
 <span class="sd">        If both `OpenAI/gym` and `gymnasium` are present in the virtual environment,</span>
@@ -2174,14 +2221,8 @@
                     <span class="k">raise</span> <span class="n">err</span>
         <span class="n">env</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_build_env</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">pixels_only</span><span class="o">=</span><span class="n">pixels_only</span><span class="p">,</span> <span class="n">from_pixels</span><span class="o">=</span><span class="n">from_pixels</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">num_envs</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_env</span><span class="p">([</span><span class="n">CloudpickleWrapper</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">env</span><span class="p">)]</span> <span class="o">*</span> <span class="n">num_envs</span><span class="p">)</span>
-            <span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
-                <span class="c1"># It would fail if the environment is not pickable. In that case,</span>
-                <span class="c1"># delegating environment instantiation to each subprocess as a fallback.</span>
-                <span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_env</span><span class="p">(</span>
-                    <span class="p">[</span><span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">make</span><span class="p">(</span><span class="n">env_name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)]</span> <span class="o">*</span> <span class="n">num_envs</span>
-                <span class="p">)</span>
+            <span class="n">make_fn</span> <span class="o">=</span> <span class="n">partial</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">make</span><span class="p">,</span> <span class="n">env_name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_env</span><span class="p">([</span><span class="n">make_fn</span><span class="p">]</span> <span class="o">*</span> <span class="n">num_envs</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="n">num_envs</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">])</span>
         <span class="k">return</span> <span class="n">env</span>
 
