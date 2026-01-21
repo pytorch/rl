@@ -449,7 +449,11 @@ class TestLLMCollector:
 
 
 class TestUpdate:
-    @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="requires 2 GPUs")
+    @pytest.mark.xfail(
+        torch.cuda.device_count() < 2,
+        reason="requires 2 GPUs",
+        strict=False,
+    )
     def test_vllm_update(self):
         import ray
 
