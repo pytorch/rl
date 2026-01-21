@@ -3174,12 +3174,6 @@ class TestVmas:
             max_steps=n_rollout_samples,
             return_contiguous=False if env.het_specs else True,
         )
-        assert (
-            env.full_action_spec_unbatched.shape == env.unbatched_action_spec.shape
-        ), (
-            env.action_spec,
-            env.batch_size,
-        )
 
         env.close()
 
@@ -3637,9 +3631,11 @@ class TestD4RL:
         root2 = tmpdir / "2"
         root3 = tmpdir / "3"
 
-        with pytest.warns(
-            UserWarning, match="Using use_truncated_as_done=True"
-        ) if use_truncated_as_done else nullcontext():
+        with (
+            pytest.warns(UserWarning, match="Using use_truncated_as_done=True")
+            if use_truncated_as_done
+            else nullcontext()
+        ):
             data_true = D4RLExperienceReplay(
                 task,
                 split_trajs=split_trajs,
@@ -5583,7 +5579,6 @@ class TestIsaacLab:
     @pytest.mark.skipif(not _has_ray, reason="Ray not found")
     @pytest.mark.parametrize("num_collectors", [1, 4], ids=["1_col", "4_col"])
     def test_isaaclab_ray_collector_start(self, env, clean_ray, num_collectors):
-
         from torchrl.data import LazyTensorStorage, RayReplayBuffer
 
         rb = RayReplayBuffer(

@@ -34,7 +34,7 @@ from tensordict import (
     TensorDictBase,
     unravel_key,
 )
-from tensordict.nn import TensorDictModule, TensorDictSequential, WrapModule
+from tensordict.nn import TensorDictModule, WrapModule
 from tensordict.utils import _unravel_key_to_tuple, assert_allclose_td
 from torch import multiprocessing as mp, nn, Tensor
 from torchrl import logger as torchrl_logger
@@ -124,7 +124,6 @@ from torchrl.envs.libs.dm_control import _has_dm_control
 from torchrl.envs.libs.gym import _has_gym, GymEnv, set_gym_backend
 from torchrl.envs.libs.unity_mlagents import _has_unity_mlagents
 from torchrl.envs.transforms import ModuleTransform, VecNorm
-from torchrl.envs.transforms.llm import KLRewardTransform
 from torchrl.envs.transforms.module import RayModuleTransform
 from torchrl.envs.transforms.r3m import _R3MNet
 from torchrl.envs.transforms.transforms import (
@@ -137,14 +136,7 @@ from torchrl.envs.transforms.transforms import (
 from torchrl.envs.transforms.vc1 import _has_vc
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs, MarlGroupMapType, step_mdp
-from torchrl.modules import (
-    GRUModule,
-    LSTMModule,
-    MLP,
-    ProbabilisticActor,
-    RandomPolicy,
-    TanhNormal,
-)
+from torchrl.modules import GRUModule, LSTMModule, RandomPolicy
 from torchrl.modules.utils import get_primers_from_module
 from torchrl.record.recorder import VideoRecorder
 
@@ -846,7 +838,6 @@ class TestCatFrames(TransformBase):
     def test_catframes_batching(
         self, batched_class, break_when_any_done, maybe_fork_ParallelEnv
     ):
-
         from torchrl.testing import CARTPOLE_VERSIONED
 
         if batched_class is ParallelEnv:
@@ -4165,7 +4156,9 @@ class TestDoubleToFloat(TransformBase):
         check_env_specs(env)
 
     def test_parallel_trans_env_check(
-        self, dtype_fixture, maybe_fork_ParallelEnv  # noqa: F811
+        self,
+        dtype_fixture,  # noqa: F811
+        maybe_fork_ParallelEnv,
     ):
         def make_env():
             return TransformedEnv(
@@ -4191,7 +4184,9 @@ class TestDoubleToFloat(TransformBase):
         check_env_specs(env)
 
     def test_trans_parallel_env_check(
-        self, dtype_fixture, maybe_fork_ParallelEnv  # noqa: F811
+        self,
+        dtype_fixture,  # noqa: F811
+        maybe_fork_ParallelEnv,
     ):
         env = TransformedEnv(
             maybe_fork_ParallelEnv(
@@ -6516,9 +6511,11 @@ class TestRewardSum(TransformBase):
         policy = MultiKeyCountingEnvPolicy(
             full_action_spec=env.action_spec, deterministic=True
         )
-        with pytest.raises(
-            ValueError, match="Could not match the env reset_keys"
-        ) if reset_keys == [("some", "nested", "reset")] else contextlib.nullcontext():
+        with (
+            pytest.raises(ValueError, match="Could not match the env reset_keys")
+            if reset_keys == [("some", "nested", "reset")]
+            else contextlib.nullcontext()
+        ):
             check_env_specs(env)
         if reset_keys != [("some", "nested", "reset")]:
             td = env.rollout(max_steps, policy=policy)
@@ -8292,7 +8289,6 @@ class TestTensorDictPrimer(TransformBase):
         assert ("next", "mykey") in env.rollout(3).keys(True)
 
     def test_dict_default_value(self):
-
         # Test with a dict of float default values
         key1_spec = Unbounded([3])
         key2_spec = Unbounded([3])
@@ -10369,7 +10365,6 @@ class TestVecNorm:
         self.SEED = 0
 
     def test_pickable(self):
-
         transform = VecNorm()
         serialized = pickle.dumps(transform)
         transform2 = pickle.loads(serialized)
@@ -11778,271 +11773,6 @@ class TestInitTracker(TransformBase):
         )
         assert len(env.transform.init_keys) == 1
         assert env.transform.init_keys[0] == ("data", "is_init")
-
-
-class TestKLRewardTransform(TransformBase):
-    envclass = ContinuousActionVecMockEnv
-
-    def _make_actor(self):
-        from tensordict.nn import NormalParamExtractor, TensorDictModule as Mod
-
-        env = self.envclass()
-        n_obs = env.observation_spec["observation"].shape[-1]
-        n_act = env.action_spec.shape[-1]
-
-        module = Mod(
-            nn.Sequential(nn.Linear(n_obs, n_act * 2), NormalParamExtractor()),
-            in_keys=["observation"],
-            out_keys=["loc", "scale"],
-        )
-        actor = ProbabilisticActor(
-            module,
-            in_keys=["loc", "scale"],
-            distribution_class=TanhNormal,
-            return_log_prob=True,
-        )
-        return actor
-
-    def _make_transform_env(self, out_key, base_env):
-        actor = self._make_actor()
-        transform = KLRewardTransform(actor, out_keys=out_key)
-        return Compose(
-            TensorDictPrimer(
-                action_log_prob=Unbounded(shape=base_env.action_spec.shape[:-1]),
-                shape=base_env.shape,
-            ),
-            transform,
-        )
-
-    @pytest.mark.parametrize("in_key", [None, "some_stuff", ["some_stuff"], ["a", "b"]])
-    @pytest.mark.parametrize(
-        "out_key", [None, "some_stuff", ["some_stuff"], ["a", "b"]]
-    )
-    def test_transform_no_env(self, in_key, out_key):
-        actor = self._make_actor()
-        if any(isinstance(key, list) and len(key) > 1 for key in (in_key, out_key)):
-            with pytest.raises(ValueError):
-                KLRewardTransform(actor, in_keys=in_key, out_keys=out_key)
-            return
-        t = KLRewardTransform(
-            actor, in_keys=in_key, out_keys=out_key, action_key="action"
-        )
-        batch = [2, 3]
-        tensordict = TensorDict(
-            {
-                "action": torch.randn(*batch, 7),
-                "observation": torch.randn(*batch, 7),
-                "action_log_prob": torch.randn(*batch),
-            },
-            batch,
-        )
-        next_td = TensorDict({t.in_keys[0]: torch.zeros(*batch, 1)}, batch)
-        next_td = t._step(tensordict, next_td)
-        tensordict.set("next", next_td)
-        assert (tensordict.get("next").get(t.out_keys[0]) != 0).all()
-
-    def test_transform_compose(self):
-        actor = self._make_actor()
-        t = Compose(KLRewardTransform(actor, action_key="action"))
-        batch = [2, 3]
-        tensordict = TensorDict(
-            {
-                "action": torch.randn(*batch, 7),
-                "observation": torch.randn(*batch, 7),
-                "next": {t[0].in_keys[0]: torch.zeros(*batch, 1)},
-                "action_log_prob": torch.randn(*batch),
-            },
-            batch,
-        )
-        t(tensordict)
-        assert (tensordict.get("next").get("reward") != 0).all()
-
-    @torch.no_grad()
-    @pytest.mark.parametrize(
-        "out_key",
-        [
-            None,
-            "some_stuff",
-            ["some_stuff"],
-        ],
-    )
-    def test_transform_env(self, out_key):
-        base_env = self.envclass()
-        torch.manual_seed(0)
-        actor = self._make_actor()
-        # we need to patch the env and create a action_log_prob spec to make check_env_specs happy
-        env = TransformedEnv(
-            base_env,
-            Compose(
-                RewardScaling(0.0, 0.0),  # make reward 0 to check the effect of kl
-                KLRewardTransform(actor, out_keys=out_key, action_key="action"),
-            ),
-        )
-        torch.manual_seed(0)
-        actor = self._make_actor()
-        td1 = env.rollout(3, actor)
-        tdparams = TensorDict(dict(actor.named_parameters()), []).unflatten_keys(".")
-        assert (
-            tdparams
-            == env.transform[-1].frozen_params.select(*tdparams.keys(True, True))
-        ).all()
-
-        def update(x):
-            x.data += 1
-            return x
-
-        tdparams.apply_(update)
-        td2 = env.rollout(3, actor)
-        assert not (
-            tdparams
-            == env.transform[-1].frozen_params.select(*tdparams.keys(True, True))
-        ).any()
-        out_key = env.transform[-1].out_keys[0]
-        assert (td1.get("next").get(out_key) != td2.get("next").get(out_key)).all()
-
-    @pytest.mark.parametrize("out_key", [None, "some_stuff", ["some_stuff"]])
-    def test_single_trans_env_check(self, out_key):
-        base_env = self.envclass()
-        # we need to patch the env and create a action_log_prob spec to make check_env_specs happy
-        env = TransformedEnv(base_env, self._make_transform_env(out_key, base_env))
-        check_env_specs(env)
-
-    def test_serial_trans_env_check(self):
-        out_key = "reward"
-
-        def make_env():
-            base_env = self.envclass()
-            return TransformedEnv(base_env, self._make_transform_env(out_key, base_env))
-
-        env = SerialEnv(2, make_env)
-        check_env_specs(env)
-
-    def test_parallel_trans_env_check(self, maybe_fork_ParallelEnv):
-        out_key = "reward"
-
-        def make_env():
-            base_env = self.envclass()
-            return TransformedEnv(base_env, self._make_transform_env(out_key, base_env))
-
-        env = maybe_fork_ParallelEnv(2, make_env)
-        try:
-            check_env_specs(env)
-        finally:
-            try:
-                env.close()
-            except RuntimeError:
-                pass
-
-    def test_trans_serial_env_check(self):
-        out_key = "reward"
-        base_env = SerialEnv(2, self.envclass)
-        env = TransformedEnv(base_env, self._make_transform_env(out_key, base_env))
-        try:
-            check_env_specs(env)
-        finally:
-            try:
-                env.close()
-            except RuntimeError:
-                pass
-
-    def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
-        out_key = "reward"
-        base_env = maybe_fork_ParallelEnv(2, self.envclass)
-        env = TransformedEnv(base_env, self._make_transform_env(out_key, base_env))
-        try:
-            check_env_specs(env)
-        finally:
-            try:
-                env.close()
-            except RuntimeError:
-                pass
-
-    def test_transform_model(self):
-        actor = self._make_actor()
-        t = KLRewardTransform(
-            actor, in_keys="reward", out_keys="reward", action_key="action"
-        )
-        batch = [2, 3]
-        tensordict = TensorDict(
-            {
-                "action": torch.randn(*batch, 7),
-                "observation": torch.randn(*batch, 7),
-                "next": {t.in_keys[0]: torch.zeros(*batch, 1)},
-                "action_log_prob": torch.randn(*batch),
-            },
-            batch,
-        )
-        t = TensorDictSequential(t)
-        t(tensordict)
-        assert (tensordict.get("next").get(t.out_keys[0]) != 0).all()
-
-    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
-    def test_transform_rb(self, rbclass):
-        actor = self._make_actor()
-        t = KLRewardTransform(
-            actor, in_keys="reward", out_keys="reward", action_key="action"
-        )
-        batch = [2, 3]
-        tensordict = TensorDict(
-            {
-                "action": torch.randn(*batch, 7),
-                "observation": torch.randn(*batch, 7),
-                "next": {t.in_keys[0]: torch.zeros(*batch, 1)},
-                "action_log_prob": torch.randn(*batch),
-            },
-            batch,
-        )
-        rb = rbclass(storage=LazyTensorStorage(100), transform=t)
-        rb.extend(tensordict)
-        sample = rb.sample(3)
-        assert (sample.get(("next", "reward")) != 0).all()
-
-    def test_transform_inverse(self):
-        raise pytest.skip("No inverse for KLRewardTransform")
-
-    @pytest.mark.parametrize("requires_grad", [True, False])
-    def test_kl_diff(self, requires_grad):
-        actor = self._make_actor()
-        t = KLRewardTransform(
-            actor, in_keys="reward", out_keys="reward", requires_grad=requires_grad
-        )
-        assert t.frozen_params.requires_grad is requires_grad
-
-    def test_kl_lstm(self):
-        from tensordict.nn import (
-            NormalParamExtractor,
-            ProbabilisticTensorDictModule,
-            ProbabilisticTensorDictSequential,
-            TensorDictModule,
-        )
-
-        env = TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
-        lstm_module = LSTMModule(
-            input_size=env.observation_spec["observation"].shape[-1],
-            hidden_size=2,
-            in_keys=["observation", "rs_h", "rs_c"],
-            out_keys=["intermediate", ("next", "rs_h"), ("next", "rs_c")],
-        )
-        mlp = MLP(num_cells=[2], out_features=env.action_spec.shape[-1] * 2)
-        policy = ProbabilisticTensorDictSequential(
-            lstm_module,
-            TensorDictModule(mlp, in_keys=["intermediate"], out_keys=["intermediate"]),
-            TensorDictModule(
-                NormalParamExtractor(),
-                in_keys=["intermediate"],
-                out_keys=["loc", "scale"],
-            ),
-            ProbabilisticTensorDictModule(
-                in_keys=["loc", "scale"],
-                out_keys=["action"],
-                distribution_class=TanhNormal,
-                return_log_prob=True,
-            ),
-        )
-        policy(env.reset())
-        klt = KLRewardTransform(policy, action_key="action")
-        # check that this runs: it can only run if the params are nn.Parameter instances
-        klt(env.rollout(3, policy))
 
 
 class TestActionMask(TransformBase):
@@ -14222,6 +13952,7 @@ class TestLineariseRewards(TransformBase):
 
     def test_compose_with_nested_keys(self):
         """Test LineariseRewards with nested keys as described in GitHub #3237."""
+
         # Create a dummy env that produces nested rewards
         class _NestedRewardEnv(EnvBase):
             def __init__(self):

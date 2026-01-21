@@ -272,7 +272,6 @@ Available Transforms
     GrayScale
     Hash
     InitTracker
-    KLRewardTransform
     LineariseRewards
     ModuleTransform
     MultiAction

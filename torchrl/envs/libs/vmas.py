@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import importlib.util
-import warnings
 
 import torch
 from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
@@ -147,9 +146,10 @@ class VmasWrapper(_EnvWrapper):
             input/output. See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
         agent_names (list of str): names of the agent in the environment
         agent_names_to_indices_map (Dict[str, int]): dictionary mapping agent names to their index in the environment
-        unbatched_action_spec (TensorSpec): version of the spec without the vectorized dimension
-        unbatched_observation_spec (TensorSpec): version of the spec without the vectorized dimension
-        unbatched_reward_spec (TensorSpec): version of the spec without the vectorized dimension
+        full_action_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension
+        full_observation_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension
+        full_reward_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension
+        full_done_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension
         het_specs (bool): whether the environment has any lazy spec
         het_specs_map (Dict[str, bool]): dictionary mapping each group to a flag representing of the group has lazy specs
         available_envs (List[str]): the list of the scenarios available to build.
@@ -314,7 +314,8 @@ class VmasWrapper(_EnvWrapper):
         return group_map
 
     def _make_specs(
-        self, env: vmas.simulator.environment.environment.Environment  # noqa
+        self,
+        env: vmas.simulator.environment.environment.Environment,  # noqa
     ) -> None:
         # Create and check group map
         self.agent_names = [agent.name for agent in self.agents]
@@ -366,38 +367,6 @@ class VmasWrapper(_EnvWrapper):
         self.full_observation_spec_unbatched = full_observation_spec_unbatched
         self.full_reward_spec_unbatched = full_reward_spec_unbatched
         self.full_done_spec_unbatched = full_done_spec_unbatched
-
-    @property
-    def unbatched_action_spec(self):
-        warnings.warn(
-            "unbatched_action_spec is deprecated and will be removed in v0.9. "
-            "Please use full_action_spec_unbatched instead."
-        )
-        return self.full_action_spec_unbatched
-
-    @property
-    def unbatched_observation_spec(self):
-        warnings.warn(
-            "unbatched_observation_spec is deprecated and will be removed in v0.9. "
-            "Please use full_observation_spec_unbatched instead."
-        )
-        return self.full_observation_spec_unbatched
-
-    @property
-    def unbatched_reward_spec(self):
-        warnings.warn(
-            "unbatched_reward_spec is deprecated and will be removed in v0.9. "
-            "Please use full_reward_spec_unbatched instead."
-        )
-        return self.full_reward_spec_unbatched
-
-    @property
-    def unbatched_done_spec(self):
-        warnings.warn(
-            "unbatched_done_spec is deprecated and will be removed in v0.9. "
-            "Please use full_done_spec_unbatched instead."
-        )
-        return self.full_done_spec_unbatched
 
     def _make_unbatched_group_specs(self, group: str):
         # Agent specs
@@ -702,9 +671,10 @@ class VmasEnv(VmasWrapper):
             input/output. See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
         agent_names (list of str): names of the agent in the environment
         agent_names_to_indices_map (Dict[str, int]): dictionary mapping agent names to their index in the environment
-        unbatched_action_spec (TensorSpec): version of the spec without the vectorized dimension
-        unbatched_observation_spec (TensorSpec): version of the spec without the vectorized dimension
-        unbatched_reward_spec (TensorSpec): version of the spec without the vectorized dimension
+        full_action_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension
+        full_observation_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension
+        full_reward_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension
+        full_done_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension
         het_specs (bool): whether the environment has any lazy spec
         het_specs_map (Dict[str, bool]): dictionary mapping each group to a flag representing of the group has lazy specs
         available_envs (List[str]): the list of the scenarios available to build.

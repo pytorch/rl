@@ -193,7 +193,6 @@ class Trainer:
         async_collection: bool = False,
         log_timings: bool = False,
     ) -> None:
-
         # objects
         self.frame_skip = frame_skip
         self.collector = collector
@@ -866,7 +865,7 @@ class Trainer:
             self._pbar.set_description(
                 ", ".join(
                     [
-                        f"{key}: {self._pbar_str[key] :{TYPE_DESCR.get(type(self._pbar_str[key]), '4.4f')}}"
+                        f"{key}: {self._pbar_str[key]:{TYPE_DESCR.get(type(self._pbar_str[key]), '4.4f')}}"
                         for key in sorted(self._pbar_str.keys())
                     ]
                 )
@@ -1347,26 +1346,6 @@ class LogScalar(TrainerHookBase):
         trainer.register_module(name, self)
 
 
-class LogReward(LogScalar):
-    """Deprecated class. Use LogScalar instead."""
-
-    def __init__(
-        self,
-        logname="r_training",
-        log_pbar: bool = False,
-        reward_key: str | tuple = None,
-    ):
-        warnings.warn(
-            "The 'LogReward' class is deprecated and will be removed in v0.9. Please use 'LogScalar' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        # Convert old API to new API
-        if reward_key is None:
-            reward_key = REWARD_KEY
-        super().__init__(key=reward_key, logname=logname, log_pbar=log_pbar)
-
-
 class RewardNormalizer(TrainerHookBase):
     """Reward normalizer hook.
 
@@ -1758,44 +1737,6 @@ class LogValidationReward(TrainerHookBase):
         trainer.register_op(
             "post_steps_log",
             self,
-        )
-
-
-class Recorder(LogValidationReward):
-    """Deprecated class. Use LogValidationReward instead."""
-
-    def __init__(
-        self,
-        *,
-        record_interval: int,
-        record_frames: int,
-        frame_skip: int = 1,
-        policy_exploration: TensorDictModule,
-        environment: EnvBase = None,
-        exploration_type: ExplorationType = ExplorationType.RANDOM,
-        log_keys: list[str | tuple[str]] | None = None,
-        out_keys: dict[str | tuple[str], str] | None = None,
-        suffix: str | None = None,
-        log_pbar: bool = False,
-        recorder: EnvBase = None,
-    ) -> None:
-        warnings.warn(
-            "The 'Recorder' class is deprecated and will be removed in v0.9. Please use 'LogValidationReward' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        super().__init__(
-            record_interval=record_interval,
-            record_frames=record_frames,
-            frame_skip=frame_skip,
-            policy_exploration=policy_exploration,
-            environment=environment,
-            exploration_type=exploration_type,
-            log_keys=log_keys,
-            out_keys=out_keys,
-            suffix=suffix,
-            log_pbar=log_pbar,
-            recorder=recorder,
         )
 
 
