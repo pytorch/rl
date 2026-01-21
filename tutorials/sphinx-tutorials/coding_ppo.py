@@ -573,9 +573,9 @@ loss_module = ClipPPOLoss(
     critic_network=value_module,
     clip_epsilon=clip_epsilon,
     entropy_bonus=bool(entropy_eps),
-    entropy_coef=entropy_eps,
+    entropy_coeff=entropy_eps,
     # these keys match by default but we set this for completeness
-    critic_coef=1.0,
+    critic_coeff=1.0,
     loss_critic_type="smooth_l1",
 )
 

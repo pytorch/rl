@@ -1,0 +1,34 @@
+diff --git a/torchrl/envs/async_envs.py b/torchrl/envs/async_envs.py
+index 263704dd6..03b69a7f9 100644
+--- a/torchrl/envs/async_envs.py
++++ b/torchrl/envs/async_envs.py
+@@ -231,12 +231,24 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
+             raise NotImplementedError
+ 
+         output_spec, input_spec = self._setup()
+-        input_spec["full_state_spec"].set(
+-            self._env_idx_key, NonTensor(example_data=0, shape=input_spec.shape)
+-        )
+-        self.__dict__["_output_spec"] = output_spec
+-        self.__dict__["_input_spec"] = input_spec
++
++        # Initialize parent first, then set specs using proper setters
++        # This ensures proper propagation of nested specs like full_action_spec
+         super().__init__(batch_size=[self.num_envs])
++
++        # Use proper spec setters like ParallelEnv does, instead of directly
++        # manipulating __dict__. This ensures full_action_spec and other nested
++        # specs are properly accessible after stacking.
++        self.action_spec = input_spec["full_action_spec"]
++        self.state_spec = input_spec["full_state_spec"]
++        self.observation_spec = output_spec["full_observation_spec"]
++        self.reward_spec = output_spec["full_reward_spec"]
++        self.done_spec = output_spec["full_done_spec"]
++
++        # Add env_index key to full_state_spec
++        self.full_state_spec.set(
++            self._env_idx_key, NonTensor(example_data=0, shape=self.batch_size)
++        )
+         self._busy = set()
+ 
+     @property
