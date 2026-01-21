@@ -12,7 +12,7 @@ from packaging import version
 from tensordict import TensorDict, TensorDictBase
 
 from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
-from torchrl.envs.common import _EnvWrapper
+from torchrl.envs.common import _EnvWrapper, _EnvPostInit
 from torchrl.envs.libs.jax_utils import (
     _extract_spec,
     _ndarray_to_tensor,
@@ -37,6 +37,34 @@ def _get_envs():
 
     return list(brax.envs._envs.keys())
 
+class _BraxMeta(_EnvPostInit):
+    """Metaclass for BraxEnv that returns a lazy ParallelEnv when num_workers > 1."""
+
+    def __call__(cls, *args, num_workers: int | None = None, **kwargs):
+        # Extract num_workers from explicit kwarg or kwargs dict
+        if num_workers is None:
+            num_workers = kwargs.pop("num_workers", 1)
+        else:
+            kwargs.pop("num_workers", None)
+
+        num_workers = int(num_workers) if num_workers is not None else 1
+        if cls.__name__ == "BraxEnv" and num_workers > 1:
+            from torchrl.envs import ParallelEnv
+
+            # Extract env_name from args or kwargs
+            env_name = args[0] if len(args) >= 1 else kwargs.get("env_name")
+
+            # Remove env_name from kwargs if present (it will be passed positionally)
+            env_kwargs = {k: v for k, v in kwargs.items() if k != "env_name"}
+
+            # Create factory function that builds single BraxEnv instances
+            def make_env(_env_name=env_name, _kwargs=env_kwargs):
+                return cls(_env_name, num_workers=1, **_kwargs)
+            
+            # Return lazy ParallelEnv (workers not started yet)
+            return ParallelEnv(num_workers, make_env)
+        
+        return super().__call__(*args, **kwargs)
 
 class BraxWrapper(_EnvWrapper):
     """Google Brax environment wrapper.
@@ -326,6 +354,14 @@ class BraxWrapper(_EnvWrapper):
     def _reset(self, tensordict: TensorDictBase = None, **kwargs) -> TensorDictBase:
         jax = self.jax
 
+        # ensure a valid JAX PRNG key exists
+        if getattr(self, "_key", None) is None:
+            seed = getattr(self, "_seed", None)
+            if seed is None:
+                seed = 0
+            
+            self._key = jax.random.PRNGKey(int(seed))
+
         # generate random keys
         self._key, *keys = jax.random.split(self._key, 1 + self.numel())
 
@@ -471,7 +507,7 @@ class BraxWrapper(_EnvWrapper):
                 pass
 
 
-class BraxEnv(BraxWrapper):
+class BraxEnv(BraxWrapper, metaclass=_BraxMeta):
     """Google Brax environment wrapper built with the environment name.
 
     Brax offers a vectorized and differentiable simulation framework based on Jax.
@@ -508,6 +544,9 @@ class BraxEnv(BraxWrapper):
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
             for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
+        num_workers (int, optional): if greater than 1, a lazy :class:`~torchrl.envs.ParallelEnv`
+            will be returned instead, with each worker instantiating its own
+            :class:`~torchrl.envs.BraxEnv` instance. Defaults to ``None``.
 
     Attributes:
         available_envs: environments available to build
@@ -540,6 +579,113 @@ class BraxEnv(BraxWrapper):
             is_shared=False)
         >>> print(env.available_envs)
         ['acrobot', 'ant', 'fast', 'fetch', ...]
+
+        # Example: create a parallel environment with 4 workers. This returns a lazy
+        # ParallelEnv; each worker will instantiate a BraxEnv with num_workers=1.
+        >>> from torchrl.envs import BraxEnv
+        >>> par_env = BraxEnv("ant", batch_size=[8], num_workers=4, device="cpu")
+        >>> # par_env is a ParallelEnv; start interacting as usual
+        >>> par_env.set_seed(0)
+        >>> td = par_env.reset()
+        >>> print(td)
+        TensorDict(
+        fields={
+            done: Tensor(shape=torch.Size([4, 8, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            observation: Tensor(shape=torch.Size([4, 8, 27]), device=cpu, dtype=torch.float32, is_shared=False),
+            state: TensorDict(
+                fields={
+                    done: Tensor(shape=torch.Size([4, 8, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                    metrics: TensorDict(
+                        fields={
+                            distance_from_origin: Tensor(shape=torch.Size([4, 8]), device=cpu, dtype=torch.float32, is_shared=False),
+                            forward_reward: Tensor(shape=torch.Size([4, 8]), device=cpu, dtype=torch.float32, is_shared=False),
+                            reward_contact: Tensor(shape=torch.Size([4, 8]), device=cpu, dtype=torch.float32, is_shared=False),
+                            reward_ctrl: Tensor(shape=torch.Size([4, 8]), device=cpu, dtype=torch.float32, is_shared=False),
+                            reward_forward: Tensor(shape=torch.Size([4, 8]), device=cpu, dtype=torch.float32, is_shared=False),
+                            reward_survive: Tensor(shape=torch.Size([4, 8]), device=cpu, dtype=torch.float32, is_shared=False),
+                            x_position: Tensor(shape=torch.Size([4, 8]), device=cpu, dtype=torch.float32, is_shared=False),
+                            x_velocity: Tensor(shape=torch.Size([4, 8]), device=cpu, dtype=torch.float32, is_shared=False),
+                            y_position: Tensor(shape=torch.Size([4, 8]), device=cpu, dtype=torch.float32, is_shared=False),
+                            y_velocity: Tensor(shape=torch.Size([4, 8]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([4, 8]),
+                        device=cpu,
+                        is_shared=False),
+                    obs: Tensor(shape=torch.Size([4, 8, 27]), device=cpu, dtype=torch.float32, is_shared=False),
+                    pipeline_state: TensorDict(
+                        fields={
+                            cd: TensorDict(
+                                fields={
+                                    ang: Tensor(shape=torch.Size([4, 8, 9, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                                    vel: Tensor(shape=torch.Size([4, 8, 9, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                                batch_size=torch.Size([4, 8]),
+                                device=cpu,
+                                is_shared=False),
+                            cdof: TensorDict(
+                                fields={
+                                    ang: Tensor(shape=torch.Size([4, 8, 14, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                                    vel: Tensor(shape=torch.Size([4, 8, 14, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                                batch_size=torch.Size([4, 8]),
+                                device=cpu,
+                                is_shared=False),
+                            cdofd: TensorDict(
+                                fields={
+                                    ang: Tensor(shape=torch.Size([4, 8, 14, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                                    vel: Tensor(shape=torch.Size([4, 8, 14, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                                batch_size=torch.Size([4, 8]),
+                                device=cpu,
+                                is_shared=False),
+                            cinr: TensorDict(
+                                fields={
+                                    i: Tensor(shape=torch.Size([4, 8, 9, 3, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                                    mass: Tensor(shape=torch.Size([4, 8, 9]), device=cpu, dtype=torch.float32, is_shared=False),
+                                    transform: TensorDict(
+                                        fields={
+                                            pos: Tensor(shape=torch.Size([4, 8, 9, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                                            rot: Tensor(shape=torch.Size([4, 8, 9, 4]), device=cpu, dtype=torch.float32, is_shared=False)},        
+                                        batch_size=torch.Size([4, 8]),
+                                        device=cpu,
+                                        is_shared=False)},
+                                batch_size=torch.Size([4, 8]),
+                                device=cpu,
+                                is_shared=False),
+                            con_aref: Tensor(shape=torch.Size([4, 8, 24]), device=cpu, dtype=torch.float32, is_shared=False),
+                            con_diag: Tensor(shape=torch.Size([4, 8, 24]), device=cpu, dtype=torch.float32, is_shared=False),
+                            con_jac: Tensor(shape=torch.Size([4, 8, 24, 14]), device=cpu, dtype=torch.float32, is_shared=False),
+                            mass_mx: Tensor(shape=torch.Size([4, 8, 14, 14]), device=cpu, dtype=torch.float32, is_shared=False),
+                            mass_mx_inv: Tensor(shape=torch.Size([4, 8, 14, 14]), device=cpu, dtype=torch.float32, is_shared=False),
+                            q: Tensor(shape=torch.Size([4, 8, 15]), device=cpu, dtype=torch.float32, is_shared=False),
+                            qd: Tensor(shape=torch.Size([4, 8, 14]), device=cpu, dtype=torch.float32, is_shared=False),
+                            qdd: Tensor(shape=torch.Size([4, 8, 14]), device=cpu, dtype=torch.float32, is_shared=False),
+                            qf_constraint: Tensor(shape=torch.Size([4, 8, 14]), device=cpu, dtype=torch.float32, is_shared=False),
+                            qf_smooth: Tensor(shape=torch.Size([4, 8, 14]), device=cpu, dtype=torch.float32, is_shared=False),
+                            root_com: Tensor(shape=torch.Size([4, 8, 9, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                            x: TensorDict(
+                                fields={
+                                    pos: Tensor(shape=torch.Size([4, 8, 9, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                                    rot: Tensor(shape=torch.Size([4, 8, 9, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                                batch_size=torch.Size([4, 8]),
+                                device=cpu,
+                                is_shared=False),
+                            xd: TensorDict(
+                                fields={
+                                    ang: Tensor(shape=torch.Size([4, 8, 9, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                                    vel: Tensor(shape=torch.Size([4, 8, 9, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                                batch_size=torch.Size([4, 8]),
+                                device=cpu,
+                                is_shared=False)},
+                        batch_size=torch.Size([4, 8]),
+                        device=cpu,
+                        is_shared=False),
+                    reward: Tensor(shape=torch.Size([4, 8, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                batch_size=torch.Size([4, 8]),
+                device=cpu,
+                is_shared=False),
+            terminated: Tensor(shape=torch.Size([4, 8, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+        batch_size=torch.Size([4, 8]),
+        device=cpu,
+        is_shared=False)
+        >>> td["action"] = par_env.action_spec.rand()
+        >>> td = par_env.step(td)
 
     To take advante of Brax, one usually executes multiple environments at the
     same time. In the following example, we iteratively test different batch sizes

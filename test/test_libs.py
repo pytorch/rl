@@ -3045,6 +3045,37 @@ class TestBrax:
         for _ in range(5):
             env.clear_cache()
 
+    def test_num_workers_returns_lazy_parallel_env(self, envname, device):
+        """Ensure BraxEnv with num_workers > 1 returns a lazy ParallelEnv."""
+        from torchrl.envs.batched_envs import ParallelEnv
+
+        env = BraxEnv(envname, num_workers=3, device=device)
+        try:
+            assert isinstance(env, ParallelEnv)
+            # accept either attribute name used by ParallelEnv implementations
+            nworkers = getattr(env, "num_workers", None)
+            assert nworkers == 3
+            # ParallelEnv should be lazy (not started yet)
+            assert env.is_closed
+            # configure_parallel should work before env starts
+            env.configure_parallel(use_buffers=False)
+            env.reset()
+            assert not env.is_closed
+            assert env.batch_size == torch.Size([3])
+        finally:
+            env.close()
+
+    def test_set_seed_and_reset_works(self, envname, device):
+        """Smoke test that setting seed and reset works for BraxEnv."""
+        env = BraxEnv(envname, device=device)
+        try:
+            final_seed = env.set_seed(0)
+            assert final_seed is not None
+            td = env.reset()
+            assert isinstance(td, TensorDict)
+        finally:
+            env.close()
+
     @pytest.mark.parametrize("freq", [10, None, False])
     def test_brax_automatic_cache_clearing_parameter(self, envname, device, freq):
         env = BraxEnv(
@@ -3067,6 +3098,39 @@ class TestBrax:
             next_td["action"] = action
             out_td, next_td = env.step_and_maybe_reset(next_td)
             assert env._step_count == i + 1
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires cuda")
+    def test_brax_kwargs_preserved_with_seed(self, envname, device):
+        """Test that kwargs like camera_id are preserved when seed is provided.
+
+        Regression test for a bug where `kwargs` were overwritten when `_seed`
+        was not None.
+        """
+        env = BraxEnv(
+            envname,
+            from_pixels=True,
+            pixels_only=True,
+            camera_id=1,
+            device=device,
+        )
+        try:
+            # calling set_seed should not drop or overwrite kwargs
+            final_seed = env.set_seed(1)
+            assert final_seed is not None
+            td = env.reset()
+            assert isinstance(td, TensorDict)
+            preserved = False
+            if hasattr(env, "_kwargs") and isinstance(env._kwargs, dict):
+                preserved = env._kwargs.get("camera_id", None) == 1
+            else:
+                inner = getattr(env, "_env", None)
+                if inner is not None and hasattr(inner, "_kwargs") and isinstance(
+                    inner._kwargs, dict
+                ):
+                    preserved = inner._kwargs.get("camera_id", None) == 1
+            assert preserved, "camera_id kwarg was not preserved after set_seed"
+        finally:
+            env.close()
 
 
 @pytest.mark.skipif(not _has_vmas, reason="vmas not installed")
