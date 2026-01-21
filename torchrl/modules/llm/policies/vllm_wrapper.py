@@ -570,10 +570,7 @@ class vLLMWrapper(LLMWrapperBase):
                     if not value:
                         vllm_kwargs["temperature"] = 0.0
                     # If do_sample=True, we keep the existing temperature/top_p/top_k values
-                elif key == "num_beams":
-                    # vLLM uses best_of instead of num_beams
-                    vllm_kwargs["best_of"] = value
-                elif key in ["length_penalty", "early_stopping"]:
+                elif key in ["length_penalty", "early_stopping", "num_beams"]:
                     # These parameters are not supported by vLLM, skip them
                     pass
                 else:

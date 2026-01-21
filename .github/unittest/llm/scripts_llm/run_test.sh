@@ -13,7 +13,6 @@ export LAZY_LEGACY_OP=False
 
 # to solve RuntimeError: Cannot re-initialize CUDA in forked subprocess. To use CUDA with multiprocessing, you must use the 'spawn' start method
 export VLLM_WORKER_MULTIPROC_METHOD=spawn
-export RAY_ADDRESS="auto"
 python -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
