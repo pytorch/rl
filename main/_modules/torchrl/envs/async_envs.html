@@ -476,13 +476,70 @@
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;_output_spec&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">output_spec</span>
         <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;_input_spec&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">input_spec</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">])</span>
+        <span class="c1"># Use spec shape as batch_size since it correctly includes both pool dimension</span>
+        <span class="c1"># and child env batch dimensions (e.g., (4, 1) for 4 envs with batch_size=(1,))</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="n">input_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_busy</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">env_batch_sizes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the batch-sizes of every env.&quot;&quot;&quot;</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">_get_child_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the list of child env specs for stacking.</span>
+
+<span class="sd">        For ThreadingAsyncEnvPool, returns [env.full_*_spec for env in self.envs].</span>
+<span class="sd">        For ProcessorAsyncEnvPool, returns cached specs from setup.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="c1"># Override spec properties to properly stack child env specs.</span>
+    <span class="c1"># This bypasses the problematic StackedComposite.get() behavior that loses</span>
+    <span class="c1"># nested keys like full_action_spec when cloning stacked specs.</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">full_action_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">child_specs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_child_specs</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">s</span><span class="p">[</span><span class="s2">&quot;input_spec&quot;</span><span class="p">][</span><span class="s2">&quot;full_action_spec&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">child_specs</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">full_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">child_specs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_child_specs</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">s</span><span class="p">[</span><span class="s2">&quot;output_spec&quot;</span><span class="p">][</span><span class="s2">&quot;full_observation_spec&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">child_specs</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">full_reward_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">child_specs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_child_specs</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">s</span><span class="p">[</span><span class="s2">&quot;output_spec&quot;</span><span class="p">][</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">child_specs</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">full_done_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">child_specs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_child_specs</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">s</span><span class="p">[</span><span class="s2">&quot;output_spec&quot;</span><span class="p">][</span><span class="s2">&quot;full_done_spec&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">child_specs</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">full_state_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">child_specs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_child_specs</span><span class="p">()</span>
+        <span class="n">specs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">s</span><span class="p">[</span><span class="s2">&quot;input_spec&quot;</span><span class="p">][</span><span class="s2">&quot;full_state_spec&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">child_specs</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span>
+        <span class="p">)</span>
+        <span class="c1"># Add env_index key for async tracking</span>
+        <span class="n">specs</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_env_idx_key</span><span class="p">,</span> <span class="n">NonTensor</span><span class="p">(</span><span class="n">example_data</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">specs</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">specs</span>
+
+    <span class="c1"># TODO: _make_single_env_spec (used by *_unbatched properties) takes spec[0],</span>
+    <span class="c1"># which assumes all child envs have identical specs. Should add validation</span>
+    <span class="c1"># that child specs match, and error if they differ.</span>
 
     <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -746,17 +803,21 @@
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">threads</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">thread</span><span class="p">)</span>
             <span class="n">thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
-        <span class="c1"># Get specs</span>
+        <span class="c1"># Get specs from each worker and cache them for _get_child_specs()</span>
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_threads</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">input_queue</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">put</span><span class="p">((</span><span class="s2">&quot;get_specs&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
-        <span class="n">specs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_child_specs</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_threads</span><span class="p">):</span>
-            <span class="n">specs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">output_queue</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">())</span>
-        <span class="n">specs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">specs</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_child_specs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">output_queue</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">())</span>
+        <span class="n">specs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_child_specs</span><span class="p">))</span>
         <span class="n">output_spec</span> <span class="o">=</span> <span class="n">specs</span><span class="p">[</span><span class="s2">&quot;output_spec&quot;</span><span class="p">]</span>
         <span class="n">input_spec</span> <span class="o">=</span> <span class="n">specs</span><span class="p">[</span><span class="s2">&quot;input_spec&quot;</span><span class="p">]</span>
         <span class="k">return</span> <span class="n">output_spec</span><span class="p">,</span> <span class="n">input_spec</span></div>
 
+
+    <span class="k">def</span> <span class="nf">_get_child_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the cached specs from each child environment process.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_child_specs</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">env_batch_sizes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]:</span>
@@ -1047,6 +1108,10 @@
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">env_batch_sizes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]:</span>
         <span class="k">return</span> <span class="p">[</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span> <span class="k">for</span> <span class="n">env</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">envs</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">_get_child_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the specs from each child environment.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">env</span><span class="o">.</span><span class="n">specs</span> <span class="k">for</span> <span class="n">env</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">envs</span><span class="p">]</span>
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">_get_specs</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">env</span><span class="p">:</span> <span class="n">EnvBase</span><span class="p">):</span>
