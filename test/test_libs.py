@@ -90,7 +90,7 @@ from torchrl.envs import (
     RenameTransform,
     StepCounter,
 )
-from torchrl.envs.batched_envs import SerialEnv
+from torchrl.envs.batched_envs import ParallelEnv, SerialEnv
 from torchrl.envs.libs.brax import _has_brax, BraxEnv, BraxWrapper
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
 from torchrl.envs.libs.envpool import _has_envpool, MultiThreadedEnvWrapper
@@ -133,7 +133,6 @@ from torchrl.modules import (
     SafeModule,
     ValueOperator,
 )
-from torchrl.envs.batched_envs import ParallelEnv
 
 _has_ray = importlib.util.find_spec("ray") is not None
 _has_ale = importlib.util.find_spec("ale_py") is not None
@@ -1947,9 +1946,9 @@ class TestGym:
         """Test that kwargs like frame_skip are preserved when seed is provided.
         Regression test for a bug where `kwargs` were overwritten when `_seed` was not None.
         """
-        # Use Pendulum-v1 instead of CartPole-v1 because CartPole can terminate
+        # Use Pendulum instead of CartPole because CartPole can terminate
         # early due to pole falling, especially with frame_skip=4
-        env = GymEnv("Pendulum-v1", frame_skip=4, from_pixels=False)
+        env = GymEnv(PENDULUM_VERSIONED(), frame_skip=4, from_pixels=False)
         try:
             td = env.reset()
             rollout = env.rollout(max_steps=5)
