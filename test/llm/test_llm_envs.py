@@ -1103,6 +1103,11 @@ class TestChatEnvIntegration:
         except Exception as e:
             pytest.skip(f"Failed to load vLLM model: {e}")
 
+    @pytest.mark.xfail(
+        reason="vLLM 0.14+ Ray async backend has KeyError: 'bundles' issue during "
+        "engine initialization. See PR #3360 for context.",
+        strict=False,
+    )
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not _has_datasets, reason="datasets not available")
     @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
