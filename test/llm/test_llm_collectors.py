@@ -341,8 +341,8 @@ class TestLLMCollector:
         def env_maker():
             env = ChatEnv.from_dataloader(
                 dataloader=dataloader,
-                from_text=True,
-                batch_size=(),
+                input_mode="history",
+                batch_size=(1,),
                 group_repeats=True,
             )
             # To make sure the env breaks at some point
@@ -415,6 +415,81 @@ class TestLLMCollector:
         if rb is None and not yield_only_last_steps:
             assert has_found_one_with_more_steps
         assert collector._frames >= total_steps
+
+
+class TestAsyncEnvPoolSpecs:
+    """Tests for AsyncEnvPool spec propagation (no vLLM/GPU required)."""
+
+    def test_async_env_pool_spec_propagation(self):
+        """Test that AsyncEnvPool properly propagates full_action_spec from child envs.
+
+        This was the original bug: full_action_spec was returning an empty Composite
+        because StackedComposite.get() was losing nested keys during clone().
+        """
+        bsz = 4
+        dataloader = DummyStrDataLoader(bsz)
+
+        def env_maker():
+            env = ChatEnv.from_dataloader(
+                dataloader=dataloader,
+                input_mode="history",
+                batch_size=(1,),
+                group_repeats=True,
+            )
+            env = env.append_transform(StepCounter(max_steps=5))
+            return env
+
+        env = AsyncEnvPool([env_maker] * bsz, backend="threading", stack="lazy")
+
+        # Verify batch_size includes child env dimensions
+        assert env.batch_size == torch.Size(
+            [bsz, 1]
+        ), f"Expected (4, 1), got {env.batch_size}"
+
+        # Verify full_action_spec is properly populated (the main bug fix)
+        full_action_spec = env.full_action_spec
+        assert full_action_spec is not None
+        assert len(full_action_spec.keys()) > 0, "full_action_spec should not be empty"
+
+        # Verify action_keys returns the expected keys
+        action_keys = env.action_keys
+        assert len(action_keys) > 0, "action_keys should not be empty"
+
+        # Verify other specs also work
+        assert len(env.full_observation_spec.keys()) > 0
+        assert len(env.full_done_spec.keys()) > 0
+
+        # Verify basic operations work
+        td = env.reset()
+        assert td.shape == env.batch_size
+
+        env.close()
+
+    def test_async_env_pool_with_unbatched_child_envs(self):
+        """Test AsyncEnvPool with child envs that have batch_size=()."""
+        from torchrl.testing.mocking_classes import CountingEnv
+
+        def env_maker():
+            return CountingEnv()
+
+        env = AsyncEnvPool([env_maker] * 4, backend="threading", stack="lazy")
+
+        # With unbatched child envs, pool batch_size should be (num_envs,)
+        assert env.batch_size == torch.Size([4])
+
+        # Verify specs work
+        assert len(env.action_keys) > 0
+        assert "action" in env.action_keys
+
+        # Verify basic operations
+        td = env.reset()
+        assert td.shape == torch.Size([4])
+
+        td["action"] = torch.ones(4, dtype=torch.int8)
+        td_next = env.step(td)
+        assert td_next.shape == torch.Size([4])
+
+        env.close()
 
 
 class TestUpdate:
