@@ -33,7 +33,7 @@ jobs:
       # gpu-arch-type: cuda
       # gpu-arch-version: "11.7"
       docker-image: "pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel"
-      timeout: 30
+      timeout: 45
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
