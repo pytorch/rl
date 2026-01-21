@@ -243,7 +243,6 @@
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">contextlib</span>
-<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">deepcopy</span>
 <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
 
@@ -532,31 +531,21 @@
         <span class="n">clip_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="c1"># Handle deprecated entropy_coef argument</span>
+        <span class="c1"># entropy_coef has been removed in v0.11</span>
         <span class="k">if</span> <span class="s2">&quot;entropy_coef&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">entropy_coeff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># Check if entropy_coeff was explicitly set</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;Cannot specify both &#39;entropy_coef&#39; and &#39;entropy_coeff&#39;&quot;</span>
-                <span class="p">)</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="s2">&quot;&#39;entropy_coef&#39; is deprecated and will be removed in torchrl v0.11. Please use &#39;entropy_coeff&#39; instead.&quot;</span><span class="p">,</span>
-                <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;&#39;entropy_coef&#39; has been removed in torchrl v0.11. Please use &#39;entropy_coeff&#39; instead.&quot;</span>
             <span class="p">)</span>
-            <span class="n">entropy_coeff</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;entropy_coef&quot;</span><span class="p">)</span>
 
         <span class="c1"># Set default value if None</span>
         <span class="k">if</span> <span class="n">entropy_coeff</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">entropy_coeff</span> <span class="o">=</span> <span class="mf">0.01</span>
 
-        <span class="c1"># Handle deprecated critic_coef argument</span>
+        <span class="c1"># critic_coef has been removed in v0.11</span>
         <span class="k">if</span> <span class="s2">&quot;critic_coef&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">critic_coeff</span> <span class="o">!=</span> <span class="mf">1.0</span><span class="p">:</span>  <span class="c1"># Check if critic_coeff was explicitly set</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot specify both &#39;critic_coef&#39; and &#39;critic_coeff&#39;&quot;</span><span class="p">)</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="s2">&quot;&#39;critic_coef&#39; is deprecated and will be removed in torchrl v0.11. Please use &#39;critic_coeff&#39; instead.&quot;</span><span class="p">,</span>
-                <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;&#39;critic_coef&#39; has been removed in torchrl v0.11. Please use &#39;critic_coeff&#39; instead.&quot;</span>
             <span class="p">)</span>
-            <span class="n">critic_coeff</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;critic_coef&quot;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">actor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">actor_network</span> <span class="o">=</span> <span class="n">actor</span>
@@ -713,9 +702,11 @@
         <span class="n">tensordict_clone</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
             <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span>
         <span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network_params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span>
-        <span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional</span> <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">():</span>
+        <span class="k">with</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">actor_network_params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional</span>
+            <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">()</span>
+        <span class="p">):</span>
             <span class="n">dist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">get_dist</span><span class="p">(</span><span class="n">tensordict_clone</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dist</span><span class="p">,</span> <span class="n">CompositeDistribution</span><span class="p">):</span>
             <span class="n">action_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span>
@@ -773,9 +764,11 @@
         <span class="n">tensordict_select</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
             <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">critic_network</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span>
         <span class="p">)</span>
-        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_network_params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">critic_network</span>
-        <span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional</span> <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">():</span>
+        <span class="k">with</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">critic_network_params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">critic_network</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional</span>
+            <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">()</span>
+        <span class="p">):</span>
             <span class="n">state_value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_network</span><span class="p">(</span>
                 <span class="n">tensordict_select</span><span class="p">,</span>
             <span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>

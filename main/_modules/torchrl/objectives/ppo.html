@@ -679,15 +679,11 @@
             <span class="n">critic_network</span> <span class="o">=</span> <span class="n">critic</span>
             <span class="k">del</span> <span class="n">critic</span>
 
-        <span class="c1"># Handle deprecated critic_coef argument</span>
+        <span class="c1"># critic_coef has been removed in v0.11</span>
         <span class="k">if</span> <span class="s2">&quot;critic_coef&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">critic_coeff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot specify both &#39;critic_coef&#39; and &#39;critic_coeff&#39;&quot;</span><span class="p">)</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="s2">&quot;&#39;critic_coef&#39; is deprecated and will be removed in torchrl v0.11. Please use &#39;critic_coeff&#39; instead.&quot;</span><span class="p">,</span>
-                <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;&#39;critic_coef&#39; has been removed in torchrl v0.11. Please use &#39;critic_coeff&#39; instead.&quot;</span>
             <span class="p">)</span>
-            <span class="n">critic_coeff</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;critic_coef&quot;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">critic_coeff</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">critic_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">critic_coeff</span> <span class="o">=</span> <span class="mf">1.0</span>
@@ -743,17 +739,11 @@
                     <span class="n">torch</span><span class="p">,</span> <span class="s2">&quot;get_default_device&quot;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
                 <span class="p">)()</span>
 
-        <span class="c1"># Handle deprecated entropy_coef argument</span>
+        <span class="c1"># entropy_coef has been removed in v0.11</span>
         <span class="k">if</span> <span class="s2">&quot;entropy_coef&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">entropy_coeff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># Check if entropy_coeff was explicitly set</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;Cannot specify both &#39;entropy_coef&#39; and &#39;entropy_coeff&#39;&quot;</span>
-                <span class="p">)</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="s2">&quot;&#39;entropy_coef&#39; is deprecated and will be removed in torchrl v0.11. Please use &#39;entropy_coeff&#39; instead.&quot;</span><span class="p">,</span>
-                <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;&#39;entropy_coef&#39; has been removed in torchrl v0.11. Please use &#39;entropy_coeff&#39; instead.&quot;</span>
             <span class="p">)</span>
-            <span class="n">entropy_coeff</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;entropy_coef&quot;</span><span class="p">)</span>
 
         <span class="c1"># Set default value if None</span>
         <span class="k">if</span> <span class="n">entropy_coeff</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -901,9 +891,11 @@
                 <span class="n">x</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">rsample</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">samples_mc_entropy</span><span class="p">,))</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">x</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">sample</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">samples_mc_entropy</span><span class="p">,))</span>
-            <span class="k">with</span> <span class="n">set_composite_lp_aggregate</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span>
-                <span class="n">dist</span><span class="p">,</span> <span class="n">CompositeDistribution</span>
-            <span class="p">)</span> <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">():</span>
+            <span class="k">with</span> <span class="p">(</span>
+                <span class="n">set_composite_lp_aggregate</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dist</span><span class="p">,</span> <span class="n">CompositeDistribution</span><span class="p">)</span>
+                <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">()</span>
+            <span class="p">):</span>
                 <span class="n">log_prob</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">log_prob</span><span class="p">):</span>
                     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">sample_log_prob</span><span class="p">,</span> <span class="n">NestedKey</span><span class="p">):</span>
@@ -923,9 +915,11 @@
         <span class="p">)</span> <span class="ow">or</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="p">,</span> <span class="s2">&quot;get_dist&quot;</span><span class="p">):</span>
             <span class="c1"># assert tensordict[&#39;log_probs&#39;].requires_grad</span>
             <span class="c1"># assert tensordict[&#39;logits&#39;].requires_grad</span>
-            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network_params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span>
-            <span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional</span> <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">():</span>
+            <span class="k">with</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">actor_network_params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional</span>
+                <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">()</span>
+            <span class="p">):</span>
                 <span class="n">dist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">get_dist</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
             <span class="n">is_composite</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dist</span><span class="p">,</span> <span class="n">CompositeDistribution</span><span class="p">)</span>
 
@@ -1038,9 +1032,11 @@
                     <span class="sa">f</span><span class="s2">&quot;Make sure that the &#39;value_key&#39; passed to PPO exists in the input tensordict.&quot;</span>
                 <span class="p">)</span>
 
-        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_network_params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">critic_network</span>
-        <span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional</span> <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">():</span>
+        <span class="k">with</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">critic_network_params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">critic_network</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional</span>
+            <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">()</span>
+        <span class="p">):</span>
             <span class="n">state_value_td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_network</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
 
         <span class="n">state_value</span> <span class="o">=</span> <span class="n">state_value_td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
@@ -1850,18 +1846,22 @@
         <span class="p">)</span>
         <span class="n">neg_loss</span> <span class="o">=</span> <span class="n">log_weight</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span> <span class="o">*</span> <span class="n">advantage</span>
 
-        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network_params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span>
-        <span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional</span> <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">():</span>
+        <span class="k">with</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">actor_network_params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional</span>
+            <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">()</span>
+        <span class="p">):</span>
             <span class="n">current_dist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">get_dist</span><span class="p">(</span><span class="n">tensordict_copy</span><span class="p">)</span>
         <span class="n">is_composite</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">current_dist</span><span class="p">,</span> <span class="n">CompositeDistribution</span><span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">kl</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">distributions</span><span class="o">.</span><span class="n">kl</span><span class="o">.</span><span class="n">kl_divergence</span><span class="p">(</span><span class="n">previous_dist</span><span class="p">,</span> <span class="n">current_dist</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">NotImplementedError</span><span class="p">:</span>
             <span class="n">x</span> <span class="o">=</span> <span class="n">previous_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">samples_mc_kl</span><span class="p">,))</span>
-            <span class="k">with</span> <span class="n">set_composite_lp_aggregate</span><span class="p">(</span>
-                <span class="kc">False</span>
-            <span class="p">)</span> <span class="k">if</span> <span class="n">is_composite</span> <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">():</span>
+            <span class="k">with</span> <span class="p">(</span>
+                <span class="n">set_composite_lp_aggregate</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">is_composite</span>
+                <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">()</span>
+            <span class="p">):</span>
                 <span class="n">previous_log_prob</span> <span class="o">=</span> <span class="n">previous_dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
                 <span class="n">current_log_prob</span> <span class="o">=</span> <span class="n">current_dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">previous_log_prob</span><span class="p">):</span>

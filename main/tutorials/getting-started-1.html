@@ -297,12 +297,12 @@ a Convolutional Neural Network (CNN) as backbones.</p>
 <p>Similar to how environments interact with instances of
 <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, the modules used to represent policies and
 value functions also do the same. The core idea is simple: encapsulate a
-standard <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> (or any other function) within a class
+standard <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> (or any other function) within a class
 that knows which entries need to be read and passed to the module, and then
 records the results with the assigned entries. To illustrate this, we will
 use the simplest policy possible: a deterministic map from the observation
 space to the action space. For maximum generality, we will use a
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear" title="(in PyTorch v2.9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyLinear</span></code></a> module with the Pendulum environment we
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear" title="(in PyTorch v2.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyLinear</span></code></a> module with the Pendulum environment we
 instantiated in the previous tutorial.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
 
@@ -532,7 +532,7 @@ to <a class="reference internal" href="../reference/generated/torchrl.modules.EG
 <p>To build our explorative policy, we only had to concatenate the
 deterministic policy module with the exploration module within a
 <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> module (which is the analogous
-to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="(in PyTorch v2.9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code></a> in the tensordict realm).</p>
+to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="(in PyTorch v2.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code></a> in the tensordict realm).</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">exploration_policy</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictSequential</span></a><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a><span class="p">,</span> <span class="n">exploration_module</span><span class="p">)</span>
 
 <span class="k">with</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type" title="tensordict.nn.set_interaction_type" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">set_exploration_type</span></a><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType" title="tensordict.nn.InteractionType" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">ExplorationType</span><span class="o">.</span><span class="n">DETERMINISTIC</span></a><span class="p">):</span>
@@ -649,7 +649,7 @@ required by the env);</p></li>
 <li><p>Compare this to the usage of transformers with the Decision Transformers
 examples (see the <code class="docutils literal notranslate"><span class="pre">example</span></code> directory on GitHub).</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.069 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.068 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-getting-started-1-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/c4e061fa0d0af4f742988ea6303991f1/getting-started-1.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">getting-started-1.ipynb</span></code></a></p>

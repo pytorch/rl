@@ -348,7 +348,7 @@ a simple signature.</p>
 <li><p>They are stateful objects: they contain a copy of the trainable parameters
 such that <code class="docutils literal notranslate"><span class="pre">loss_module.parameters()</span></code> gives whatever is needed to train the
 algorithm.</p></li>
-<li><p>They follow the <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> convention: the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.forward" title="(in PyTorch v2.9)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.forward()</span></code></a>
+<li><p>They follow the <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> convention: the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.forward" title="(in PyTorch v2.10)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.forward()</span></code></a>
 method will receive a TensorDict as input that contains all the necessary
 information to return a loss value.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">replay_buffer</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
@@ -885,7 +885,7 @@ value network, trained to estimate the value of a state-action pair, and a
 parametric actor that learns how to select actions that maximize this value.</p>
 <p>Recall that building a TorchRL module requires two steps:</p>
 <ul class="simple">
-<li><p>writing the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> that will be used as network,</p></li>
+<li><p>writing the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> that will be used as network,</p></li>
 <li><p>wrapping the network in a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModule</span></code></a> where the
 data flow is handled by specifying the input and output keys.</p></li>
 </ul>
@@ -1353,26 +1353,26 @@ modules we need.</p>
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>  0%|          | 0/10000 [00:00&lt;?, ?it/s]
-  8%|▊         | 800/10000 [00:00&lt;00:04, 2090.32it/s]
- 16%|█▌        | 1600/10000 [00:02&lt;00:12, 658.31it/s]
- 24%|██▍       | 2400/10000 [00:02&lt;00:07, 976.69it/s]
- 32%|███▏      | 3200/10000 [00:02&lt;00:05, 1272.99it/s]
- 40%|████      | 4000/10000 [00:03&lt;00:03, 1523.97it/s]
- 48%|████▊     | 4800/10000 [00:03&lt;00:03, 1701.12it/s]
- 56%|█████▌    | 5600/10000 [00:03&lt;00:02, 1790.89it/s]
-reward: -2.58 (r0 = -2.62), reward eval: reward:  0.01, reward normalized=-2.31/6.43, grad norm= 99.22, loss_value= 420.44, loss_actor= 14.97, target value: -14.30:  56%|█████▌    | 5600/10000 [00:05&lt;00:02, 1790.89it/s]
-reward: -2.58 (r0 = -2.62), reward eval: reward:  0.01, reward normalized=-2.31/6.43, grad norm= 99.22, loss_value= 420.44, loss_actor= 14.97, target value: -14.30:  64%|██████▍   | 6400/10000 [00:06&lt;00:04, 797.12it/s]
-reward: -1.94 (r0 = -2.62), reward eval: reward:  0.01, reward normalized=-2.98/5.92, grad norm= 223.82, loss_value= 329.47, loss_actor= 15.38, target value: -18.50:  64%|██████▍   | 6400/10000 [00:07&lt;00:04, 797.12it/s]
-reward: -1.94 (r0 = -2.62), reward eval: reward:  0.01, reward normalized=-2.98/5.92, grad norm= 223.82, loss_value= 329.47, loss_actor= 15.38, target value: -18.50:  72%|███████▏  | 7200/10000 [00:08&lt;00:04, 582.04it/s]
-reward: -5.16 (r0 = -2.62), reward eval: reward:  0.01, reward normalized=-2.02/5.13, grad norm= 238.83, loss_value= 217.81, loss_actor= 17.76, target value: -13.13:  72%|███████▏  | 7200/10000 [00:09&lt;00:04, 582.04it/s]
-reward: -5.16 (r0 = -2.62), reward eval: reward:  0.01, reward normalized=-2.02/5.13, grad norm= 238.83, loss_value= 217.81, loss_actor= 17.76, target value: -13.13:  80%|████████  | 8000/10000 [00:10&lt;00:04, 492.51it/s]
-reward: -4.91 (r0 = -2.62), reward eval: reward:  0.01, reward normalized=-2.85/4.83, grad norm= 207.81, loss_value= 157.21, loss_actor= 20.25, target value: -19.11:  80%|████████  | 8000/10000 [00:12&lt;00:04, 492.51it/s]
-reward: -4.91 (r0 = -2.62), reward eval: reward:  0.01, reward normalized=-2.85/4.83, grad norm= 207.81, loss_value= 157.21, loss_actor= 20.25, target value: -19.11:  88%|████████▊ | 8800/10000 [00:12&lt;00:02, 446.78it/s]
-reward: -0.27 (r0 = -2.62), reward eval: reward: -14.49, reward normalized=-2.67/4.93, grad norm= 118.64, loss_value= 224.69, loss_actor= 15.25, target value: -18.43:  88%|████████▊ | 8800/10000 [00:15&lt;00:02, 446.78it/s]
-reward: -0.27 (r0 = -2.62), reward eval: reward: -14.49, reward normalized=-2.67/4.93, grad norm= 118.64, loss_value= 224.69, loss_actor= 15.25, target value: -18.43:  96%|█████████▌| 9600/10000 [00:16&lt;00:01, 343.30it/s]
-reward: -12.25 (r0 = -2.62), reward eval: reward: -14.49, reward normalized=-2.87/5.66, grad norm= 291.77, loss_value= 256.18, loss_actor= 18.78, target value: -19.67:  96%|█████████▌| 9600/10000 [00:17&lt;00:01, 343.30it/s]
-reward: -12.25 (r0 = -2.62), reward eval: reward: -14.49, reward normalized=-2.87/5.66, grad norm= 291.77, loss_value= 256.18, loss_actor= 18.78, target value: -19.67: : 10400it [00:19, 319.05it/s]
-reward: -4.48 (r0 = -2.62), reward eval: reward: -14.49, reward normalized=-2.52/7.18, grad norm= 409.25, loss_value= 501.84, loss_actor= 18.00, target value: -17.10: : 10400it [00:21, 319.05it/s]
+  8%|▊         | 800/10000 [00:00&lt;00:04, 2273.66it/s]
+ 16%|█▌        | 1600/10000 [00:02&lt;00:12, 689.38it/s]
+ 24%|██▍       | 2400/10000 [00:02&lt;00:07, 1023.58it/s]
+ 32%|███▏      | 3200/10000 [00:02&lt;00:05, 1327.80it/s]
+ 40%|████      | 4000/10000 [00:03&lt;00:03, 1588.36it/s]
+ 48%|████▊     | 4800/10000 [00:03&lt;00:02, 1764.39it/s]
+ 56%|█████▌    | 5600/10000 [00:03&lt;00:02, 1932.45it/s]
+reward: -1.97 (r0 = -2.31), reward eval: reward: -0.01, reward normalized=-2.50/6.15, grad norm= 77.90, loss_value= 364.03, loss_actor= 14.62, target value: -15.97:  56%|█████▌    | 5600/10000 [00:05&lt;00:02, 1932.45it/s]
+reward: -1.97 (r0 = -2.31), reward eval: reward: -0.01, reward normalized=-2.50/6.15, grad norm= 77.90, loss_value= 364.03, loss_actor= 14.62, target value: -15.97:  64%|██████▍   | 6400/10000 [00:06&lt;00:04, 800.09it/s]
+reward: -0.98 (r0 = -2.31), reward eval: reward: -0.01, reward normalized=-2.43/5.88, grad norm= 89.77, loss_value= 278.06, loss_actor= 11.78, target value: -14.46:  64%|██████▍   | 6400/10000 [00:07&lt;00:04, 800.09it/s]
+reward: -0.98 (r0 = -2.31), reward eval: reward: -0.01, reward normalized=-2.43/5.88, grad norm= 89.77, loss_value= 278.06, loss_actor= 11.78, target value: -14.46:  72%|███████▏  | 7200/10000 [00:08&lt;00:04, 577.65it/s]
+reward: -4.84 (r0 = -2.31), reward eval: reward: -0.01, reward normalized=-2.51/4.80, grad norm= 68.87, loss_value= 151.44, loss_actor= 16.01, target value: -16.09:  72%|███████▏  | 7200/10000 [00:09&lt;00:04, 577.65it/s]
+reward: -4.84 (r0 = -2.31), reward eval: reward: -0.01, reward normalized=-2.51/4.80, grad norm= 68.87, loss_value= 151.44, loss_actor= 16.01, target value: -16.09:  80%|████████  | 8000/10000 [00:10&lt;00:04, 485.20it/s]
+reward: -4.93 (r0 = -2.31), reward eval: reward: -0.01, reward normalized=-1.86/5.44, grad norm= 223.69, loss_value= 162.27, loss_actor= 16.69, target value: -12.81:  80%|████████  | 8000/10000 [00:12&lt;00:04, 485.20it/s]
+reward: -4.93 (r0 = -2.31), reward eval: reward: -0.01, reward normalized=-1.86/5.44, grad norm= 223.69, loss_value= 162.27, loss_actor= 16.69, target value: -12.81:  88%|████████▊ | 8800/10000 [00:12&lt;00:02, 438.22it/s]
+reward: -5.20 (r0 = -2.31), reward eval: reward: -5.37, reward normalized=-2.89/4.86, grad norm= 69.21, loss_value= 209.41, loss_actor= 19.94, target value: -19.75:  88%|████████▊ | 8800/10000 [00:15&lt;00:02, 438.22it/s]
+reward: -5.20 (r0 = -2.31), reward eval: reward: -5.37, reward normalized=-2.89/4.86, grad norm= 69.21, loss_value= 209.41, loss_actor= 19.94, target value: -19.75:  96%|█████████▌| 9600/10000 [00:16&lt;00:01, 337.50it/s]
+reward: -5.04 (r0 = -2.31), reward eval: reward: -5.37, reward normalized=-3.31/5.38, grad norm= 135.68, loss_value= 278.72, loss_actor= 18.94, target value: -22.77:  96%|█████████▌| 9600/10000 [00:17&lt;00:01, 337.50it/s]
+reward: -5.04 (r0 = -2.31), reward eval: reward: -5.37, reward normalized=-3.31/5.38, grad norm= 135.68, loss_value= 278.72, loss_actor= 18.94, target value: -22.77: : 10400it [00:19, 314.25it/s]
+reward: -4.86 (r0 = -2.31), reward eval: reward: -5.37, reward normalized=-3.40/5.37, grad norm= 110.74, loss_value= 257.43, loss_actor= 20.20, target value: -23.01: : 10400it [00:21, 314.25it/s]
 </pre></div>
 </div>
 </section>
@@ -1416,7 +1416,7 @@ loss component;</p></li>
 <li><p>Using <cite>&#64;dispatch</cite> (see <a class="reference external" href="https://github.com/pytorch/rl/pull/1230">[Feature] Distpatch IQL loss module</a>.)</p></li>
 <li><p>Allowing flexible TensorDict keys.</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 28.216 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 28.255 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-coding-ddpg-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/7ef773e36507adbc389133424f663224/coding_ddpg.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">coding_ddpg.ipynb</span></code></a></p>

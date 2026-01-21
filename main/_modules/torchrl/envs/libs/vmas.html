@@ -243,7 +243,6 @@
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">importlib.util</span>
-<span class="kn">import</span> <span class="nn">warnings</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">LazyStackedTensorDict</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
@@ -387,9 +386,10 @@
 <span class="sd">            input/output. See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.</span>
 <span class="sd">        agent_names (list of str): names of the agent in the environment</span>
 <span class="sd">        agent_names_to_indices_map (Dict[str, int]): dictionary mapping agent names to their index in the environment</span>
-<span class="sd">        unbatched_action_spec (TensorSpec): version of the spec without the vectorized dimension</span>
-<span class="sd">        unbatched_observation_spec (TensorSpec): version of the spec without the vectorized dimension</span>
-<span class="sd">        unbatched_reward_spec (TensorSpec): version of the spec without the vectorized dimension</span>
+<span class="sd">        full_action_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension</span>
+<span class="sd">        full_observation_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension</span>
+<span class="sd">        full_reward_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension</span>
+<span class="sd">        full_done_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension</span>
 <span class="sd">        het_specs (bool): whether the environment has any lazy spec</span>
 <span class="sd">        het_specs_map (Dict[str, bool]): dictionary mapping each group to a flag representing of the group has lazy specs</span>
 <span class="sd">        available_envs (List[str]): the list of the scenarios available to build.</span>
@@ -554,7 +554,8 @@
         <span class="k">return</span> <span class="n">group_map</span>
 
     <span class="k">def</span> <span class="nf">_make_specs</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">:</span> <span class="n">vmas</span><span class="o">.</span><span class="n">simulator</span><span class="o">.</span><span class="n">environment</span><span class="o">.</span><span class="n">environment</span><span class="o">.</span><span class="n">Environment</span>  <span class="c1"># noqa</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">env</span><span class="p">:</span> <span class="n">vmas</span><span class="o">.</span><span class="n">simulator</span><span class="o">.</span><span class="n">environment</span><span class="o">.</span><span class="n">environment</span><span class="o">.</span><span class="n">Environment</span><span class="p">,</span>  <span class="c1"># noqa</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="c1"># Create and check group map</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">agent_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">agent</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">agent</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">agents</span><span class="p">]</span>
@@ -606,38 +607,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec_unbatched</span> <span class="o">=</span> <span class="n">full_observation_spec_unbatched</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">full_reward_spec_unbatched</span> <span class="o">=</span> <span class="n">full_reward_spec_unbatched</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">full_done_spec_unbatched</span> <span class="o">=</span> <span class="n">full_done_spec_unbatched</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">unbatched_action_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-            <span class="s2">&quot;unbatched_action_spec is deprecated and will be removed in v0.9. &quot;</span>
-            <span class="s2">&quot;Please use full_action_spec_unbatched instead.&quot;</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_action_spec_unbatched</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">unbatched_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-            <span class="s2">&quot;unbatched_observation_spec is deprecated and will be removed in v0.9. &quot;</span>
-            <span class="s2">&quot;Please use full_observation_spec_unbatched instead.&quot;</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec_unbatched</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">unbatched_reward_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-            <span class="s2">&quot;unbatched_reward_spec is deprecated and will be removed in v0.9. &quot;</span>
-            <span class="s2">&quot;Please use full_reward_spec_unbatched instead.&quot;</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_reward_spec_unbatched</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">unbatched_done_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-            <span class="s2">&quot;unbatched_done_spec is deprecated and will be removed in v0.9. &quot;</span>
-            <span class="s2">&quot;Please use full_done_spec_unbatched instead.&quot;</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_done_spec_unbatched</span>
 
     <span class="k">def</span> <span class="nf">_make_unbatched_group_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">group</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
         <span class="c1"># Agent specs</span>
@@ -945,9 +914,10 @@
 <span class="sd">            input/output. See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.</span>
 <span class="sd">        agent_names (list of str): names of the agent in the environment</span>
 <span class="sd">        agent_names_to_indices_map (Dict[str, int]): dictionary mapping agent names to their index in the environment</span>
-<span class="sd">        unbatched_action_spec (TensorSpec): version of the spec without the vectorized dimension</span>
-<span class="sd">        unbatched_observation_spec (TensorSpec): version of the spec without the vectorized dimension</span>
-<span class="sd">        unbatched_reward_spec (TensorSpec): version of the spec without the vectorized dimension</span>
+<span class="sd">        full_action_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension</span>
+<span class="sd">        full_observation_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension</span>
+<span class="sd">        full_reward_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension</span>
+<span class="sd">        full_done_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension</span>
 <span class="sd">        het_specs (bool): whether the environment has any lazy spec</span>
 <span class="sd">        het_specs_map (Dict[str, bool]): dictionary mapping each group to a flag representing of the group has lazy specs</span>
 <span class="sd">        available_envs (List[str]): the list of the scenarios available to build.</span>

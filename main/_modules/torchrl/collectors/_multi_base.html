@@ -605,7 +605,6 @@
         <span class="n">use_buffers</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">replay_buffer</span><span class="p">:</span> <span class="n">ReplayBuffer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">extend_buffer</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">replay_buffer_chunk</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">local_init_rb</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">trust_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">compile_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -654,9 +653,7 @@
         <span class="c1"># Set up replay buffer</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span> <span class="o">=</span> <span class="n">use_buffers</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">replay_buffer</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_setup_multi_replay_buffer</span><span class="p">(</span>
-            <span class="n">local_init_rb</span><span class="p">,</span> <span class="n">replay_buffer</span><span class="p">,</span> <span class="n">replay_buffer_chunk</span><span class="p">,</span> <span class="n">extend_buffer</span>
-        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_setup_multi_replay_buffer</span><span class="p">(</span><span class="n">local_init_rb</span><span class="p">,</span> <span class="n">replay_buffer</span><span class="p">,</span> <span class="n">extend_buffer</span><span class="p">)</span>
 
         <span class="c1"># Set up policy and weights</span>
         <span class="k">if</span> <span class="n">trust_policy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -795,7 +792,6 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">local_init_rb</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">replay_buffer</span><span class="p">:</span> <span class="n">ReplayBuffer</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">replay_buffer_chunk</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">extend_buffer</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Set up replay buffer for multi-process collector.&quot;&quot;&quot;</span>
@@ -812,17 +808,6 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_check_replay_buffer_init</span><span class="p">()</span>
 
-        <span class="k">if</span> <span class="n">replay_buffer_chunk</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">extend_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">replay_buffer_chunk</span> <span class="o">=</span> <span class="n">extend_buffer</span>
-                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                    <span class="s2">&quot;The replay_buffer_chunk is deprecated and replaced by extend_buffer. This argument will disappear in v0.10.&quot;</span><span class="p">,</span>
-                    <span class="ne">DeprecationWarning</span><span class="p">,</span>
-                <span class="p">)</span>
-            <span class="k">elif</span> <span class="n">extend_buffer</span> <span class="o">!=</span> <span class="n">replay_buffer_chunk</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;conflicting values for replay_buffer_chunk and extend_buffer.&quot;</span>
-                <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">extend_buffer</span> <span class="o">=</span> <span class="n">extend_buffer</span>
 
         <span class="k">if</span> <span class="p">(</span>

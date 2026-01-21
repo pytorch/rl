@@ -440,7 +440,7 @@ backbone, an <a class="reference internal" href="../reference/generated/torchrl.
 action values.</p>
 <section id="convolutional-network">
 <h3>Convolutional network<a class="headerlink" href="#convolutional-network" title="Link to this heading">¶</a></h3>
-<p>We build a convolutional network flanked with a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.AdaptiveAvgPool2d.html#torch.nn.AdaptiveAvgPool2d" title="(in PyTorch v2.9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.AdaptiveAvgPool2d</span></code></a>
+<p>We build a convolutional network flanked with a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.AdaptiveAvgPool2d.html#torch.nn.AdaptiveAvgPool2d" title="(in PyTorch v2.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.AdaptiveAvgPool2d</span></code></a>
 that will squash the output in a vector of size 64. The <a class="reference internal" href="../reference/generated/torchrl.modules.ConvNet.html#torchrl.modules.ConvNet" title="torchrl.modules.ConvNet"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConvNet</span></code></a>
 can assist us with this:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">feature</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">Mod</span></a><span class="p">(</span>
@@ -645,7 +645,7 @@ This decay is achieved via a call to <a class="reference internal" href="../refe
 <section id="using-the-model-for-the-loss">
 <h3>Using the model for the loss<a class="headerlink" href="#using-the-model-for-the-loss" title="Link to this heading">¶</a></h3>
 <p>The model as we’ve built it is well-equipped to be used in sequential settings.
-However, the class <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LSTM.html#torch.nn.LSTM" title="(in PyTorch v2.9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.LSTM</span></code></a> can use a cuDNN-optimized backend
+However, the class <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LSTM.html#torch.nn.LSTM" title="(in PyTorch v2.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.LSTM</span></code></a> can use a cuDNN-optimized backend
 to run the RNN sequence faster on GPU device. We would not want to miss
 such an opportunity to speed up our training loop!</p>
 <p>By default, torchrl losses will use this when executing any
@@ -792,10 +792,10 @@ every 50 data collection iterations, and plot the results after training.</p>
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>  0%|          | 0/200 [00:00&lt;?, ?it/s]
- 25%|██▌       | 50/200 [00:00&lt;00:01, 124.53it/s]
- 50%|█████     | 100/200 [00:00&lt;00:00, 127.69it/s]
- 75%|███████▌  | 150/200 [00:01&lt;00:00, 129.99it/s]
-100%|██████████| 200/200 [00:01&lt;00:00, 130.06it/s]
+ 25%|██▌       | 50/200 [00:00&lt;00:01, 124.95it/s]
+ 50%|█████     | 100/200 [00:00&lt;00:00, 127.97it/s]
+ 75%|███████▌  | 150/200 [00:01&lt;00:00, 127.52it/s]
+100%|██████████| 200/200 [00:01&lt;00:00, 127.64it/s]
 </pre></div>
 </div>
 <p>Let’s plot our results:</p>
@@ -827,7 +827,7 @@ the data</p></li>
 <ul class="simple">
 <li><p>The TorchRL documentation can be found <a class="reference external" href="https://pytorch.org/rl/">here</a>.</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 5.747 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 5.762 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-dqn-with-rnn-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/28be785bad9a380ed2a853d865b074b9/dqn_with_rnn.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">dqn_with_rnn.ipynb</span></code></a></p>

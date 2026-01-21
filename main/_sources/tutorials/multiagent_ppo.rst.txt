@@ -1028,7 +1028,7 @@ return the policy and value losses.
         actor_network=policy,
         critic_network=critic,
         clip_epsilon=clip_epsilon,
-        entropy_coef=entropy_eps,
+        entropy_coeff=entropy_eps,
         normalize_advantage=False,  # Important to avoid normalizing across the agent dimension
     )
     loss_module.set_keys(  # We have to tell the loss where to find the keys
@@ -1147,7 +1147,7 @@ The steps include:
 
  .. code-block:: none
 
-    episode_reward_mean = 0:   0%|          | 0/5 [00:00<?, ?it/s]    episode_reward_mean = -0.8804718255996704:  20%|██        | 1/5 [00:05<00:20,  5.22s/it]    episode_reward_mean = 0.43637800216674805:  40%|████      | 2/5 [00:10<00:15,  5.21s/it]    episode_reward_mean = 1.0605204105377197:  60%|██████    | 3/5 [00:15<00:10,  5.25s/it]     episode_reward_mean = 1.4579030275344849:  80%|████████  | 4/5 [00:21<00:05,  5.26s/it]    episode_reward_mean = 1.768986701965332: 100%|██████████| 5/5 [00:26<00:00,  5.28s/it] 
+    episode_reward_mean = 0:   0%|          | 0/5 [00:00<?, ?it/s]    episode_reward_mean = -1.0264644622802734:  20%|██        | 1/5 [00:05<00:20,  5.25s/it]    episode_reward_mean = -0.07789897918701172:  40%|████      | 2/5 [00:10<00:15,  5.19s/it]    episode_reward_mean = 0.7680268883705139:  60%|██████    | 3/5 [00:15<00:10,  5.19s/it]      episode_reward_mean = 1.3569982051849365:  80%|████████  | 4/5 [00:20<00:05,  5.19s/it]    episode_reward_mean = 1.866979956626892: 100%|██████████| 5/5 [00:25<00:00,  5.20s/it] 
 
 
 
@@ -1278,7 +1278,7 @@ Here are a few videos of some possible scenarios you can try in VMAS.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 26.513 seconds)
+   **Total running time of the script:** (0 minutes 26.201 seconds)
 
 
 .. _sphx_glr_download_tutorials_multiagent_ppo.py:

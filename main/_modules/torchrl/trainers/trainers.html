@@ -439,7 +439,6 @@
         <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-
         <span class="c1"># objects</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">frame_skip</span> <span class="o">=</span> <span class="n">frame_skip</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">collector</span> <span class="o">=</span> <span class="n">collector</span>
@@ -1115,7 +1114,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_pbar</span><span class="o">.</span><span class="n">set_description</span><span class="p">(</span>
                 <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
                     <span class="p">[</span>
-                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_pbar_str</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="w"> </span><span class="si">:{</span><span class="n">TYPE_DESCR</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_pbar_str</span><span class="p">[</span><span class="n">key</span><span class="p">]),</span><span class="w"> </span><span class="s1">&#39;4.4f&#39;</span><span class="p">)</span><span class="si">}}</span><span class="s2">&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_pbar_str</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="si">:{</span><span class="n">TYPE_DESCR</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_pbar_str</span><span class="p">[</span><span class="n">key</span><span class="p">]),</span><span class="w"> </span><span class="s1">&#39;4.4f&#39;</span><span class="p">)</span><span class="si">}}</span><span class="s2">&quot;</span>
                         <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_pbar_str</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
                     <span class="p">]</span>
                 <span class="p">)</span>
@@ -1624,26 +1623,6 @@
 
 
 
-<span class="k">class</span> <span class="nc">LogReward</span><span class="p">(</span><span class="n">LogScalar</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Deprecated class. Use LogScalar instead.&quot;&quot;&quot;</span>
-
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;r_training&quot;</span><span class="p">,</span>
-        <span class="n">log_pbar</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="n">reward_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">tuple</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">):</span>
-        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-            <span class="s2">&quot;The &#39;LogReward&#39; class is deprecated and will be removed in v0.9. Please use &#39;LogScalar&#39; instead.&quot;</span><span class="p">,</span>
-            <span class="ne">DeprecationWarning</span><span class="p">,</span>
-            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="c1"># Convert old API to new API</span>
-        <span class="k">if</span> <span class="n">reward_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">reward_key</span> <span class="o">=</span> <span class="n">REWARD_KEY</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="n">reward_key</span><span class="p">,</span> <span class="n">logname</span><span class="o">=</span><span class="n">logname</span><span class="p">,</span> <span class="n">log_pbar</span><span class="o">=</span><span class="n">log_pbar</span><span class="p">)</span>
-
-
 <div class="viewcode-block" id="RewardNormalizer">
 <a class="viewcode-back" href="../../../reference/generated/torchrl.trainers.RewardNormalizer.html#torchrl.trainers.RewardNormalizer">[docs]</a>
 <span class="k">class</span> <span class="nc">RewardNormalizer</span><span class="p">(</span><span class="n">TrainerHookBase</span><span class="p">):</span>
@@ -2054,44 +2033,6 @@
         <span class="p">)</span></div>
 </div>
 
-
-
-<span class="k">class</span> <span class="nc">Recorder</span><span class="p">(</span><span class="n">LogValidationReward</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Deprecated class. Use LogValidationReward instead.&quot;&quot;&quot;</span>
-
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="o">*</span><span class="p">,</span>
-        <span class="n">record_interval</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-        <span class="n">record_frames</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-        <span class="n">frame_skip</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
-        <span class="n">policy_exploration</span><span class="p">:</span> <span class="n">TensorDictModule</span><span class="p">,</span>
-        <span class="n">environment</span><span class="p">:</span> <span class="n">EnvBase</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">exploration_type</span><span class="p">:</span> <span class="n">ExplorationType</span> <span class="o">=</span> <span class="n">ExplorationType</span><span class="o">.</span><span class="n">RANDOM</span><span class="p">,</span>
-        <span class="n">log_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">out_keys</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">suffix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">log_pbar</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="n">recorder</span><span class="p">:</span> <span class="n">EnvBase</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-            <span class="s2">&quot;The &#39;Recorder&#39; class is deprecated and will be removed in v0.9. Please use &#39;LogValidationReward&#39; instead.&quot;</span><span class="p">,</span>
-            <span class="ne">DeprecationWarning</span><span class="p">,</span>
-            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
-            <span class="n">record_interval</span><span class="o">=</span><span class="n">record_interval</span><span class="p">,</span>
-            <span class="n">record_frames</span><span class="o">=</span><span class="n">record_frames</span><span class="p">,</span>
-            <span class="n">frame_skip</span><span class="o">=</span><span class="n">frame_skip</span><span class="p">,</span>
-            <span class="n">policy_exploration</span><span class="o">=</span><span class="n">policy_exploration</span><span class="p">,</span>
-            <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span>
-            <span class="n">exploration_type</span><span class="o">=</span><span class="n">exploration_type</span><span class="p">,</span>
-            <span class="n">log_keys</span><span class="o">=</span><span class="n">log_keys</span><span class="p">,</span>
-            <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">,</span>
-            <span class="n">suffix</span><span class="o">=</span><span class="n">suffix</span><span class="p">,</span>
-            <span class="n">log_pbar</span><span class="o">=</span><span class="n">log_pbar</span><span class="p">,</span>
-            <span class="n">recorder</span><span class="o">=</span><span class="n">recorder</span><span class="p">,</span>
-        <span class="p">)</span>
 
 
 <span class="k">def</span> <span class="nf">_resolve_module</span><span class="p">(</span><span class="n">trainer</span><span class="p">:</span> <span class="n">Trainer</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
