@@ -31,7 +31,13 @@ This document tracks known issues with the LLM tests that need to be addressed i
 - **Issue**: AsyncEnvPool was not properly propagating batch_size from child environments
 - **Status**: Fixed in main (merged)
 
-### 6. Ray + vLLM v1 "bundles" KeyError
+### 6. vLLM logprobs type error
+- **Issue**: `msgspec.ValidationError: Expected `int | null`, got `bool` - at `$[3].logprobs``
+- **Root Cause**: TorchRL was passing boolean to vLLM's `logprobs` parameter, but vLLM expects `int | None`
+- **Fix Applied**: Convert bool to int (1 if True, None if False) in vllm_wrapper.py
+- **Status**: Fixed
+
+### 7. Ray + vLLM v1 "bundles" KeyError
 - **Issue**: `KeyError: 'bundles'` during Ray async engine initialization
 - **Root Cause**: Ray workers not connecting to same Ray cluster (vLLM issue #19123, fixed in PR #21540)
 - **Fix Applied**: 
