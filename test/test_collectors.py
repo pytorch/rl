@@ -1904,6 +1904,42 @@ if __name__ == "__main__":
         finally:
             collector.shutdown()
 
+    def test_collector_next_method(self):
+        """Non-regression test: next() should work correctly after __iter__.
+
+        Previously, `__iter__` set `_iterator = True` as a flag, but `next()` expected
+        `_iterator` to be either `None` or an actual iterator object. This test ensures
+        that calling `next()` works correctly.
+        """
+        env = ContinuousActionVecMockEnv()
+        policy = RandomPolicy(env.action_spec)
+
+        collector = Collector(
+            env,
+            policy,
+            total_frames=500,
+            frames_per_batch=50,
+        )
+        try:
+            # Test calling next() multiple times
+            data1 = collector.next()
+            assert data1 is not None, "next() should return data"
+            assert data1.numel() == 50, f"Expected 50 frames, got {data1.numel()}"
+
+            data2 = collector.next()
+            assert data2 is not None, "second next() should return data"
+            assert data2.numel() == 50, f"Expected 50 frames, got {data2.numel()}"
+
+            # Test that we can still iterate after calling next()
+            count = 0
+            for data in collector:
+                assert data.numel() == 50
+                count += 1
+                if count >= 2:
+                    break
+        finally:
+            collector.shutdown()
+
 
 class TestCollectorDevices:
     class DeviceLessEnv(EnvBase):

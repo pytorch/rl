@@ -3168,11 +3168,14 @@ class TestActorSharing:
             assert isinstance(result2["text"].response, str)
 
         finally:
-            # Cleanup
+            # Cleanup: wrappers, GPU memory, and Ray
             try:
                 del wrapper1
                 del wrapper2
                 gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                ray.shutdown()
             except Exception:
                 pass
 

@@ -26,7 +26,9 @@ conda deactivate && conda activate ./env
 # Run pytest with:
 # - --runslow: Run slow tests that would otherwise skip
 # - --ignore: Exclude tests requiring unavailable dependencies (mlgym not on PyPI)
+# - --timeout: 5 minute timeout per test to prevent hangs
 # Note: Removed --error-for-skips as many LLM tests use pytest.skip for optional dependencies
-pytest test/llm -vvv --instafail --durations 600 --capture no --exitfirst \
+# Note: Removed --exitfirst to run all tests and collect all failures
+pytest test/llm -vvv --instafail --durations 600 --capture no --timeout=300 \
     --runslow \
     --ignore=test/llm/libs/test_mlgym.py
