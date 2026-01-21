@@ -361,8 +361,18 @@ class VecNormV2(Transform):
         if self.stateful and self._loc is not None:
             self._loc = self._loc.apply(fn)
             self._var = self._var.apply(fn)
-            # Move _count to same device as _loc (but preserve its int dtype)
-            self._count = self._count.to(device=self._loc.device)
+            # Move _count to same device as _loc, but preserve its int dtype.
+            # We extract the device from an actual leaf tensor because TensorDict.device
+            # can be stale after .apply(fn) moves the leaves.
+            iterator = iter(self._loc.values(True, True))
+            leaf_tensor = next(iterator)
+            while not isinstance(leaf_tensor, torch.Tensor):
+                leaf_tensor = next(iterator)
+            target_device = leaf_tensor.device
+            if isinstance(self._count, TensorDictBase):
+                self._count = self._count.to(device=target_device)
+            else:
+                self._count = self._count.to(device=target_device)
 
         return self
 
