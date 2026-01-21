@@ -346,10 +346,11 @@ class TestLLMCollector:
             assert has_found_one_with_more_steps
         assert collector._frames >= total_steps
 
-    @pytest.mark.skip(
+    @pytest.mark.xfail(
         reason="AsyncEnvPool batch_size handling with LLMCollector yield_completed_trajectories "
         "needs architectural fix. AsyncEnvPool should report batch_size=[num_envs, *child_batch_size] "
-        "but LLMCollector only supports single-dim batch sizes. See PR #3360 for context."
+        "but LLMCollector only supports single-dim batch sizes. See PR #3360 for context.",
+        strict=False,  # Allow passing if behavior is fixed
     )
     @pytest.mark.slow
     @pytest.mark.parametrize("rb", [False, True])
