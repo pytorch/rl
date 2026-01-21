@@ -136,11 +136,7 @@ from torchrl.envs.transforms.transforms import (
 from torchrl.envs.transforms.vc1 import _has_vc
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs, MarlGroupMapType, step_mdp
-from torchrl.modules import (
-    GRUModule,
-    LSTMModule,
-    RandomPolicy,
-)
+from torchrl.modules import GRUModule, LSTMModule, RandomPolicy
 from torchrl.modules.utils import get_primers_from_module
 from torchrl.record.recorder import VideoRecorder
 
