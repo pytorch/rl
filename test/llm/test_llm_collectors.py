@@ -11,7 +11,6 @@ import time
 
 import pytest
 import torch
-from mocking_classes_llm import DummyStrDataLoader
 from tensordict import set_list_to_stack
 from torchrl import logger as torchrl_logger
 from torchrl.collectors.llm import LLMCollector
@@ -21,6 +20,7 @@ from torchrl.envs import AsyncEnvPool, StepCounter
 from torchrl.envs.llm.chat import ChatEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from torchrl.modules.llm.backends import make_vllm_worker
+from torchrl.testing import DummyStrDataLoader
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
