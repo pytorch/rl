@@ -10,6 +10,7 @@ import importlib
 import warnings
 from contextlib import nullcontext
 from copy import copy
+from functools import partial
 from types import ModuleType
 from warnings import warn
 
@@ -36,7 +37,6 @@ from torchrl.data.tensor_specs import (
     Unbounded,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict, torch_to_numpy_dtype_dict
-from torchrl.envs.batched_envs import CloudpickleWrapper
 from torchrl.envs.common import _EnvPostInit
 from torchrl.envs.gym_like import default_info_dict_reader, GymLikeEnv
 from torchrl.envs.utils import _classproperty
@@ -818,6 +818,17 @@ def _is_from_pixels(env):
 class _GymAsyncMeta(_EnvPostInit):
     def __call__(cls, *args, **kwargs):
         missing_obs_value = kwargs.pop("missing_obs_value", None)
+        num_workers = kwargs.pop("num_workers", 1)
+
+        if cls.__name__ == "GymEnv" and num_workers > 1:
+            from torchrl.envs import EnvCreator, ParallelEnv
+
+            env_name = args[0] if args else kwargs.get("env_name")
+            env_kwargs = kwargs.copy()
+            env_kwargs.pop("env_name", None)
+            make_env = partial(cls, env_name, **env_kwargs)
+            return ParallelEnv(num_workers, EnvCreator(make_env))
+
         instance: GymWrapper = super().__call__(*args, **kwargs)
 
         # before gym 0.22, there was no final_observation
@@ -1719,6 +1730,15 @@ class GymEnv(GymWrapper):
         num_envs (int, optional): the number of envs to run in parallel. Defaults to
             ``None`` (a single env is to be run). :class:`~gym.vector.AsyncVectorEnv`
             will be used by default.
+        num_workers (int, optional): number of top-level worker subprocesses used to create/run
+            multiple :class:`GymEnv` instances in parallel (handled by the metaclass
+            :class:`_GymAsyncMeta`). When ``num_workers > 1``, a lazy
+            :class:`~torchrl.envs.ParallelEnv` is returned whose factory preserves the original
+            `GymEnv` kwargs. You can modify the ParallelEnv construction/configuration before
+            it starts by calling :meth:`~torchrl.envs.batched_envs.BatchedEnvBase.configure_parallel`
+            on the returned object (for example: ``env.configure_parallel(use_buffers=True, num_threads=2)``).
+            When both ``num_workers`` and ``num_envs`` are greater than 1, the total number of
+            environments executed in parallel is ``num_workers * num_envs``. Defaults to ``1``.
         disable_env_checker (bool, optional): for gym > 0.24 only. If ``True`` (default
             for these versions), the environment checker won't be run.
         from_pixels (bool, optional): if ``True``, an attempt to return the pixel
@@ -1783,6 +1803,33 @@ class GymEnv(GymWrapper):
             is_shared=False)
         >>> print(env.available_envs)
         ['ALE/Adventure-ram-v5', 'ALE/Adventure-v5', 'ALE/AirRaid-ram-v5', 'ALE/AirRaid-v5', 'ALE/Alien-ram-v5', 'ALE/Alien-v5',
+
+        To run multiple environments in parallel:
+        >>> from torchrl.envs import GymEnv
+        >>> env = GymEnv("Pendulum-v1", num_workers=4)
+        >>> td_reset = env.reset()
+        >>> td = env.rand_step(td_reset)
+        >>> print(td)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([4]),
+                    device=None,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                terminated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([4]),
+            device=None,
+            is_shared=False)
 
     .. note::
         If both `OpenAI/gym` and `gymnasium` are present in the virtual environment,
@@ -1922,14 +1969,8 @@ class GymEnv(GymWrapper):
                     raise err
         env = super()._build_env(env, pixels_only=pixels_only, from_pixels=from_pixels)
         if num_envs > 0:
-            try:
-                env = self._async_env([CloudpickleWrapper(lambda: env)] * num_envs)
-            except RuntimeError:
-                # It would fail if the environment is not pickable. In that case,
-                # delegating environment instantiation to each subprocess as a fallback.
-                env = self._async_env(
-                    [lambda: self.lib.make(env_name, **kwargs)] * num_envs
-                )
+            make_fn = partial(self.lib.make, env_name, **kwargs)
+            env = self._async_env([make_fn] * num_envs)
             self.batch_size = torch.Size([num_envs, *self.batch_size])
         return env
 

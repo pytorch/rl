@@ -219,9 +219,11 @@ class LLMCollector(Collector):
         self.yield_only_last_steps = yield_only_last_steps
         self.verbose = verbose
         if self.yield_completed_trajectories:
-            if len(self.env.batch_size) != 1:
+            # For async envs, we route by env_id so we only care about batch_size[0].
+            # For non-async envs, we need exactly one batch dimension.
+            if not isinstance(self.env, AsyncEnvPool) and len(self.env.batch_size) != 1:
                 raise ValueError(
-                    "`yield_only_last_steps` only works with envs that have a single batch dimension. Got "
+                    "`yield_completed_trajectories` only works with envs that have a single batch dimension. Got "
                     f"env.batch_size={self.env.batch_size}."
                 )
             self._yield_queues = [deque() for _ in range(self.env.batch_size[0])]

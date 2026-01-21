@@ -422,11 +422,9 @@ The result is""",
         from transformers import AutoTokenizer
 
         try:
-            tokenizer = AutoTokenizer.from_pretrained(
-                "meta-llama/Llama-4-Scout-17B-16E-Instruct"
-            )
+            tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
         except Exception:
-            pytest.skip("Could not load Llama tokenizer")
+            pytest.xfail("Could not load Llama tokenizer - model may be gated")
 
         history = History.from_text(test_case, chat_template_name="llama")
         proc = history.apply_chat_template(
@@ -522,7 +520,7 @@ The result is""",
         [
             ("Qwen/Qwen2.5-0.5B", "qwen"),
             ("microsoft/phi-2", "chatml_format"),
-            ("mosaicml/mpt-7b-instruct", "chatml_format"),
+            ("HuggingFaceH4/zephyr-7b-beta", "chatml_format"),
             ("facebook/opt-125m", "chatml_format"),
             ("gpt2", "chatml_format"),
             ("EleutherAI/pythia-70m", "chatml_format"),
@@ -800,7 +798,7 @@ The result is""",
     @pytest.mark.parametrize(
         "tokenizer_name",
         [
-            "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+            "Qwen/Qwen2.5-0.5B-Instruct",
             "Qwen/Qwen2.5-0.5B",
             "microsoft/phi-2",
         ],
@@ -878,7 +876,7 @@ The result is""",
         [
             "Qwen/Qwen2.5-0.5B",
             "microsoft/phi-2",
-            "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+            "Qwen/Qwen2.5-0.5B-Instruct",
         ],
     )
     @pytest.mark.parametrize(
