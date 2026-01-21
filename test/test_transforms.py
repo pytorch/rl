@@ -123,8 +123,8 @@ from torchrl.envs import (
 from torchrl.envs.libs.dm_control import _has_dm_control
 from torchrl.envs.libs.gym import _has_gym, GymEnv, set_gym_backend
 from torchrl.envs.libs.unity_mlagents import _has_unity_mlagents
+from torchrl.envs.llm import KLRewardTransform
 from torchrl.envs.transforms import ModuleTransform, VecNorm
-from torchrl.envs.transforms.llm import KLRewardTransform
 from torchrl.envs.transforms.module import RayModuleTransform
 from torchrl.envs.transforms.r3m import _R3MNet
 from torchrl.envs.transforms.transforms import (
@@ -846,7 +846,6 @@ class TestCatFrames(TransformBase):
     def test_catframes_batching(
         self, batched_class, break_when_any_done, maybe_fork_ParallelEnv
     ):
-
         from torchrl.testing import CARTPOLE_VERSIONED
 
         if batched_class is ParallelEnv:
@@ -4165,7 +4164,9 @@ class TestDoubleToFloat(TransformBase):
         check_env_specs(env)
 
     def test_parallel_trans_env_check(
-        self, dtype_fixture, maybe_fork_ParallelEnv  # noqa: F811
+        self,
+        dtype_fixture,  # noqa: F811
+        maybe_fork_ParallelEnv,
     ):
         def make_env():
             return TransformedEnv(
@@ -4191,7 +4192,9 @@ class TestDoubleToFloat(TransformBase):
         check_env_specs(env)
 
     def test_trans_parallel_env_check(
-        self, dtype_fixture, maybe_fork_ParallelEnv  # noqa: F811
+        self,
+        dtype_fixture,  # noqa: F811
+        maybe_fork_ParallelEnv,
     ):
         env = TransformedEnv(
             maybe_fork_ParallelEnv(
@@ -6516,9 +6519,11 @@ class TestRewardSum(TransformBase):
         policy = MultiKeyCountingEnvPolicy(
             full_action_spec=env.action_spec, deterministic=True
         )
-        with pytest.raises(
-            ValueError, match="Could not match the env reset_keys"
-        ) if reset_keys == [("some", "nested", "reset")] else contextlib.nullcontext():
+        with (
+            pytest.raises(ValueError, match="Could not match the env reset_keys")
+            if reset_keys == [("some", "nested", "reset")]
+            else contextlib.nullcontext()
+        ):
             check_env_specs(env)
         if reset_keys != [("some", "nested", "reset")]:
             td = env.rollout(max_steps, policy=policy)
@@ -8292,7 +8297,6 @@ class TestTensorDictPrimer(TransformBase):
         assert ("next", "mykey") in env.rollout(3).keys(True)
 
     def test_dict_default_value(self):
-
         # Test with a dict of float default values
         key1_spec = Unbounded([3])
         key2_spec = Unbounded([3])
@@ -10369,7 +10373,6 @@ class TestVecNorm:
         self.SEED = 0
 
     def test_pickable(self):
-
         transform = VecNorm()
         serialized = pickle.dumps(transform)
         transform2 = pickle.loads(serialized)
@@ -14222,6 +14225,7 @@ class TestLineariseRewards(TransformBase):
 
     def test_compose_with_nested_keys(self):
         """Test LineariseRewards with nested keys as described in GitHub #3237."""
+
         # Create a dummy env that produces nested rewards
         class _NestedRewardEnv(EnvBase):
             def __init__(self):

@@ -3,8 +3,9 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from torchrl.envs.llm import KLRewardTransform
+
 from .gym_transforms import EndOfLifeTransform
-from .llm import KLRewardTransform
 from .module import ModuleTransform
 from .r3m import R3MTransform
 from .ray_service import RayTransform
