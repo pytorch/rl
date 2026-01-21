@@ -10,6 +10,7 @@ import importlib
 import warnings
 from contextlib import nullcontext
 from copy import copy
+from functools import partial
 from types import ModuleType
 from warnings import warn
 
@@ -18,7 +19,6 @@ import torch
 from packaging import version
 from tensordict import TensorDict, TensorDictBase
 from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
-from functools import partial
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
@@ -37,7 +37,6 @@ from torchrl.data.tensor_specs import (
     Unbounded,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict, torch_to_numpy_dtype_dict
-from torchrl.envs.batched_envs import CloudpickleWrapper
 from torchrl.envs.common import _EnvPostInit
 from torchrl.envs.gym_like import default_info_dict_reader, GymLikeEnv
 from torchrl.envs.utils import _classproperty
@@ -821,14 +820,15 @@ class _GymAsyncMeta(_EnvPostInit):
         missing_obs_value = kwargs.pop("missing_obs_value", None)
         num_workers = kwargs.pop("num_workers", 1)
 
-        if cls.__name__== "GymEnv" and num_workers > 1:
-            from torchrl.envs import ParallelEnv, EnvCreator
+        if cls.__name__ == "GymEnv" and num_workers > 1:
+            from torchrl.envs import EnvCreator, ParallelEnv
+
             env_name = args[0] if args else kwargs.get("env_name")
             env_kwargs = kwargs.copy()
             env_kwargs.pop("env_name", None)
             make_env = partial(cls, env_name, **env_kwargs)
             return ParallelEnv(num_workers, EnvCreator(make_env))
-            
+
         instance: GymWrapper = super().__call__(*args, **kwargs)
 
         # before gym 0.22, there was no final_observation
