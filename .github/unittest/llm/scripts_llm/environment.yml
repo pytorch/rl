@@ -15,6 +15,7 @@ dependencies:
     - pytest-error-for-skips
     - pytest-asyncio
     - pytest-timeout
+    - pytest-isolate
     - expecttest
     - pybind11[global]
     - pyyaml
