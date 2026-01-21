@@ -39,12 +39,18 @@ This document tracks known issues with the LLM tests that need to be addressed i
 
 ### 7. Ray + vLLM v1 "bundles" KeyError
 - **Issue**: `KeyError: 'bundles'` during Ray async engine initialization
-- **Root Cause**: Ray workers not connecting to same Ray cluster (vLLM issue #19123, fixed in PR #21540)
+- **Root Cause**: vLLM subprocess starts new Ray instance instead of connecting to parent's cluster
+- **Reference**: https://github.com/vllm-project/vllm/issues/19123 (fixed in PR #21540)
 - **Fix Applied**: 
-  - Set `RAY_ADDRESS="auto"` in CI test script
+  - Set `RAY_ADDRESS` to current Ray GCS address in `vllm_async.py` before creating AsyncLLMEngine
   - Removed `VLLM_USE_V1=0` from tutorials (we need v1!)
-- **Reference**: https://github.com/vllm-project/vllm/issues/19123
-- **Status**: Applied fix, monitoring
+- **Status**: Fixed
+
+### 8. vLLM best_of parameter removed
+- **Issue**: `TypeError: Unexpected keyword argument 'best_of'`
+- **Root Cause**: vLLM removed `best_of` parameter from SamplingParams
+- **Fix Applied**: Skip `num_beams` parameter mapping in vllm_wrapper.py
+- **Status**: Fixed
 
 ## Issues Requiring Follow-up PRs
 
@@ -72,21 +78,19 @@ This document tracks known issues with the LLM tests that need to be addressed i
 
 ## Test Configuration Changes
 
-### pytest-isolate (subprocess isolation)
-- Added `pytest-isolate` dependency
-- Each test runs in a separate subprocess
-- Provides better cleanup for GPU memory and Ray processes
-- Tests that timeout are killed cleanly
-
 ### pytest-timeout (5 minutes per test)
 - Added `pytest-timeout` dependency
 - Default 300s (5 min) timeout applied
 - Prevents indefinite hangs
 
-### RAY_ADDRESS="auto"
-- Set in CI test script
-- Ensures all Ray workers connect to same cluster
+### RAY_ADDRESS in vLLM async code
+- Set RAY_ADDRESS to current Ray GCS address before creating AsyncLLMEngine
+- Ensures vLLM subprocess connects to same Ray cluster as parent
 - Fixes vLLM v1 "bundles" KeyError issue
+
+### Removed --isolate
+- Too slow - each test in subprocess adds huge overhead
+- CI took 1+ hours instead of ~10 minutes
 
 ### Removed --exitfirst
 - Allows all tests to run and collect all failures
