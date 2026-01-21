@@ -251,10 +251,24 @@ class CloudpickleWrapper(metaclass=_CloudpickleWrapperMeta):
         return cloudpickle.dumps((self.fn, self.kwargs))
 
     def __setstate__(self, ob: bytes):
-        import pickle
+        try:
+            import cloudpickle
 
-        self.fn, self.kwargs = pickle.loads(ob)
-        functools.update_wrapper(self, self.fn)
+            try:
+                self.fn, self.kwargs = cloudpickle.loads(ob)
+            except Exception:
+                import pickle
+
+                self.fn, self.kwargs = pickle.loads(ob)
+        except Exception:
+            import pickle
+
+            self.fn, self.kwargs = pickle.loads(ob)
+        # best-effort update of wrapper metadata
+        try:
+            functools.update_wrapper(self, self.fn)
+        except Exception:
+            pass
 
     def __call__(self, *args, **kwargs) -> Any:
         kwargs.update(self.kwargs)

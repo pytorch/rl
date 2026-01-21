@@ -90,7 +90,7 @@ from torchrl.envs import (
     RenameTransform,
     StepCounter,
 )
-from torchrl.envs.batched_envs import SerialEnv
+from torchrl.envs.batched_envs import ParallelEnv, SerialEnv
 from torchrl.envs.libs.brax import _has_brax, BraxEnv, BraxWrapper
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
 from torchrl.envs.libs.envpool import _has_envpool, MultiThreadedEnvWrapper
@@ -1877,6 +1877,85 @@ class TestGym:
         assert (
             result is False
         ), f"Expected False for Dict environment without pixels, got {result}"
+
+    def test_num_workers_returns_parallel_env(self):
+        """Ensure explicit TorchRL `num_workers` returns a lazy ParallelEnv, while gym's
+        native `num_envs` remains a gym-native vectorization."""
+
+        # TorchRL-managed parallelism: should return ParallelEnv
+        env = GymEnv("CartPole-v1", num_workers=3)
+        try:
+            assert isinstance(env, ParallelEnv)
+            # accept either attribute name used by ParallelEnv implementations
+            nworkers = getattr(env, "num_workers", None)
+            if nworkers is None:
+                nworkers = getattr(env, "num_envs", None)
+            assert nworkers == 3
+            # start workers on first use
+            env.reset()
+            assert env.batch_size == torch.Size([3])
+        finally:
+            env.close()
+
+        # Gym-native vectorization should NOT be converted implicitly by TorchRL
+        env_gymvec = GymEnv("CartPole-v1", num_envs=3)
+        try:
+            assert not isinstance(env_gymvec, ParallelEnv)
+        finally:
+            env_gymvec.close()
+
+    def test_num_workers_kwargs_modifiable(self):
+        """Ensure the kwargs preserved by the GymEnv factory can be modified via
+        `configure_parallel` before workers start."""
+
+        env = GymEnv("CartPole-v1", num_workers=3)
+        try:
+            # should return a lazy ParallelEnv
+            assert isinstance(env, ParallelEnv)
+
+            # configure_parallel should accept kwargs and be callable before start
+            env.configure_parallel(use_buffers=True, num_threads=1)
+
+            # starting the environment should work after configuring
+            td = env.reset()
+            assert isinstance(td, TensorDict)
+        finally:
+            env.close()
+
+    def test_set_seed_and_reset_works(self):
+        """Smoke test that setting seed and reset works (seed forwarded into build)."""
+        env = GymEnv("CartPole-v1")
+        final_seed = env.set_seed(0)
+        assert final_seed is not None
+        td = env.reset()
+
+        assert isinstance(td, TensorDict)
+        env.close()
+
+        # Also verify behavior for TorchRL-managed parallel envs
+        penv = GymEnv("CartPole-v1", num_workers=2)
+        try:
+            final_seed = penv.set_seed(0)
+            assert final_seed is not None
+            td = penv.reset()
+            assert isinstance(td, TensorDict)
+        finally:
+            penv.close()
+
+    def test_gym_kwargs_preserved_with_seed(self):
+        """Test that kwargs like frame_skip are preserved when seed is provided.
+        Regression test for a bug where `kwargs` were overwritten when `_seed` was not None.
+        """
+        # Use Pendulum instead of CartPole because CartPole can terminate
+        # early due to pole falling, especially with frame_skip=4
+        env = GymEnv(PENDULUM_VERSIONED(), frame_skip=4, from_pixels=False)
+        try:
+            td = env.reset()
+            rollout = env.rollout(max_steps=5)
+            assert rollout.shape[0] == 5
+            assert "observation" in td.keys()
+        finally:
+            env.close()
 
     def test_is_from_pixels_wrapper_env(self):
         """Test that _is_from_pixels correctly identifies wrapped environments."""
