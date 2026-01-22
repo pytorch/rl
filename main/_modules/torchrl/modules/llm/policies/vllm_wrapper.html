@@ -282,11 +282,22 @@
 <span class="n">_HAS_TRANSFORMERS</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;transformers&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">vllm.inputs</span> <span class="kn">import</span> <span class="n">TokensPrompt</span>  <span class="c1"># type: ignore[import-not-found]</span>
     <span class="kn">from</span> <span class="nn">vllm.outputs</span> <span class="kn">import</span> <span class="n">RequestOutput</span>  <span class="c1"># type: ignore[import-not-found]</span>
     <span class="kn">from</span> <span class="nn">vllm.sampling_params</span> <span class="kn">import</span> <span class="n">SamplingParams</span>  <span class="c1"># type: ignore[import-not-found]</span>
+<span class="k">elif</span> <span class="n">_HAS_VLLM</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">vllm.outputs</span> <span class="kn">import</span> <span class="n">RequestOutput</span>
+    <span class="kn">from</span> <span class="nn">vllm.sampling_params</span> <span class="kn">import</span> <span class="n">SamplingParams</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span> <span class="nn">vllm.inputs</span> <span class="kn">import</span> <span class="n">TokensPrompt</span>
+    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+        <span class="c1"># Fallback for older vLLM versions</span>
+        <span class="n">TokensPrompt</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="k">else</span><span class="p">:</span>
-    <span class="n">SamplingParams</span> <span class="o">=</span> <span class="n">Any</span>  <span class="c1"># type: ignore</span>
-    <span class="n">RequestOutput</span> <span class="o">=</span> <span class="n">Any</span>  <span class="c1"># type: ignore</span>
+    <span class="n">SamplingParams</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Will error at usage if vLLM not available</span>
+    <span class="n">RequestOutput</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">TokensPrompt</span> <span class="o">=</span> <span class="kc">None</span>
 
 
 <span class="k">def</span> <span class="nf">_require_transformers</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -788,6 +799,9 @@
                 <span class="k">elif</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;stop_sequences&quot;</span><span class="p">:</span>
                     <span class="n">vllm_kwargs</span><span class="p">[</span><span class="s2">&quot;stop&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
                 <span class="k">elif</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;logprobs&quot;</span><span class="p">:</span>
+                    <span class="c1"># vLLM expects int for logprobs, not bool</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+                        <span class="n">value</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">value</span> <span class="k">else</span> <span class="kc">None</span>
                     <span class="n">vllm_kwargs</span><span class="p">[</span><span class="s2">&quot;logprobs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
                 <span class="k">elif</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;do_sample&quot;</span><span class="p">:</span>
                     <span class="c1"># do_sample is handled through the sampling parameters</span>
@@ -796,10 +810,7 @@
                     <span class="k">if</span> <span class="ow">not</span> <span class="n">value</span><span class="p">:</span>
                         <span class="n">vllm_kwargs</span><span class="p">[</span><span class="s2">&quot;temperature&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
                     <span class="c1"># If do_sample=True, we keep the existing temperature/top_p/top_k values</span>
-                <span class="k">elif</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;num_beams&quot;</span><span class="p">:</span>
-                    <span class="c1"># vLLM uses best_of instead of num_beams</span>
-                    <span class="n">vllm_kwargs</span><span class="p">[</span><span class="s2">&quot;best_of&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
-                <span class="k">elif</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;length_penalty&quot;</span><span class="p">,</span> <span class="s2">&quot;early_stopping&quot;</span><span class="p">]:</span>
+                <span class="k">elif</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;length_penalty&quot;</span><span class="p">,</span> <span class="s2">&quot;early_stopping&quot;</span><span class="p">,</span> <span class="s2">&quot;num_beams&quot;</span><span class="p">]:</span>
                     <span class="c1"># These parameters are not supported by vLLM, skip them</span>
                     <span class="k">pass</span>
                 <span class="k">else</span><span class="p">:</span>
@@ -831,7 +842,8 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span> <span class="o">=</span> <span class="n">inplace</span>
 
-        <span class="n">prompt_logprobs</span> <span class="o">=</span> <span class="n">return_log_probs</span>
+        <span class="c1"># vLLM expects int for logprobs, not bool. Use 1 if True, None if False.</span>
+        <span class="n">prompt_logprobs</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">return_log_probs</span> <span class="k">else</span> <span class="kc">None</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">generate</span><span class="p">:</span>
             <span class="c1"># We want only the log-probs, we generate a single token (that we then discard)</span>
@@ -842,7 +854,7 @@
 
         <span class="n">vllm_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;detokenize&quot;</span><span class="p">,</span> <span class="ow">not</span> <span class="n">pad_output</span><span class="p">)</span>
         <span class="n">vllm_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;prompt_logprobs&quot;</span><span class="p">,</span> <span class="n">prompt_logprobs</span><span class="p">)</span>
-        <span class="n">vllm_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;logprobs&quot;</span><span class="p">,</span> <span class="n">return_log_probs</span><span class="p">)</span>
+        <span class="n">vllm_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;logprobs&quot;</span><span class="p">,</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">return_log_probs</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
         <span class="n">vllm_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;include_stop_str_in_output&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
         <span class="n">vllm_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;skip_special_tokens&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
 
@@ -1039,7 +1051,30 @@
             <span class="k">return</span> <span class="kc">None</span>
 
     <span class="k">def</span> <span class="nf">_call_generate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Call generate method based on model type.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Call generate method based on model type.</span>
+
+<span class="sd">        In vLLM 0.14+, prompt_token_ids should be passed as TokensPrompt objects</span>
+<span class="sd">        rather than as a keyword argument.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Convert prompt_token_ids to TokensPrompt format for vLLM 0.14+ compatibility</span>
+        <span class="n">prompt_token_ids</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;prompt_token_ids&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">prompt_token_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">TokensPrompt</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Convert list of token ID lists to TokensPrompt objects</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">prompt_token_ids</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">prompt_token_ids</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">prompt_token_ids</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">list</span><span class="p">):</span>
+                    <span class="c1"># List of token ID lists -&gt; list of TokensPrompt</span>
+                    <span class="n">prompts</span> <span class="o">=</span> <span class="p">[</span>
+                        <span class="n">TokensPrompt</span><span class="p">(</span><span class="n">prompt_token_ids</span><span class="o">=</span><span class="n">tids</span><span class="p">)</span> <span class="k">for</span> <span class="n">tids</span> <span class="ow">in</span> <span class="n">prompt_token_ids</span>
+                    <span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># Single token ID list -&gt; single TokensPrompt</span>
+                    <span class="n">prompts</span> <span class="o">=</span> <span class="n">TokensPrompt</span><span class="p">(</span><span class="n">prompt_token_ids</span><span class="o">=</span><span class="n">prompt_token_ids</span><span class="p">)</span>
+                <span class="c1"># Insert prompts as the first positional argument</span>
+                <span class="n">args</span> <span class="o">=</span> <span class="p">(</span><span class="n">prompts</span><span class="p">,)</span> <span class="o">+</span> <span class="n">args</span>
+        <span class="k">elif</span> <span class="n">prompt_token_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Fallback for older vLLM versions that still support prompt_token_ids kwarg</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;prompt_token_ids&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">prompt_token_ids</span>
+
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_type</span> <span class="o">==</span> <span class="s2">&quot;ray_actor&quot;</span><span class="p">:</span>
             <span class="kn">import</span> <span class="nn">ray</span>
 

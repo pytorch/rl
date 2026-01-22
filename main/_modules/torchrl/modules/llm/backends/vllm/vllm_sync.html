@@ -261,7 +261,6 @@
 
 <span class="k">try</span><span class="p">:</span>
     <span class="kn">from</span> <span class="nn">vllm</span> <span class="kn">import</span> <span class="n">LLM</span>
-    <span class="kn">from</span> <span class="nn">vllm.utils</span> <span class="kn">import</span> <span class="n">get_open_port</span>
     <span class="kn">from</span> <span class="nn">vllm.worker.worker</span> <span class="kn">import</span> <span class="n">Worker</span>
 
     <span class="n">_has_vllm</span> <span class="o">=</span> <span class="kc">True</span>
@@ -273,13 +272,20 @@
     <span class="k">class</span> <span class="nc">Worker</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Placeholder for Worker class when vLLM is not installed.&quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="nf">get_open_port</span><span class="p">():</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Placeholder for get_open_port function when vLLM is not installed.&quot;&quot;&quot;</span>
-        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-            <span class="s2">&quot;vllm is not installed. Please install it with `pip install vllm`.&quot;</span>
-        <span class="p">)</span>
-
     <span class="n">_has_vllm</span> <span class="o">=</span> <span class="kc">False</span>
+
+<span class="c1"># get_open_port may not be available in all vLLM versions</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">vllm.utils</span> <span class="kn">import</span> <span class="n">get_open_port</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+
+    <span class="k">def</span> <span class="nf">get_open_port</span><span class="p">():</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fallback get_open_port using standard library.&quot;&quot;&quot;</span>
+        <span class="kn">import</span> <span class="nn">socket</span>
+
+        <span class="k">with</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SOCK_STREAM</span><span class="p">)</span> <span class="k">as</span> <span class="n">s</span><span class="p">:</span>
+            <span class="n">s</span><span class="o">.</span><span class="n">bind</span><span class="p">((</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+            <span class="k">return</span> <span class="n">s</span><span class="o">.</span><span class="n">getsockname</span><span class="p">()[</span><span class="mi">1</span><span class="p">]</span>
 
 
 <span class="k">class</span> <span class="nc">_vLLMWorker</span><span class="p">(</span><span class="n">Worker</span><span class="p">):</span>

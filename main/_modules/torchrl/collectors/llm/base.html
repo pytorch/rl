@@ -458,6 +458,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">yield_completed_trajectories</span> <span class="o">=</span> <span class="n">yield_completed_trajectories</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">yield_only_last_steps</span> <span class="o">=</span> <span class="n">yield_only_last_steps</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Initialize shuttle for rollout</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">yield_completed_trajectories</span><span class="p">:</span>
             <span class="c1"># For async envs, we route by env_id so we only care about batch_size[0].</span>
             <span class="c1"># For non-async envs, we need exactly one batch dimension.</span>
@@ -563,9 +564,10 @@
             <span class="n">env_output</span><span class="p">,</span> <span class="n">env_next_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">step_and_maybe_reset</span><span class="p">(</span><span class="n">env_input</span><span class="p">)</span>
 
             <span class="c1"># carry over collector data without messing up devices</span>
-            <span class="n">collector_data</span> <span class="o">=</span> <span class="n">env_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-            <span class="n">env_next_output</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="n">collector_data</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_update_traj_ids</span><span class="p">(</span><span class="n">env_output</span><span class="p">)</span>
+            <span class="n">collector_data</span> <span class="o">=</span> <span class="n">env_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">collector_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">env_next_output</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="n">collector_data</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_update_traj_ids</span><span class="p">(</span><span class="n">env_output</span><span class="p">)</span>
             <span class="n">trajectory</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">env_output</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
             <span class="n">collected_steps</span> <span class="o">+=</span> <span class="n">env_output</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
             <span class="n">policy_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span> <span class="o">=</span> <span class="n">env_next_output</span>
@@ -578,10 +580,8 @@
 
     <span class="k">def</span> <span class="nf">_rollout_yield_trajs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>  <span class="c1"># A simplified version of rollout</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Data shuttle not found&quot;</span><span class="p">)</span>
-            <span class="c1"># next_output = self.env.reset()</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">next_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="n">next_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span>
 
         <span class="n">collected_steps</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="n">dones</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
@@ -598,10 +598,10 @@
             <span class="c1">#     print(len(cur_output[i][&quot;text&quot;]) &lt; len(cur_output[i][&quot;next&quot;, &quot;text&quot;]))</span>
 
             <span class="c1"># carry over collector data without messing up devices</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_update_traj_ids</span><span class="p">(</span><span class="n">cur_output</span><span class="p">)</span>
-
-            <span class="n">collector_data</span> <span class="o">=</span> <span class="n">cur_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-            <span class="n">next_output</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="n">collector_data</span><span class="p">)</span>
+            <span class="n">collector_data</span> <span class="o">=</span> <span class="n">cur_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">collector_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_update_traj_ids</span><span class="p">(</span><span class="n">cur_output</span><span class="p">)</span>
+                <span class="n">next_output</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="n">collector_data</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
 
             <span class="c1"># if the loop is interrupted</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span> <span class="o">=</span> <span class="n">next_output</span>
@@ -644,6 +644,8 @@
         <span class="bp">self</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>  <span class="c1"># A simplified version of rollout</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">started</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
             <span class="n">next_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span>
             <span class="n">env_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">(</span><span class="n">next_output</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">async_step_and_maybe_reset_send</span><span class="p">(</span><span class="n">env_input</span><span class="p">)</span>
@@ -661,10 +663,10 @@
             <span class="n">env_ids</span> <span class="o">=</span> <span class="n">cur_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">_env_idx_key</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
 
             <span class="c1"># carry over collector data without messing up devices</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_update_traj_ids</span><span class="p">(</span><span class="n">cur_output</span><span class="p">)</span>
-
-            <span class="n">collector_data</span> <span class="o">=</span> <span class="n">cur_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-            <span class="n">next_output</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="n">collector_data</span><span class="p">)</span>
+            <span class="n">collector_data</span> <span class="o">=</span> <span class="n">cur_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">collector_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_update_traj_ids</span><span class="p">(</span><span class="n">cur_output</span><span class="p">)</span>
+                <span class="n">next_output</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="n">collector_data</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
 
             <span class="n">collected_steps</span> <span class="o">+=</span> <span class="n">next_output</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
             <span class="n">dones</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>

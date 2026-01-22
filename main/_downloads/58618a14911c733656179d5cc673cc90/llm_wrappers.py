@@ -23,14 +23,12 @@ Key Features:
 # -----------------
 # First, let's set up the environment and import the necessary modules.
 
-import os
 import warnings
 
 # Suppress warnings for cleaner output
 warnings.filterwarnings("ignore")
 
 # Set vLLM environment variables
-os.environ["VLLM_USE_V1"] = "0"
 
 import torch
 from tensordict import TensorDict

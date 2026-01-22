@@ -42,19 +42,17 @@ Setup and Imports
 -----------------
 First, let's set up the environment and import the necessary modules.
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-40
+.. GENERATED FROM PYTHON SOURCE LINES 25-38
 
 .. code-block:: Python
 
 
-    import os
     import warnings
 
     # Suppress warnings for cleaner output
     warnings.filterwarnings("ignore")
 
     # Set vLLM environment variables
-    os.environ["VLLM_USE_V1"] = "0"
 
     import torch
     from tensordict import TensorDict
@@ -68,13 +66,13 @@ First, let's set up the environment and import the necessary modules.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 41-44
+.. GENERATED FROM PYTHON SOURCE LINES 39-42
 
 Example 1: vLLM Wrapper with History Input
 ------------------------------------------
 The vLLM wrapper is optimized for high-performance inference and is ideal for production environments.
 
-.. GENERATED FROM PYTHON SOURCE LINES 44-94
+.. GENERATED FROM PYTHON SOURCE LINES 42-92
 
 .. code-block:: Python
 
@@ -141,13 +139,13 @@ The vLLM wrapper is optimized for high-performance inference and is ideal for pr
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 95-98
+.. GENERATED FROM PYTHON SOURCE LINES 93-96
 
 Example 2: Transformers Wrapper with History Input
 --------------------------------------------------
 The Transformers wrapper provides more flexibility and is great for research and development.
 
-.. GENERATED FROM PYTHON SOURCE LINES 98-148
+.. GENERATED FROM PYTHON SOURCE LINES 96-146
 
 .. code-block:: Python
 
@@ -222,13 +220,13 @@ The Transformers wrapper provides more flexibility and is great for research and
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 149-152
+.. GENERATED FROM PYTHON SOURCE LINES 147-150
 
 Example 3: Text Input Mode
 --------------------------
 Both wrappers support direct text input for simpler use cases.
 
-.. GENERATED FROM PYTHON SOURCE LINES 152-188
+.. GENERATED FROM PYTHON SOURCE LINES 150-186
 
 .. code-block:: Python
 
@@ -281,13 +279,13 @@ Both wrappers support direct text input for simpler use cases.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 189-192
+.. GENERATED FROM PYTHON SOURCE LINES 187-190
 
 Example 4: Log Probabilities Only Mode
 --------------------------------------
 Both wrappers can compute log probabilities without generating new tokens.
 
-.. GENERATED FROM PYTHON SOURCE LINES 192-229
+.. GENERATED FROM PYTHON SOURCE LINES 190-227
 
 .. code-block:: Python
 
@@ -341,13 +339,13 @@ Both wrappers can compute log probabilities without generating new tokens.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 230-233
+.. GENERATED FROM PYTHON SOURCE LINES 228-231
 
 Example 5: TensorClass Structure Exploration
 ----------------------------------------------
 Let's explore the structured outputs provided by both wrappers.
 
-.. GENERATED FROM PYTHON SOURCE LINES 233-285
+.. GENERATED FROM PYTHON SOURCE LINES 231-283
 
 .. code-block:: Python
 
@@ -416,13 +414,13 @@ Let's explore the structured outputs provided by both wrappers.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 286-289
+.. GENERATED FROM PYTHON SOURCE LINES 284-287
 
 Example 6: Error Handling and Validation
 ----------------------------------------
 Both wrappers provide clear error messages for invalid inputs.
 
-.. GENERATED FROM PYTHON SOURCE LINES 289-315
+.. GENERATED FROM PYTHON SOURCE LINES 287-313
 
 .. code-block:: Python
 
@@ -469,13 +467,13 @@ Both wrappers provide clear error messages for invalid inputs.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 316-319
+.. GENERATED FROM PYTHON SOURCE LINES 314-317
 
 Example 7: RL Environment Integration
 --------------------------------------
 The wrappers are designed to work seamlessly with TorchRL environments.
 
-.. GENERATED FROM PYTHON SOURCE LINES 319-348
+.. GENERATED FROM PYTHON SOURCE LINES 317-346
 
 .. code-block:: Python
 
@@ -524,7 +522,7 @@ The wrappers are designed to work seamlessly with TorchRL environments.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 349-362
+.. GENERATED FROM PYTHON SOURCE LINES 347-360
 
 Conclusion
 ----------
@@ -540,7 +538,7 @@ into reinforcement learning workflows. Key benefits include:
 The wrappers are designed to be interchangeable, allowing you to switch between
 different LLM backends without changing your RL code.
 
-.. GENERATED FROM PYTHON SOURCE LINES 362-366
+.. GENERATED FROM PYTHON SOURCE LINES 360-364
 
 .. code-block:: Python
 
@@ -567,7 +565,7 @@ different LLM backends without changing your RL code.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.456 seconds)
+   **Total running time of the script:** (0 minutes 8.381 seconds)
 
 
 .. _sphx_glr_download_tutorials_llm_wrappers.py:

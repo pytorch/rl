@@ -475,6 +475,23 @@
 
         <span class="n">engine_args</span><span class="o">.</span><span class="n">enable_prefix_caching</span> <span class="o">=</span> <span class="n">enable_prefix_caching</span>
 
+        <span class="c1"># Fix for vLLM issue #19123: Set RAY_ADDRESS so vLLM subprocesses connect</span>
+        <span class="c1"># to the same Ray cluster instead of starting a new one (causes KeyError: &#39;bundles&#39;)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">import</span> <span class="nn">ray</span>
+
+            <span class="k">if</span> <span class="n">ray</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+                <span class="c1"># Get the current Ray address and set it in the environment</span>
+                <span class="c1"># so vLLM&#39;s subprocess connects to the same cluster</span>
+                <span class="n">ray_address</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get_runtime_context</span><span class="p">()</span><span class="o">.</span><span class="n">gcs_address</span>
+                <span class="k">if</span> <span class="n">ray_address</span> <span class="ow">and</span> <span class="s2">&quot;RAY_ADDRESS&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">:</span>
+                    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;RAY_ADDRESS&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ray_address</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Set RAY_ADDRESS=</span><span class="si">{</span><span class="n">ray_address</span><span class="si">}</span><span class="s2"> for vLLM subprocess&quot;</span>
+                    <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">pass</span>  <span class="c1"># Ray not available or not initialized, let vLLM handle it</span>
+
         <span class="c1"># Create the engine directly - this is the source of the blocking ray.get issue</span>
         <span class="c1"># but we need to handle it differently for multiple replicas</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">engine</span> <span class="o">=</span> <span class="n">AsyncLLMEngine</span><span class="o">.</span><span class="n">from_engine_args</span><span class="p">(</span><span class="n">engine_args</span><span class="p">)</span>
@@ -2330,9 +2347,9 @@
     <span class="c1"># Disabled by default in GRPO since it can cause issues during training</span>
     <span class="k">if</span> <span class="s2">&quot;compilation_config&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
         <span class="k">if</span> <span class="nb">compile</span><span class="p">:</span>
-            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;compilation_config&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;enabled&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;compilation_config&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;level&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">}</span>  <span class="c1"># PIECEWISE compilation</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;compilation_config&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;enabled&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">}</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;compilation_config&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;level&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">}</span>  <span class="c1"># NO_COMPILATION</span>
 
     <span class="n">engine_args</span> <span class="o">=</span> <span class="n">AsyncEngineArgs</span><span class="p">(</span>
         <span class="n">model</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span>

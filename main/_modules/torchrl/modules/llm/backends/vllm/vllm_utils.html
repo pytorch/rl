@@ -252,14 +252,25 @@
 <span class="k">try</span><span class="p">:</span>
     <span class="kn">from</span> <span class="nn">vllm.distributed.device_communicators.pynccl</span> <span class="kn">import</span> <span class="n">PyNcclCommunicator</span>
     <span class="kn">from</span> <span class="nn">vllm.distributed.utils</span> <span class="kn">import</span> <span class="n">StatelessProcessGroup</span>
-    <span class="kn">from</span> <span class="nn">vllm.utils</span> <span class="kn">import</span> <span class="n">get_open_port</span>
 
     <span class="n">_has_vllm</span> <span class="o">=</span> <span class="kc">True</span>
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
     <span class="n">PyNcclCommunicator</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">StatelessProcessGroup</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">get_open_port</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">_has_vllm</span> <span class="o">=</span> <span class="kc">False</span>
+
+<span class="c1"># get_open_port may not be available in all vLLM versions</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">vllm.utils</span> <span class="kn">import</span> <span class="n">get_open_port</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+
+    <span class="k">def</span> <span class="nf">get_open_port</span><span class="p">():</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fallback get_open_port using standard library.&quot;&quot;&quot;</span>
+        <span class="kn">import</span> <span class="nn">socket</span>
+
+        <span class="k">with</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SOCK_STREAM</span><span class="p">)</span> <span class="k">as</span> <span class="n">s</span><span class="p">:</span>
+            <span class="n">s</span><span class="o">.</span><span class="n">bind</span><span class="p">((</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+            <span class="k">return</span> <span class="n">s</span><span class="o">.</span><span class="n">getsockname</span><span class="p">()[</span><span class="mi">1</span><span class="p">]</span>
 
 
 <div class="viewcode-block" id="stateless_init_process_group">
