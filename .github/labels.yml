@@ -17,29 +17,87 @@
   description: "Improvements or additions to documentation"
   color: "0075ca"
 
-- name: question
-  description: "Further information is requested"
-  color: "d876e3"
+- name: duplicate
+  description: "This issue or pull request already exists"
+  color: "cfd3d7"
 
-- name: good first issue
-  description: "Good for newcomers"
-  color: "7057ff"
+- name: invalid
+  description: "This doesn't seem right"
+  color: "e4e669"
 
 - name: help wanted
   description: "Extra attention is needed"
   color: "008672"
 
-- name: duplicate
-  description: "This issue or pull request already exists"
-  color: "cfd3d7"
+- name: Good first issue
+  description: "A good way to start hacking torchrl!"
+  color: "7057ff"
 
-- name: wontfix
-  description: "This will not be worked on"
-  color: "ffffff"
+- name: Discussion needed
+  description: "Input from the community is welcome and needed"
+  color: "d876e3"
 
-- name: invalid
-  description: "This doesn't seem right"
-  color: "e4e669"
+- name: Deprecation
+  description: "Marks deprecated features or deprecation-related changes"
+  color: "FEF2C0"
+
+# =============================================================================
+# Category Labels
+# =============================================================================
+- name: bc breaking
+  description: "Backward compatibility breaking change"
+  color: "B60205"
+
+- name: BE
+  description: "Better errors, logs, docs or test utils"
+  color: "C2E0C6"
+
+- name: Benchmarks
+  description: "rl/benchmark changes"
+  color: "5319E7"
+
+- name: CI
+  description: "Has to do with CI setup (e.g. wheels & builds, tests...)"
+  color: "BFDADC"
+
+- name: Collectors
+  description: "Related to data collectors"
+  color: "1D76DB"
+
+- name: distributions
+  description: "Related to probability distributions"
+  color: "D4C5F9"
+
+- name: Examples
+  description: "Related to example scripts"
+  color: "C5DEF5"
+
+- name: formatting
+  description: "Code formatting changes"
+  color: "FEF2C0"
+
+- name: dependencies
+  description: "Pull requests that update a dependency file"
+  color: "0366D6"
+
+# =============================================================================
+# CI Workflow Labels
+# =============================================================================
+- name: CLA Signed
+  description: "This label is managed by the Facebook bot. Authors need to sign the CLA before a PR can be reviewed."
+  color: "5319E7"
+
+- name: ci-no-td
+  description: "Skip TensorDict CI checks"
+  color: "BFDADC"
+
+- name: ciflow/binaries/all
+  description: "Build all binaries"
+  color: "BFDADC"
+
+- name: ciflow/docs
+  description: "Tests full docs CI"
+  color: "BFDADC"
 
 # =============================================================================
 # CI Trigger Labels - Environments
@@ -49,7 +107,7 @@
   description: "Triggers all environment CI tests"
   color: "0E8A16"
 
-# Individual environment labels
+# Individual environment labels - trigger only specific tests
 - name: Environments/brax
   description: "Triggers brax environment tests only"
   color: "0E8A16"
@@ -110,7 +168,7 @@
   description: "Triggers all data CI tests"
   color: "1D76DB"
 
-# Individual data labels
+# Individual data labels - trigger only specific tests
 - name: Data/gendgrl
   description: "Triggers gen-dgrl data tests only"
   color: "1D76DB"
@@ -135,12 +193,24 @@
 # CI Trigger Labels - LLM
 # =============================================================================
 - name: llm/
-  description: "Triggers LLM CI tests"
+  description: "LLM-related PR, triggers LLM CI tests"
+  color: "FBCA04"
+
+- name: llm/api
+  description: "LLM API changes"
+  color: "FBCA04"
+
+- name: llm/ci
+  description: "LLM CI configuration changes"
+  color: "FBCA04"
+
+- name: llm/feature
+  description: "LLM new feature"
   color: "FBCA04"
 
 # =============================================================================
 # CI Trigger Labels - Benchmarks
 # =============================================================================
 - name: benchmarks/upload
-  description: "Uploads benchmark results on PR"
+  description: "Upload results of the PR to benchmarks"
   color: "5319E7"

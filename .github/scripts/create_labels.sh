@@ -1,36 +1,29 @@
 #!/bin/bash
-# Script to create all labels in the GitHub repository
+# Script to create CI granularity labels in the GitHub repository
 # Usage: .github/scripts/create_labels.sh [owner/repo]
 # Example: .github/scripts/create_labels.sh pytorch/rl
+#
+# This script focuses on the NEW granular CI labels.
+# Existing labels (bug, enhancement, etc.) are not modified.
 
 set -euo pipefail
 
 REPO="${1:-pytorch/rl}"
 
-echo "Creating labels for repository: $REPO"
-echo "================================================"
+echo "Creating/updating CI granularity labels for repository: $REPO"
+echo "=============================================================="
 
 # =============================================================================
-# Issue/PR Type Labels
-# =============================================================================
-echo "Creating issue/PR type labels..."
-gh label create "bug" --repo "$REPO" --description "Something isn't working" --color "d73a4a" --force
-gh label create "enhancement" --repo "$REPO" --description "New feature or request" --color "a2eeef" --force
-gh label create "documentation" --repo "$REPO" --description "Improvements or additions to documentation" --color "0075ca" --force
-gh label create "question" --repo "$REPO" --description "Further information is requested" --color "d876e3" --force
-gh label create "good first issue" --repo "$REPO" --description "Good for newcomers" --color "7057ff" --force
-gh label create "help wanted" --repo "$REPO" --description "Extra attention is needed" --color "008672" --force
-gh label create "duplicate" --repo "$REPO" --description "This issue or pull request already exists" --color "cfd3d7" --force
-gh label create "wontfix" --repo "$REPO" --description "This will not be worked on" --color "ffffff" --force
-gh label create "invalid" --repo "$REPO" --description "This doesn't seem right" --color "e4e669" --force
-
-# =============================================================================
-# Environment labels (green)
+# Environment labels (green) - NEW granular labels
 # =============================================================================
 ENV_COLOR="0E8A16"
 
+echo ""
 echo "Creating Environments labels..."
+# Parent label (may already exist)
 gh label create "Environments" --repo "$REPO" --description "Triggers all environment CI tests" --color "$ENV_COLOR" --force
+
+# New granular labels
 gh label create "Environments/brax" --repo "$REPO" --description "Triggers brax environment tests only" --color "$ENV_COLOR" --force
 gh label create "Environments/chess" --repo "$REPO" --description "Triggers chess environment tests only" --color "$ENV_COLOR" --force
 gh label create "Environments/envpool" --repo "$REPO" --description "Triggers envpool environment tests only" --color "$ENV_COLOR" --force
@@ -46,42 +39,28 @@ gh label create "Environments/unity_mlagents" --repo "$REPO" --description "Trig
 gh label create "Environments/vmas" --repo "$REPO" --description "Triggers vmas environment tests only" --color "$ENV_COLOR" --force
 
 # =============================================================================
-# Data labels (blue)
+# Data labels (blue) - NEW granular labels
 # =============================================================================
 DATA_COLOR="1D76DB"
 
+echo ""
 echo "Creating Data labels..."
+# Parent label (may already exist)
 gh label create "Data" --repo "$REPO" --description "Triggers all data CI tests" --color "$DATA_COLOR" --force
+
+# New granular labels
 gh label create "Data/gendgrl" --repo "$REPO" --description "Triggers gen-dgrl data tests only" --color "$DATA_COLOR" --force
 gh label create "Data/minari" --repo "$REPO" --description "Triggers minari data tests only" --color "$DATA_COLOR" --force
 gh label create "Data/openx" --repo "$REPO" --description "Triggers openx data tests only" --color "$DATA_COLOR" --force
 gh label create "Data/roboset" --repo "$REPO" --description "Triggers roboset data tests only" --color "$DATA_COLOR" --force
 gh label create "Data/vd4rl" --repo "$REPO" --description "Triggers vd4rl data tests only" --color "$DATA_COLOR" --force
 
-# =============================================================================
-# LLM labels (yellow)
-# =============================================================================
-LLM_COLOR="FBCA04"
-
-echo "Creating LLM labels..."
-gh label create "llm/" --repo "$REPO" --description "Triggers LLM CI tests" --color "$LLM_COLOR" --force
-
-# =============================================================================
-# Benchmark labels (purple)
-# =============================================================================
-BENCH_COLOR="5319E7"
-
-echo "Creating Benchmark labels..."
-gh label create "benchmarks/upload" --repo "$REPO" --description "Uploads benchmark results on PR" --color "$BENCH_COLOR" --force
-
 echo ""
-echo "================================================"
-echo "Done! All labels created successfully."
+echo "=============================================================="
+echo "Done! All CI granularity labels created/updated."
 echo ""
-echo "CI Label usage:"
+echo "Usage:"
 echo "  - 'Environments' → triggers ALL environment tests"
 echo "  - 'Environments/brax' → triggers only brax tests"
 echo "  - 'Data' → triggers ALL data tests"
 echo "  - 'Data/minari' → triggers only minari tests"
-echo "  - 'llm/' → triggers LLM tests"
-echo "  - 'benchmarks/upload' → uploads benchmark results"
