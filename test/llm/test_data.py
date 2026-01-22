@@ -34,6 +34,38 @@ class TestHistory:
         with set_list_to_stack(True):
             yield
 
+    @pytest.fixture(scope="class")
+    def mock_llama_tokenizer(self):
+        """Create a mock tokenizer with Llama 3 special tokens for testing.
+
+        This allows testing the Llama chat template parsing without requiring
+        access to the gated Llama models on HuggingFace.
+
+        We use SmolLM-135M-Instruct as the base tokenizer because:
+        - It's a modern BPE tokenizer with chat template support
+        - Very small (135M params), fast to download and load
+        - Apache 2.0 licensed, from HuggingFace official
+        - Non-gated, always accessible in CI
+        """
+        from transformers import AutoTokenizer
+
+        # Use SmolLM as a modern base tokenizer
+        tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-135M-Instruct")
+
+        # Add Llama 3 special tokens that aren't in SmolLM's vocabulary
+        llama_special_tokens = [
+            "<|begin_of_text|>",
+            "<|end_of_text|>",
+            "<|header_start|>",
+            "<|header_end|>",
+            "<|eot|>",
+        ]
+        tokenizer.add_special_tokens(
+            {"additional_special_tokens": llama_special_tokens}
+        )
+
+        return tokenizer
+
     def test_history_construct(self):
         hst0 = History(role="user", content="a message")
         assert not hst0.shape
@@ -418,16 +450,11 @@ The result is""",
         LLAMA_TEST_CASES,
         ids=["case_1", "case_2", "case_3", "case_4", "case_6"],
     )
-    def test_history_assistant_mask_llama(self, test_case):
-        # This test requires a Llama tokenizer which is gated on HuggingFace
-        # Mark as xfail since we cannot access the gated model in CI
-        pytest.xfail("Llama tokenizer required but model is gated on HuggingFace")
-        from transformers import AutoTokenizer
-
-        try:
-            tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
-        except Exception:
-            pytest.xfail("Could not load Llama tokenizer - model may be gated")
+    def test_history_assistant_mask_llama(self, test_case, mock_llama_tokenizer):
+        # This test verifies that the Llama chat template parsing works correctly.
+        # We use a mock tokenizer with Llama 3 special tokens added, which allows
+        # testing the API without requiring access to the gated Llama models.
+        tokenizer = mock_llama_tokenizer
 
         history = History.from_text(test_case, chat_template_name="llama")
         proc = history.apply_chat_template(

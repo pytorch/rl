@@ -103,9 +103,6 @@ class TestLLMCollector:
     @pytest.mark.slow
     @pytest.mark.parametrize("rb,queue", [[True, False], [False, True], [False, False]])
     @pytest.mark.parametrize("total_steps", [1, 10, 20])
-    @pytest.mark.xfail(
-        reason="TransformersWrapper history output not populated correctly in collector - needs investigation"
-    )
     def test_llm_collector_with_transformers(
         self, rb, queue, total_steps, transformers_instance
     ):
@@ -346,12 +343,6 @@ class TestLLMCollector:
             assert has_found_one_with_more_steps
         assert collector._frames >= total_steps
 
-    @pytest.mark.xfail(
-        reason="AsyncEnvPool batch_size handling with LLMCollector yield_completed_trajectories "
-        "needs architectural fix. AsyncEnvPool should report batch_size=[num_envs, *child_batch_size] "
-        "but LLMCollector only supports single-dim batch sizes. See PR #3360 for context.",
-        strict=False,  # Allow passing if behavior is fixed
-    )
     @pytest.mark.slow
     @pytest.mark.parametrize("rb", [False, True])
     @pytest.mark.parametrize("yield_only_last_steps", [False, True])
