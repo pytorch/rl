@@ -2,6 +2,7 @@ name: Libs Tests on Linux
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches:
       - nightly
