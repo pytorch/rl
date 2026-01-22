@@ -884,6 +884,10 @@ class TransformersWrapper(LLMWrapperBase):
                 text_full, prompt_histories, self.chat_template_name, self.tokenizer
             )
             history_chat_flat.response = h_responses
+            # Combine prompt and response to create full history
+            history_chat_flat.full = history_chat_flat.prompt.extend(
+                h_responses, inplace=False, dim=-1
+            )
         result.set(self.history_key, history_chat)
         return result
 
