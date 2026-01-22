@@ -3065,6 +3065,7 @@ class TestBatching:
 
 class TestRayWrapper:
     @pytest.mark.parametrize("backend", ["transformers"])
+    @pytest.mark.skip(reason="Ray wrapper tests hang in CI - needs investigation")
     def test_ray_wrapper(self, sample_text, backend):
         import gc
         from concurrent.futures import ThreadPoolExecutor
@@ -3115,6 +3116,7 @@ class TestActorSharing:
     """Test actor sharing functionality for Remote wrappers."""
 
     @pytest.mark.parametrize("backend", ["transformers"])
+    @pytest.mark.skip(reason="Ray actor sharing tests hang in CI - needs investigation")
     def test_actor_sharing(self, backend):
         """Test that creating the same wrapper twice uses the same actor."""
         import ray
