@@ -237,6 +237,23 @@ class _AsyncLLMEngine:
 
         engine_args.enable_prefix_caching = enable_prefix_caching
 
+        # Fix for vLLM issue #19123: Set RAY_ADDRESS so vLLM subprocesses connect
+        # to the same Ray cluster instead of starting a new one (causes KeyError: 'bundles')
+        try:
+            import ray
+
+            if ray.is_initialized():
+                # Get the current Ray address and set it in the environment
+                # so vLLM's subprocess connects to the same cluster
+                ray_address = ray.get_runtime_context().gcs_address
+                if ray_address and "RAY_ADDRESS" not in os.environ:
+                    os.environ["RAY_ADDRESS"] = ray_address
+                    torchrl_logger.debug(
+                        f"Set RAY_ADDRESS={ray_address} for vLLM subprocess"
+                    )
+        except Exception:
+            pass  # Ray not available or not initialized, let vLLM handle it
+
         # Create the engine directly - this is the source of the blocking ray.get issue
         # but we need to handle it differently for multiple replicas
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
@@ -2042,9 +2059,9 @@ def make_async_vllm_engine(
     # Disabled by default in GRPO since it can cause issues during training
     if "compilation_config" not in kwargs:
         if compile:
-            kwargs["compilation_config"] = {"enabled": True}
+            kwargs["compilation_config"] = {"level": 3}  # PIECEWISE compilation
         else:
-            kwargs["compilation_config"] = {"enabled": False}
+            kwargs["compilation_config"] = {"level": 0}  # NO_COMPILATION
 
     engine_args = AsyncEngineArgs(
         model=model_name,

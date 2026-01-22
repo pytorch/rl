@@ -47,7 +47,7 @@ class MockTransformerModel(torch.nn.Module):
     def forward(self, input_ids, attention_mask=None, **kwargs):
         """Forward pass that returns logits in the expected format."""
         # Get embeddings (which we'll use as logits for simplicity)
-        logits = self.embedding(input_ids % self.config.vocab_size)
+        logits = self.embedding(input_ids.to(self.device) % self.config.vocab_size)
         # Return output object similar to transformers models
         return MockTransformerOutput(logits)
 
