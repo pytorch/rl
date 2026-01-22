@@ -218,6 +218,7 @@ class LLMCollector(Collector):
         self.yield_completed_trajectories = yield_completed_trajectories
         self.yield_only_last_steps = yield_only_last_steps
         self.verbose = verbose
+        self._shuttle = None  # Initialize shuttle for rollout
         if self.yield_completed_trajectories:
             # For async envs, we route by env_id so we only care about batch_size[0].
             # For non-async envs, we need exactly one batch dimension.
@@ -317,9 +318,10 @@ class LLMCollector(Collector):
             env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
 
             # carry over collector data without messing up devices
-            collector_data = env_output.get("collector").copy()
-            env_next_output.set("collector", collector_data)
-            self._update_traj_ids(env_output)
+            collector_data = env_output.get("collector", default=None)
+            if collector_data is not None:
+                env_next_output.set("collector", collector_data.copy())
+                self._update_traj_ids(env_output)
             trajectory.append(env_output.clone())
             collected_steps += env_output.numel()
             policy_input = self._shuttle = env_next_output
@@ -332,10 +334,8 @@ class LLMCollector(Collector):
 
     def _rollout_yield_trajs(self) -> TensorDictBase:  # A simplified version of rollout
         if self._shuttle is None:
-            raise RuntimeError("Data shuttle not found")
-            # next_output = self.env.reset()
-        else:
-            next_output = self._shuttle
+            self._shuttle = self.env.reset()
+        next_output = self._shuttle
 
         collected_steps = 0
         dones = torch.zeros(self.env.batch_size, dtype=torch.bool)
@@ -352,10 +352,10 @@ class LLMCollector(Collector):
             #     print(len(cur_output[i]["text"]) < len(cur_output[i]["next", "text"]))
 
             # carry over collector data without messing up devices
-            self._update_traj_ids(cur_output)
-
-            collector_data = cur_output.get("collector").copy()
-            next_output.set("collector", collector_data)
+            collector_data = cur_output.get("collector", default=None)
+            if collector_data is not None:
+                self._update_traj_ids(cur_output)
+                next_output.set("collector", collector_data.copy())
 
             # if the loop is interrupted
             self._shuttle = next_output
@@ -398,6 +398,8 @@ class LLMCollector(Collector):
         self,
     ) -> TensorDictBase:  # A simplified version of rollout
         if not self.started:
+            if self._shuttle is None:
+                self._shuttle = self.env.reset()
             next_output = self._shuttle
             env_input = self.policy(next_output)
             self.env.async_step_and_maybe_reset_send(env_input)
@@ -415,10 +417,10 @@ class LLMCollector(Collector):
             env_ids = cur_output.get(self.env._env_idx_key).tolist()
 
             # carry over collector data without messing up devices
-            self._update_traj_ids(cur_output)
-
-            collector_data = cur_output.get("collector").copy()
-            next_output.set("collector", collector_data)
+            collector_data = cur_output.get("collector", default=None)
+            if collector_data is not None:
+                self._update_traj_ids(cur_output)
+                next_output.set("collector", collector_data.copy())
 
             collected_steps += next_output.numel()
             dones.fill_(False)
