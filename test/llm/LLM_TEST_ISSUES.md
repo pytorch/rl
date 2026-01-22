@@ -52,29 +52,41 @@ This document tracks known issues with the LLM tests that need to be addressed i
 - **Fix Applied**: Skip `num_beams` parameter mapping in vllm_wrapper.py
 - **Status**: Fixed
 
-## Issues Requiring Follow-up PRs
-
-### 1. AsyncEnvPool + LLMCollector yield_completed_trajectories
+### 9. AsyncEnvPool + LLMCollector yield_completed_trajectories
 - **Files**: `torchrl/envs/async_envs.py`, `torchrl/collectors/llm/base.py`
 - **Test**: `test_llm_collector_completed_async`
 - **Issue**: 
   - `AsyncEnvPool` now correctly reports `batch_size=[num_envs, *child_batch_size]` (e.g., `[4, 1]`)
   - `LLMCollector.yield_completed_trajectories=True` was checking for single batch dimension
-  - Fixed: Now allows AsyncEnvPool by routing by env_id using batch_size[0]
-- **Workaround**: Test marked as xfail with `strict=False` (will pass if fixed)
-- **Priority**: Medium
+  - `_sort_results` was returning nested lists instead of scalar indices
+  - Trajectory results had extra batch dimension from child envs
+- **Fix Applied**:
+  - `async_envs._sort_results`: Unwrap single-element sequences to get scalar indices
+  - `base.py._rollout_yield_trajs_async`: Flatten env_ids to handle nested lists
+  - Use 1D dones tensor (only tracking by env_id, not child batch)
+  - Apply `view(-1)` to flatten trajectory results
+- **Status**: Fixed
 
-### 2. TransformersWrapper History Output in Collector
+### 10. Gated HuggingFace Models
+- **Files**: `test/llm/test_data.py`
+- **Test**: `test_history_assistant_mask_llama`
+- **Issue**: Tests using Llama tokenizer fail because model is gated on HuggingFace
+- **Fix Applied**: Changed from `pytest.xfail()` to `pytest.skip()` with clear message
+  - Test will run if Llama tokenizer is available (e.g., with HF credentials)
+  - Skips gracefully in CI environments without access
+  - The History API is still tested via `test_history_assistant_mask_qwen`
+- **Status**: Fixed
+
+## Issues Requiring Follow-up PRs
+
+### 1. TransformersWrapper History Output in Collector
 - **Test**: `test_llm_collector_with_transformers`
 - **Issue**: TransformersWrapper history output not populated correctly in collector context
+  - The `("next", "history", "prompt")` key is empty when using TransformersWrapper
+  - vLLMWrapper works correctly with the same test setup
+  - Likely an integration issue between ChatEnv and TransformersWrapper
 - **Workaround**: Test marked as xfail
-- **Priority**: Medium
-
-### 3. Gated HuggingFace Models
-- **Files**: `test/llm/test_data.py`
-- **Issue**: Tests using Llama tokenizer fail because model is gated
-- **Workaround**: Tests marked as xfail
-- **Priority**: Low - expected behavior for gated models
+- **Priority**: Medium - requires further investigation
 
 ## Test Configuration Changes
 
