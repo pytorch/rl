@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**05:00.365** total execution time for 19 files **from tutorials**:
+**04:56.756** total execution time for 19 files **from tutorials**:
 
 .. container::
 
@@ -33,59 +33,59 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_tutorials_coding_dqn.py` (``coding_dqn.py``)
-     - 01:23.843
+     - 01:21.277
      - 0.0
    * - :ref:`sphx_glr_tutorials_pretrained_models.py` (``pretrained_models.py``)
-     - 00:34.560
+     - 00:35.729
      - 0.0
    * - :ref:`sphx_glr_tutorials_coding_ddpg.py` (``coding_ddpg.py``)
-     - 00:28.732
-     - 0.0
-   * - :ref:`sphx_glr_tutorials_multiagent_ppo.py` (``multiagent_ppo.py``)
-     - 00:26.960
+     - 00:28.022
      - 0.0
    * - :ref:`sphx_glr_tutorials_coding_ppo.py` (``coding_ppo.py``)
-     - 00:26.954
+     - 00:26.725
+     - 0.0
+   * - :ref:`sphx_glr_tutorials_multiagent_ppo.py` (``multiagent_ppo.py``)
+     - 00:26.140
      - 0.0
    * - :ref:`sphx_glr_tutorials_multiagent_competitive_ddpg.py` (``multiagent_competitive_ddpg.py``)
-     - 00:25.885
+     - 00:25.870
      - 0.0
    * - :ref:`sphx_glr_tutorials_torchrl_envs.py` (``torchrl_envs.py``)
-     - 00:22.486
+     - 00:22.271
      - 0.0
    * - :ref:`sphx_glr_tutorials_export.py` (``export.py``)
-     - 00:21.516
+     - 00:21.520
      - 0.0
    * - :ref:`sphx_glr_tutorials_llm_wrappers.py` (``llm_wrappers.py``)
-     - 00:08.584
+     - 00:08.405
      - 0.0
    * - :ref:`sphx_glr_tutorials_dqn_with_rnn.py` (``dqn_with_rnn.py``)
-     - 00:05.735
+     - 00:05.725
      - 0.0
    * - :ref:`sphx_glr_tutorials_pendulum.py` (``pendulum.py``)
-     - 00:05.485
+     - 00:05.496
      - 0.0
    * - :ref:`sphx_glr_tutorials_getting-started-5.py` (``getting-started-5.py``)
-     - 00:04.587
+     - 00:04.599
      - 0.0
    * - :ref:`sphx_glr_tutorials_multi_task.py` (``multi_task.py``)
-     - 00:03.903
+     - 00:03.827
      - 0.0
    * - :ref:`sphx_glr_tutorials_rb_tutorial.py` (``rb_tutorial.py``)
-     - 00:00.785
+     - 00:00.794
      - 0.0
    * - :ref:`sphx_glr_tutorials_getting-started-4.py` (``getting-started-4.py``)
      - 00:00.111
      - 0.0
    * - :ref:`sphx_glr_tutorials_getting-started-3.py` (``getting-started-3.py``)
-     - 00:00.080
+     - 00:00.081
      - 0.0
    * - :ref:`sphx_glr_tutorials_getting-started-1.py` (``getting-started-1.py``)
-     - 00:00.070
+     - 00:00.071
      - 0.0
    * - :ref:`sphx_glr_tutorials_getting-started-2.py` (``getting-started-2.py``)
-     - 00:00.057
+     - 00:00.058
      - 0.0
    * - :ref:`sphx_glr_tutorials_getting-started-0.py` (``getting-started-0.py``)
-     - 00:00.032
+     - 00:00.036
      - 0.0
