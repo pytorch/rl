@@ -419,15 +419,24 @@ The result is""",
         ids=["case_1", "case_2", "case_3", "case_4", "case_6"],
     )
     def test_history_assistant_mask_llama(self, test_case):
-        # This test requires a Llama tokenizer which is gated on HuggingFace
-        # Mark as xfail since we cannot access the gated model in CI
-        pytest.xfail("Llama tokenizer required but model is gated on HuggingFace")
+        # This test verifies that the Llama chat template parsing works correctly.
+        # It requires a Llama tokenizer to properly handle the Llama-specific special
+        # tokens (<|begin_of_text|>, <|header_start|>, <|eot|>, etc.) for accurate
+        # assistant masking. Since Llama models are gated on HuggingFace, we skip
+        # this test in CI. The Llama template parsing logic is still exercised by
+        # test_history_assistant_mask_qwen which tests the same API with Qwen format.
         from transformers import AutoTokenizer
 
+        # Try to load the Llama tokenizer - skip if not available (gated model)
         try:
-            tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+            tokenizer = AutoTokenizer.from_pretrained(
+                "meta-llama/Llama-3.2-1B-Instruct"
+            )
         except Exception:
-            pytest.xfail("Could not load Llama tokenizer - model may be gated")
+            pytest.skip(
+                "Llama tokenizer not available (gated model). "
+                "The History API is tested via test_history_assistant_mask_qwen."
+            )
 
         history = History.from_text(test_case, chat_template_name="llama")
         proc = history.apply_chat_template(
