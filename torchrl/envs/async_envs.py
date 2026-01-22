@@ -386,7 +386,19 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         return tensordict
 
     def _sort_results(self, results, *other_results):
-        idx = [int(r[self._env_idx_key]) for r in results]
+        # Extract env indices from results. When child envs have a batch dimension
+        # (e.g., batch_size=(1,)), r[self._env_idx_key] may be a 1D sequence
+        # instead of a scalar, so we need to handle both cases.
+        idx = []
+        for r in results:
+            env_idx = r[self._env_idx_key]
+            # Handle sequence types (NonTensorStack, etc.) by taking first element
+            while hasattr(env_idx, "__len__") and not isinstance(env_idx, (str, bytes)):
+                if len(env_idx) == 1:
+                    env_idx = env_idx[0]
+                else:
+                    break
+            idx.append(int(env_idx))
         argsort = torch.argsort(torch.tensor(idx)).tolist()
         results = [results[i] for i in argsort]
         if other_results:

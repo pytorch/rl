@@ -406,15 +406,23 @@ class LLMCollector(Collector):
         self.started = True
 
         collected_steps = 0
-        dones = torch.zeros(self.env.batch_size, dtype=torch.bool)
+        # Use only the first dimension (num_envs) for done tracking, since we route by env_id
+        dones = torch.zeros(self.env.batch_size[0], dtype=torch.bool)
         while True:
             if self._trajectory_queue:
                 break
 
             cur_output, next_output = self.env.async_step_and_maybe_reset_recv()
 
-            # Get the env ids
-            env_ids = cur_output.get(self.env._env_idx_key).tolist()
+            # Get the env ids - flatten to handle multi-dimensional batch sizes
+            # (e.g., AsyncEnvPool with batch_size=[4, 1] gives [[0], [1], [2], [3]])
+            env_ids_raw = cur_output.get(self.env._env_idx_key).tolist()
+            # Flatten nested lists to get scalar env indices
+            env_ids = []
+            for eid in env_ids_raw:
+                while isinstance(eid, list) and len(eid) == 1:
+                    eid = eid[0]
+                env_ids.append(eid)
 
             # carry over collector data without messing up devices
             collector_data = cur_output.get("collector", default=None)
@@ -450,6 +458,9 @@ class LLMCollector(Collector):
                 self.env.async_step_and_maybe_reset_send(env_input)
 
         result = self._trajectory_queue.popleft()
+        # Flatten the result - AsyncEnvPool child envs with batch_size=(1,) produce
+        # trajectories with shape [1, T] but we want [T] for consistency
+        result = result.view(-1)
         if self.verbose:
             torchrl_logger.debug(
                 f"LLMCollector: Yielding completed trajectory with shape {result.shape}."
