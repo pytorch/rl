@@ -3052,9 +3052,7 @@ class TestBrax:
         env = BraxEnv(envname, num_workers=3, device=device)
         try:
             assert isinstance(env, ParallelEnv)
-            # accept either attribute name used by ParallelEnv implementations
-            nworkers = getattr(env, "num_workers", None)
-            assert nworkers == 3
+            assert env.num_workers == 3
             # ParallelEnv should be lazy (not started yet)
             assert env.is_closed
             # configure_parallel should work before env starts

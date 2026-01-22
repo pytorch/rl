@@ -12,6 +12,7 @@ from packaging import version
 from tensordict import TensorDict, TensorDictBase
 
 from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
+from torchrl.envs.batched_envs import ParallelEnv
 from torchrl.envs.common import _EnvPostInit, _EnvWrapper
 from torchrl.envs.libs.jax_utils import (
     _extract_spec,
@@ -48,10 +49,8 @@ class _BraxMeta(_EnvPostInit):
         else:
             kwargs.pop("num_workers", None)
 
-        num_workers = int(num_workers) if num_workers is not None else 1
+        num_workers = int(num_workers)
         if cls.__name__ == "BraxEnv" and num_workers > 1:
-            from torchrl.envs import ParallelEnv
-
             # Extract env_name from args or kwargs
             env_name = args[0] if len(args) >= 1 else kwargs.get("env_name")
 
@@ -99,7 +98,10 @@ class BraxWrapper(_EnvWrapper):
         device (torch.device, optional): if provided, the device on which the data
             is to be cast. Defaults to ``torch.device("cpu")``.
         batch_size (torch.Size, optional): the batch size of the environment.
-            In ``brax``, this indicates the number of vectorized environments.
+            In ``brax``, this controls the number of environments simulated in
+            parallel via JAX's ``vmap`` on a single device (GPU/TPU). Brax leverages
+            MuJoCo XLA (MJX) for hardware-accelerated batched simulation, enabling
+            thousands of environments to run in parallel within a single process.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
             for envs to be ``done`` just after :meth:`reset` is called.
@@ -541,7 +543,10 @@ class BraxEnv(BraxWrapper, metaclass=_BraxMeta):
         device (torch.device, optional): if provided, the device on which the data
             is to be cast. Defaults to ``torch.device("cpu")``.
         batch_size (torch.Size, optional): the batch size of the environment.
-            In ``brax``, this indicates the number of vectorized environments.
+            In ``brax``, this controls the number of environments simulated in
+            parallel via JAX's ``vmap`` on a single device (GPU/TPU). Brax leverages
+            MuJoCo XLA (MJX) for hardware-accelerated batched simulation, enabling
+            thousands of environments to run in parallel within a single process.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
             for envs to be ``done`` just after :meth:`reset` is called.
@@ -549,6 +554,20 @@ class BraxEnv(BraxWrapper, metaclass=_BraxMeta):
         num_workers (int, optional): if greater than 1, a lazy :class:`~torchrl.envs.ParallelEnv`
             will be returned instead, with each worker instantiating its own
             :class:`~torchrl.envs.BraxEnv` instance. Defaults to ``None``.
+
+    .. note::
+        There are two orthogonal ways to scale environment throughput:
+
+        - **batch_size**: Uses Brax's native JAX-based vectorization (``vmap``) to run
+          multiple environments in parallel on a single GPU/TPU. This is highly efficient
+          for moderate batch sizes where the MJX solver has not yet saturated.
+        - **num_workers**: Uses TorchRL's :class:`~torchrl.envs.ParallelEnv` to spawn
+          multiple Python processes, each running its own ``BraxEnv``.
+
+        These can be combined: ``BraxEnv("ant", batch_size=[128], num_workers=4)`` creates
+        4 worker processes, each running 128 vectorized environments, for a total of 512
+        parallel environments. This hybrid approach can be beneficial when the MJX solver
+        saturates on a single device, or when distributing across multiple GPUs/CPUs.
 
     Attributes:
         available_envs: environments available to build
@@ -589,103 +608,8 @@ class BraxEnv(BraxWrapper, metaclass=_BraxMeta):
         >>> # par_env is a ParallelEnv; start interacting as usual
         >>> par_env.set_seed(0)
         >>> td = par_env.reset()
-        >>> print(td)
-        TensorDict(
-        fields={
-            done: Tensor(shape=torch.Size([4, 8, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-            observation: Tensor(shape=torch.Size([4, 8, 27]), device=cpu, dtype=torch.float32, is_shared=False),
-            state: TensorDict(
-                fields={
-                    done: Tensor(shape=torch.Size([4, 8, 1]), device=cpu, dtype=torch.float32, is_shared=False),
-                    metrics: TensorDict(
-                        fields={
-                            distance_from_origin: Tensor(shape=torch.Size([4, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                            forward_reward: Tensor(shape=torch.Size([4, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                            reward_contact: Tensor(shape=torch.Size([4, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                            reward_ctrl: Tensor(shape=torch.Size([4, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                            reward_forward: Tensor(shape=torch.Size([4, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                            reward_survive: Tensor(shape=torch.Size([4, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                            x_position: Tensor(shape=torch.Size([4, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                            x_velocity: Tensor(shape=torch.Size([4, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                            y_position: Tensor(shape=torch.Size([4, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                            y_velocity: Tensor(shape=torch.Size([4, 8]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([4, 8]),
-                        device=cpu,
-                        is_shared=False),
-                    obs: Tensor(shape=torch.Size([4, 8, 27]), device=cpu, dtype=torch.float32, is_shared=False),
-                    pipeline_state: TensorDict(
-                        fields={
-                            cd: TensorDict(
-                                fields={
-                                    ang: Tensor(shape=torch.Size([4, 8, 9, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                                    vel: Tensor(shape=torch.Size([4, 8, 9, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                                batch_size=torch.Size([4, 8]),
-                                device=cpu,
-                                is_shared=False),
-                            cdof: TensorDict(
-                                fields={
-                                    ang: Tensor(shape=torch.Size([4, 8, 14, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                                    vel: Tensor(shape=torch.Size([4, 8, 14, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                                batch_size=torch.Size([4, 8]),
-                                device=cpu,
-                                is_shared=False),
-                            cdofd: TensorDict(
-                                fields={
-                                    ang: Tensor(shape=torch.Size([4, 8, 14, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                                    vel: Tensor(shape=torch.Size([4, 8, 14, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                                batch_size=torch.Size([4, 8]),
-                                device=cpu,
-                                is_shared=False),
-                            cinr: TensorDict(
-                                fields={
-                                    i: Tensor(shape=torch.Size([4, 8, 9, 3, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                                    mass: Tensor(shape=torch.Size([4, 8, 9]), device=cpu, dtype=torch.float32, is_shared=False),
-                                    transform: TensorDict(
-                                        fields={
-                                            pos: Tensor(shape=torch.Size([4, 8, 9, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                                            rot: Tensor(shape=torch.Size([4, 8, 9, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
-                                        batch_size=torch.Size([4, 8]),
-                                        device=cpu,
-                                        is_shared=False)},
-                                batch_size=torch.Size([4, 8]),
-                                device=cpu,
-                                is_shared=False),
-                            con_aref: Tensor(shape=torch.Size([4, 8, 24]), device=cpu, dtype=torch.float32, is_shared=False),
-                            con_diag: Tensor(shape=torch.Size([4, 8, 24]), device=cpu, dtype=torch.float32, is_shared=False),
-                            con_jac: Tensor(shape=torch.Size([4, 8, 24, 14]), device=cpu, dtype=torch.float32, is_shared=False),
-                            mass_mx: Tensor(shape=torch.Size([4, 8, 14, 14]), device=cpu, dtype=torch.float32, is_shared=False),
-                            mass_mx_inv: Tensor(shape=torch.Size([4, 8, 14, 14]), device=cpu, dtype=torch.float32, is_shared=False),
-                            q: Tensor(shape=torch.Size([4, 8, 15]), device=cpu, dtype=torch.float32, is_shared=False),
-                            qd: Tensor(shape=torch.Size([4, 8, 14]), device=cpu, dtype=torch.float32, is_shared=False),
-                            qdd: Tensor(shape=torch.Size([4, 8, 14]), device=cpu, dtype=torch.float32, is_shared=False),
-                            qf_constraint: Tensor(shape=torch.Size([4, 8, 14]), device=cpu, dtype=torch.float32, is_shared=False),
-                            qf_smooth: Tensor(shape=torch.Size([4, 8, 14]), device=cpu, dtype=torch.float32, is_shared=False),
-                            root_com: Tensor(shape=torch.Size([4, 8, 9, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                            x: TensorDict(
-                                fields={
-                                    pos: Tensor(shape=torch.Size([4, 8, 9, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                                    rot: Tensor(shape=torch.Size([4, 8, 9, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
-                                batch_size=torch.Size([4, 8]),
-                                device=cpu,
-                                is_shared=False),
-                            xd: TensorDict(
-                                fields={
-                                    ang: Tensor(shape=torch.Size([4, 8, 9, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                                    vel: Tensor(shape=torch.Size([4, 8, 9, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                                batch_size=torch.Size([4, 8]),
-                                device=cpu,
-                                is_shared=False)},
-                        batch_size=torch.Size([4, 8]),
-                        device=cpu,
-                        is_shared=False),
-                    reward: Tensor(shape=torch.Size([4, 8, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([4, 8]),
-                device=cpu,
-                is_shared=False),
-            terminated: Tensor(shape=torch.Size([4, 8, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
-        batch_size=torch.Size([4, 8]),
-        device=cpu,
-        is_shared=False)
+        >>> print(td.shape)
+        torch.Size([4, 8])
         >>> td["action"] = par_env.action_spec.rand()
         >>> td = par_env.step(td)
 
