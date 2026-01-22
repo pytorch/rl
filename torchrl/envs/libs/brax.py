@@ -12,7 +12,7 @@ from packaging import version
 from tensordict import TensorDict, TensorDictBase
 
 from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
-from torchrl.envs.common import _EnvWrapper, _EnvPostInit
+from torchrl.envs.common import _EnvPostInit, _EnvWrapper
 from torchrl.envs.libs.jax_utils import (
     _extract_spec,
     _ndarray_to_tensor,
@@ -37,6 +37,7 @@ def _get_envs():
 
     return list(brax.envs._envs.keys())
 
+
 class _BraxMeta(_EnvPostInit):
     """Metaclass for BraxEnv that returns a lazy ParallelEnv when num_workers > 1."""
 
@@ -60,11 +61,12 @@ class _BraxMeta(_EnvPostInit):
             # Create factory function that builds single BraxEnv instances
             def make_env(_env_name=env_name, _kwargs=env_kwargs):
                 return cls(_env_name, num_workers=1, **_kwargs)
-            
+
             # Return lazy ParallelEnv (workers not started yet)
             return ParallelEnv(num_workers, make_env)
-        
+
         return super().__call__(*args, **kwargs)
+
 
 class BraxWrapper(_EnvWrapper):
     """Google Brax environment wrapper.
@@ -359,7 +361,7 @@ class BraxWrapper(_EnvWrapper):
             seed = getattr(self, "_seed", None)
             if seed is None:
                 seed = 0
-            
+
             self._key = jax.random.PRNGKey(int(seed))
 
         # generate random keys
@@ -641,7 +643,7 @@ class BraxEnv(BraxWrapper, metaclass=_BraxMeta):
                                     transform: TensorDict(
                                         fields={
                                             pos: Tensor(shape=torch.Size([4, 8, 9, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                                            rot: Tensor(shape=torch.Size([4, 8, 9, 4]), device=cpu, dtype=torch.float32, is_shared=False)},        
+                                            rot: Tensor(shape=torch.Size([4, 8, 9, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
                                         batch_size=torch.Size([4, 8]),
                                         device=cpu,
                                         is_shared=False)},

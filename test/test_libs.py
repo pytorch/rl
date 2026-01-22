@@ -3124,8 +3124,10 @@ class TestBrax:
                 preserved = env._kwargs.get("camera_id", None) == 1
             else:
                 inner = getattr(env, "_env", None)
-                if inner is not None and hasattr(inner, "_kwargs") and isinstance(
-                    inner._kwargs, dict
+                if (
+                    inner is not None
+                    and hasattr(inner, "_kwargs")
+                    and isinstance(inner._kwargs, dict)
                 ):
                     preserved = inner._kwargs.get("camera_id", None) == 1
             assert preserved, "camera_id kwarg was not preserved after set_seed"
