@@ -250,7 +250,7 @@
 <h1>BraxEnv<a class="headerlink" href="#braxenv" title="Link to this heading">¶</a></h1>
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrl.envs.BraxEnv">
-<span class="sig-prename descclassname"><span class="pre">torchrl.envs.</span></span><span class="sig-name descname"><span class="pre">BraxEnv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/libs/brax.html#BraxEnv"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.BraxEnv" title="Link to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">torchrl.envs.</span></span><span class="sig-name descname"><span class="pre">BraxEnv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/libs/brax.html#BraxEnv"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.BraxEnv" title="Link to this definition">¶</a></dt>
 <dd><p>Google Brax environment wrapper built with the environment name.</p>
 <p>Brax offers a vectorized and differentiable simulation framework based on Jax.
 TorchRL’s wrapper incurs some overhead for the jax-to-torch conversion,
@@ -282,13 +282,36 @@ of rewards across steps.</p></li>
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.10)"><em>torch.device</em></a><em>, </em><em>optional</em>) – if provided, the device on which the data
 is to be cast. Defaults to <code class="docutils literal notranslate"><span class="pre">torch.device(&quot;cpu&quot;)</span></code>.</p></li>
 <li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.10)"><em>torch.Size</em></a><em>, </em><em>optional</em>) – the batch size of the environment.
-In <code class="docutils literal notranslate"><span class="pre">brax</span></code>, this indicates the number of vectorized environments.
+In <code class="docutils literal notranslate"><span class="pre">brax</span></code>, this controls the number of environments simulated in
+parallel via JAX’s <code class="docutils literal notranslate"><span class="pre">vmap</span></code> on a single device (GPU/TPU). Brax leverages
+MuJoCo XLA (MJX) for hardware-accelerated batched simulation, enabling
+thousands of environments to run in parallel within a single process.
 Defaults to <code class="docutils literal notranslate"><span class="pre">torch.Size([])</span></code>.</p></li>
 <li><p><strong>allow_done_after_reset</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, it is tolerated
 for envs to be <code class="docutils literal notranslate"><span class="pre">done</span></code> just after <a class="reference internal" href="torchrl.envs.ModelBasedEnvBase.html#torchrl.envs.reset" title="torchrl.envs.reset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reset()</span></code></a> is called.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>num_workers</strong> (<em>int</em><em>, </em><em>optional</em>) – if greater than 1, a lazy <a class="reference internal" href="torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a>
+will be returned instead, with each worker instantiating its own
+<a class="reference internal" href="#torchrl.envs.BraxEnv" title="torchrl.envs.BraxEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">BraxEnv</span></code></a> instance. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 </ul>
 </dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>There are two orthogonal ways to scale environment throughput:</p>
+<ul class="simple">
+<li><p><strong>batch_size</strong>: Uses Brax’s native JAX-based vectorization (<code class="docutils literal notranslate"><span class="pre">vmap</span></code>) to run
+multiple environments in parallel on a single GPU/TPU. This is highly efficient
+for moderate batch sizes where the MJX solver has not yet saturated.</p></li>
+<li><p><strong>num_workers</strong>: Uses TorchRL’s <a class="reference internal" href="torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> to spawn
+multiple Python processes, each running its own <code class="docutils literal notranslate"><span class="pre">BraxEnv</span></code>.</p></li>
+</ul>
+<p>These can be combined: <code class="docutils literal notranslate"><span class="pre">BraxEnv(&quot;ant&quot;,</span> <span class="pre">batch_size=[128],</span> <span class="pre">num_workers=4)</span></code> creates
+4 worker processes, each running 128 vectorized environments, for a total of 512
+parallel environments. This hybrid approach can be beneficial when the MJX solver
+saturates on a single device, or when distributing across multiple GPUs/CPUs.</p>
+</div>
+<dl class="field-list simple">
 <dt class="field-odd">Variables<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>available_envs</strong> – environments available to build</p>
 </dd>
@@ -323,6 +346,17 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <span class="go">[&#39;acrobot&#39;, &#39;ant&#39;, &#39;fast&#39;, &#39;fetch&#39;, ...]</span>
 </pre></div>
 </div>
+<p># Example: create a parallel environment with 4 workers. This returns a lazy
+# ParallelEnv; each worker will instantiate a BraxEnv with num_workers=1.
+&gt;&gt;&gt; from torchrl.envs import BraxEnv
+&gt;&gt;&gt; par_env = BraxEnv(“ant”, batch_size=[8], num_workers=4, device=”cpu”)
+&gt;&gt;&gt; # par_env is a ParallelEnv; start interacting as usual
+&gt;&gt;&gt; par_env.set_seed(0)
+&gt;&gt;&gt; td = par_env.reset()
+&gt;&gt;&gt; print(td.shape)
+torch.Size([4, 8])
+&gt;&gt;&gt; td[“action”] = par_env.action_spec.rand()
+&gt;&gt;&gt; td = par_env.step(td)</p>
 <p>To take advante of Brax, one usually executes multiple environments at the
 same time. In the following example, we iteratively test different batch sizes
 and report the execution time for a short rollout:</p>

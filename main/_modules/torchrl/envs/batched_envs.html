@@ -286,11 +286,6 @@
 
 <span class="kn">from</span> <span class="nn">torchrl.envs.env_creator</span> <span class="kn">import</span> <span class="n">EnvCreator</span><span class="p">,</span> <span class="n">get_env_metadata</span>
 
-<span class="c1"># legacy</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs.libs.envpool</span> <span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: F401</span>
-    <span class="n">MultiThreadedEnv</span><span class="p">,</span>
-    <span class="n">MultiThreadedEnvWrapper</span><span class="p">,</span>
-<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">torchrl.envs.utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_aggregate_end_of_traj</span><span class="p">,</span>
     <span class="n">_sort_keys</span><span class="p">,</span>
@@ -3364,6 +3359,12 @@
 
 <span class="c1"># Create an alias for possible imports</span>
 <span class="n">_BatchedEnv</span> <span class="o">=</span> <span class="n">BatchedEnvBase</span>
+
+<span class="c1"># legacy re-exports (must be at end of file to avoid circular imports)</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.libs.envpool</span> <span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: F401, E402</span>
+    <span class="n">MultiThreadedEnv</span><span class="p">,</span>
+    <span class="n">MultiThreadedEnvWrapper</span><span class="p">,</span>
+<span class="p">)</span>
 </pre></div>
 
              </article>

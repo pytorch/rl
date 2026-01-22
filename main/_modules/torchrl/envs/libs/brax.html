@@ -250,7 +250,8 @@
 <span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 
 <span class="kn">from</span> <span class="nn">torchrl.data.tensor_specs</span> <span class="kn">import</span> <span class="n">Bounded</span><span class="p">,</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">Unbounded</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">_EnvWrapper</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.batched_envs</span> <span class="kn">import</span> <span class="n">ParallelEnv</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">_EnvPostInit</span><span class="p">,</span> <span class="n">_EnvWrapper</span>
 <span class="kn">from</span> <span class="nn">torchrl.envs.libs.jax_utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_extract_spec</span><span class="p">,</span>
     <span class="n">_ndarray_to_tensor</span><span class="p">,</span>
@@ -274,6 +275,34 @@
     <span class="kn">import</span> <span class="nn">brax.envs</span>
 
     <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">brax</span><span class="o">.</span><span class="n">envs</span><span class="o">.</span><span class="n">_envs</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+
+
+<span class="k">class</span> <span class="nc">_BraxMeta</span><span class="p">(</span><span class="n">_EnvPostInit</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Metaclass for BraxEnv that returns a lazy ParallelEnv when num_workers &gt; 1.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">num_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="c1"># Extract num_workers from explicit kwarg or kwargs dict</span>
+        <span class="k">if</span> <span class="n">num_workers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">num_workers</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;num_workers&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;num_workers&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="n">num_workers</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">num_workers</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;BraxEnv&quot;</span> <span class="ow">and</span> <span class="n">num_workers</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="c1"># Extract env_name from args or kwargs</span>
+            <span class="n">env_name</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;env_name&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Remove env_name from kwargs if present (it will be passed positionally)</span>
+            <span class="n">env_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="s2">&quot;env_name&quot;</span><span class="p">}</span>
+
+            <span class="c1"># Create factory function that builds single BraxEnv instances</span>
+            <span class="k">def</span> <span class="nf">make_env</span><span class="p">(</span><span class="n">_env_name</span><span class="o">=</span><span class="n">env_name</span><span class="p">,</span> <span class="n">_kwargs</span><span class="o">=</span><span class="n">env_kwargs</span><span class="p">):</span>
+                <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">_env_name</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="o">**</span><span class="n">_kwargs</span><span class="p">)</span>
+
+            <span class="c1"># Return lazy ParallelEnv (workers not started yet)</span>
+            <span class="k">return</span> <span class="n">ParallelEnv</span><span class="p">(</span><span class="n">num_workers</span><span class="p">,</span> <span class="n">make_env</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="BraxWrapper">
@@ -309,7 +338,10 @@
 <span class="sd">        device (torch.device, optional): if provided, the device on which the data</span>
 <span class="sd">            is to be cast. Defaults to ``torch.device(&quot;cpu&quot;)``.</span>
 <span class="sd">        batch_size (torch.Size, optional): the batch size of the environment.</span>
-<span class="sd">            In ``brax``, this indicates the number of vectorized environments.</span>
+<span class="sd">            In ``brax``, this controls the number of environments simulated in</span>
+<span class="sd">            parallel via JAX&#39;s ``vmap`` on a single device (GPU/TPU). Brax leverages</span>
+<span class="sd">            MuJoCo XLA (MJX) for hardware-accelerated batched simulation, enabling</span>
+<span class="sd">            thousands of environments to run in parallel within a single process.</span>
 <span class="sd">            Defaults to ``torch.Size([])``.</span>
 <span class="sd">        allow_done_after_reset (bool, optional): if ``True``, it is tolerated</span>
 <span class="sd">            for envs to be ``done`` just after :meth:`reset` is called.</span>
@@ -566,6 +598,14 @@
     <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="n">jax</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">jax</span>
 
+        <span class="c1"># ensure a valid JAX PRNG key exists</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_key&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">seed</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_seed&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">seed</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">seed</span> <span class="o">=</span> <span class="mi">0</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_key</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">seed</span><span class="p">))</span>
+
         <span class="c1"># generate random keys</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_key</span><span class="p">,</span> <span class="o">*</span><span class="n">keys</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_key</span><span class="p">,</span> <span class="mi">1</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>
 
@@ -714,7 +754,7 @@
 
 <div class="viewcode-block" id="BraxEnv">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.BraxEnv.html#torchrl.envs.BraxEnv">[docs]</a>
-<span class="k">class</span> <span class="nc">BraxEnv</span><span class="p">(</span><span class="n">BraxWrapper</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">BraxEnv</span><span class="p">(</span><span class="n">BraxWrapper</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_BraxMeta</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Google Brax environment wrapper built with the environment name.</span>
 
 <span class="sd">    Brax offers a vectorized and differentiable simulation framework based on Jax.</span>
@@ -746,11 +786,31 @@
 <span class="sd">        device (torch.device, optional): if provided, the device on which the data</span>
 <span class="sd">            is to be cast. Defaults to ``torch.device(&quot;cpu&quot;)``.</span>
 <span class="sd">        batch_size (torch.Size, optional): the batch size of the environment.</span>
-<span class="sd">            In ``brax``, this indicates the number of vectorized environments.</span>
+<span class="sd">            In ``brax``, this controls the number of environments simulated in</span>
+<span class="sd">            parallel via JAX&#39;s ``vmap`` on a single device (GPU/TPU). Brax leverages</span>
+<span class="sd">            MuJoCo XLA (MJX) for hardware-accelerated batched simulation, enabling</span>
+<span class="sd">            thousands of environments to run in parallel within a single process.</span>
 <span class="sd">            Defaults to ``torch.Size([])``.</span>
 <span class="sd">        allow_done_after_reset (bool, optional): if ``True``, it is tolerated</span>
 <span class="sd">            for envs to be ``done`` just after :meth:`reset` is called.</span>
 <span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        num_workers (int, optional): if greater than 1, a lazy :class:`~torchrl.envs.ParallelEnv`</span>
+<span class="sd">            will be returned instead, with each worker instantiating its own</span>
+<span class="sd">            :class:`~torchrl.envs.BraxEnv` instance. Defaults to ``None``.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        There are two orthogonal ways to scale environment throughput:</span>
+
+<span class="sd">        - **batch_size**: Uses Brax&#39;s native JAX-based vectorization (``vmap``) to run</span>
+<span class="sd">          multiple environments in parallel on a single GPU/TPU. This is highly efficient</span>
+<span class="sd">          for moderate batch sizes where the MJX solver has not yet saturated.</span>
+<span class="sd">        - **num_workers**: Uses TorchRL&#39;s :class:`~torchrl.envs.ParallelEnv` to spawn</span>
+<span class="sd">          multiple Python processes, each running its own ``BraxEnv``.</span>
+
+<span class="sd">        These can be combined: ``BraxEnv(&quot;ant&quot;, batch_size=[128], num_workers=4)`` creates</span>
+<span class="sd">        4 worker processes, each running 128 vectorized environments, for a total of 512</span>
+<span class="sd">        parallel environments. This hybrid approach can be beneficial when the MJX solver</span>
+<span class="sd">        saturates on a single device, or when distributing across multiple GPUs/CPUs.</span>
 
 <span class="sd">    Attributes:</span>
 <span class="sd">        available_envs: environments available to build</span>
@@ -783,6 +843,18 @@
 <span class="sd">            is_shared=False)</span>
 <span class="sd">        &gt;&gt;&gt; print(env.available_envs)</span>
 <span class="sd">        [&#39;acrobot&#39;, &#39;ant&#39;, &#39;fast&#39;, &#39;fetch&#39;, ...]</span>
+
+<span class="sd">        # Example: create a parallel environment with 4 workers. This returns a lazy</span>
+<span class="sd">        # ParallelEnv; each worker will instantiate a BraxEnv with num_workers=1.</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import BraxEnv</span>
+<span class="sd">        &gt;&gt;&gt; par_env = BraxEnv(&quot;ant&quot;, batch_size=[8], num_workers=4, device=&quot;cpu&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; # par_env is a ParallelEnv; start interacting as usual</span>
+<span class="sd">        &gt;&gt;&gt; par_env.set_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt; td = par_env.reset()</span>
+<span class="sd">        &gt;&gt;&gt; print(td.shape)</span>
+<span class="sd">        torch.Size([4, 8])</span>
+<span class="sd">        &gt;&gt;&gt; td[&quot;action&quot;] = par_env.action_spec.rand()</span>
+<span class="sd">        &gt;&gt;&gt; td = par_env.step(td)</span>
 
 <span class="sd">    To take advante of Brax, one usually executes multiple environments at the</span>
 <span class="sd">    same time. In the following example, we iteratively test different batch sizes</span>
