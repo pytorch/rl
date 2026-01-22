@@ -451,7 +451,7 @@ class ContinuousBox(Box):
         if self._batch_size is not None:
             if value.shape[: len(self._batch_size)] != self._batch_size:
                 raise ValueError(
-                    f"Batch size {value.shape[:len(self._batch_size)]} is not compatible with low and high {self._batch_size}"
+                    f"Batch size {value.shape[: len(self._batch_size)]} is not compatible with low and high {self._batch_size}"
                 )
             if self._batch_size:
                 self._low = self._low.flatten(0, len(self._batch_size) - 1)[0].clone()
@@ -463,7 +463,7 @@ class ContinuousBox(Box):
         if self._batch_size is not None:
             if value.shape[: len(self._batch_size)] != self._batch_size:
                 raise ValueError(
-                    f"Batch size {value.shape[:len(self._batch_size)]} is not compatible with low and high {self._batch_size}"
+                    f"Batch size {value.shape[: len(self._batch_size)]} is not compatible with low and high {self._batch_size}"
                 )
             if self._batch_size:
                 self._high = self._high.flatten(0, len(self._batch_size) - 1)[0].clone()
@@ -496,7 +496,6 @@ class ContinuousBox(Box):
 
     def __eq__(self, other):
         if other is None:
-
             minval, maxval = _minmax_dtype(self.low.dtype)
             minval = torch.as_tensor(minval).to(self.low.device, self.low.dtype)
             maxval = torch.as_tensor(maxval).to(self.low.device, self.low.dtype)
@@ -1541,7 +1540,7 @@ class Stacked(_LazyStackedMixin[TensorSpec], TensorSpec):
         if safe:
             if val.shape[self.dim] != len(self._specs):
                 raise ValueError(
-                    "Size of Stacked and val differ along the stacking " "dimension"
+                    "Size of Stacked and val differ along the stacking dimension"
                 )
             for spec, v in zip(self._specs, torch.unbind(val, dim=self.dim)):
                 spec.assert_is_in(v)
@@ -1634,7 +1633,7 @@ class Stacked(_LazyStackedMixin[TensorSpec], TensorSpec):
         )
 
     def type_check(self, value: torch.Tensor, key: NestedKey | None = None) -> None:
-        for (val, spec) in zip(value.unbind(self.dim), self._specs):
+        for val, spec in zip(value.unbind(self.dim), self._specs):
             spec.type_check(val)
 
     def is_in(self, value) -> bool:
@@ -2023,7 +2022,6 @@ class OneHot(TensorSpec):
         *,
         ignore_device: bool = False,
     ) -> torch.Tensor:
-
         funcs = self._encode_memo_dict.get(ignore_device)
         if funcs is not None:
             return funcs(val)
@@ -2313,21 +2311,9 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
         **kwargs,
     ):
         if "maximum" in kwargs:
-            if high is not None:
-                raise TypeError(self.CONFLICTING_KWARGS.format("high", "maximum"))
-            high = kwargs.pop("maximum")
-            warnings.warn(
-                "Maximum is deprecated since v0.4.0, using high instead.",
-                category=DeprecationWarning,
-            )
+            raise TypeError("'maximum' has been removed. Please use 'high' instead.")
         if "minimum" in kwargs:
-            if low is not None:
-                raise TypeError(self.CONFLICTING_KWARGS.format("low", "minimum"))
-            low = kwargs.pop("minimum")
-            warnings.warn(
-                "Minimum is deprecated since v0.4.0, using low instead.",
-                category=DeprecationWarning,
-            )
+            raise TypeError("'minimum' has been removed. Please use 'low' instead.")
         domain = kwargs.pop("domain", None)
         if len(kwargs):
             raise TypeError(f"Got unrecognised kwargs {tuple(kwargs.keys())}.")
@@ -5366,7 +5352,7 @@ class Composite(TensorSpec):
     def device(self, device: DEVICE_TYPING):
         if device is None and self._device is not None:
             raise RuntimeError(
-                "To erase the device of a composite spec, call " "spec.clear_device_()."
+                "To erase the device of a composite spec, call spec.clear_device_()."
             )
         device = _make_ordinal_device(torch.device(device))
         self.to(device)
@@ -7011,13 +6997,12 @@ class _CompositeSpecItemsView:
                 if is_leaf is _NESTED_TENSORS_AS_LISTS and isinstance(
                     item, _LazyStackedMixin
                 ):
-                    for (i, spec) in enumerate(item._specs):
+                    for i, spec in enumerate(item._specs):
                         yield from _iter_from_item(unravel_key((key, str(i))), spec)
                 else:
                     yield from _iter_from_item(key, item)
 
     def _get_composite_items(self, is_leaf):
-
         if isinstance(self.composite, StackedComposite):
             from tensordict.base import _NESTED_TENSORS_AS_LISTS
 

@@ -32,8 +32,8 @@ loss:
   gae_lambda: 0.95
   clip_epsilon: 0.2
   anneal_clip_epsilon: False
-  critic_coef: 0.25
-  entropy_coef: 0.0
+  critic_coeff: 0.25
+  entropy_coeff: 0.0
   loss_critic_type: l2
 
 compile:
