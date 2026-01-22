@@ -641,7 +641,9 @@ class TestGRPOLossIntegration:
 
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.parametrize("masking_strategy", ["sft", "rlhf"])
-    @pytest.mark.skip(reason="GRPOLoss shape mismatch between masking strategies - needs investigation")
+    @pytest.mark.skip(
+        reason="GRPOLoss shape mismatch between masking strategies - needs investigation"
+    )
     def test_grpo_loss_with_real_models(
         self,
         vllm_instance,

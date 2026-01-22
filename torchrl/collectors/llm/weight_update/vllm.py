@@ -138,10 +138,12 @@ class vLLMUpdater(WeightUpdaterBase, metaclass=vLLMUpdaterMeta):
         if self._master_port is None:
             try:
                 from vllm.utils import get_open_port
+
                 self._master_port = get_open_port()
             except ImportError:
                 # Fallback if vLLM get_open_port not available
                 import socket
+
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     s.bind(("", 0))
                     self._master_port = s.getsockname()[1]

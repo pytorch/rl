@@ -832,7 +832,9 @@ The result is""",
                 not hasattr(tokenizer, "chat_template")
                 or tokenizer.chat_template is None
             ):
-                pytest.xfail(f"Tokenizer {tokenizer_name} does not have a chat template")
+                pytest.xfail(
+                    f"Tokenizer {tokenizer_name} does not have a chat template"
+                )
             chat_template = tokenizer.chat_template
             chat_template_name = None
         else:
@@ -909,7 +911,9 @@ The result is""",
                 not hasattr(tokenizer, "chat_template")
                 or tokenizer.chat_template is None
             ):
-                pytest.xfail(f"Tokenizer {tokenizer_name} does not have a chat template")
+                pytest.xfail(
+                    f"Tokenizer {tokenizer_name} does not have a chat template"
+                )
             chat_template = tokenizer.chat_template
             chat_template_name = None
         else:

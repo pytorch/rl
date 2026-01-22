@@ -25,9 +25,11 @@ except ImportError:
 try:
     from vllm.utils import get_open_port
 except ImportError:
+
     def get_open_port():
         """Fallback get_open_port using standard library."""
         import socket
+
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind(("", 0))
             return s.getsockname()[1]

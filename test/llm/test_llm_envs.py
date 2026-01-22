@@ -1121,7 +1121,9 @@ class TestChatEnvIntegration:
             "tokens_no_compute_reward",
         ],
     )
-    @pytest.mark.skip(reason="Ray placement group timeout with vLLM async engine - skipped to reduce CI time")
+    @pytest.mark.skip(
+        reason="Ray placement group timeout with vLLM async engine - skipped to reduce CI time"
+    )
     def test_chat_env_integration_ifeval(self, compute_reward, pad_output, input_mode):
         """Test that the wrapper works correctly with the ChatEnv."""
         import vllm.envs as envs
@@ -1173,7 +1175,9 @@ class TestChatEnvIntegration:
     @pytest.mark.parametrize(
         "input_mode", ["history", "text", "tokens"], ids=["history", "text", "tokens"]
     )
-    @pytest.mark.skip(reason="Ray placement group timeout with vLLM async engine - skipped to reduce CI time")
+    @pytest.mark.skip(
+        reason="Ray placement group timeout with vLLM async engine - skipped to reduce CI time"
+    )
     def test_chat_env_integration_gsm8k(self, compute_reward, pad_output, input_mode):
         """Test that the wrapper works correctly with the ChatEnv."""
         import vllm.envs as envs

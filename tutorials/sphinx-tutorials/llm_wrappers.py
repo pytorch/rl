@@ -23,7 +23,6 @@ Key Features:
 # -----------------
 # First, let's set up the environment and import the necessary modules.
 
-import os
 import warnings
 
 # Suppress warnings for cleaner output

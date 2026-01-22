@@ -248,7 +248,9 @@ class _AsyncLLMEngine:
                 ray_address = ray.get_runtime_context().gcs_address
                 if ray_address and "RAY_ADDRESS" not in os.environ:
                     os.environ["RAY_ADDRESS"] = ray_address
-                    torchrl_logger.debug(f"Set RAY_ADDRESS={ray_address} for vLLM subprocess")
+                    torchrl_logger.debug(
+                        f"Set RAY_ADDRESS={ray_address} for vLLM subprocess"
+                    )
         except Exception:
             pass  # Ray not available or not initialized, let vLLM handle it
 
