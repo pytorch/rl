@@ -71,22 +71,26 @@ This document tracks known issues with the LLM tests that need to be addressed i
 - **Files**: `test/llm/test_data.py`
 - **Test**: `test_history_assistant_mask_llama`
 - **Issue**: Tests using Llama tokenizer fail because model is gated on HuggingFace
-- **Fix Applied**: Changed from `pytest.xfail()` to `pytest.skip()` with clear message
-  - Test will run if Llama tokenizer is available (e.g., with HF credentials)
-  - Skips gracefully in CI environments without access
-  - The History API is still tested via `test_history_assistant_mask_qwen`
+- **Fix Applied**: Created a mock Llama tokenizer fixture using GPT-2 as base with Llama 3 special tokens added
+  - Test now runs without requiring access to gated models
+  - Mock tokenizer includes `<|begin_of_text|>`, `<|header_start|>`, `<|header_end|>`, `<|eot|>` tokens
+  - Properly tests the Llama chat template parsing API
+- **Status**: Fixed
+
+### 11. TransformersWrapper History Output in Collector
+- **Files**: `torchrl/modules/llm/policies/transformers_wrapper.py`
+- **Test**: `test_llm_collector_with_transformers`
+- **Issue**: TransformersWrapper history output not populated correctly in collector context
+  - The `("next", "history", "prompt")` key was empty when using TransformersWrapper
+  - Root cause: `_from_transformers_generate_history` was not setting `ChatHistory.full`
+  - `ChatEnv._step_history` reads `chat_history.full` to get the complete conversation
+- **Fix Applied**: Added missing `history_chat_flat.full = history_chat_flat.prompt.extend(h_responses, inplace=False, dim=-1)`
+- **Documentation**: Added `test/llm/TRANSFORMERS_CHATENV_INTEGRATION.md` explaining the data flow
 - **Status**: Fixed
 
 ## Issues Requiring Follow-up PRs
 
-### 1. TransformersWrapper History Output in Collector
-- **Test**: `test_llm_collector_with_transformers`
-- **Issue**: TransformersWrapper history output not populated correctly in collector context
-  - The `("next", "history", "prompt")` key is empty when using TransformersWrapper
-  - vLLMWrapper works correctly with the same test setup
-  - Likely an integration issue between ChatEnv and TransformersWrapper
-- **Workaround**: Test marked as xfail
-- **Priority**: Medium - requires further investigation
+(No remaining issues)
 
 ## Test Configuration Changes
 
