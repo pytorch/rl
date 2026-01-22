@@ -1,0 +1,146 @@
+# Labels for TorchRL repository
+# Use with: gh label create "Label Name" --description "Description" --color "hex"
+# Or run: .github/scripts/create_labels.sh pytorch/rl
+
+# =============================================================================
+# Issue/PR Type Labels
+# =============================================================================
+- name: bug
+  description: "Something isn't working"
+  color: "d73a4a"
+
+- name: enhancement
+  description: "New feature or request"
+  color: "a2eeef"
+
+- name: documentation
+  description: "Improvements or additions to documentation"
+  color: "0075ca"
+
+- name: question
+  description: "Further information is requested"
+  color: "d876e3"
+
+- name: good first issue
+  description: "Good for newcomers"
+  color: "7057ff"
+
+- name: help wanted
+  description: "Extra attention is needed"
+  color: "008672"
+
+- name: duplicate
+  description: "This issue or pull request already exists"
+  color: "cfd3d7"
+
+- name: wontfix
+  description: "This will not be worked on"
+  color: "ffffff"
+
+- name: invalid
+  description: "This doesn't seem right"
+  color: "e4e669"
+
+# =============================================================================
+# CI Trigger Labels - Environments
+# =============================================================================
+# Parent label - triggers ALL environment tests
+- name: Environments
+  description: "Triggers all environment CI tests"
+  color: "0E8A16"
+
+# Individual environment labels
+- name: Environments/brax
+  description: "Triggers brax environment tests only"
+  color: "0E8A16"
+
+- name: Environments/chess
+  description: "Triggers chess environment tests only"
+  color: "0E8A16"
+
+- name: Environments/envpool
+  description: "Triggers envpool environment tests only"
+  color: "0E8A16"
+
+- name: Environments/isaaclab
+  description: "Triggers Isaac Lab environment tests only"
+  color: "0E8A16"
+
+- name: Environments/jumanji
+  description: "Triggers jumanji environment tests only"
+  color: "0E8A16"
+
+- name: Environments/meltingpot
+  description: "Triggers meltingpot environment tests only"
+  color: "0E8A16"
+
+- name: Environments/open_spiel
+  description: "Triggers open_spiel environment tests only"
+  color: "0E8A16"
+
+- name: Environments/pettingzoo
+  description: "Triggers pettingzoo environment tests only"
+  color: "0E8A16"
+
+- name: Environments/procgen
+  description: "Triggers procgen environment tests only"
+  color: "0E8A16"
+
+- name: Environments/robohive
+  description: "Triggers robohive environment tests only"
+  color: "0E8A16"
+
+- name: Environments/smacv2
+  description: "Triggers smacv2 environment tests only"
+  color: "0E8A16"
+
+- name: Environments/unity_mlagents
+  description: "Triggers Unity ML-Agents environment tests only"
+  color: "0E8A16"
+
+- name: Environments/vmas
+  description: "Triggers vmas environment tests only"
+  color: "0E8A16"
+
+# =============================================================================
+# CI Trigger Labels - Data
+# =============================================================================
+# Parent label - triggers ALL data tests
+- name: Data
+  description: "Triggers all data CI tests"
+  color: "1D76DB"
+
+# Individual data labels
+- name: Data/gendgrl
+  description: "Triggers gen-dgrl data tests only"
+  color: "1D76DB"
+
+- name: Data/minari
+  description: "Triggers minari data tests only"
+  color: "1D76DB"
+
+- name: Data/openx
+  description: "Triggers openx data tests only"
+  color: "1D76DB"
+
+- name: Data/roboset
+  description: "Triggers roboset data tests only"
+  color: "1D76DB"
+
+- name: Data/vd4rl
+  description: "Triggers vd4rl data tests only"
+  color: "1D76DB"
+
+# =============================================================================
+# CI Trigger Labels - LLM
+# =============================================================================
+- name: llm/
+  description: "Triggers LLM CI tests"
+  color: "FBCA04"
+
+# =============================================================================
+# CI Trigger Labels - Benchmarks
+# =============================================================================
+- name: benchmarks/upload
+  description: "Uploads benchmark results on PR"
+  color: "5319E7"
