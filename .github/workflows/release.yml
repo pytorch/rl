@@ -18,6 +18,10 @@ on:
         description: 'Skip sanity checks (for retry after fixing issues)'
         type: boolean
         default: false
+      dry_run:
+        description: 'Dry run - do everything except publish to PyPI'
+        type: boolean
+        default: false
 
 concurrency:
   group: release-${{ github.ref_name }}
@@ -274,7 +278,7 @@ jobs:
           grep -A2 -B2 "stable release" versions.html || true
 
       - name: Commit and push docs update
-        if: steps.check.outputs.needs_update == 'true'
+        if: steps.check.outputs.needs_update == 'true' && !inputs.dry_run
         run: |
           git config user.name 'pytorchbot'
           git config user.email 'soumith+bot@pytorch.org'
@@ -288,6 +292,14 @@ jobs:
             git push
             echo "Pushed docs update"
           fi
+
+      - name: Dry run - show docs changes
+        if: steps.check.outputs.needs_update == 'true' && inputs.dry_run
+        run: |
+          echo "::notice::DRY RUN - Would update docs but skipping push"
+          echo "Changes that would be made:"
+          echo "- stable symlink: ${{ steps.version.outputs.short_version }}"
+          git diff || true
 
   # =============================================================================
   # Create draft GitHub release
@@ -312,8 +324,16 @@ jobs:
           TAG="${{ inputs.tag || github.ref_name }}"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
+      - name: List wheels (dry run info)
+        run: |
+          echo "Wheels that would be attached to release:"
+          ls -la dist/
+          echo ""
+          echo "Total: $(find dist/ -name '*.whl' | wc -l) wheels"
+
       - name: Check if release exists
         id: check_release
+        if: ${{ !inputs.dry_run }}
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
           if gh release view "$TAG" &>/dev/null; then
@@ -326,7 +346,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create draft release
-        if: steps.check_release.outputs.exists == 'false'
+        if: ${{ !inputs.dry_run && steps.check_release.outputs.exists == 'false' }}
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
           
@@ -344,7 +364,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload wheels to existing release
-        if: steps.check_release.outputs.exists == 'true'
+        if: ${{ !inputs.dry_run && steps.check_release.outputs.exists == 'true' }}
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
           
@@ -356,12 +376,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Dry run summary
+        if: ${{ inputs.dry_run }}
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          echo "::notice::DRY RUN - Would create/update draft release for $TAG"
+          echo "::notice::DRY RUN - Would attach $(find dist/ -name '*.whl' | wc -l) wheels"
+
   # =============================================================================
   # Publish to PyPI (requires manual approval via environment)
   # =============================================================================
   publish-pypi:
     needs: [collect-wheels, update-docs, create-draft-release]
-    if: always() && needs.collect-wheels.result == 'success'
+    if: always() && needs.collect-wheels.result == 'success' && !inputs.dry_run
     runs-on: ubuntu-latest
     environment: pypi-publish
     permissions:
@@ -392,3 +419,30 @@ jobs:
           # Uses OIDC trusted publishing - no API token needed
           # Requires setup at: https://pypi.org/manage/project/torchrl/settings/publishing/
           verbose: true
+
+  # =============================================================================
+  # Dry run summary (only runs in dry run mode)
+  # =============================================================================
+  dry-run-summary:
+    needs: [sanity-checks, collect-wheels, update-docs, create-draft-release]
+    if: always() && inputs.dry_run && needs.collect-wheels.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dry run complete
+        run: |
+          echo "=============================================="
+          echo "DRY RUN COMPLETE"
+          echo "=============================================="
+          echo ""
+          echo "The following steps were executed:"
+          echo "  [x] Sanity checks (branch, tag, version files)"
+          echo "  [x] Build wheels for all platforms"
+          echo "  [x] Collect and verify wheels"
+          echo ""
+          echo "The following steps were SKIPPED (dry run):"
+          echo "  [ ] Update gh-pages docs (stable symlink)"
+          echo "  [ ] Create/update GitHub draft release"
+          echo "  [ ] Publish to PyPI"
+          echo ""
+          echo "To perform a real release, re-run without dry_run option."
+          echo "=============================================="
