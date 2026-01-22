@@ -652,15 +652,23 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">started</span> <span class="o">=</span> <span class="kc">True</span>
 
         <span class="n">collected_steps</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="n">dones</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+        <span class="c1"># Use only the first dimension (num_envs) for done tracking, since we route by env_id</span>
+        <span class="n">dones</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span><span class="p">:</span>
                 <span class="k">break</span>
 
             <span class="n">cur_output</span><span class="p">,</span> <span class="n">next_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">async_step_and_maybe_reset_recv</span><span class="p">()</span>
 
-            <span class="c1"># Get the env ids</span>
-            <span class="n">env_ids</span> <span class="o">=</span> <span class="n">cur_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">_env_idx_key</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+            <span class="c1"># Get the env ids - flatten to handle multi-dimensional batch sizes</span>
+            <span class="c1"># (e.g., AsyncEnvPool with batch_size=[4, 1] gives [[0], [1], [2], [3]])</span>
+            <span class="n">env_ids_raw</span> <span class="o">=</span> <span class="n">cur_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">_env_idx_key</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+            <span class="c1"># Flatten nested lists to get scalar env indices</span>
+            <span class="n">env_ids</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">eid</span> <span class="ow">in</span> <span class="n">env_ids_raw</span><span class="p">:</span>
+                <span class="k">while</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">eid</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">eid</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">eid</span> <span class="o">=</span> <span class="n">eid</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="n">env_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">eid</span><span class="p">)</span>
 
             <span class="c1"># carry over collector data without messing up devices</span>
             <span class="n">collector_data</span> <span class="o">=</span> <span class="n">cur_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
@@ -696,6 +704,9 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">async_step_and_maybe_reset_send</span><span class="p">(</span><span class="n">env_input</span><span class="p">)</span>
 
         <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+        <span class="c1"># Flatten the result - AsyncEnvPool child envs with batch_size=(1,) produce</span>
+        <span class="c1"># trajectories with shape [1, T] but we want [T] for consistency</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
             <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;LLMCollector: Yielding completed trajectory with shape </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">.&quot;</span>

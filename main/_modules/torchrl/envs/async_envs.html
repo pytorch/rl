@@ -635,7 +635,19 @@
 
 
     <span class="k">def</span> <span class="nf">_sort_results</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">results</span><span class="p">,</span> <span class="o">*</span><span class="n">other_results</span><span class="p">):</span>
-        <span class="n">idx</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_env_idx_key</span><span class="p">])</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">results</span><span class="p">]</span>
+        <span class="c1"># Extract env indices from results. When child envs have a batch dimension</span>
+        <span class="c1"># (e.g., batch_size=(1,)), r[self._env_idx_key] may be a 1D sequence</span>
+        <span class="c1"># instead of a scalar, so we need to handle both cases.</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">results</span><span class="p">:</span>
+            <span class="n">env_idx</span> <span class="o">=</span> <span class="n">r</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_env_idx_key</span><span class="p">]</span>
+            <span class="c1"># Handle sequence types (NonTensorStack, etc.) by taking first element</span>
+            <span class="k">while</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">env_idx</span><span class="p">,</span> <span class="s2">&quot;__len__&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env_idx</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">)):</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">env_idx</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">env_idx</span> <span class="o">=</span> <span class="n">env_idx</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">break</span>
+            <span class="n">idx</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">env_idx</span><span class="p">))</span>
         <span class="n">argsort</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">idx</span><span class="p">))</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
         <span class="n">results</span> <span class="o">=</span> <span class="p">[</span><span class="n">results</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">argsort</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">other_results</span><span class="p">:</span>

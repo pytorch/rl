@@ -1130,6 +1130,10 @@
                 <span class="n">text_full</span><span class="p">,</span> <span class="n">prompt_histories</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template_name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span>
             <span class="p">)</span>
             <span class="n">history_chat_flat</span><span class="o">.</span><span class="n">response</span> <span class="o">=</span> <span class="n">h_responses</span>
+            <span class="c1"># Combine prompt and response to create full history</span>
+            <span class="n">history_chat_flat</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="n">history_chat_flat</span><span class="o">.</span><span class="n">prompt</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
+                <span class="n">h_responses</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span>
+            <span class="p">)</span>
         <span class="n">result</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">history_key</span><span class="p">,</span> <span class="n">history_chat</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span>
 
