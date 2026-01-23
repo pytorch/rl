@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import functools
 import math
+import warnings
 from abc import abstractmethod
 from enum import Enum
 
@@ -13,12 +14,12 @@ import torch
 
 from tensordict import NestedKey, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
-from torch import nn
-
 
 class MCTSScore(TensorDictModuleBase):
+    """Abstract base class for MCTS score computation modules."""
+
     @abstractmethod
-    def forward(self, node):
+    def forward(self, node: TensorDictBase) -> TensorDictBase:
         pass
 
 
@@ -128,6 +129,9 @@ class PUCTScore(MCTSScore):
         visits = node.get(self.visits_key)
         n_total = node.get(self.total_visits_key)
         prior_prob = node.get(self.prior_prob_key)
+        # Handle broadcasting for batched inputs
+        if n_total.ndim > 0 and n_total.ndim < visits.ndim:
+            n_total = n_total.unsqueeze(-1)
         node.set(
             self.score_key,
             (win_count / visits) + self.c * prior_prob * n_total.sqrt() / (1 + visits),
@@ -216,6 +220,9 @@ class UCBScore(MCTSScore):
         win_count = node.get(self.win_count_key)
         visits = node.get(self.visits_key)
         n_total = node.get(self.total_visits_key)
+        # Handle broadcasting for batched inputs
+        if n_total.ndim > 0 and n_total.ndim < visits.ndim:
+            n_total = n_total.unsqueeze(-1)
         node.set(
             self.score_key,
             (win_count / visits) + self.c * n_total.sqrt() / (1 + visits),
@@ -299,35 +306,31 @@ class EXP3Score(MCTSScore):
     def forward(self, node: TensorDictBase) -> TensorDictBase:
         num_actions = node.get(self.num_actions_key)
 
+        # Extract scalar value from num_actions (handles batched tensors too)
+        if isinstance(num_actions, torch.Tensor):
+            # For batched tensors, take the first element (all should be same)
+            k = int(num_actions.flatten()[0].item())
+        elif isinstance(num_actions, int):
+            k = num_actions
+        else:
+            raise ValueError(
+                f"'{self.num_actions_key}' ('num_actions') must be an integer or a tensor."
+            )
+
         if self.weights_key not in node.keys(include_nested=True):
             batch_size = node.batch_size
-            if isinstance(num_actions, torch.Tensor) and num_actions.numel() == 1:
-                k = int(num_actions.item())
-            elif isinstance(num_actions, int):
-                k = num_actions
-            else:
-                raise ValueError(
-                    f"'{self.num_actions_key}' ('num_actions') must be an integer or a scalar tensor."
-                )
             weights_shape = (*batch_size, k)
             weights = torch.ones(weights_shape, device=node.device)
             node.set(self.weights_key, weights)
         else:
             weights = node.get(self.weights_key)
 
-        k = weights.shape[-1]
-        if isinstance(num_actions, torch.Tensor) and num_actions.numel() == 1:
-            if k != num_actions.item():
-                raise ValueError(
-                    f"Shape of weights {weights.shape} implies {k} actions."
-                    f"but num_actions is {num_actions.item()}"
-                )
-        elif isinstance(num_actions, int):
-            if k != num_actions:
-                raise ValueError(
-                    f"Shape of weights {weights.shape} implies {k} actions, "
-                    f"but num_actions is {num_actions}."
-                )
+        k_from_weights = weights.shape[-1]
+        if k_from_weights != k:
+            raise ValueError(
+                f"Shape of weights {weights.shape} implies {k_from_weights} actions, "
+                f"but num_actions is {k}."
+            )
 
         sum_weights = torch.sum(weights, dim=-1, keepdim=True)
         sum_weights = torch.where(
@@ -386,8 +389,9 @@ class EXP3Score(MCTSScore):
             ```
         """
         if not (0 <= reward <= 1):
-            raise ValueError(
-                f"Reward {reward} is outside the expected [0, 1] range for EXP3."
+            warnings.warn(
+                f"Reward {reward} is outside the expected [0,1] range for EXP3.",
+                UserWarning,
             )
 
         weights = node.get(self.weights_key)
@@ -404,11 +408,14 @@ class EXP3Score(MCTSScore):
             raise ValueError(f"Invalid weights dimensions: {weights.ndim}")
 
         if torch.any(prob_i <= 0):
-            raise ValueError(
-                f"Probability p_i(t) for action {action_idx} is {prob_i}, which is <= 0."
-                " This might lead to issues in weight update."
+            prob_i_val = prob_i.item() if prob_i.numel() == 1 else prob_i
+            warnings.warn(
+                f"Probability p_i(t) for action {action_idx} is {prob_i_val}. "
+                "Weight will not be updated for zero probability actions.",
+                UserWarning,
             )
-            prob_i = torch.clamp(prob_i, min=1e-9)
+            # Don't update weights for zero probability - just return
+            return
 
         reward_tensor = torch.as_tensor(
             reward, device=current_weight.device, dtype=current_weight.dtype
@@ -543,7 +550,7 @@ class UCB1TunedScore(MCTSScore):
             ).sqrt()
 
             v_i_v = empirical_variance_v + bias_correction_v
-            v_i_v.clamp(min=0)
+            v_i_v = v_i_v.clamp(min=0)
 
             min_variance_term_v = torch.min(torch.full_like(v_i_v, 0.25), v_i_v)
             exploration_component_v = (
@@ -561,10 +568,11 @@ class UCB1TunedScore(MCTSScore):
 
 
 class MCTSScores(Enum):
+    """Enum providing factory functions for common MCTS score configurations."""
+
     PUCT = functools.partial(PUCTScore, c=5)  # AlphaGo default value
     UCB = functools.partial(UCBScore, c=math.sqrt(2))  # default from Auer et al. 2002
     UCB1_TUNED = functools.partial(
         UCB1TunedScore, exploration_constant=2.0
     )  # Auer et al. (2002) C=2 for rewards in [0,1]
     EXP3 = functools.partial(EXP3Score, gamma=0.1)
-    PUCT_VARIANT = "PUCT-Variant"

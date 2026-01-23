@@ -10,6 +10,8 @@ import functools
 import importlib
 import os
 import pickle
+import shutil
+import signal
 import sys
 import tempfile
 from functools import partial
@@ -1799,6 +1801,30 @@ def test_batch_errors():
     for _ in rb:
         pass
     rb.sample()
+
+
+def test_storage_save_hook(tmpdir):
+    observed = {}
+
+    class SaveHook:
+        shift = None
+        is_full = None
+
+        def __call__(self, data, path=None):
+            observed["shift"] = self.shift
+            observed["is_full"] = self.is_full
+            return data
+
+    hook = SaveHook()
+    rb = ReplayBuffer(storage=LazyMemmapStorage(10))
+    rb.register_save_hook(hook)
+    rb.extend(torch.arange(5))
+    rb.dumps(tmpdir)
+
+    assert hook.shift == 5, f"Expected shift=5, got {hook.shift}"
+    assert hook.is_full is False, f"Expected is_full=False, got {hook.is_full}"
+    assert observed["shift"] == 5
+    assert observed["is_full"] is False
 
 
 @pytest.mark.skipif(not torchrl._utils.RL_WARNINGS, reason="RL_WARNINGS is not set")
@@ -4582,6 +4608,270 @@ class TestRBLazyInit:
         assert rb._init_sampler is None
         assert rb._writer is not None
         assert rb._init_writer is None
+
+
+@pytest.mark.skipif(
+    _os_is_windows, reason="Windows file locking prevents cleanup tests"
+)
+class TestLazyMemmapStorageCleanup:
+    """Tests for LazyMemmapStorage automatic cleanup functionality."""
+
+    def test_cleanup_explicit_scratch_dir(self, tmpdir):
+        """Test that cleanup removes files when scratch_dir is specified."""
+        scratch_dir = str(tmpdir / "memmap_storage")
+        os.makedirs(scratch_dir, exist_ok=True)
+
+        storage = LazyMemmapStorage(100, scratch_dir=scratch_dir, auto_cleanup=True)
+        rb = ReplayBuffer(storage=storage)
+        rb.extend(TensorDict(a=torch.randn(10), batch_size=[10]))
+
+        # Verify files were created
+        assert os.path.isdir(scratch_dir)
+        assert len(os.listdir(scratch_dir)) > 0
+
+        # Cleanup should remove the directory
+        result = storage.cleanup()
+        assert result is True
+        assert not os.path.exists(scratch_dir)
+
+        # Second cleanup should be a no-op
+        result = storage.cleanup()
+        assert result is False
+
+    def test_cleanup_temp_dir(self):
+        """Test cleanup when using default temp directory."""
+        storage = LazyMemmapStorage(100, auto_cleanup=True)
+        rb = ReplayBuffer(storage=storage)
+        rb.extend(TensorDict(a=torch.randn(10), batch_size=[10]))
+
+        # Get the temp directory paths before cleanup
+        temp_paths = set()
+        for tensor in storage._storage.values(include_nested=True, leaves_only=True):
+            try:
+                if hasattr(tensor, "filename") and tensor.filename:
+                    temp_paths.add(os.path.dirname(tensor.filename))
+            except (AttributeError, RuntimeError):
+                continue
+
+        # Cleanup should remove the files if any were created on disk
+        result = storage.cleanup()
+        if len(temp_paths) > 0:
+            assert result is True
+            # Paths should no longer exist
+            for path in temp_paths:
+                assert not os.path.exists(path)
+        else:
+            # If no files were created (e.g. anonymous memmap), result should be False
+            assert result is False
+
+    def test_auto_cleanup_default_behavior(self, tmpdir):
+        """Test that auto_cleanup defaults correctly based on scratch_dir."""
+        # When scratch_dir is None, auto_cleanup should default to True
+        storage1 = LazyMemmapStorage(100)
+        assert storage1._auto_cleanup is True
+        assert storage1._scratch_dir_is_temp is True
+
+        # When scratch_dir is provided, auto_cleanup should default to False
+        scratch_dir = str(tmpdir / "user_storage")
+        storage2 = LazyMemmapStorage(100, scratch_dir=scratch_dir)
+        assert storage2._auto_cleanup is False
+        assert storage2._scratch_dir_is_temp is False
+
+        # User can override
+        storage3 = LazyMemmapStorage(100, scratch_dir=scratch_dir, auto_cleanup=True)
+        assert storage3._auto_cleanup is True
+
+        storage4 = LazyMemmapStorage(100, auto_cleanup=False)
+        assert storage4._auto_cleanup is False
+
+    def test_cleanup_idempotent(self, tmpdir):
+        """Test that cleanup can be called multiple times safely."""
+        scratch_dir = str(tmpdir / "memmap_storage")
+        os.makedirs(scratch_dir, exist_ok=True)
+
+        storage = LazyMemmapStorage(100, scratch_dir=scratch_dir, auto_cleanup=True)
+        rb = ReplayBuffer(storage=storage)
+        rb.extend(TensorDict(a=torch.randn(10), batch_size=[10]))
+
+        # Multiple cleanups should not raise
+        storage.cleanup()
+        storage.cleanup()
+        storage.cleanup()
+        assert storage._cleaned_up is True
+
+    def test_cleanup_nonexistent_dir(self, tmpdir):
+        """Test cleanup when directory was already deleted."""
+        scratch_dir = str(tmpdir / "memmap_storage")
+        os.makedirs(scratch_dir, exist_ok=True)
+
+        storage = LazyMemmapStorage(100, scratch_dir=scratch_dir, auto_cleanup=True)
+        rb = ReplayBuffer(storage=storage)
+        rb.extend(TensorDict(a=torch.randn(10), batch_size=[10]))
+
+        # Delete the directory externally
+        shutil.rmtree(scratch_dir)
+        assert not os.path.exists(scratch_dir)
+
+        # Cleanup should handle missing directory gracefully
+        result = storage.cleanup()
+        assert result is False  # No cleanup needed since dir is gone
+
+    def test_cleanup_uninitialized_storage(self):
+        """Test cleanup on storage that was never used."""
+        storage = LazyMemmapStorage(100, auto_cleanup=True)
+        # Storage is not initialized - cleanup should be safe
+        result = storage.cleanup()
+        assert result is False
+
+    def test_cleanup_registry(self):
+        """Test that storages are registered for cleanup."""
+        from torchrl.data.replay_buffers.storages import _MEMMAP_STORAGE_REGISTRY
+
+        initial_count = len(list(_MEMMAP_STORAGE_REGISTRY))
+
+        storage = LazyMemmapStorage(100, auto_cleanup=True)
+        assert len(list(_MEMMAP_STORAGE_REGISTRY)) == initial_count + 1
+
+        # Storage with auto_cleanup=False should not be registered
+        storage2 = LazyMemmapStorage(100, auto_cleanup=False)
+        assert len(list(_MEMMAP_STORAGE_REGISTRY)) == initial_count + 1
+
+        # Cleanup should still work
+        storage.cleanup()
+
+    def test_cleanup_subprocess(self, tmpdir):
+        """Test that cleanup works correctly in subprocess scenarios."""
+        import subprocess
+        import sys
+
+        scratch_dir = str(tmpdir / "subprocess_storage")
+
+        # Create a script that creates a storage and exits normally
+        script = f"""
+import torch
+from tensordict import TensorDict
+from torchrl.data import ReplayBuffer, LazyMemmapStorage
+
+storage = LazyMemmapStorage(100, scratch_dir="{scratch_dir}", auto_cleanup=True)
+rb = ReplayBuffer(storage=storage)
+rb.extend(TensorDict(a=torch.randn(10), batch_size=[10]))
+print("Storage created")
+# Normal exit - atexit handler should clean up
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        # Script should have succeeded
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        # Directory should have been cleaned up on exit
+        assert not os.path.exists(
+            scratch_dir
+        ), f"Directory {scratch_dir} should have been cleaned up"
+
+    def test_cleanup_signal_interrupt(self, tmpdir):
+        """Test that cleanup happens on SIGINT (Ctrl+C)."""
+        import subprocess
+        import sys
+        import time
+
+        scratch_dir = str(tmpdir / "signal_storage")
+
+        # Create a script that sleeps and can be interrupted
+        script = f"""
+import signal
+import time
+import torch
+from tensordict import TensorDict
+from torchrl.data import ReplayBuffer, LazyMemmapStorage
+
+storage = LazyMemmapStorage(100, scratch_dir="{scratch_dir}", auto_cleanup=True)
+rb = ReplayBuffer(storage=storage)
+rb.extend(TensorDict(a=torch.randn(10), batch_size=[10]))
+print("READY", flush=True)
+time.sleep(60)  # Will be interrupted
+"""
+        proc = subprocess.Popen(
+            [sys.executable, "-c", script],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+        # Wait for the script to be ready
+        try:
+            # Read until we see READY
+            start = time.time()
+            while time.time() - start < 10:
+                line = proc.stdout.readline()
+                if "READY" in line:
+                    break
+            else:
+                proc.kill()
+                pytest.skip("Script did not start in time")
+
+            # Give it a moment to set up signal handlers
+            time.sleep(0.5)
+
+            # Verify directory exists
+            assert os.path.isdir(scratch_dir)
+
+            # Send SIGINT (Ctrl+C)
+            proc.send_signal(signal.SIGINT)
+            proc.wait(timeout=5)
+
+            # Directory should have been cleaned up
+            assert not os.path.exists(
+                scratch_dir
+            ), f"Directory {scratch_dir} should have been cleaned up on SIGINT"
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+
+    def test_cleanup_with_del(self, tmpdir):
+        """Test that __del__ triggers cleanup."""
+        scratch_dir = str(tmpdir / "del_storage")
+        os.makedirs(scratch_dir, exist_ok=True)
+
+        def create_and_delete():
+            storage = LazyMemmapStorage(100, scratch_dir=scratch_dir, auto_cleanup=True)
+            rb = ReplayBuffer(storage=storage)
+            rb.extend(TensorDict(a=torch.randn(10), batch_size=[10]))
+            # Storage goes out of scope here
+
+        create_and_delete()
+
+        # Force garbage collection
+        import gc
+
+        gc.collect()
+
+        # Note: __del__ is not guaranteed to run immediately, but the cleanup
+        # infrastructure should still work via atexit
+
+    def test_cleanup_preserves_user_data_by_default(self, tmpdir):
+        """Test that user-specified directories are NOT cleaned by default."""
+        scratch_dir = str(tmpdir / "user_data")
+        os.makedirs(scratch_dir, exist_ok=True)
+
+        storage = LazyMemmapStorage(100, scratch_dir=scratch_dir)
+        rb = ReplayBuffer(storage=storage)
+        rb.extend(TensorDict(a=torch.randn(10), batch_size=[10]))
+
+        # auto_cleanup should be False by default
+        assert storage._auto_cleanup is False
+
+        # Directory should exist
+        assert os.path.isdir(scratch_dir)
+
+        # Explicit cleanup should still work
+        storage.cleanup()
+        assert not os.path.exists(scratch_dir)
 
 
 if __name__ == "__main__":

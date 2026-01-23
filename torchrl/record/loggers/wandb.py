@@ -15,6 +15,7 @@ from .common import Logger
 
 _has_wandb = importlib.util.find_spec("wandb") is not None
 _has_omegaconf = importlib.util.find_spec("omegaconf") is not None
+_has_moviepy = importlib.util.find_spec("moviepy") is not None
 
 
 class WandbLogger(Logger):
@@ -130,7 +131,16 @@ class WandbLogger(Logger):
                 supports 'step' (integer indicating the step index), 'format'
                 (default is 'mp4') and 'fps' (defaults to ``self.video_fps``). Other kwargs are
                 passed as-is to the :obj:`experiment.log` method.
+
+        Raises:
+            ImportError: If moviepy is not installed (required by wandb for video encoding).
         """
+        if not _has_moviepy:
+            raise ImportError(
+                "Video logging with wandb requires moviepy. "
+                "Install with: pip install moviepy\n"
+                "Or install wandb with media support: pip install 'wandb[media]'"
+            )
         import wandb
 
         fps = kwargs.pop("fps", self.video_fps)

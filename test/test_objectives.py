@@ -129,6 +129,7 @@ from torchrl.objectives.utils import (
 )
 from torchrl.objectives.value.advantages import (
     GAE,
+    TD0Estimator,
     TD1Estimator,
     TDLambdaEstimator,
     VTrace,
@@ -18097,6 +18098,167 @@ def test_loss_exploration():
         assert exploration_type() == ExplorationType.RANDOM
         loss_fn(None, ExplorationType.MEAN)
         assert exploration_type() == ExplorationType.RANDOM
+
+
+@pytest.mark.parametrize("device", get_default_devices())
+class TestMakeValueEstimator:
+    """Tests for make_value_estimator accepting ValueEstimatorBase instances and subclasses."""
+
+    def _create_mock_value_net(self, obs_dim=4, device="cpu"):
+        """Create a simple value network for testing."""
+        return TensorDictModule(
+            nn.Linear(obs_dim, 1),
+            in_keys=["observation"],
+            out_keys=["state_value"],
+        ).to(device)
+
+    def _create_mock_actor(self, obs_dim=4, action_dim=2, device="cpu"):
+        """Create a simple actor network for testing."""
+        return ProbabilisticActor(
+            module=TensorDictModule(
+                nn.Linear(obs_dim, 2 * action_dim),
+                in_keys=["observation"],
+                out_keys=["loc", "scale"],
+            ),
+            in_keys=["loc", "scale"],
+            distribution_class=TanhNormal,
+            return_log_prob=True,
+            spec=Composite(action=Bounded(-1, 1, (action_dim,))),
+        ).to(device)
+
+    def _create_mock_qvalue(self, obs_dim=4, action_dim=2, device="cpu"):
+        """Create a simple Q-value network for testing."""
+        return TensorDictModule(
+            nn.Linear(obs_dim + action_dim, 1),
+            in_keys=["observation", "action"],
+            out_keys=["state_action_value"],
+        ).to(device)
+
+    @set_composite_lp_aggregate(False)
+    def test_make_value_estimator_with_instance(self, device):
+        """Test that make_value_estimator accepts a ValueEstimatorBase instance."""
+        value_net = self._create_mock_value_net(device=device)
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+
+        # Create a value estimator instance
+        value_estimator = TD0Estimator(
+            gamma=0.99,
+            value_network=value_net,
+        )
+
+        # Create a loss module that supports value estimation
+        loss_fn = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+        )
+
+        # Pass the instance to make_value_estimator
+        result = loss_fn.make_value_estimator(value_estimator)
+
+        # Verify the value estimator was set correctly
+        assert loss_fn._value_estimator is value_estimator
+        assert loss_fn.value_type is TD0Estimator
+        # Verify chaining works
+        assert result is loss_fn
+
+    @set_composite_lp_aggregate(False)
+    def test_make_value_estimator_with_class(self, device):
+        """Test that make_value_estimator accepts a ValueEstimatorBase subclass."""
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+
+        # Create a loss module
+        loss_fn = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+        )
+
+        # Pass a class with hyperparameters
+        result = loss_fn.make_value_estimator(
+            TD0Estimator,
+            gamma=0.95,
+            value_network=None,  # SAC losses don't need a separate value network
+        )
+
+        # Verify the value estimator was instantiated correctly
+        assert isinstance(loss_fn._value_estimator, TD0Estimator)
+        assert loss_fn.value_type is TD0Estimator
+        assert loss_fn._value_estimator.gamma == 0.95
+        # Verify chaining works
+        assert result is loss_fn
+
+    @set_composite_lp_aggregate(False)
+    def test_make_value_estimator_with_class_inherits_device(self, device):
+        """Test that make_value_estimator with a class inherits device from loss module."""
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+
+        # Create a loss module
+        loss_fn = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+        )
+
+        # Pass a class without explicit device
+        loss_fn.make_value_estimator(
+            TD0Estimator,
+            gamma=0.99,
+            value_network=None,
+        )
+
+        # The value estimator should have inherited the device
+        assert loss_fn._value_estimator.gamma.device == device
+
+    @set_composite_lp_aggregate(False)
+    def test_make_value_estimator_with_gae_class(self, device):
+        """Test that make_value_estimator works with GAE class."""
+        value_net = self._create_mock_value_net(device=device)
+        actor = self._create_mock_actor(device=device)
+
+        # Create a PPO loss which supports GAE
+        loss_fn = PPOLoss(
+            actor_network=actor,
+            critic_network=value_net,
+        )
+
+        # Pass GAE class with hyperparameters
+        loss_fn.make_value_estimator(
+            GAE,
+            gamma=0.99,
+            lmbda=0.95,
+            value_network=value_net,
+        )
+
+        # Verify the value estimator was instantiated correctly
+        assert isinstance(loss_fn._value_estimator, GAE)
+        assert loss_fn.value_type is GAE
+
+    @set_composite_lp_aggregate(False)
+    def test_make_value_estimator_with_gae_instance(self, device):
+        """Test that make_value_estimator works with GAE instance."""
+        value_net = self._create_mock_value_net(device=device)
+        actor = self._create_mock_actor(device=device)
+
+        # Create a GAE instance
+        gae = GAE(
+            gamma=0.99,
+            lmbda=0.95,
+            value_network=value_net,
+        )
+
+        # Create a PPO loss
+        loss_fn = PPOLoss(
+            actor_network=actor,
+            critic_network=value_net,
+        )
+
+        # Pass the GAE instance
+        loss_fn.make_value_estimator(gae)
+
+        # Verify it was set directly
+        assert loss_fn._value_estimator is gae
+        assert loss_fn.value_type is GAE
 
 
 if __name__ == "__main__":

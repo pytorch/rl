@@ -12,7 +12,8 @@ from packaging import version
 from tensordict import TensorDict, TensorDictBase
 
 from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
-from torchrl.envs.common import _EnvWrapper
+from torchrl.envs.batched_envs import ParallelEnv
+from torchrl.envs.common import _EnvPostInit, _EnvWrapper
 from torchrl.envs.libs.jax_utils import (
     _extract_spec,
     _ndarray_to_tensor,
@@ -36,6 +37,34 @@ def _get_envs():
     import brax.envs
 
     return list(brax.envs._envs.keys())
+
+
+class _BraxMeta(_EnvPostInit):
+    """Metaclass for BraxEnv that returns a lazy ParallelEnv when num_workers > 1."""
+
+    def __call__(cls, *args, num_workers: int | None = None, **kwargs):
+        # Extract num_workers from explicit kwarg or kwargs dict
+        if num_workers is None:
+            num_workers = kwargs.pop("num_workers", 1)
+        else:
+            kwargs.pop("num_workers", None)
+
+        num_workers = int(num_workers)
+        if cls.__name__ == "BraxEnv" and num_workers > 1:
+            # Extract env_name from args or kwargs
+            env_name = args[0] if len(args) >= 1 else kwargs.get("env_name")
+
+            # Remove env_name from kwargs if present (it will be passed positionally)
+            env_kwargs = {k: v for k, v in kwargs.items() if k != "env_name"}
+
+            # Create factory function that builds single BraxEnv instances
+            def make_env(_env_name=env_name, _kwargs=env_kwargs):
+                return cls(_env_name, num_workers=1, **_kwargs)
+
+            # Return lazy ParallelEnv (workers not started yet)
+            return ParallelEnv(num_workers, make_env)
+
+        return super().__call__(*args, **kwargs)
 
 
 class BraxWrapper(_EnvWrapper):
@@ -69,7 +98,10 @@ class BraxWrapper(_EnvWrapper):
         device (torch.device, optional): if provided, the device on which the data
             is to be cast. Defaults to ``torch.device("cpu")``.
         batch_size (torch.Size, optional): the batch size of the environment.
-            In ``brax``, this indicates the number of vectorized environments.
+            In ``brax``, this controls the number of environments simulated in
+            parallel via JAX's ``vmap`` on a single device (GPU/TPU). Brax leverages
+            MuJoCo XLA (MJX) for hardware-accelerated batched simulation, enabling
+            thousands of environments to run in parallel within a single process.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
             for envs to be ``done`` just after :meth:`reset` is called.
@@ -326,6 +358,14 @@ class BraxWrapper(_EnvWrapper):
     def _reset(self, tensordict: TensorDictBase = None, **kwargs) -> TensorDictBase:
         jax = self.jax
 
+        # ensure a valid JAX PRNG key exists
+        if getattr(self, "_key", None) is None:
+            seed = getattr(self, "_seed", None)
+            if seed is None:
+                seed = 0
+
+            self._key = jax.random.PRNGKey(int(seed))
+
         # generate random keys
         self._key, *keys = jax.random.split(self._key, 1 + self.numel())
 
@@ -471,7 +511,7 @@ class BraxWrapper(_EnvWrapper):
                 pass
 
 
-class BraxEnv(BraxWrapper):
+class BraxEnv(BraxWrapper, metaclass=_BraxMeta):
     """Google Brax environment wrapper built with the environment name.
 
     Brax offers a vectorized and differentiable simulation framework based on Jax.
@@ -503,11 +543,31 @@ class BraxEnv(BraxWrapper):
         device (torch.device, optional): if provided, the device on which the data
             is to be cast. Defaults to ``torch.device("cpu")``.
         batch_size (torch.Size, optional): the batch size of the environment.
-            In ``brax``, this indicates the number of vectorized environments.
+            In ``brax``, this controls the number of environments simulated in
+            parallel via JAX's ``vmap`` on a single device (GPU/TPU). Brax leverages
+            MuJoCo XLA (MJX) for hardware-accelerated batched simulation, enabling
+            thousands of environments to run in parallel within a single process.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
             for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
+        num_workers (int, optional): if greater than 1, a lazy :class:`~torchrl.envs.ParallelEnv`
+            will be returned instead, with each worker instantiating its own
+            :class:`~torchrl.envs.BraxEnv` instance. Defaults to ``None``.
+
+    .. note::
+        There are two orthogonal ways to scale environment throughput:
+
+        - **batch_size**: Uses Brax's native JAX-based vectorization (``vmap``) to run
+          multiple environments in parallel on a single GPU/TPU. This is highly efficient
+          for moderate batch sizes where the MJX solver has not yet saturated.
+        - **num_workers**: Uses TorchRL's :class:`~torchrl.envs.ParallelEnv` to spawn
+          multiple Python processes, each running its own ``BraxEnv``.
+
+        These can be combined: ``BraxEnv("ant", batch_size=[128], num_workers=4)`` creates
+        4 worker processes, each running 128 vectorized environments, for a total of 512
+        parallel environments. This hybrid approach can be beneficial when the MJX solver
+        saturates on a single device, or when distributing across multiple GPUs/CPUs.
 
     Attributes:
         available_envs: environments available to build
@@ -540,6 +600,18 @@ class BraxEnv(BraxWrapper):
             is_shared=False)
         >>> print(env.available_envs)
         ['acrobot', 'ant', 'fast', 'fetch', ...]
+
+        # Example: create a parallel environment with 4 workers. This returns a lazy
+        # ParallelEnv; each worker will instantiate a BraxEnv with num_workers=1.
+        >>> from torchrl.envs import BraxEnv
+        >>> par_env = BraxEnv("ant", batch_size=[8], num_workers=4, device="cpu")
+        >>> # par_env is a ParallelEnv; start interacting as usual
+        >>> par_env.set_seed(0)
+        >>> td = par_env.reset()
+        >>> print(td.shape)
+        torch.Size([4, 8])
+        >>> td["action"] = par_env.action_spec.rand()
+        >>> td = par_env.step(td)
 
     To take advante of Brax, one usually executes multiple environments at the
     same time. In the following example, we iteratively test different batch sizes

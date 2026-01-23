@@ -599,7 +599,7 @@ loss_module = ClipPPOLoss(
     actor_network=policy,
     critic_network=critic,
     clip_epsilon=clip_epsilon,
-    entropy_coef=entropy_eps,
+    entropy_coeff=entropy_eps,
     normalize_advantage=False,  # Important to avoid normalizing across the agent dimension
 )
 loss_module.set_keys(  # We have to tell the loss where to find the keys

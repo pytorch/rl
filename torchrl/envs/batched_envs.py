@@ -35,9 +35,11 @@ from torch import multiprocessing as mp
 
 from torchrl._utils import (
     _check_for_faulty_process,
+    _get_default_mp_start_method,
     _make_ordinal_device,
     logger as torchrl_logger,
     rl_warnings,
+    timeit,
     VERBOSE,
 )
 from torchrl.data.tensor_specs import Composite, NonTensor
@@ -46,11 +48,6 @@ from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, EnvMetaData
 
 from torchrl.envs.env_creator import EnvCreator, get_env_metadata
 
-# legacy
-from torchrl.envs.libs.envpool import (  # noqa: F401
-    MultiThreadedEnv,
-    MultiThreadedEnvWrapper,
-)
 from torchrl.envs.utils import (
     _aggregate_end_of_traj,
     _sort_keys,
@@ -206,6 +203,8 @@ class BatchedEnvBase(EnvBase):
 
     Those queries will return a list of length equal to the number of workers containing the
     values resulting from those queries.
+
+    Example:
         >>> env = ParallelEnv(3, my_env_fun)
         >>> custom_attribute_list = env.custom_attribute
         >>> custom_method_list = env.custom_method(*args)
@@ -463,6 +462,73 @@ class BatchedEnvBase(EnvBase):
         self._mp_start_method = mp_start_method
 
     is_spec_locked = EnvBase.is_spec_locked
+
+    def configure_parallel(
+        self,
+        *,
+        use_buffers: bool | None = None,
+        shared_memory: bool | None = None,
+        memmap: bool | None = None,
+        mp_start_method: str | None = None,
+        num_threads: int | None = None,
+        num_sub_threads: int | None = None,
+        non_blocking: bool | None = None,
+        daemon: bool | None = None,
+    ) -> BatchedEnvBase:
+        """Configure parallel execution parameters before the environment starts.
+
+        This method allows configuring parameters for parallel environment
+        execution. It must be called before the environment is started
+        (i.e., before accessing specs or calling reset/step).
+
+        Args:
+            use_buffers (bool, optional): whether communication between workers should
+                occur via circular preallocated memory buffers.
+            shared_memory (bool, optional): whether the returned tensordict will be
+                placed in shared memory.
+            memmap (bool, optional): whether the returned tensordict will be placed
+                in memory map.
+            mp_start_method (str, optional): the multiprocessing start method.
+            num_threads (int, optional): number of threads for this process.
+            num_sub_threads (int, optional): number of threads of the subprocesses.
+            non_blocking (bool, optional): if ``True``, device moves will be done using
+                the ``non_blocking=True`` option.
+            daemon (bool, optional): whether the processes should be daemonized.
+
+        Returns:
+            self: Returns self for method chaining.
+
+        Raises:
+            RuntimeError: If called after the environment has already started.
+
+        Example:
+            >>> env = ParallelEnv(4, lambda: GymEnv("Pendulum-v1"))
+            >>> env.configure_parallel(use_buffers=True, num_threads=2)
+            >>> env.reset()  # Environment starts here
+
+        """
+        if not self.is_closed:
+            raise RuntimeError(
+                "configure_parallel() cannot be called after the environment has started. "
+                "Call configure_parallel() before accessing specs or calling reset/step."
+            )
+        if use_buffers is not None:
+            self._use_buffers = use_buffers
+        if shared_memory is not None:
+            self._share_memory = shared_memory
+        if memmap is not None:
+            self._memmap = memmap
+        if mp_start_method is not None:
+            self._mp_start_method = mp_start_method
+        if num_threads is not None:
+            self.num_threads = num_threads
+        if num_sub_threads is not None:
+            self.num_sub_threads = num_sub_threads
+        if non_blocking is not None:
+            self._non_blocking = non_blocking
+        if daemon is not None:
+            self.daemon = daemon
+        return self
 
     def select_and_clone(self, name, tensor, selected_keys=None):
         if selected_keys is None:
@@ -1512,7 +1578,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if self._mp_start_method is not None:
             ctx = mp.get_context(self._mp_start_method)
         else:
-            ctx = mp.get_context("spawn")
+            ctx = mp.get_context(_get_default_mp_start_method())
         # Use ctx.Process directly to ensure all multiprocessing primitives
         # (Queue, Pipe, Process, Event) come from the same context.
         # Warning filtering and num_threads are handled in the worker functions.
@@ -2460,6 +2526,23 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             self.set_seed(self._seeds[0])
         return self
 
+    @classmethod
+    def make_parallel(cls, *args, num_envs: int = 1, **parallel_kwargs) -> EnvBase:
+        """Backward-compatible factory matching EnvBase.make_parallel signature.
+
+        Supports calls like:
+          ParallelEnv.make_parallel(create_env_fn, num_envs=4, ...)
+        or the constructor form:
+          ParallelEnv.make_parallel(num_workers, create_env_fn, ...)
+        """
+        if len(args) >= 1 and isinstance(args[0], int):
+            return cls(*args, **parallel_kwargs)
+        if len(args) >= 1:
+            create_env_fn = args[0]
+            other_args = args[1:]
+            return cls(int(num_envs), create_env_fn, *other_args, **parallel_kwargs)
+        return cls(int(num_envs), **parallel_kwargs)
+
 
 def _recursively_strip_locks_from_state_dict(state_dict: OrderedDict) -> OrderedDict:
     return OrderedDict(
@@ -2534,17 +2617,39 @@ def _run_worker_pipe_shared_mem(
 
     child_pipe.send("started")
     next_shared_tensordict, root_shared_tensordict = (None,) * 2
+    _cmd_count = 0
+    _last_cmd = "N/A"
+    # Create a timeit instance to track elapsed time since worker start
+    _worker_timer = timeit(f"batched_env_worker/{pid}/lifetime").start()
     while True:
         try:
             if child_pipe.poll(_timeout):
                 cmd, data = child_pipe.recv()
+                _cmd_count += 1
+                _last_cmd = cmd
+                # Log every 1000 commands
+                if _cmd_count % 1000 == 0:
+                    torchrl_logger.debug(
+                        f"batched_env worker {pid}: cmd_count={_cmd_count}, "
+                        f"elapsed={_worker_timer.elapsed():.1f}s, last_cmd={cmd}"
+                    )
             else:
+                torchrl_logger.debug(
+                    f"batched_env worker {pid}: TIMEOUT after {_timeout}s waiting for cmd, "
+                    f"elapsed_since_start={_worker_timer.elapsed():.1f}s, "
+                    f"last_cmd={_last_cmd}, cmd_count={_cmd_count}"
+                )
                 raise TimeoutError(
                     f"Worker timed out after {_timeout}s, "
                     f"increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable."
                 )
         except EOFError as err:
-            raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err
+            torchrl_logger.debug(
+                f"batched_env worker {pid}: EOFError - pipe closed, "
+                f"elapsed_since_start={_worker_timer.elapsed():.1f}s, "
+                f"last_cmd={_last_cmd}, cmd_count={_cmd_count}"
+            )
+            raise EOFError(f"proc {pid} failed, last command: {_last_cmd}.") from err
         if cmd == "seed":
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
@@ -2980,3 +3085,9 @@ def _mps_sync(device):
 
 # Create an alias for possible imports
 _BatchedEnv = BatchedEnvBase
+
+# legacy re-exports (must be at end of file to avoid circular imports)
+from torchrl.envs.libs.envpool import (  # noqa: F401, E402
+    MultiThreadedEnv,
+    MultiThreadedEnvWrapper,
+)

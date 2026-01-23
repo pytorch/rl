@@ -230,10 +230,7 @@ class MultiSyncCollector(MultiCollector):
                 self.update_policy_weights_()
 
             for idx in range(self.num_workers):
-                if (
-                    self.init_random_frames is not None
-                    and self._frames < self.init_random_frames
-                ):
+                if self._should_use_random_frames():
                     msg = "continue_random"
                 else:
                     msg = "continue"
@@ -365,6 +362,19 @@ class MultiSyncCollector(MultiCollector):
                     else:
                         same_device = same_device and (item.device == prev_device)
 
+            if self.split_trajs:
+                max_traj_id = -1
+                for idx in range(self.num_workers):
+                    if buffers[idx] is not None:
+                        traj_ids = buffers[idx].get(("collector", "traj_ids"))
+                        if traj_ids is not None:
+                            buffers[idx].set_(
+                                ("collector", "traj_ids"), traj_ids + max_traj_id + 1
+                            )
+                            max_traj_id = (
+                                buffers[idx].get(("collector", "traj_ids")).max()
+                            )
+
             if cat_results == "stack":
                 stack = (
                     torch.stack if self._use_buffers else TensorDict.maybe_dense_stack
@@ -430,7 +440,6 @@ class MultiSyncCollector(MultiCollector):
                 if excluded_keys:
                     out = out.exclude(*excluded_keys)
             yield out
-            del out
 
         del self.buffers
         self.out_buffer = None

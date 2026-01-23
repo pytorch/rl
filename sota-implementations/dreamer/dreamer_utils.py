@@ -20,6 +20,7 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 from torchrl import logger as torchrl_logger
+from torchrl._utils import set_profiling_enabled
 from torchrl.collectors import MultiCollector
 
 from torchrl.data import (
@@ -32,7 +33,6 @@ from torchrl.data import (
 
 from torchrl.envs import (
     Compose,
-    DeviceCastTransform,
     DMControlEnv,
     DoubleToFloat,
     DreamerDecoder,
@@ -159,17 +159,20 @@ class DreamerProfiler:
         self._stopped = False
         self._compile_warmup = compile_warmup
 
+        # Enable detailed profiling instrumentation in torchrl when profiling
+        set_profiling_enabled(self.enabled)
+
         if not self.enabled:
             return
 
-        # Override total_frames for profiling runs
+        # Override total_optim_steps for profiling runs
         torchrl_logger.info(
-            f"Profiling enabled: running {cfg.profiling.total_frames} frames "
+            f"Profiling enabled: running {cfg.profiling.total_optim_steps} optim steps "
             f"(skip_first={cfg.profiling.skip_first}, warmup={cfg.profiling.warmup_steps}, "
             f"active={cfg.profiling.active_steps})"
         )
         if pbar is not None:
-            pbar.total = cfg.profiling.total_frames
+            pbar.total = cfg.profiling.total_optim_steps
 
         # Setup profiler schedule
         # - skip_first: steps to skip entirely (no profiling)
@@ -268,6 +271,9 @@ def _make_env(cfg, device, from_pixels=False):
                 from_pixels=cfg.env.from_pixels or from_pixels,
                 pixels_only=cfg.env.from_pixels,
             )
+        # Gym doesn't support native frame_skip, apply transform inside worker
+        if cfg.env.frame_skip > 1:
+            env = TransformedEnv(env, FrameSkipTransform(cfg.env.frame_skip))
     elif lib == "dm_control":
         env = DMControlEnv(
             cfg.env.name,
@@ -275,6 +281,7 @@ def _make_env(cfg, device, from_pixels=False):
             from_pixels=cfg.env.from_pixels or from_pixels,
             pixels_only=cfg.env.from_pixels,
             device=device,
+            frame_skip=cfg.env.frame_skip,  # Native frame skip inside worker
         )
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")
@@ -307,7 +314,8 @@ def transform_env(cfg, env):
 
     env.append_transform(DoubleToFloat())
     env.append_transform(RewardSum())
-    env.append_transform(FrameSkipTransform(cfg.env.frame_skip))
+    # Note: FrameSkipTransform is now applied inside workers (in _make_env) to avoid
+    # extra IPC round-trips. DMControl uses native frame_skip, Gym uses the transform.
     env.append_transform(StepCounter(cfg.env.horizon))
 
     return env
@@ -350,7 +358,15 @@ def make_environments(cfg, parallel_envs=1, logger=None):
     eval_env = transform_env(cfg, eval_env)
     eval_env.set_seed(cfg.env.seed + 1)
     if cfg.logger.video:
-        eval_env.insert_transform(0, VideoRecorder(logger, tag="eval/video"))
+        eval_env.insert_transform(
+            0,
+            VideoRecorder(
+                logger,
+                tag="eval/video",
+                in_keys=["pixels"],
+                skip=cfg.logger.video_skip,
+            ),
+        )
 
     # Check specs on a temporary train env
     temp_train_env = train_env_factory()
@@ -362,9 +378,16 @@ def make_environments(cfg, parallel_envs=1, logger=None):
     return train_env_factory, eval_env
 
 
-def dump_video(module):
+def dump_video(module, step: int | None = None):
+    """Dump video from VideoRecorder transforms.
+
+    Args:
+        module: The transform module to check.
+        step: Optional step to log the video at. If not provided,
+            the VideoRecorder uses its internal counter.
+    """
     if isinstance(module, VideoRecorder):
-        module.dump()
+        module.dump(step=step)
 
 
 def _compute_encoder_output_size(image_size, channels=32, num_layers=4):
@@ -373,7 +396,7 @@ def _compute_encoder_output_size(image_size, channels=32, num_layers=4):
     size = image_size
     for _ in range(num_layers):
         size = (size - 4) // 2 + 1
-    # Final channels = channels * 2^(num_layers-1)
+    # Final channels = channels * (2 ** (num_layers - 1))
     final_channels = channels * (2 ** (num_layers - 1))
     return final_channels * size * size
 
@@ -574,7 +597,10 @@ def make_dreamer(
         model_based_env_eval.append_transform(float_to_int)
         model_based_env_eval.append_transform(
             VideoRecorder(
-                logger=logger, tag="eval/simulated_rendering", in_keys=["reco_pixels"]
+                logger=logger,
+                tag="eval/simulated_video",
+                in_keys=["reco_pixels"],
+                skip=cfg.logger.video_skip,
             )
         )
 
@@ -591,7 +617,13 @@ def make_dreamer(
 
 
 def make_collector(
-    cfg, train_env_factory, actor_model_explore, training_device: torch.device
+    cfg,
+    train_env_factory,
+    actor_model_explore,
+    training_device: torch.device,
+    replay_buffer=None,
+    storage_transform=None,
+    track_policy_version=False,
 ):
     """Make async multi-collector for parallel data collection.
 
@@ -600,6 +632,10 @@ def make_collector(
         train_env_factory: A callable that creates a training environment
         actor_model_explore: The exploration policy
         training_device: Device used for training (used to allocate collector devices)
+        replay_buffer: Optional replay buffer for true async collection with start()
+        storage_transform: Optional transform to apply before storing in buffer
+        track_policy_version: If True, track policy version using integer versioning.
+            Can also be a PolicyVersion instance for custom versioning.
 
     Returns:
         MultiCollector in async mode with multiple worker processes
@@ -610,6 +646,11 @@ def make_collector(
         - If training on CPU: collectors use CPU
     """
     num_collectors = cfg.collector.num_collectors
+    init_random_frames = (
+        cfg.collector.init_random_frames
+        if not cfg.profiling.enabled
+        else cfg.profiling.collector.init_random_frames_override
+    )
 
     # Allocate devices for collectors (reserves cuda:0 for training if multi-GPU)
     collector_devices = allocate_collector_devices(num_collectors, training_device)
@@ -618,12 +659,18 @@ def make_collector(
         create_env_fn=[train_env_factory] * num_collectors,
         policy=actor_model_explore,
         frames_per_batch=cfg.collector.frames_per_batch,
-        total_frames=cfg.collector.total_frames,
-        init_random_frames=cfg.collector.init_random_frames,
+        total_frames=-1,  # Run indefinitely until async_shutdown() is called
+        init_random_frames=init_random_frames,
         policy_device=collector_devices,
+        env_device=collector_devices,  # Match env output device to policy device for CUDA transforms
         storing_device="cpu",
         sync=False,  # Async mode for overlapping collection with training
-        update_at_each_batch=True,
+        update_at_each_batch=False,  # We manually call update_policy_weights_() in training loop
+        replay_buffer=replay_buffer,
+        postproc=storage_transform,
+        track_policy_version=track_policy_version,
+        # Skip fake data initialization - storage handles coordination
+        local_init_rb=True,
     )
     collector.set_seed(cfg.env.seed)
 
@@ -659,6 +706,10 @@ def make_storage_transform(
     return storage_transforms
 
 
+def _to_device(td, device):
+    return td.to(device=device, non_blocking=True)
+
+
 def make_replay_buffer(
     *,
     batch_size,
@@ -687,8 +738,7 @@ def make_replay_buffer(
     ) as scratch_dir:
         # Sample-time transforms: only device transfer (fast)
         sample_transforms = Compose(
-            # Reshape on CPU before device transfer to avoid extra work / sync in the training loop.
-            DeviceCastTransform(device=device),
+            functools.partial(_to_device, device=device),
         )
 
         replay_buffer = TensorDictReplayBuffer(
@@ -699,12 +749,13 @@ def make_replay_buffer(
                 scratch_dir=scratch_dir,
                 device="cpu",
                 ndim=2,
+                shared_init=True,  # Allow remote processes to initialize storage
             ),
             sampler=SliceSampler(
                 slice_len=batch_seq_len,
                 strict_length=False,
                 traj_key=("collector", "traj_ids"),
-                cache_values=True,
+                cache_values=False,  # Disabled for async collection (cache not synced across processes)
                 # Don't compile the sampler - inductor has C++ codegen bugs for int64 ops
             ),
             transform=sample_transforms,

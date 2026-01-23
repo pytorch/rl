@@ -12,6 +12,7 @@ from multiprocessing.managers import SyncManager
 import torch
 from torch import multiprocessing as mp
 
+from torchrl._utils import WEIGHT_SYNC_TIMEOUT
 from torchrl.envs.utils import ExplorationType
 
 try:
@@ -39,9 +40,6 @@ __all__ = [
 _TIMEOUT = 1.0
 INSTANTIATE_TIMEOUT = 20
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
-# Timeout for weight synchronization during collector init.
-# Increase this when using many collectors across different CUDA devices.
-WEIGHT_SYNC_TIMEOUT = float(os.environ.get("TORCHRL_WEIGHT_SYNC_TIMEOUT", 120.0))
 # MAX_IDLE_COUNT is the maximum number of times a Dataloader worker can timeout with his queue.
 _MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", torch.iinfo(torch.int64).max))
 
