@@ -114,6 +114,7 @@ uv_pip_install \
   pytest-timeout \
   pytest-forked \
   pytest-asyncio \
+  pytest-isolate \
   expecttest \
   "pybind11[global]>=2.13" \
   pyyaml \
