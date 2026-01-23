@@ -101,7 +101,7 @@ uv_pip_install \
   hypothesis \
   future \
   cloudpickle \
-  pyvers \
+  "git+https://github.com/vmoens/pyvers.git" \
   packaging \
   pygame \
   "moviepy<2.0.0" \
