@@ -47,7 +47,7 @@ uv_pip_install \
   wheel \
   packaging \
   cloudpickle \
-  "git+https://github.com/vmoens/pyvers.git" \
+  pyvers \
   numpy \
   ninja \
   "pybind11[global]>=2.13"
