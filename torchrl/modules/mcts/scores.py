@@ -15,6 +15,7 @@ import torch
 from tensordict import NestedKey, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 
+
 class MCTSScore(TensorDictModuleBase):
     """Abstract base class for MCTS score computation modules."""
 
