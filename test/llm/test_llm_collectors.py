@@ -42,10 +42,16 @@ class TestLLMCollector:
         except ImportError:
             pytest.skip(reason="missing vllm")
 
-        llm_model = vllm.LLM("gpt2")
+        llm_model = vllm.LLM("Qwen/Qwen2.5-0.5B", gpu_memory_utilization=0.4)
         tokenizer = llm_model.get_tokenizer()
         tokenizer.pad_token = tokenizer.eos_token
-        return llm_model
+        yield llm_model
+        # Cleanup
+        del llm_model
+        import gc
+
+        gc.collect()
+        torch.cuda.empty_cache()
 
     @pytest.fixture(scope="module")
     def vllm_instance_opt(self):
@@ -54,10 +60,16 @@ class TestLLMCollector:
         except ImportError:
             pytest.skip(reason="missing vllm")
 
-        llm_model = vllm.LLM("facebook/opt-125m")
+        llm_model = vllm.LLM("Qwen/Qwen2.5-0.5B", gpu_memory_utilization=0.4)
         tokenizer = llm_model.get_tokenizer()
         tokenizer.pad_token = tokenizer.eos_token
-        return llm_model
+        yield llm_model
+        # Cleanup
+        del llm_model
+        import gc
+
+        gc.collect()
+        torch.cuda.empty_cache()
 
     @pytest.fixture(scope="module")
     def transformers_instance(self):
@@ -82,7 +94,9 @@ class TestLLMCollector:
     def test_llm_collector_with_vllm(self, rb, queue, total_steps, vllm_instance):
         # NOTE: if VLLM fails with CUDA multiprocessing, try setting
         # `export VLLM_WORKER_MULTIPROC_METHOD=spawn`
-        policy = vLLMWrapper(vllm_instance)
+        policy = vLLMWrapper(
+            vllm_instance, generate_kwargs={"max_new_tokens": 20, "ignore_eos": True}
+        )
         tokenizer = vllm_instance.get_tokenizer()
         self._run_collector_test(total_steps, rb, queue, policy, tokenizer)
 
@@ -168,7 +182,9 @@ class TestLLMCollector:
     @pytest.mark.skip_if_nightly
     def test_llm_collector_start(self, vllm_instance):
         total_steps = 20
-        policy = vLLMWrapper(vllm_instance)
+        policy = vLLMWrapper(
+            vllm_instance, generate_kwargs={"max_new_tokens": 20, "ignore_eos": True}
+        )
         vllm_instance.get_tokenizer()
         bsz = 4
         dataloader = DummyStrDataLoader(bsz)
@@ -227,7 +243,10 @@ class TestLLMCollector:
         self, vllm_instance_opt, rb, yield_only_last_steps, dialog_turns_per_batch
     ):
         torch.manual_seed(0)
-        policy = vLLMWrapper(vllm_instance_opt)
+        policy = vLLMWrapper(
+            vllm_instance_opt,
+            generate_kwargs={"max_new_tokens": 20, "ignore_eos": True},
+        )
         vllm_instance_opt.get_tokenizer()
         bsz = 4
         total_steps = 20
@@ -263,7 +282,7 @@ class TestLLMCollector:
             **kwargs,
         )
         if not dialog_turns_per_batch:
-            assert collector.dialog_turns_per_batch == 1
+            assert collector.dialog_turns_per_batch == bsz
         assert collector.yield_completed_trajectories
         assert collector.yield_only_last_steps is yield_only_last_steps
 
@@ -331,7 +350,10 @@ class TestLLMCollector:
         self, vllm_instance_opt, rb, yield_only_last_steps
     ):
         torch.manual_seed(0)
-        policy = vLLMWrapper(vllm_instance_opt)
+        policy = vLLMWrapper(
+            vllm_instance_opt,
+            generate_kwargs={"max_new_tokens": 20, "ignore_eos": True},
+        )
         vllm_instance_opt.get_tokenizer()
         bsz = 4
         total_steps = 20
@@ -493,103 +515,118 @@ class TestAsyncEnvPoolSpecs:
 
 
 class TestUpdate:
-    @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="requires 2 GPUs")
+    @pytest.mark.xfail(
+        torch.cuda.device_count() < 2,
+        reason="requires 2 GPUs",
+        strict=False,
+    )
     def test_vllm_update(self):
+        import gc
+
         import ray
 
         ray.init()
 
-        from torchrl.envs.llm import GSM8KEnv
-        from transformers import AutoModelForCausalLM, AutoTokenizer
+        collector = None
+        try:
+            from torchrl.envs.llm import GSM8KEnv
+            from transformers import AutoModelForCausalLM, AutoTokenizer
 
-        model_name = "Qwen/Qwen2.5-3B"
-        # TODO: Simple model errors
-        # model_name = "facebook/opt-125m"
+            model_name = "Qwen/Qwen2.5-3B"
+            # TODO: Simple model errors
+            # model_name = "facebook/opt-125m"
 
-        # Create train model
-        train_model = AutoModelForCausalLM.from_pretrained(
-            model_name, device_map="cuda:0"
-        )
-        train_tokenizer = AutoTokenizer.from_pretrained(model_name)
+            # Create train model
+            train_model = AutoModelForCausalLM.from_pretrained(
+                model_name, device_map="cuda:0"
+            )
+            train_tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-        # Wrap
-        policy_training = TransformersWrapper(
-            train_model,
-            # train_model.eval(),
-            tokenizer=train_tokenizer,
-            # We have the tokens, let's just use them
-            from_text=False,
-            generate=False,
-            return_log_probs=True,
-        )
+            # Wrap
+            policy_training = TransformersWrapper(
+                train_model,
+                # train_model.eval(),
+                tokenizer=train_tokenizer,
+                # We have the tokens, let's just use them
+                from_text=False,
+                generate=False,
+                return_log_probs=True,
+            )
 
-        # Create environment
-        env = GSM8KEnv(repeats=4, tokenizer=train_tokenizer, num_envs=4)
+            # Create environment
+            env = GSM8KEnv(repeats=4, tokenizer=train_tokenizer, num_envs=4)
 
-        # Get metadata
-        # TODO: Simplify this: can be done by the updater if the training policy is passed
-        model_metadata = {
-            k: (v.dtype, v.shape) for k, v in policy_training.model.state_dict().items()
-        }
+            # Get metadata
+            # TODO: Simplify this: can be done by the updater if the training policy is passed
+            model_metadata = {
+                k: (v.dtype, v.shape)
+                for k, v in policy_training.model.state_dict().items()
+            }
 
-        # Get inference server
-        inference_server = make_vllm_worker(
-            model_name,
-            gpu_memory_utilization=0.5,
-            devices=[1],
-            make_ray_worker=True,
-        )
+            # Get inference server
+            inference_server = make_vllm_worker(
+                model_name,
+                gpu_memory_utilization=0.5,
+                devices=[1],
+                make_ray_worker=True,
+            )
 
-        # Wrap
-        policy = vLLMWrapper(
-            inference_server,
-            from_text=True,
-            return_log_probs=True,
-            generate_kwargs={
-                "max_tokens": 1024,
-                "include_stop_str_in_output": True,
-                "temperature": 0.8,
-            },
-        )
+            # Wrap
+            policy = vLLMWrapper(
+                inference_server,
+                input_mode="history",
+                return_log_probs=True,
+                generate_kwargs={
+                    "max_tokens": 1024,
+                    "include_stop_str_in_output": True,
+                    "temperature": 0.8,
+                },
+            )
 
-        # Make updater
-        # TODO: Could use the transformer model directly?
-        updater = vLLMUpdater(
-            master_address=None,
-            master_port=None,
-            model_metadata=model_metadata,
-        )
-        collector = LLMCollector(
-            env,
-            policy=policy,
-            dialog_turns_per_batch=4,
-            total_dialog_turns=1_000_000,
-            weight_updater=updater,
-        )
-        torchrl_logger.info("Created collector")
-        torchrl_logger.info("init group")
+            # Make updater
+            # TODO: Could use the transformer model directly?
+            updater = vLLMUpdater(
+                master_address=None,
+                master_port=None,
+                model_metadata=model_metadata,
+            )
+            collector = LLMCollector(
+                env,
+                policy=policy,
+                dialog_turns_per_batch=4,
+                total_dialog_turns=1_000_000,
+                weight_updater=updater,
+            )
+            torchrl_logger.info("Created collector")
+            torchrl_logger.info("init group")
 
-        # TODO: Could we ask the collector to do this? Or maybe automate it within the registering of
-        #  the collector
-        updater.maybe_init_group()
-        torchrl_logger.info("Update weights")
+            # TODO: Could we ask the collector to do this? Or maybe automate it within the registering of
+            #  the collector
+            updater.maybe_init_group()
+            torchrl_logger.info("Update weights")
 
-        # TODO: If the policy training is passed to the updater, we can cache a ref to the weights
-        collector.update_policy_weights_(
-            policy_training.model.state_dict(), worker_ids=[0]
-        )
+            # TODO: If the policy training is passed to the updater, we can cache a ref to the weights
+            collector.update_policy_weights_(
+                policy_training.model.state_dict(), worker_ids=[0]
+            )
 
-        torchrl_logger.info("Iterate")
-        for _ in collector:
-            break
+            torchrl_logger.info("Iterate")
+            for _ in collector:
+                break
 
-        torchrl_logger.info("Second update")
-        collector.update_policy_weights_(
-            policy_training.model.state_dict(), worker_ids=[0]
-        )
-
-        torchrl_logger.info("Shutdown")
-        collector.shutdown()
+            torchrl_logger.info("Second update")
+            collector.update_policy_weights_(
+                policy_training.model.state_dict(), worker_ids=[0]
+            )
+        finally:
+            # Cleanup: shutdown collector, Ray, and GPU memory
+            torchrl_logger.info("Shutdown")
+            if collector is not None:
+                collector.shutdown()
+            ray.shutdown()
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":

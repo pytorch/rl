@@ -439,15 +439,11 @@ class PPOLoss(LossModule):
             critic_network = critic
             del critic
 
-        # Handle deprecated critic_coef argument
+        # critic_coef has been removed in v0.11
         if "critic_coef" in kwargs:
-            if critic_coeff is not None:
-                raise ValueError("Cannot specify both 'critic_coef' and 'critic_coeff'")
-            warnings.warn(
-                "'critic_coef' is deprecated and will be removed in torchrl v0.11. Please use 'critic_coeff' instead.",
-                DeprecationWarning,
+            raise TypeError(
+                "'critic_coef' has been removed in torchrl v0.11. Please use 'critic_coeff' instead."
             )
-            critic_coeff = kwargs.pop("critic_coef")
 
         if critic_coeff is None and critic_network is not None:
             critic_coeff = 1.0
@@ -503,17 +499,11 @@ class PPOLoss(LossModule):
                     torch, "get_default_device", lambda: torch.device("cpu")
                 )()
 
-        # Handle deprecated entropy_coef argument
+        # entropy_coef has been removed in v0.11
         if "entropy_coef" in kwargs:
-            if entropy_coeff is not None:  # Check if entropy_coeff was explicitly set
-                raise ValueError(
-                    "Cannot specify both 'entropy_coef' and 'entropy_coeff'"
-                )
-            warnings.warn(
-                "'entropy_coef' is deprecated and will be removed in torchrl v0.11. Please use 'entropy_coeff' instead.",
-                DeprecationWarning,
+            raise TypeError(
+                "'entropy_coef' has been removed in torchrl v0.11. Please use 'entropy_coeff' instead."
             )
-            entropy_coeff = kwargs.pop("entropy_coef")
 
         # Set default value if None
         if entropy_coeff is None:
@@ -661,9 +651,11 @@ class PPOLoss(LossModule):
                 x = dist.rsample((self.samples_mc_entropy,))
             else:
                 x = dist.sample((self.samples_mc_entropy,))
-            with set_composite_lp_aggregate(False) if isinstance(
-                dist, CompositeDistribution
-            ) else contextlib.nullcontext():
+            with (
+                set_composite_lp_aggregate(False)
+                if isinstance(dist, CompositeDistribution)
+                else contextlib.nullcontext()
+            ):
                 log_prob = dist.log_prob(x)
                 if is_tensor_collection(log_prob):
                     if isinstance(self.tensor_keys.sample_log_prob, NestedKey):
@@ -683,9 +675,11 @@ class PPOLoss(LossModule):
         ) or hasattr(self.actor_network, "get_dist"):
             # assert tensordict['log_probs'].requires_grad
             # assert tensordict['logits'].requires_grad
-            with self.actor_network_params.to_module(
-                self.actor_network
-            ) if self.functional else contextlib.nullcontext():
+            with (
+                self.actor_network_params.to_module(self.actor_network)
+                if self.functional
+                else contextlib.nullcontext()
+            ):
                 dist = self.actor_network.get_dist(tensordict)
             is_composite = isinstance(dist, CompositeDistribution)
 
@@ -796,9 +790,11 @@ class PPOLoss(LossModule):
                     f"Make sure that the 'value_key' passed to PPO exists in the input tensordict."
                 )
 
-        with self.critic_network_params.to_module(
-            self.critic_network
-        ) if self.functional else contextlib.nullcontext():
+        with (
+            self.critic_network_params.to_module(self.critic_network)
+            if self.functional
+            else contextlib.nullcontext()
+        ):
             state_value_td = self.critic_network(tensordict)
 
         state_value = state_value_td.get(self.tensor_keys.value)
@@ -1590,18 +1586,22 @@ class KLPENPPOLoss(PPOLoss):
         )
         neg_loss = log_weight.exp() * advantage
 
-        with self.actor_network_params.to_module(
-            self.actor_network
-        ) if self.functional else contextlib.nullcontext():
+        with (
+            self.actor_network_params.to_module(self.actor_network)
+            if self.functional
+            else contextlib.nullcontext()
+        ):
             current_dist = self.actor_network.get_dist(tensordict_copy)
         is_composite = isinstance(current_dist, CompositeDistribution)
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:
             x = previous_dist.sample((self.samples_mc_kl,))
-            with set_composite_lp_aggregate(
-                False
-            ) if is_composite else contextlib.nullcontext():
+            with (
+                set_composite_lp_aggregate(False)
+                if is_composite
+                else contextlib.nullcontext()
+            ):
                 previous_log_prob = previous_dist.log_prob(x)
                 current_log_prob = current_dist.log_prob(x)
             if is_tensor_collection(previous_log_prob):

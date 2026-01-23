@@ -365,7 +365,6 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
         extend_buffer: bool = True,
-        replay_buffer_chunk: bool | None = None,
         local_init_rb: bool | None = None,
         trust_policy: bool | None = None,
         compile_policy: bool | dict[str, Any] | None = None,
@@ -414,9 +413,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         # Set up replay buffer
         self._use_buffers = use_buffers
         self.replay_buffer = replay_buffer
-        self._setup_multi_replay_buffer(
-            local_init_rb, replay_buffer, replay_buffer_chunk, extend_buffer
-        )
+        self._setup_multi_replay_buffer(local_init_rb, replay_buffer, extend_buffer)
 
         # Set up policy and weights
         if trust_policy is None:
@@ -555,7 +552,6 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         self,
         local_init_rb: bool | None,
         replay_buffer: ReplayBuffer | None,
-        replay_buffer_chunk: bool | None,
         extend_buffer: bool,
     ) -> None:
         """Set up replay buffer for multi-process collector."""
@@ -572,17 +568,6 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
 
         self._check_replay_buffer_init()
 
-        if replay_buffer_chunk is not None:
-            if extend_buffer is None:
-                replay_buffer_chunk = extend_buffer
-                warnings.warn(
-                    "The replay_buffer_chunk is deprecated and replaced by extend_buffer. This argument will disappear in v0.10.",
-                    DeprecationWarning,
-                )
-            elif extend_buffer != replay_buffer_chunk:
-                raise ValueError(
-                    "conflicting values for replay_buffer_chunk and extend_buffer."
-                )
         self.extend_buffer = extend_buffer
 
         if (

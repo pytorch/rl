@@ -14,6 +14,8 @@ dependencies:
     - pytest-rerunfailures
     - pytest-error-for-skips
     - pytest-asyncio
+    - pytest-timeout
+    - pytest-isolate
     - expecttest
     - pybind11[global]
     - pyyaml
@@ -23,4 +25,4 @@ dependencies:
     - datasets
     - vllm
     - mcp
-    - mlgym
+    - langdetect
