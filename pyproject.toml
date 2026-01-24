@@ -68,6 +68,7 @@ tests = [
     "pytest-forked",
     "pytest-random-order",
     "pytest-repeat",
+    "pytest-isolate",
 ]
 utils = [
     "tensorboard",
