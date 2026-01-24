@@ -143,7 +143,7 @@ def train(cfg: DictConfig):  # noqa: F821
         actor_network=policy,
         critic_network=value_module,
         clip_epsilon=cfg.loss.clip_epsilon,
-        entropy_coef=cfg.loss.entropy_eps,
+        entropy_coeff=cfg.loss.entropy_eps,
         normalize_advantage=False,
     )
     loss_module.set_keys(

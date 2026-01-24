@@ -21,6 +21,7 @@ apt-get install -y wget \
     libglfw3 \
     swig3.0 \
     libglew-dev \
+    zlib1g-dev \
     libglvnd0 \
     libgl1 \
     libglx0 \

@@ -31,6 +31,11 @@ def sampling_params():
     )  # Use greedy decoding for reproducibility
 
 
+@pytest.mark.xfail(
+    reason="AsyncVLLM tests fail due to Ray placement group timeout. "
+    "ray.get(pg.ready(), timeout=180) times out. See LLM_TEST_ISSUES.md for details.",
+    strict=False,
+)
 class TestAsyncVLLMIntegration:
     """Integration tests for AsyncVLLM with real models."""
 

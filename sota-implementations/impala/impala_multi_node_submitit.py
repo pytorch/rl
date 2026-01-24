@@ -115,8 +115,8 @@ def main(cfg: DictConfig):  # noqa: F821
         actor_network=actor,
         critic_network=critic,
         loss_critic_type=cfg.loss.loss_critic_type,
-        entropy_coef=cfg.loss.entropy_coef,
-        critic_coef=cfg.loss.critic_coef,
+        entropy_coeff=cfg.loss.entropy_coeff,
+        critic_coeff=cfg.loss.critic_coeff,
     )
     loss_module.set_keys(done="eol", terminated="eol")
 
