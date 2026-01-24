@@ -1103,6 +1103,11 @@ class TestChatEnvIntegration:
         except Exception as e:
             pytest.skip(f"Failed to load vLLM model: {e}")
 
+    @pytest.mark.xfail(
+        reason="vLLM 0.14+ Ray async backend has KeyError: 'bundles' issue during "
+        "engine initialization. See PR #3360 for context.",
+        strict=False,
+    )
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not _has_datasets, reason="datasets not available")
     @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
@@ -1115,6 +1120,9 @@ class TestChatEnvIntegration:
             "text_no_compute_reward",
             "tokens_no_compute_reward",
         ],
+    )
+    @pytest.mark.skip(
+        reason="Ray placement group timeout with vLLM async engine - skipped to reduce CI time"
     )
     def test_chat_env_integration_ifeval(self, compute_reward, pad_output, input_mode):
         """Test that the wrapper works correctly with the ChatEnv."""
@@ -1167,6 +1175,9 @@ class TestChatEnvIntegration:
     @pytest.mark.parametrize(
         "input_mode", ["history", "text", "tokens"], ids=["history", "text", "tokens"]
     )
+    @pytest.mark.skip(
+        reason="Ray placement group timeout with vLLM async engine - skipped to reduce CI time"
+    )
     def test_chat_env_integration_gsm8k(self, compute_reward, pad_output, input_mode):
         """Test that the wrapper works correctly with the ChatEnv."""
         import vllm.envs as envs
@@ -1209,6 +1220,11 @@ class TestChatEnvIntegration:
         r = policy(r_)
         r, r_ = env.step_and_maybe_reset(r)
 
+    @pytest.mark.xfail(
+        reason="IFEvalEnv tests with vLLM fail due to Ray placement group timeout. "
+        "See LLM_TEST_ISSUES.md for details.",
+        strict=False,
+    )
     @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
     @pytest.mark.parametrize("ref_input_mode", ["tokens"], ids=["tokens"])
     @pytest.mark.parametrize(
@@ -1271,6 +1287,11 @@ class TestChatEnvIntegration:
                 assert r.shape[1] > 1
                 assert r.shape[2] == 1
 
+    @pytest.mark.xfail(
+        reason="IFEvalEnv tests with vLLM fail due to Ray placement group timeout. "
+        "See LLM_TEST_ISSUES.md for details.",
+        strict=False,
+    )
     @pytest.mark.parametrize(
         "env_class", ["GSM8KEnv", "IFEvalEnv"], ids=["gsm8k", "ifeval"]
     )

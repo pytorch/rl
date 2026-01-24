@@ -142,6 +142,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
 
     _task = None
     _iterator = None
+    _iteration_started = False
     total_frames: int
     requested_frames_per_batch: int
     frames_per_batch: int
@@ -225,7 +226,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             - For multi-process collectors, this must be called BEFORE
               iteration starts as it needs to configure workers
         """
-        if self._iterator is not None:
+        if self._iteration_started:
             raise RuntimeError(
                 "Cannot enable profiling after iteration has started. "
                 "Call enable_profile() before iterating over the collector."
@@ -936,7 +937,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         # Mark that iteration has started (used by enable_profile check)
-        self._iterator = True
+        self._iteration_started = True
         try:
             yield from self.iterator()
         except Exception:

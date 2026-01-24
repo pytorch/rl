@@ -5,12 +5,18 @@ set -v
 
 
 apt-get update && apt-get upgrade -y
-apt-get install -y vim git wget cmake
+apt-get install -y vim git wget cmake ninja-build
 
-apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev
+# OpenGL/EGL dependencies for headless rendering
+apt-get install -y libglfw3 libglfw3-dev libgl1-mesa-glx libosmesa6 libosmesa6-dev libglew-dev
 apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2
+apt-get install -y libegl1-mesa-dev libgles2-mesa-dev
 
+# Build tools and libraries for habitat-sim
 apt-get install -y g++ gcc
+apt-get install -y libjpeg-dev libpng-dev
+apt-get install -y pkg-config
+
 #apt-get upgrade -y libstdc++6
 #apt-get install -y libgcc
 apt-get dist-upgrade -y

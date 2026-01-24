@@ -34,38 +34,18 @@ jobs:
       repository: pytorch/rl
       upload-artifact: docs
       timeout: 120
+      # Use PyTorch image with newer GCC for GLIBCXX_3.4.30 support (needed by AOTInductor in export.py)
+      docker-image: pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel
       script: |
         set -e
         set -v
-        yum makecache
-        # Install Mesa and OpenGL Libraries:
-        yum install -y glfw mesa-libGL mesa-libGL-devel egl-utils freeglut mesa-libGLU mesa-libEGL python39-pip
-        yum install epel-release -y  # for missing librhash0 when installing tensordict
-        yum install rhash -y  # Provides librhash.so.0 needed by cmake
-        # Install DRI Drivers:
-        yum install -y mesa-dri-drivers
-        # Install Xvfb for Headless Environments:
-        yum install -y xorg-x11-server-Xvfb
-        # xhost +local:docker
-        # Xvfb :1 -screen 0 1024x768x24 &
-
-        root_dir="$(pwd)"
-        conda_dir="${root_dir}/conda"
-        env_dir="${root_dir}/env"
-        os=Linux
         
-        # 1. Install conda at ./conda
-        printf "* Installing conda\n"
-        wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
-        bash ./miniconda.sh -b -f -p "${conda_dir}"
-        eval "$(${conda_dir}/bin/conda shell.bash hook)"
-        printf "* Creating a test environment\n"
-        conda create --prefix "${env_dir}" -y python=3.12
-        printf "* Activating\n"
-        conda activate "${env_dir}"
-
+        # Install system dependencies (Ubuntu-based PyTorch image)
+        apt-get update
+        apt-get install -y libglfw3 libglfw3-dev libgl1-mesa-glx libgl1-mesa-dev libegl1-mesa-dev \
+          freeglut3-dev libglu1-mesa libegl1 mesa-utils xvfb wget git cmake
+        
         # 2. upgrade pip, ninja and packaging
-        conda install anaconda::cmake -y
         python -m pip install --upgrade pip
         python -m pip install setuptools ninja packaging "pybind11[global]" -U
         
@@ -76,19 +56,26 @@ jobs:
         git version
         
         # 5. Install PyTorch
+        # Uninstall pre-installed packages from Docker image to avoid conflicts
+        # (gym conflicts with gymnasium, torch/torchaudio versions conflict with nightly)
+        python -m pip uninstall -y torch torchvision torchaudio gym || true
+        
         if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
-          python -m pip install torch torchvision
-          python -m pip install tensordict
+          # Use stable PyTorch for releases (tags and release/* branches)
+          python -m pip install torch torchvision --quiet --root-user-action=ignore
+          python -m pip install tensordict --quiet --root-user-action=ignore
         else
+          # Use nightly PyTorch for main, nightly, and PRs
           python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
           python -m pip install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
         fi
         
+        # 6. Install doc requirements BEFORE TorchRL to ensure gymnasium is available
+        # (TorchRL's gym backend detection happens at import time)
+        python -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
+        
         # 7. Install TorchRL
         python -m pip install -e . --no-build-isolation
-        
-        # 8. Install requirements
-        python -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
 
         # 9. Set sanitize version
         if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then

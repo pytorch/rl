@@ -190,8 +190,7 @@ class PPOTrainerConfig(TrainerConfig):
         gae: Custom GAE module configuration.
         weight_update_map: Mapping from collector destination paths to trainer source paths.
             Required if collector has weight_sync_schemes configured.
-            Example: {"policy": "loss_module.actor_network",
-                     "replay_buffer.transforms[0]": "loss_module.critic_network"}
+            Example: ``{"policy": "loss_module.actor_network", "replay_buffer.transforms[0]": "loss_module.critic_network"}``.
         log_timings: Whether to automatically log timing information for all hooks.
             If True, timing metrics will be logged to the logger (e.g., wandb, tensorboard)
             with prefix "time/" (e.g., "time/hook/UpdateWeights"). Default: False.

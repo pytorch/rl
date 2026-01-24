@@ -65,8 +65,8 @@ python -c "import torchrl"
 # Install MCP dependencies for tool execution tests
 printf "* Installing MCP dependencies (uvx, Deno)\n"
 
-# Install uvx (universal package runner)
-pip install uvx
+# Install uv (provides uvx command)
+pip install uv
 
 # Install Deno (required by mcp-run-python)
 curl -fsSL https://deno.land/install.sh | sh
