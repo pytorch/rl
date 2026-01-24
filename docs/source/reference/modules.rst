@@ -4,6 +4,7 @@ torchrl.modules package
 =======================
 
 .. _ref_modules:
+.. _tdmodules:
 
 TorchRL offers a comprehensive collection of RL-specific neural network modules built on top of
 :class:`tensordict.nn.TensorDictModule`. These modules are designed to work seamlessly with

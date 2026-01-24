@@ -449,6 +449,65 @@ class DistributedCollectorBase:
                 proc.terminate()
             queue.close()
 
+    @classmethod
+    def _test_collector_next_method(cls, queue):
+        """Non-regression test for iterator/flag bug.
+
+        Previously, `__iter__` set `_iterator = True` as a flag, but `next()` expected
+        `_iterator` to be either `None` or an actual iterator object. When Ray's remote
+        collector called `next()` after `__iter__`, it tried `next(True)` which failed
+        with `TypeError: 'bool' object is not an iterator`.
+
+        This test ensures that calling `next()` works correctly regardless of whether
+        `__iter__` has been called.
+        """
+        try:
+            cls._start_worker()
+            env = ContinuousActionVecMockEnv
+            policy = RandomPolicy(env().action_spec)
+            collector = cls.distributed_class()(
+                [env] * 2,
+                policy,
+                total_frames=500,
+                frames_per_batch=50,
+                **cls.distributed_kwargs(),
+            )
+
+            # Test 1: Call next() directly without __iter__
+            data1 = collector.next()
+            assert data1 is not None, "next() should return data"
+            assert data1.numel() == 50, f"Expected 50 frames, got {data1.numel()}"
+
+            # Test 2: Call next() again
+            data2 = collector.next()
+            assert data2 is not None, "second next() should return data"
+            assert data2.numel() == 50, f"Expected 50 frames, got {data2.numel()}"
+
+            queue.put(("passed", None))
+        except Exception as e:
+            tb = traceback.format_exc()
+            queue.put(("not passed", (e, tb)))
+        finally:
+            collector.shutdown()
+
+    def test_collector_next_method(self):
+        """Non-regression test: next() should work correctly (iterator/flag bug fix)."""
+        queue = mp.Queue(1)
+        proc = mp.Process(
+            target=self._test_collector_next_method,
+            args=(queue,),
+        )
+        proc.start()
+        try:
+            out, maybe_err = queue.get(timeout=TIMEOUT)
+            if out != "passed":
+                raise RuntimeError(f"Error with stack {maybe_err[1]}") from maybe_err[0]
+        finally:
+            proc.join(10)
+            if proc.is_alive():
+                proc.terminate()
+            queue.close()
+
 
 class TestDistributedCollector(DistributedCollectorBase):
     @classmethod

@@ -28,6 +28,8 @@ from torchrl.testing.gym_helpers import (
     PONG_VERSIONED,
 )
 from torchrl.testing.llm_mocks import (
+    DummyStrDataLoader,
+    DummyTensorDataLoader,
     MockTransformerConfig,
     MockTransformerModel,
     MockTransformerOutput,
@@ -75,6 +77,8 @@ __all__ = [
     "PENDULUM_VERSIONED",
     "PONG_VERSIONED",
     # LLM mocks
+    "DummyStrDataLoader",
+    "DummyTensorDataLoader",
     "MockTransformerConfig",
     "MockTransformerModel",
     "MockTransformerOutput",

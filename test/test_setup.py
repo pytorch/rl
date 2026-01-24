@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 _ROOT = Path(__file__).resolve().parents[1]
+_IS_WINDOWS = sys.platform == "win32"
 
 
 def _run(cmd, *, cwd, env=None, timeout=60 * 60) -> str:
@@ -76,7 +77,19 @@ def _expected_dist_version(base_version: str) -> str:
     return f"{base_version}+g{_git(['rev-parse', '--short', 'HEAD'])}"
 
 
-@pytest.mark.parametrize("editable", [True, False], ids=["editable", "wheel"])
+@pytest.mark.parametrize(
+    "editable",
+    [
+        pytest.param(
+            True,
+            marks=pytest.mark.skipif(
+                _IS_WINDOWS, reason="Windows file locking prevents editable re-install"
+            ),
+            id="editable",
+        ),
+        pytest.param(False, id="wheel"),
+    ],
+)
 def test_install_no_deps_has_nonzero_version(editable: bool, tmp_path: Path):
     # Requires git checkout.
     if not (_ROOT / ".git").exists():

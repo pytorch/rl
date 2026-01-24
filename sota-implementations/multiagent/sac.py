@@ -77,7 +77,7 @@ def train(cfg: DictConfig):  # noqa: F821
     if cfg.env.continuous_actions:
         actor_net = nn.Sequential(
             MultiAgentMLP(
-                n_agent_inputs=env.unbatched_observation_spec[
+                n_agent_inputs=env.full_observation_spec_unbatched[
                     "agents", "observation"
                 ].shape[-1],
                 n_agent_outputs=2

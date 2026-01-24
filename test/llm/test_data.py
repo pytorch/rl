@@ -34,6 +34,38 @@ class TestHistory:
         with set_list_to_stack(True):
             yield
 
+    @pytest.fixture(scope="class")
+    def mock_llama_tokenizer(self):
+        """Create a mock tokenizer with Llama 3 special tokens for testing.
+
+        This allows testing the Llama chat template parsing without requiring
+        access to the gated Llama models on HuggingFace.
+
+        We use SmolLM-135M-Instruct as the base tokenizer because:
+        - It's a modern BPE tokenizer with chat template support
+        - Very small (135M params), fast to download and load
+        - Apache 2.0 licensed, from HuggingFace official
+        - Non-gated, always accessible in CI
+        """
+        from transformers import AutoTokenizer
+
+        # Use SmolLM as a modern base tokenizer
+        tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-135M-Instruct")
+
+        # Add Llama 3 special tokens that aren't in SmolLM's vocabulary
+        llama_special_tokens = [
+            "<|begin_of_text|>",
+            "<|end_of_text|>",
+            "<|header_start|>",
+            "<|header_end|>",
+            "<|eot|>",
+        ]
+        tokenizer.add_special_tokens(
+            {"additional_special_tokens": llama_special_tokens}
+        )
+
+        return tokenizer
+
     def test_history_construct(self):
         hst0 = History(role="user", content="a message")
         assert not hst0.shape
@@ -418,15 +450,11 @@ The result is""",
         LLAMA_TEST_CASES,
         ids=["case_1", "case_2", "case_3", "case_4", "case_6"],
     )
-    def test_history_assistant_mask_llama(self, test_case):
-        from transformers import AutoTokenizer
-
-        try:
-            tokenizer = AutoTokenizer.from_pretrained(
-                "meta-llama/Llama-4-Scout-17B-16E-Instruct"
-            )
-        except Exception:
-            pytest.skip("Could not load Llama tokenizer")
+    def test_history_assistant_mask_llama(self, test_case, mock_llama_tokenizer):
+        # This test verifies that the Llama chat template parsing works correctly.
+        # We use a mock tokenizer with Llama 3 special tokens added, which allows
+        # testing the API without requiring access to the gated Llama models.
+        tokenizer = mock_llama_tokenizer
 
         history = History.from_text(test_case, chat_template_name="llama")
         proc = history.apply_chat_template(
@@ -522,7 +550,7 @@ The result is""",
         [
             ("Qwen/Qwen2.5-0.5B", "qwen"),
             ("microsoft/phi-2", "chatml_format"),
-            ("mosaicml/mpt-7b-instruct", "chatml_format"),
+            ("HuggingFaceH4/zephyr-7b-beta", "chatml_format"),
             ("facebook/opt-125m", "chatml_format"),
             ("gpt2", "chatml_format"),
             ("EleutherAI/pythia-70m", "chatml_format"),
@@ -800,7 +828,7 @@ The result is""",
     @pytest.mark.parametrize(
         "tokenizer_name",
         [
-            "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+            "Qwen/Qwen2.5-0.5B-Instruct",
             "Qwen/Qwen2.5-0.5B",
             "microsoft/phi-2",
         ],
@@ -831,7 +859,9 @@ The result is""",
                 not hasattr(tokenizer, "chat_template")
                 or tokenizer.chat_template is None
             ):
-                pytest.skip(f"Tokenizer {tokenizer_name} does not have a chat template")
+                pytest.xfail(
+                    f"Tokenizer {tokenizer_name} does not have a chat template"
+                )
             chat_template = tokenizer.chat_template
             chat_template_name = None
         else:
@@ -878,7 +908,7 @@ The result is""",
         [
             "Qwen/Qwen2.5-0.5B",
             "microsoft/phi-2",
-            "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+            "Qwen/Qwen2.5-0.5B-Instruct",
         ],
     )
     @pytest.mark.parametrize(
@@ -892,7 +922,7 @@ The result is""",
     ):
         """Test that truncated strings are properly parsed with the last message marked as incomplete."""
         if chat[0]["role"] != "system":
-            pytest.skip("Skipping test for non-system message")
+            pytest.xfail("Skipping test for non-system message")
         import re
 
         from transformers import AutoTokenizer
@@ -908,7 +938,9 @@ The result is""",
                 not hasattr(tokenizer, "chat_template")
                 or tokenizer.chat_template is None
             ):
-                pytest.skip(f"Tokenizer {tokenizer_name} does not have a chat template")
+                pytest.xfail(
+                    f"Tokenizer {tokenizer_name} does not have a chat template"
+                )
             chat_template = tokenizer.chat_template
             chat_template_name = None
         else:

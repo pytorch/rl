@@ -1,3 +1,5 @@
+:orphan:
+
 .. note::
     If the following conditions are not met, the backward pass will use a slower but more
     memory efficient implementation:

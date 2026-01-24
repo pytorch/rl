@@ -101,8 +101,8 @@ def main(cfg: DictConfig):  # noqa: F821
         critic_network=critic,
         clip_epsilon=cfg.ppo.loss.clip_epsilon,
         loss_critic_type=cfg.ppo.loss.loss_critic_type,
-        entropy_coef=cfg.ppo.loss.entropy_coef,
-        critic_coef=cfg.ppo.loss.critic_coef,
+        entropy_coeff=cfg.ppo.loss.entropy_coeff,
+        critic_coeff=cfg.ppo.loss.critic_coeff,
         normalize_advantage=True,
     )
 

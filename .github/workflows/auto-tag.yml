@@ -1,0 +1,61 @@
+# Automatically add a label to PRs based on the [Label] prefix in the title
+#
+# Usage:
+#  - PR title must start with [Label] where Label is the desired label
+#  - Example: "[Bug] Fix memory leak" will add the "Bug" label
+#  - Fails if no [Label] prefix is found
+#  - When title is edited, old auto-label is replaced with the new one
+#------------------------------------------------------------
+
+name: PR Label
+
+on:
+  pull_request:
+    types: [opened, edited]
+
+jobs:
+  add-label:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Parse and apply label from PR title
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          # Known auto-labels that this workflow manages (add new ones here)
+          AUTO_LABELS: "Bug Feature Enhancement CI Doc Refactor Test Performance Breaking Deprecation"
+        run: |
+          set -euo pipefail
+
+          echo "PR Title: $PR_TITLE"
+
+          # Check if title starts with [...]
+          if [[ ! "$PR_TITLE" =~ ^\[([^\]]+)\] ]]; then
+            echo "::error::PR title must start with [Label]. Got: '$PR_TITLE'"
+            exit 1
+          fi
+
+          # Extract the label and normalize case (capitalize first letter of each word)
+          RAW_LABEL="${BASH_REMATCH[1]}"
+          LABEL="$(echo "$RAW_LABEL" | sed 's/.*/\L&/' | sed 's/\b\w/\u&/g')"
+
+          echo "Extracted label: $LABEL (from: $RAW_LABEL)"
+
+          # Get current labels on the PR
+          CURRENT_LABELS=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels --jq '.labels[].name' 2>/dev/null || echo "")
+
+          # Remove any existing auto-labels that don't match the new one
+          for existing in $CURRENT_LABELS; do
+            if [[ "$existing" != "$LABEL" && " $AUTO_LABELS " == *" $existing "* ]]; then
+              echo "Removing old auto-label: $existing"
+              gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "$existing" 2>/dev/null || true
+            fi
+          done
+
+          # Add the label to the PR
+          gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "$LABEL"
+
+          echo "Successfully added label '$LABEL' to PR #$PR_NUMBER"

@@ -163,6 +163,7 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
     which provides better modularity and integration with the new wrapper design.
 
     **Recent Changes:**
+
     - **Legacy Status**: This transform is now considered legacy and may not work optimally
       with the new modular wrapper design.
     - **ChatHistory Integration**: Limited support for the new :class:`~torchrl.modules.llm.policies.ChatHistory` objects.

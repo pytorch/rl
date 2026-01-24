@@ -2031,8 +2031,8 @@ class ClipTransform(Transform):
     Args:
         in_keys (list of NestedKeys): input entries (read)
         out_keys (list of NestedKeys): input entries (write)
-        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`inv` calls.
-        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`inv` calls.
+        in_keys_inv (list of NestedKeys): input entries (read) during ``inv`` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during ``inv`` calls.
 
     Keyword Args:
         low (scalar, optional): the lower bound of the clipped space.
@@ -2798,8 +2798,8 @@ class UnsqueezeTransform(Transform):
         in_keys (list of NestedKeys): input entries (read).
         out_keys (list of NestedKeys): input entries (write). Defaults to ``in_keys`` if
             not provided.
-        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`inv` calls.
-        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls.
+        in_keys_inv (list of NestedKeys): input entries (read) during ``inv`` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during ``inv`` calls.
             Defaults to ``in_keys_in`` if not provided.
     """
 
@@ -2968,8 +2968,8 @@ class PermuteTransform(Transform):
         in_keys (list of NestedKeys): input entries (read).
         out_keys (list of NestedKeys): input entries (write). Defaults to ``in_keys`` if
             not provided.
-        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`~.inv` calls.
-        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls. Defaults to ``in_keys_in`` if
+        in_keys_inv (list of NestedKeys): input entries (read) during ``inv`` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during ``inv`` calls. Defaults to ``in_keys_in`` if
             not provided.
 
     Examples:
@@ -3481,7 +3481,7 @@ class CatFrames(ObservationTransform):
 
     When used within a transformed environment,
     :class:`CatFrames` is a stateful class, and it can be reset to its native state by
-    calling the :meth:`~.reset` method. This method accepts tensordicts with a
+    calling the ``reset`` method. This method accepts tensordicts with a
     ``"_reset"`` entry that indicates which buffer to reset.
 
     Args:
@@ -5326,6 +5326,7 @@ class Hash(UnaryTransform):
             transform instantiation and these modifications will be reflected in
             the map. Missing hashes will be mapped to ``None``. Default: ``None``
 
+    Examples:
         >>> from torchrl.envs import GymEnv, UnaryTransform, Hash
         >>> env = GymEnv("Pendulum-v1")
         >>> # Add a string output
@@ -5833,10 +5834,10 @@ class Stack(Transform):
     Args:
         in_keys (sequence of NestedKey): keys to be stacked.
         out_key (NestedKey): key of the resulting stacked entry.
-        in_key_inv (NestedKey, optional): key to unstack during :meth:`~.inv`
+        in_key_inv (NestedKey, optional): key to unstack during ``inv``
             calls. Default is ``None``.
         out_keys_inv (sequence of NestedKey, optional): keys of the resulting
-            unstacked entries after :meth:`~.inv` calls. Default is ``None``.
+            unstacked entries after ``inv`` calls. Default is ``None``.
         dim (int, optional): dimension to insert. Default is ``-1``.
         allow_positive_dim (bool, optional): if ``True``, positive dimensions
             are accepted.  Defaults to ``False``, ie. non-negative dimensions are
@@ -6749,7 +6750,7 @@ def _sum_left(val, dest):
 class gSDENoise(TensorDictPrimer):
     """A gSDE noise initializer.
 
-    See the :func:`~torchrl.modules.models.exploration.gSDEModule' for more info.
+    See the :func:`~torchrl.modules.models.exploration.gSDEModule` for more info.
     """
 
     def __init__(
@@ -8438,7 +8439,7 @@ class InitTracker(Transform):
     """Reset tracker.
 
     This transform populates the step/reset tensordict with a reset tracker entry
-    that is set to ``True`` whenever :meth:`~.reset` is called.
+    that is set to ``True`` whenever ``reset`` is called.
 
     Args:
          init_key (NestedKey, optional): the key to be used for the tracker entry.
@@ -8960,7 +8961,19 @@ class ActionMask(Transform):
     It reads the mask from the input tensordict after the step is executed,
     and adapts the mask of the finite action spec.
 
-      .. note:: This transform will fail when used without an environment.
+    .. note:: This transform will fail when used without an environment.
+
+    .. note:: **MultiDiscrete action spaces with 2D masks (e.g., board games)**
+
+        When wrapping a Gym environment with a ``MultiDiscrete`` action space
+        (e.g., ``MultiDiscrete([5, 5])``) and an ``action_mask`` observation whose
+        shape matches the ``nvec`` (e.g., shape ``(5, 5)``), the :class:`~torchrl.envs.GymWrapper`
+        automatically converts the action space to a flattened ``Categorical(n=25)``
+        or ``OneHot(n=25)``. This allows the mask to represent all possible action
+        combinations (25 in this example) rather than independent sub-actions.
+
+        This is particularly useful for grid-based games where the mask indicates
+        which (row, column) positions are valid moves.
 
     Args:
         action_key (NestedKey, optional): the key where the action tensor can be found.
@@ -9403,8 +9416,8 @@ class SignTransform(Transform):
     Args:
         in_keys (list of NestedKeys): input entries (read)
         out_keys (list of NestedKeys): input entries (write)
-        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`~.inv` calls.
-        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls.
+        in_keys_inv (list of NestedKeys): input entries (read) during ``inv`` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during ``inv`` calls.
 
     Examples:
         >>> from torchrl.envs import GymEnv, TransformedEnv, SignTransform
@@ -10394,6 +10407,21 @@ class ActionDiscretizer(Transform):
         >>> assert (r["action"] < base_env.action_spec.high).all()
         >>> assert (r["action"] > base_env.action_spec.low).all()
 
+    .. note:: Custom Sampling Strategies
+
+        To implement a custom sampling strategy beyond the built-in options
+        (``MEDIAN``, ``LOW``, ``HIGH``, ``RANDOM``), subclass ``ActionDiscretizer``
+        and override the :meth:`~ActionDiscretizer.custom_arange` method. This
+        method computes the normalized interval positions (values in ``[0, 1)``)
+        that determine where each discrete action maps within the continuous
+        action interval.
+
+        Example:
+            >>> class LogSpacedActionDiscretizer(ActionDiscretizer):
+            ...     def custom_arange(self, nint, device):
+            ...         # Use logarithmic spacing instead of linear
+            ...         return torch.logspace(-2, 0, nint, device=device) - 0.01
+
     """
 
     class SamplingStrategy(IntEnum):
@@ -10440,7 +10468,33 @@ class ActionDiscretizer(Transform):
             f"\n{_indent(out_action_key)},\n{_indent(sampling)},\n{_indent(categorical)})"
         )
 
-    def _custom_arange(self, nint, device):
+    def custom_arange(self, nint, device):
+        """Compute the normalized interval positions for discretization.
+
+        This method generates values in the range [0, 1) that determine where
+        each discrete action maps within the continuous action interval.
+
+        Override this method in a subclass to implement custom sampling
+        strategies beyond the built-in ``MEDIAN``, ``LOW``, ``HIGH``, and
+        ``RANDOM`` strategies.
+
+        Args:
+            nint (int): the number of intervals (discrete actions) for this
+                action dimension.
+            device (torch.device): the device on which to create the tensor.
+
+        Returns:
+            torch.Tensor: a 1D tensor of shape ``(nint,)`` with values in
+                ``[0, 1)`` representing the normalized positions within each
+                interval.
+
+        Example:
+            >>> class CustomActionDiscretizer(ActionDiscretizer):
+            ...     def custom_arange(self, nint, device):
+            ...         # Custom sampling: use logarithmic spacing
+            ...         return torch.logspace(-2, 0, nint, device=device) - 0.01
+
+        """
         result = torch.arange(
             start=0.0,
             end=1.0,
@@ -10490,7 +10544,7 @@ class ActionDiscretizer(Transform):
 
             if isinstance(num_intervals, int):
                 arange = (
-                    self._custom_arange(num_intervals, action_spec.device).expand(
+                    self.custom_arange(num_intervals, action_spec.device).expand(
                         (*n_act, num_intervals)
                     )
                     * interval
@@ -10501,7 +10555,7 @@ class ActionDiscretizer(Transform):
                 self.register_buffer("intervals", low + arange)
             else:
                 arange = [
-                    self._custom_arange(_num_intervals, action_spec.device) * interval
+                    self.custom_arange(_num_intervals, action_spec.device) * interval
                     for _num_intervals, interval in zip(
                         num_intervals.tolist(), interval.unbind(-2)
                     )

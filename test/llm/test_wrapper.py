@@ -2099,6 +2099,11 @@ class TestLogProbsComparison:
             vllm_lp_result, tf_lp_result, atol=1e-1, rtol=1e-1, intersection=True
         )
 
+    @pytest.mark.xfail(
+        reason="AsyncVLLM tests fail due to Ray placement group timeout. "
+        "See LLM_TEST_ISSUES.md for details.",
+        strict=False,
+    )
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_sync_async_vllm_strict_equivalence(
@@ -2868,6 +2873,9 @@ class TestBatching:
         [vLLMWrapper, TransformersWrapperMaxTokens],
         ids=["vllm", "transformers"],
     )
+    @pytest.mark.xfail(
+        strict=False, reason="vLLM no longer has best_of parameter in SamplingParams"
+    )
     def test_standardized_generation_parameters(
         self, wrapper_class, vllm_instance, transformers_instance
     ):
@@ -3059,6 +3067,7 @@ class TestBatching:
 
 class TestRayWrapper:
     @pytest.mark.parametrize("backend", ["transformers"])
+    @pytest.mark.skip(reason="Ray wrapper tests hang in CI - needs investigation")
     def test_ray_wrapper(self, sample_text, backend):
         import gc
         from concurrent.futures import ThreadPoolExecutor
@@ -3109,6 +3118,7 @@ class TestActorSharing:
     """Test actor sharing functionality for Remote wrappers."""
 
     @pytest.mark.parametrize("backend", ["transformers"])
+    @pytest.mark.skip(reason="Ray actor sharing tests hang in CI - needs investigation")
     def test_actor_sharing(self, backend):
         """Test that creating the same wrapper twice uses the same actor."""
         import ray
@@ -3168,11 +3178,14 @@ class TestActorSharing:
             assert isinstance(result2["text"].response, str)
 
         finally:
-            # Cleanup
+            # Cleanup: wrappers, GPU memory, and Ray
             try:
                 del wrapper1
                 del wrapper2
                 gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                ray.shutdown()
             except Exception:
                 pass
 

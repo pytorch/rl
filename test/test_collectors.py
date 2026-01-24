@@ -240,6 +240,10 @@ def make_policy(env):
         raise NotImplementedError
 
 
+def _pendulum_env_maker():
+    return GymEnv(PENDULUM_VERSIONED())
+
+
 # def _is_consistent_device_type(
 #     device_type, policy_device_type, storing_device_type, tensordict_device_type
 # ):
@@ -537,7 +541,7 @@ class TestCollectorGeneric:
 
         policy = SafeModule(**policy_kwargs)
 
-        env_maker = lambda: GymEnv(PENDULUM_VERSIONED())
+        env_maker = _pendulum_env_maker
 
         policy(env_maker().reset())
 
@@ -1904,6 +1908,42 @@ if __name__ == "__main__":
         finally:
             collector.shutdown()
 
+    def test_collector_next_method(self):
+        """Non-regression test: next() should work correctly after __iter__.
+
+        Previously, `__iter__` set `_iterator = True` as a flag, but `next()` expected
+        `_iterator` to be either `None` or an actual iterator object. This test ensures
+        that calling `next()` works correctly.
+        """
+        env = ContinuousActionVecMockEnv()
+        policy = RandomPolicy(env.action_spec)
+
+        collector = Collector(
+            env,
+            policy,
+            total_frames=500,
+            frames_per_batch=50,
+        )
+        try:
+            # Test calling next() multiple times
+            data1 = collector.next()
+            assert data1 is not None, "next() should return data"
+            assert data1.numel() == 50, f"Expected 50 frames, got {data1.numel()}"
+
+            data2 = collector.next()
+            assert data2 is not None, "second next() should return data"
+            assert data2.numel() == 50, f"Expected 50 frames, got {data2.numel()}"
+
+            # Test that we can still iterate after calling next()
+            count = 0
+            for data in collector:
+                assert data.numel() == 50
+                count += 1
+                if count >= 2:
+                    break
+        finally:
+            collector.shutdown()
+
 
 class TestCollectorDevices:
     class DeviceLessEnv(EnvBase):
@@ -2544,7 +2584,7 @@ class TestAutoWrap:
                 # this does not work now that we force the device of the policy
                 # assert collector.policy.module is policy
 
-            for i, data in enumerate(collector):
+            for i, data in enumerate(collector):  # noqa: B007
                 # Debug: iteration {i}
                 if i == 0:
                     assert (data["action"] != 0).any()
@@ -2582,7 +2622,7 @@ class TestAutoWrap:
     #         assert collector.policy.out_keys == ["action"]
     #         assert collector.policy is policy
     #
-    #     for i, data in enumerate(collector):
+    #     for i, data in enumerate(collector):  # noqa: B007
     #         if i == 0:
     #             assert (data["action"] != 0).any()
     #             for p in policy.parameters():
@@ -2682,6 +2722,42 @@ class TestPreemptiveThreshold:
             assert trajectory_ids[trajectory_ids_mask].numel() < frames_per_batch
         collector.shutdown()
         del collector
+
+    def test_multisync_split_trajs_set_seed(self):
+        """Test that MultiSyncCollector with split_trajs=True and set_seed works without errors."""
+        from torchrl.testing.mocking_classes import CountingEnv
+
+        env_maker = lambda: CountingEnv(max_steps=100)
+        policy = RandomPolicy(env_maker().action_spec)
+        collector = MultiSyncCollector(
+            create_env_fn=[env_maker, env_maker],
+            policy=policy,
+            total_frames=2000,
+            max_frames_per_traj=50,
+            frames_per_batch=200,
+            init_random_frames=-1,
+            reset_at_each_iter=False,
+            device="cpu",
+            storing_device="cpu",
+            cat_results="stack",
+            split_trajs=True,
+        )
+        collector.set_seed(42)
+        try:
+            for i, data in enumerate(collector):  # noqa: B007
+                if i == 2:
+                    break
+            # Check that traj_ids are unique across the batch
+            traj_ids = data.get(("collector", "traj_ids"))
+            # Each row is one trajectory; all elements in a row share the same traj_id
+            # Check that each trajectory has a unique id
+            traj_ids_per_traj = traj_ids.select(-1, 0)
+            assert (
+                traj_ids_per_traj.unique().numel() == traj_ids_per_traj.numel()
+            ), "traj_ids should be unique across trajectories"
+        finally:
+            collector.shutdown()
+            del collector
 
 
 class TestNestedEnvsCollector:
@@ -3972,6 +4048,75 @@ class TestCollectorRB:
                 ).all(), steps_counts
                 assert (idsdiff >= 0).all()
 
+    @pytest.mark.skipif(not _has_gym, reason="requires gym.")
+    @pytest.mark.parametrize(
+        "collector_class", [MultiSyncCollector, MultiAsyncCollector]
+    )
+    @pytest.mark.parametrize("extend_buffer", [True, False])
+    def test_parallel_env_with_multi_collector_and_replay_buffer(
+        self, collector_class, extend_buffer
+    ):
+        """Test that ParallelEnv works with multi-collectors when replay_buffer is given.
+
+        Regression test for issue #3240 / PR #3341.
+        The bug was that `_main_async_collector` hardcoded `extend_buffer=False`
+        instead of forwarding the user's setting, causing dimension mismatches
+        when using ParallelEnv with multi-collectors and replay buffers.
+        """
+
+        # Create a ParallelEnv factory - this is the key component that was failing
+        def make_parallel_env():
+            return ParallelEnv(
+                num_workers=2,
+                create_env_fn=lambda cp=CARTPOLE_VERSIONED(): GymEnv(
+                    cp
+                ).append_transform(StepCounter()),
+            )
+
+        # Get action spec from a temporary env
+        temp_env = make_parallel_env()
+        action_spec = temp_env.action_spec
+        temp_env.close(raise_if_closed=False)
+        del temp_env
+
+        # Create replay buffer with ndim=2 to handle the batch dimension from ParallelEnv
+        rb = ReplayBuffer(storage=LazyTensorStorage(512, ndim=2), batch_size=5)
+
+        # Create the multi-collector with ParallelEnv and replay_buffer
+        # This combination was failing before the fix
+        collector = collector_class(
+            [
+                make_parallel_env,
+                make_parallel_env,
+            ],  # 2 workers, each with ParallelEnv(2)
+            RandomPolicy(action_spec),
+            replay_buffer=rb,
+            total_frames=256,
+            frames_per_batch=32,
+            extend_buffer=extend_buffer,
+        )
+
+        try:
+            # Collect data - this should not raise dimension mismatch errors
+            for c in collector:
+                # When replay_buffer is used, iterator yields None
+                assert c is None
+
+            # Verify buffer was populated correctly
+            assert len(rb) >= 256, f"Expected at least 256 frames, got {len(rb)}"
+
+            # If extend_buffer=True, verify trajectory structure is preserved
+            if extend_buffer:
+                # Each batch should have consecutive step counts (with resets)
+                steps_counts = rb["step_count"].squeeze()
+                # Just verify we have valid step counts (StepCounter starts at 0)
+                assert steps_counts.min() >= 0
+                assert steps_counts.numel() >= 256
+
+        finally:
+            collector.shutdown()
+            del collector
+
     @staticmethod
     def _zero_postproc(td):
         # Apply zero to all tensor values in the tensordict
@@ -4194,7 +4339,7 @@ class TestPolicyFactory:
             # When using policy_factory, must pass weights explicitly
             collector.update_policy_weights_(policy_weights)
 
-            for i, data in enumerate(collector):
+            for i, data in enumerate(collector):  # noqa: B007
                 if i == 2:
                     assert (data["action"] != 0).any()
                     # zero the policy

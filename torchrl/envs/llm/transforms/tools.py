@@ -463,7 +463,8 @@ class XMLBlockParser:
 class JSONCallParser:
     """Parser for JSON-style function-calling responses.
 
-    Expects responses in the format:
+    Expects responses in the format::
+
         {
           "message": "...",
           "tools": [

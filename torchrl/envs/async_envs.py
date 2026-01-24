@@ -236,13 +236,70 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         )
         self.__dict__["_output_spec"] = output_spec
         self.__dict__["_input_spec"] = input_spec
-        super().__init__(batch_size=[self.num_envs])
+        # Use spec shape as batch_size since it correctly includes both pool dimension
+        # and child env batch dimensions (e.g., (4, 1) for 4 envs with batch_size=(1,))
+        super().__init__(batch_size=input_spec.shape)
         self._busy = set()
 
     @property
     def env_batch_sizes(self) -> list[torch.Size]:
         """Returns the batch-sizes of every env."""
         raise NotImplementedError
+
+    @abc.abstractmethod
+    def _get_child_specs(self) -> list:
+        """Returns the list of child env specs for stacking.
+
+        For ThreadingAsyncEnvPool, returns [env.full_*_spec for env in self.envs].
+        For ProcessorAsyncEnvPool, returns cached specs from setup.
+        """
+        raise NotImplementedError
+
+    # Override spec properties to properly stack child env specs.
+    # This bypasses the problematic StackedComposite.get() behavior that loses
+    # nested keys like full_action_spec when cloning stacked specs.
+
+    @property
+    def full_action_spec(self):
+        child_specs = self._get_child_specs()
+        return torch.stack(
+            [s["input_spec"]["full_action_spec"] for s in child_specs], dim=0
+        )
+
+    @property
+    def full_observation_spec(self):
+        child_specs = self._get_child_specs()
+        return torch.stack(
+            [s["output_spec"]["full_observation_spec"] for s in child_specs], dim=0
+        )
+
+    @property
+    def full_reward_spec(self):
+        child_specs = self._get_child_specs()
+        return torch.stack(
+            [s["output_spec"]["full_reward_spec"] for s in child_specs], dim=0
+        )
+
+    @property
+    def full_done_spec(self):
+        child_specs = self._get_child_specs()
+        return torch.stack(
+            [s["output_spec"]["full_done_spec"] for s in child_specs], dim=0
+        )
+
+    @property
+    def full_state_spec(self):
+        child_specs = self._get_child_specs()
+        specs = torch.stack(
+            [s["input_spec"]["full_state_spec"] for s in child_specs], dim=0
+        )
+        # Add env_index key for async tracking
+        specs.set(self._env_idx_key, NonTensor(example_data=0, shape=specs.shape))
+        return specs
+
+    # TODO: _make_single_env_spec (used by *_unbatched properties) takes spec[0],
+    # which assumes all child envs have identical specs. Should add validation
+    # that child specs match, and error if they differ.
 
     def _reset(
         self,
@@ -329,7 +386,19 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         return tensordict
 
     def _sort_results(self, results, *other_results):
-        idx = [int(r[self._env_idx_key]) for r in results]
+        # Extract env indices from results. When child envs have a batch dimension
+        # (e.g., batch_size=(1,)), r[self._env_idx_key] may be a 1D sequence
+        # instead of a scalar, so we need to handle both cases.
+        idx = []
+        for r in results:
+            env_idx = r[self._env_idx_key]
+            # Handle sequence types (NonTensorStack, etc.) by taking first element
+            while hasattr(env_idx, "__len__") and not isinstance(env_idx, (str, bytes)):
+                if len(env_idx) == 1:
+                    env_idx = env_idx[0]
+                else:
+                    break
+            idx.append(int(env_idx))
         argsort = torch.argsort(torch.tensor(idx)).tolist()
         results = [results[i] for i in argsort]
         if other_results:
@@ -492,16 +561,20 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             )
             self.threads.append(thread)
             thread.start()
-        # Get specs
+        # Get specs from each worker and cache them for _get_child_specs()
         for i in range(num_threads):
             self.input_queue[i].put(("get_specs", None))
-        specs = []
+        self._child_specs = []
         for i in range(num_threads):
-            specs.append(self.output_queue[i].get())
-        specs = torch.stack(list(specs))
+            self._child_specs.append(self.output_queue[i].get())
+        specs = torch.stack(list(self._child_specs))
         output_spec = specs["output_spec"]
         input_spec = specs["input_spec"]
         return output_spec, input_spec
+
+    def _get_child_specs(self) -> list:
+        """Returns the cached specs from each child environment process."""
+        return self._child_specs
 
     @property
     def env_batch_sizes(self) -> list[torch.Size]:
@@ -771,6 +844,10 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
     @property
     def env_batch_sizes(self) -> list[torch.Size]:
         return [env.batch_size for env in self.envs]
+
+    def _get_child_specs(self) -> list:
+        """Returns the specs from each child environment."""
+        return [env.specs for env in self.envs]
 
     @classmethod
     def _get_specs(cls, env: EnvBase):
