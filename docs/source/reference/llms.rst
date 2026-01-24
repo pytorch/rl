@@ -204,7 +204,7 @@ such as :class:`~torchrl.envs.llm.ChatEnv`.
 An example of a tool transform is the :class:`~torchrl.envs.llm.transforms.PythonInterpreter` transform, which is used
 to execute Python code in the context of the LLM. The PythonInterpreter can optionally use a shared 
 :class:`~torchrl.envs.llm.transforms.PythonExecutorService` for efficient resource usage across multiple environments.
-See :ref:`ref_services` for more details on the service registry system.
+See :doc:`services` for more details on the service registry system.
 
     >>> from torchrl.envs.llm.transforms import PythonInterpreter
     >>> from torchrl.envs.llm import ChatEnv

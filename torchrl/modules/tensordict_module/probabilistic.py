@@ -42,7 +42,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
     - It uses a real mapping R^n -> R^m to create a distribution in R^d from
       which values can be sampled or computed.
 
-    When the :meth:`__call__` and :meth:`~.forward` method are called, a distribution is
+    When the ``__call__`` and ``forward`` methods are called, a distribution is
     created, and a value computed (depending on the ``interaction_type`` value, 'dist.mean',
     'dist.mode', 'dist.median' attributes could be used, as well as
     the 'dist.rsample', 'dist.sample' method). The sampling step is skipped if the supplied

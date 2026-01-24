@@ -79,7 +79,9 @@ except NameError:
     is_sphinx = False
 
 try:
-    multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
+    multiprocessing.set_start_method(
+        "spawn" if is_sphinx else "fork", force=not is_sphinx
+    )
 except RuntimeError:
     pass
 
@@ -117,7 +119,7 @@ collector_device = torch.device("cpu")  # Change the device to ``cuda`` to use C
 #   method will receive a TensorDict as input that contains all the necessary
 #   information to return a loss value.
 #
-#   .. code-block::Python
+#   .. code-block:: python
 #
 #       >>> data = replay_buffer.sample()
 #       >>> loss_dict = loss_module(data)
@@ -132,7 +134,7 @@ collector_device = torch.device("cpu")  # Change the device to ``cuda`` to use C
 #     optimizer for different sets of parameters for instance. Summing the losses
 #     can be simply done via
 #
-#     ..code - block::Python
+#     .. code-block:: python
 #
 #       >>> loss_val = sum(loss for key, loss in loss_dict.items() if key.startswith("loss_"))
 #
@@ -605,6 +607,7 @@ def parallel_env_constructor(
         create_env_fn=EnvCreator(lambda: make_env()),
         create_env_kwargs=None,
         pin_memory=False,
+        mp_start_method="fork" if is_fork else "spawn",
     )
     env = make_transformed_env(parallel_env)
     # we call `init_stats` for a limited number of steps, just to instantiate

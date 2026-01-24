@@ -23,19 +23,17 @@ Key Features:
 # -----------------
 # First, let's set up the environment and import the necessary modules.
 
-import os
 import warnings
 
 # Suppress warnings for cleaner output
 warnings.filterwarnings("ignore")
 
 # Set vLLM environment variables
-os.environ["VLLM_USE_V1"] = "0"
 
 import torch
 from tensordict import TensorDict
 from torchrl.data.llm import History
-from torchrl.modules.llm.policies import TransformersWrapper, vLLMWrapper
+from torchrl.modules.llm.policies import ChatHistory, TransformersWrapper, vLLMWrapper
 
 # %%
 # Example 1: vLLM Wrapper with History Input
@@ -62,6 +60,7 @@ try:
         ],
     ]
     history = History.from_chats(chats)
+    chat_history = ChatHistory(prompt=history)
 
     # Create vLLM wrapper with history input (recommended for RL environments)
     vllm_wrapper = vLLMWrapper(
@@ -70,9 +69,6 @@ try:
         input_mode="history",
         generate=True,
         return_log_probs=True,
-        return_text=True,
-        return_tokens=True,
-        return_masks=True,
         pad_output=False,  # Use False to avoid stacking issues
     )
 
@@ -80,7 +76,7 @@ try:
     print(f"vLLM wrapper output keys: {vllm_wrapper.out_keys}")
 
     # Process the data
-    data_history = TensorDict(history=history, batch_size=(2,))
+    data_history = TensorDict(history=chat_history, batch_size=(2,))
     result = vllm_wrapper(data_history)
 
     print("vLLM Results:")
@@ -112,9 +108,6 @@ try:
         input_mode="history",
         generate=True,
         return_log_probs=True,
-        return_text=True,
-        return_tokens=True,
-        return_masks=True,
         pad_output=True,  # Transformers typically use padded outputs
         generate_kwargs={"max_new_tokens": 50},
     )
@@ -122,7 +115,22 @@ try:
     print(f"Transformers wrapper input keys: {transformers_wrapper.in_keys}")
     print(f"Transformers wrapper output keys: {transformers_wrapper.out_keys}")
 
-    # Process the same data
+    # Create data for the Transformers wrapper
+    chats = [
+        [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "What is the capital of France?"},
+        ],
+        [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "What is the capital of Canada?"},
+        ],
+    ]
+    history = History.from_chats(chats)
+    chat_history = ChatHistory(prompt=history)
+    data_history = TensorDict(history=chat_history, batch_size=(2,))
+
+    # Process the data
     result_tf = transformers_wrapper(data_history)
 
     print("Transformers Results:")
@@ -151,8 +159,6 @@ try:
         tokenizer=tokenizer,
         input_mode="text",
         generate=True,
-        return_text=True,
-        return_tokens=True,
         pad_output=False,
     )
 
@@ -166,8 +172,6 @@ try:
         tokenizer=transformers_tokenizer,
         input_mode="text",
         generate=True,
-        return_text=True,
-        return_tokens=True,
         pad_output=True,
         generate_kwargs={"max_new_tokens": 20},
     )
@@ -192,8 +196,6 @@ try:
         input_mode="history",
         generate=False,  # Only compute log-probs
         return_log_probs=True,
-        return_text=True,
-        return_tokens=True,
         pad_output=False,
     )
 
@@ -210,8 +212,6 @@ try:
         input_mode="history",
         generate=False,
         return_log_probs=True,
-        return_text=True,
-        return_tokens=True,
         pad_output=True,
     )
 
@@ -307,7 +307,7 @@ try:
         tokenizer=tokenizer,
         input_mode="invalid_mode",  # Invalid mode
     )
-except ValueError as e:
+except (ValueError, NameError) as e:
     print(f"Expected error for invalid input mode: {e}")
 
 # %%

@@ -579,16 +579,28 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         this method.
 
         Args:
-            value_type (ValueEstimators): A :class:`~torchrl.objectives.utils.ValueEstimators`
-                enum type indicating the value function to use. If none is provided,
-                the default stored in the ``default_value_estimator``
-                attribute will be used. The resulting value estimator class
-                will be registered in ``self.value_type``, allowing
-                future refinements.
+            value_type (ValueEstimators, ValueEstimatorBase, or type): The value
+                estimator to use. This can be one of the following:
+
+                - A :class:`~torchrl.objectives.utils.ValueEstimators` enum type
+                  indicating which value function to use. If none is provided,
+                  the default stored in the ``default_value_estimator``
+                  attribute will be used.
+                - A :class:`~torchrl.objectives.value.ValueEstimatorBase` instance,
+                  which will be used directly as the value estimator.
+                - A :class:`~torchrl.objectives.value.ValueEstimatorBase` subclass,
+                  which will be instantiated with the provided ``hyperparams``.
+
+                The resulting value estimator class will be registered in
+                ``self.value_type``, allowing future refinements.
             **hyperparams: hyperparameters to use for the value function.
                 If not provided, the value indicated by
                 :func:`~torchrl.objectives.utils.default_value_kwargs` will be
-                used.
+                used. When passing a ``ValueEstimatorBase`` subclass, these
+                hyperparameters are passed directly to the class constructor.
+
+        Returns:
+            self: Returns the loss module for method chaining.
 
         Examples:
             >>> from torchrl.objectives import DQNLoss
@@ -603,9 +615,35 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             >>> # if we want to change the gamma value
             >>> dqn_loss.make_value_estimator(dqn_loss.value_type, gamma=0.9)
 
+            Using a :class:`~torchrl.objectives.value.ValueEstimatorBase` subclass:
+
+            >>> from torchrl.objectives.value import TD0Estimator
+            >>> dqn_loss.make_value_estimator(TD0Estimator, gamma=0.99, value_network=value_net)
+
+            Using a :class:`~torchrl.objectives.value.ValueEstimatorBase` instance:
+
+            >>> from torchrl.objectives.value import GAE
+            >>> gae = GAE(gamma=0.99, lmbda=0.95, value_network=value_net)
+            >>> ppo_loss.make_value_estimator(gae)
+
         """
         if value_type is None:
             value_type = self.default_value_estimator
+
+        if isinstance(value_type, ValueEstimatorBase):
+            self._value_estimator = value_type
+            self.value_type = type(value_type)
+            return self
+
+        if isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase):
+            if "device" not in hyperparams:
+                device = self._default_device
+                if device is not None:
+                    hyperparams["device"] = device
+            self._value_estimator = value_type(**hyperparams)
+            self.value_type = value_type
+            return self
+
         self.value_type = value_type
         if value_type == ValueEstimators.TD1:
             raise NotImplementedError(

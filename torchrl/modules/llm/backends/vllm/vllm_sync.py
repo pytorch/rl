@@ -23,7 +23,6 @@ from .vllm_utils import stateless_init_process_group
 
 try:
     from vllm import LLM
-    from vllm.utils import get_open_port
     from vllm.worker.worker import Worker
 
     _has_vllm = True
@@ -35,13 +34,20 @@ except ImportError:
     class Worker:
         """Placeholder for Worker class when vLLM is not installed."""
 
-    def get_open_port():
-        """Placeholder for get_open_port function when vLLM is not installed."""
-        raise ImportError(
-            "vllm is not installed. Please install it with `pip install vllm`."
-        )
-
     _has_vllm = False
+
+# get_open_port may not be available in all vLLM versions
+try:
+    from vllm.utils import get_open_port
+except ImportError:
+
+    def get_open_port():
+        """Fallback get_open_port using standard library."""
+        import socket
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("", 0))
+            return s.getsockname()[1]
 
 
 class _vLLMWorker(Worker):
