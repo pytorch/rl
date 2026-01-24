@@ -43,6 +43,52 @@ class StorageCheckpointerBase:
 
     """
 
+    def __init__(self):
+        self._save_hooks = []
+        self._load_hooks = []
+
+    def register_save_hook(self, hook):
+        """Registers a save hook for this checkpointer."""
+        self._save_hooks.append(hook)
+
+    def register_load_hook(self, hook):
+        """Registers a load hook for this checkpointer."""
+        self._load_hooks.append(hook)
+
+    def _get_shift_from_last_cursor(self, last_cursor):
+        """Computes shift from the last cursor position."""
+        if isinstance(last_cursor, slice):
+            return last_cursor.stop + 1
+        if isinstance(last_cursor, int):
+            return last_cursor + 1
+        if isinstance(last_cursor, range):
+            return last_cursor[-1] + 1
+        if isinstance(last_cursor, torch.Tensor):
+            return last_cursor.reshape(-1)[-1].item() + 1
+        if isinstance(last_cursor, np.ndarray):
+            return last_cursor.reshape(-1)[-1].item() + 1
+        raise ValueError(f"Unrecognised last_cursor type {type(last_cursor)}.")
+
+    def _set_hooks_shift_is_full(self, storage):
+        """Sets shift and is_full attributes on save hooks that have them."""
+        is_full = storage._is_full
+        last_cursor = storage._last_cursor
+        for hook in self._save_hooks:
+            if hasattr(hook, "is_full"):
+                hook.is_full = is_full
+        if last_cursor is None:
+            warnings.warn(
+                "last_cursor is None. The replay buffer "
+                "may not be saved properly in this setting. To solve this issue, make "
+                "sure the storage updates the _last_cursor value during calls to `set`."
+            )
+            shift = 0
+        else:
+            shift = self._get_shift_from_last_cursor(last_cursor)
+        for hook in self._save_hooks:
+            if hasattr(hook, "shift"):
+                hook.shift = shift
+
     @abc.abstractmethod
     def dumps(self, storage, path):
         ...
@@ -287,9 +333,6 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
 
     """
 
-    _save_hooks = []
-    _load_hooks = []
-
     def dumps(self, storage, path):
         path = Path(path)
         path.mkdir(exist_ok=True)
@@ -298,6 +341,9 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
             raise RuntimeError("Cannot save a non-initialized storage.")
         metadata = {}
         _storage = storage._storage
+
+        self._set_hooks_shift_is_full(storage)
+
         for hook in self._save_hooks:
             _storage = hook(_storage, path=path)
         if is_tensor_collection(_storage):
@@ -424,6 +470,7 @@ class FlatStorageCheckpointer(TensorStorageCheckpointer):
     """
 
     def __init__(self, done_keys=None, reward_keys=None):
+        super().__init__()
         kwargs = {}
         if done_keys is not None:
             kwargs["done_keys"] = done_keys
@@ -431,38 +478,6 @@ class FlatStorageCheckpointer(TensorStorageCheckpointer):
             kwargs["reward_keys"] = reward_keys
         self._save_hooks = [TED2Flat(**kwargs)]
         self._load_hooks = [Flat2TED(**kwargs)]
-
-    def _save_shift_is_full(self, storage):
-        is_full = storage._is_full
-        last_cursor = storage._last_cursor
-        for hook in self._save_hooks:
-            if hasattr(hook, "is_full"):
-                hook.is_full = is_full
-        if last_cursor is None:
-            warnings.warn(
-                "las_cursor is None. The replay buffer "
-                "may not be saved properly in this setting. To solve this issue, make "
-                "sure the storage updates the _las_cursor value during calls to `set`."
-            )
-        shift = self._get_shift_from_last_cursor(last_cursor)
-        for hook in self._save_hooks:
-            if hasattr(hook, "shift"):
-                hook.shift = shift
-
-    def dumps(self, storage, path):
-        self._save_shift_is_full(storage)
-        return super().dumps(storage, path)
-
-    def _get_shift_from_last_cursor(self, last_cursor):
-        if isinstance(last_cursor, slice):
-            return last_cursor.stop + 1
-        if isinstance(last_cursor, int):
-            return last_cursor + 1
-        if isinstance(last_cursor, torch.Tensor):
-            return last_cursor.reshape(-1)[-1].item() + 1
-        if isinstance(last_cursor, np.ndarray):
-            return last_cursor.reshape(-1)[-1].item() + 1
-        raise ValueError(f"Unrecognised last_cursor type {type(last_cursor)}.")
 
 
 class NestedStorageCheckpointer(FlatStorageCheckpointer):
@@ -478,7 +493,8 @@ class NestedStorageCheckpointer(FlatStorageCheckpointer):
 
     """
 
-    def __init__(self, done_keys=None, reward_keys=None, **kwargs):
+    def __init__(self, done_keys=None, reward_keys=None):
+        super().__init__()
         kwargs = {}
         if done_keys is not None:
             kwargs["done_keys"] = done_keys
@@ -522,6 +538,7 @@ class H5StorageCheckpointer(NestedStorageCheckpointer):
         h5_kwargs=None,
         **kwargs,
     ):
+        StorageCheckpointerBase.__init__(self)
         ted2_kwargs = kwargs
         if done_keys is not None:
             ted2_kwargs["done_keys"] = done_keys
@@ -535,7 +552,7 @@ class H5StorageCheckpointer(NestedStorageCheckpointer):
     def dumps(self, storage, path):
         path = self._get_path(path)
 
-        self._save_shift_is_full(storage)
+        self._set_hooks_shift_is_full(storage)
 
         if not storage.initialized:
             raise RuntimeError("Cannot save a non-initialized storage.")

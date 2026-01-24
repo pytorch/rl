@@ -1,3 +1,5 @@
+:orphan:
+
 .. currentmodule:: torchrl.modules.llm
 
 LLM Wrappers

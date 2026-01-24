@@ -102,12 +102,14 @@ except NameError:
     is_sphinx = False
 
 try:
-    multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
-    mp_context = "fork"
+    multiprocessing.set_start_method(
+        "spawn" if is_sphinx else "fork", force=not is_sphinx
+    )
+    mp_context = "spawn" if is_sphinx else "fork"
 except RuntimeError:
     # If we can't set the method globally we can still run the parallel env with "fork"
     # This will fail on windows! Use "spawn" and put the script within `if __name__ == "__main__"`
-    mp_context = "fork"
+    mp_context = "spawn" if is_sphinx else "fork"
 
 # sphinx_gallery_end_ignore
 import os

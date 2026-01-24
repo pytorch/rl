@@ -11,7 +11,6 @@ import time
 
 import pytest
 import torch
-from mocking_classes_llm import DummyStrDataLoader
 from tensordict import set_list_to_stack
 from torchrl import logger as torchrl_logger
 from torchrl.collectors.llm import LLMCollector
@@ -21,6 +20,7 @@ from torchrl.envs import AsyncEnvPool, StepCounter
 from torchrl.envs.llm.chat import ChatEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from torchrl.modules.llm.backends import make_vllm_worker
+from torchrl.testing import DummyStrDataLoader
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
@@ -42,10 +42,16 @@ class TestLLMCollector:
         except ImportError:
             pytest.skip(reason="missing vllm")
 
-        llm_model = vllm.LLM("gpt2")
+        llm_model = vllm.LLM("Qwen/Qwen2.5-0.5B", gpu_memory_utilization=0.4)
         tokenizer = llm_model.get_tokenizer()
         tokenizer.pad_token = tokenizer.eos_token
-        return llm_model
+        yield llm_model
+        # Cleanup
+        del llm_model
+        import gc
+
+        gc.collect()
+        torch.cuda.empty_cache()
 
     @pytest.fixture(scope="module")
     def vllm_instance_opt(self):
@@ -54,10 +60,16 @@ class TestLLMCollector:
         except ImportError:
             pytest.skip(reason="missing vllm")
 
-        llm_model = vllm.LLM("facebook/opt-125m")
+        llm_model = vllm.LLM("Qwen/Qwen2.5-0.5B", gpu_memory_utilization=0.4)
         tokenizer = llm_model.get_tokenizer()
         tokenizer.pad_token = tokenizer.eos_token
-        return llm_model
+        yield llm_model
+        # Cleanup
+        del llm_model
+        import gc
+
+        gc.collect()
+        torch.cuda.empty_cache()
 
     @pytest.fixture(scope="module")
     def transformers_instance(self):
@@ -82,7 +94,9 @@ class TestLLMCollector:
     def test_llm_collector_with_vllm(self, rb, queue, total_steps, vllm_instance):
         # NOTE: if VLLM fails with CUDA multiprocessing, try setting
         # `export VLLM_WORKER_MULTIPROC_METHOD=spawn`
-        policy = vLLMWrapper(vllm_instance)
+        policy = vLLMWrapper(
+            vllm_instance, generate_kwargs={"max_new_tokens": 20, "ignore_eos": True}
+        )
         tokenizer = vllm_instance.get_tokenizer()
         self._run_collector_test(total_steps, rb, queue, policy, tokenizer)
 
@@ -168,7 +182,9 @@ class TestLLMCollector:
     @pytest.mark.skip_if_nightly
     def test_llm_collector_start(self, vllm_instance):
         total_steps = 20
-        policy = vLLMWrapper(vllm_instance)
+        policy = vLLMWrapper(
+            vllm_instance, generate_kwargs={"max_new_tokens": 20, "ignore_eos": True}
+        )
         vllm_instance.get_tokenizer()
         bsz = 4
         dataloader = DummyStrDataLoader(bsz)
@@ -227,7 +243,10 @@ class TestLLMCollector:
         self, vllm_instance_opt, rb, yield_only_last_steps, dialog_turns_per_batch
     ):
         torch.manual_seed(0)
-        policy = vLLMWrapper(vllm_instance_opt)
+        policy = vLLMWrapper(
+            vllm_instance_opt,
+            generate_kwargs={"max_new_tokens": 20, "ignore_eos": True},
+        )
         vllm_instance_opt.get_tokenizer()
         bsz = 4
         total_steps = 20
@@ -263,7 +282,7 @@ class TestLLMCollector:
             **kwargs,
         )
         if not dialog_turns_per_batch:
-            assert collector.dialog_turns_per_batch == 1
+            assert collector.dialog_turns_per_batch == bsz
         assert collector.yield_completed_trajectories
         assert collector.yield_only_last_steps is yield_only_last_steps
 
@@ -331,7 +350,10 @@ class TestLLMCollector:
         self, vllm_instance_opt, rb, yield_only_last_steps
     ):
         torch.manual_seed(0)
-        policy = vLLMWrapper(vllm_instance_opt)
+        policy = vLLMWrapper(
+            vllm_instance_opt,
+            generate_kwargs={"max_new_tokens": 20, "ignore_eos": True},
+        )
         vllm_instance_opt.get_tokenizer()
         bsz = 4
         total_steps = 20
@@ -341,8 +363,8 @@ class TestLLMCollector:
         def env_maker():
             env = ChatEnv.from_dataloader(
                 dataloader=dataloader,
-                from_text=True,
-                batch_size=(),
+                input_mode="history",
+                batch_size=(1,),
                 group_repeats=True,
             )
             # To make sure the env breaks at some point
@@ -417,104 +439,194 @@ class TestLLMCollector:
         assert collector._frames >= total_steps
 
 
+class TestAsyncEnvPoolSpecs:
+    """Tests for AsyncEnvPool spec propagation (no vLLM/GPU required)."""
+
+    def test_async_env_pool_spec_propagation(self):
+        """Test that AsyncEnvPool properly propagates full_action_spec from child envs.
+
+        This was the original bug: full_action_spec was returning an empty Composite
+        because StackedComposite.get() was losing nested keys during clone().
+        """
+        bsz = 4
+        dataloader = DummyStrDataLoader(bsz)
+
+        def env_maker():
+            env = ChatEnv.from_dataloader(
+                dataloader=dataloader,
+                input_mode="history",
+                batch_size=(1,),
+                group_repeats=True,
+            )
+            env = env.append_transform(StepCounter(max_steps=5))
+            return env
+
+        env = AsyncEnvPool([env_maker] * bsz, backend="threading", stack="lazy")
+
+        # Verify batch_size includes child env dimensions
+        assert env.batch_size == torch.Size(
+            [bsz, 1]
+        ), f"Expected (4, 1), got {env.batch_size}"
+
+        # Verify full_action_spec is properly populated (the main bug fix)
+        full_action_spec = env.full_action_spec
+        assert full_action_spec is not None
+        assert len(full_action_spec.keys()) > 0, "full_action_spec should not be empty"
+
+        # Verify action_keys returns the expected keys
+        action_keys = env.action_keys
+        assert len(action_keys) > 0, "action_keys should not be empty"
+
+        # Verify other specs also work
+        assert len(env.full_observation_spec.keys()) > 0
+        assert len(env.full_done_spec.keys()) > 0
+
+        # Verify basic operations work
+        td = env.reset()
+        assert td.shape == env.batch_size
+
+        env.close()
+
+    def test_async_env_pool_with_unbatched_child_envs(self):
+        """Test AsyncEnvPool with child envs that have batch_size=()."""
+        from torchrl.testing.mocking_classes import CountingEnv
+
+        def env_maker():
+            return CountingEnv()
+
+        env = AsyncEnvPool([env_maker] * 4, backend="threading", stack="lazy")
+
+        # With unbatched child envs, pool batch_size should be (num_envs,)
+        assert env.batch_size == torch.Size([4])
+
+        # Verify specs work
+        assert len(env.action_keys) > 0
+        assert "action" in env.action_keys
+
+        # Verify basic operations
+        td = env.reset()
+        assert td.shape == torch.Size([4])
+
+        td["action"] = torch.ones(4, dtype=torch.int8)
+        td_next = env.step(td)
+        assert td_next.shape == torch.Size([4])
+
+        env.close()
+
+
 class TestUpdate:
-    @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="requires 2 GPUs")
+    @pytest.mark.xfail(
+        torch.cuda.device_count() < 2,
+        reason="requires 2 GPUs",
+        strict=False,
+    )
     def test_vllm_update(self):
+        import gc
+
         import ray
 
         ray.init()
 
-        from torchrl.envs.llm import GSM8KEnv
-        from transformers import AutoModelForCausalLM, AutoTokenizer
+        collector = None
+        try:
+            from torchrl.envs.llm import GSM8KEnv
+            from transformers import AutoModelForCausalLM, AutoTokenizer
 
-        model_name = "Qwen/Qwen2.5-3B"
-        # TODO: Simple model errors
-        # model_name = "facebook/opt-125m"
+            model_name = "Qwen/Qwen2.5-3B"
+            # TODO: Simple model errors
+            # model_name = "facebook/opt-125m"
 
-        # Create train model
-        train_model = AutoModelForCausalLM.from_pretrained(
-            model_name, device_map="cuda:0"
-        )
-        train_tokenizer = AutoTokenizer.from_pretrained(model_name)
+            # Create train model
+            train_model = AutoModelForCausalLM.from_pretrained(
+                model_name, device_map="cuda:0"
+            )
+            train_tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-        # Wrap
-        policy_training = TransformersWrapper(
-            train_model,
-            # train_model.eval(),
-            tokenizer=train_tokenizer,
-            # We have the tokens, let's just use them
-            from_text=False,
-            generate=False,
-            return_log_probs=True,
-        )
+            # Wrap
+            policy_training = TransformersWrapper(
+                train_model,
+                # train_model.eval(),
+                tokenizer=train_tokenizer,
+                # We have the tokens, let's just use them
+                from_text=False,
+                generate=False,
+                return_log_probs=True,
+            )
 
-        # Create environment
-        env = GSM8KEnv(repeats=4, tokenizer=train_tokenizer, num_envs=4)
+            # Create environment
+            env = GSM8KEnv(repeats=4, tokenizer=train_tokenizer, num_envs=4)
 
-        # Get metadata
-        # TODO: Simplify this: can be done by the updater if the training policy is passed
-        model_metadata = {
-            k: (v.dtype, v.shape) for k, v in policy_training.model.state_dict().items()
-        }
+            # Get metadata
+            # TODO: Simplify this: can be done by the updater if the training policy is passed
+            model_metadata = {
+                k: (v.dtype, v.shape)
+                for k, v in policy_training.model.state_dict().items()
+            }
 
-        # Get inference server
-        inference_server = make_vllm_worker(
-            model_name,
-            gpu_memory_utilization=0.5,
-            devices=[1],
-            make_ray_worker=True,
-        )
+            # Get inference server
+            inference_server = make_vllm_worker(
+                model_name,
+                gpu_memory_utilization=0.5,
+                devices=[1],
+                make_ray_worker=True,
+            )
 
-        # Wrap
-        policy = vLLMWrapper(
-            inference_server,
-            from_text=True,
-            return_log_probs=True,
-            generate_kwargs={
-                "max_tokens": 1024,
-                "include_stop_str_in_output": True,
-                "temperature": 0.8,
-            },
-        )
+            # Wrap
+            policy = vLLMWrapper(
+                inference_server,
+                input_mode="history",
+                return_log_probs=True,
+                generate_kwargs={
+                    "max_tokens": 1024,
+                    "include_stop_str_in_output": True,
+                    "temperature": 0.8,
+                },
+            )
 
-        # Make updater
-        # TODO: Could use the transformer model directly?
-        updater = vLLMUpdater(
-            master_address=None,
-            master_port=None,
-            model_metadata=model_metadata,
-        )
-        collector = LLMCollector(
-            env,
-            policy=policy,
-            dialog_turns_per_batch=4,
-            total_dialog_turns=1_000_000,
-            weight_updater=updater,
-        )
-        torchrl_logger.info("Created collector")
-        torchrl_logger.info("init group")
+            # Make updater
+            # TODO: Could use the transformer model directly?
+            updater = vLLMUpdater(
+                master_address=None,
+                master_port=None,
+                model_metadata=model_metadata,
+            )
+            collector = LLMCollector(
+                env,
+                policy=policy,
+                dialog_turns_per_batch=4,
+                total_dialog_turns=1_000_000,
+                weight_updater=updater,
+            )
+            torchrl_logger.info("Created collector")
+            torchrl_logger.info("init group")
 
-        # TODO: Could we ask the collector to do this? Or maybe automate it within the registering of
-        #  the collector
-        updater.maybe_init_group()
-        torchrl_logger.info("Update weights")
+            # TODO: Could we ask the collector to do this? Or maybe automate it within the registering of
+            #  the collector
+            updater.maybe_init_group()
+            torchrl_logger.info("Update weights")
 
-        # TODO: If the policy training is passed to the updater, we can cache a ref to the weights
-        collector.update_policy_weights_(
-            policy_training.model.state_dict(), worker_ids=[0]
-        )
+            # TODO: If the policy training is passed to the updater, we can cache a ref to the weights
+            collector.update_policy_weights_(
+                policy_training.model.state_dict(), worker_ids=[0]
+            )
 
-        torchrl_logger.info("Iterate")
-        for _ in collector:
-            break
+            torchrl_logger.info("Iterate")
+            for _ in collector:
+                break
 
-        torchrl_logger.info("Second update")
-        collector.update_policy_weights_(
-            policy_training.model.state_dict(), worker_ids=[0]
-        )
-
-        torchrl_logger.info("Shutdown")
-        collector.shutdown()
+            torchrl_logger.info("Second update")
+            collector.update_policy_weights_(
+                policy_training.model.state_dict(), worker_ids=[0]
+            )
+        finally:
+            # Cleanup: shutdown collector, Ray, and GPU memory
+            torchrl_logger.info("Shutdown")
+            if collector is not None:
+                collector.shutdown()
+            ray.shutdown()
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":
