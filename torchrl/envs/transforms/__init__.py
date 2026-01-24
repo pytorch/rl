@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 from .gym_transforms import EndOfLifeTransform
-from .llm import KLRewardTransform
 from .module import ModuleTransform
 from .r3m import R3MTransform
 from .ray_service import RayTransform
@@ -103,7 +102,6 @@ __all__ = [
     "GrayScale",
     "Hash",
     "InitTracker",
-    "KLRewardTransform",
     "LineariseRewards",
     "ModuleTransform",
     "MultiAction",
