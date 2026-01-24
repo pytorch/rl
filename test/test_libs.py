@@ -2381,6 +2381,62 @@ class TestHabitat:
         if from_pixels:
             assert "pixels" in rollout.keys()
 
+    def test_num_workers_returns_lazy_parallel_env(self):
+        """Ensure HabitatEnv with num_workers > 1 returns a lazy ParallelEnv."""
+        from torchrl.envs.batched_envs import ParallelEnv
+
+        env = HabitatEnv("HabitatRenderPick-v0", num_workers=3)
+        try:
+            assert isinstance(env, ParallelEnv)
+            assert env.num_workers == 3
+            # ParallelEnv should be lazy (not started yet)
+            assert env.is_closed
+
+            # configure_parallel should work before env starts
+            env.configure_parallel(use_buffers=False)
+            assert env._use_buffers is False
+
+            # After reset, env is started
+            env.reset()
+            assert not env.is_closed
+            assert env.batch_size == torch.Size([3])
+        finally:
+            env.close()
+
+    def test_set_seed_and_reset_works(self):
+        """Smoke test that setting seed and reset works (seed forwarded into build)."""
+        env = HabitatEnv("HabitatRenderPick-v0")
+        final_seed = env.set_seed(0)
+        assert final_seed is not None
+        td = env.reset()
+        assert isinstance(td, TensorDict)
+        env.close()
+    
+    def test_habitat_kwargs_preserved_with_seed(self):
+        """Test that kwargs like camera_id are preserved when seed is provided."""
+        env = HabitatEnv(
+            "HabitatRenderPick-v0",
+            from_pixels=True,
+            pixels_only=True,
+            camera_id=1,  # Non-default camera_id
+        )
+        try:
+            final_seed = env.set_seed(1)
+            assert final_seed is not None
+            td = env.reset()
+            assert isinstance(td, TensorDict)
+            preserved = False
+            if hasattr(env, "render_kwargs") and isinstance(env.render_kwargs, dict):
+                preserved = env.render_kwargs.get("camera_id", None) == 1
+            else:
+                inner = getattr(env, "_env", None)
+                if inner is not None and hasattr(inner, "_kwargs") and isinstance(
+                    inner._kwargs, dict
+                ):
+                    preserved = inner._kwargs.get("camera_id", None) == 1
+            assert preserved, "camera_id was not preserved after set_seed"
+        finally:
+            env.close()
 
 def _jumanji_envs():
     if not _has_jumanji:

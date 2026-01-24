@@ -11,7 +11,7 @@ import torch
 from torchrl._utils import _make_ordinal_device
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
-from torchrl.envs.libs.gym import GymEnv, set_gym_backend
+from torchrl.envs.libs.gym import GymEnv, set_gym_backend, _GymAsyncMeta
 from torchrl.envs.utils import _classproperty
 
 _has_habitat = importlib.util.find_spec("habitat") is not None
@@ -39,7 +39,31 @@ def _get_available_envs():
             yield env
 
 
-class HabitatEnv(GymEnv):
+class _HabitatMeta(_GymAsyncMeta):
+    """Metaclass for HabitatEnv that returns a lazy ParallelEnv when num_workers > 1."""
+
+    def __call__(self, *args, num_workers: int | None = None, **kwargs):
+        # Extract num_workers from explicit kwarg or kwargs dict
+        if num_workers is None:
+            num_workers = kwargs.pop("num_workers", 1)
+        else:
+            kwargs.pop("num_workers", None)
+
+        num_workers = int(num_workers) if num_workers is not None else 1
+        if getattr(self, "__name__", None) == "HabitatEnv" and num_workers > 1:
+            from torchrl.envs import ParallelEnv
+
+            env_name = args[0] if len(args) >= 1 else kwargs.get("env_name")
+            env_kwargs = {k: v for k, v in kwargs.items() if k != "env_name"}
+
+            def make_env(_env_name=env_name, _kwargs=env_kwargs):
+                return self(_env_name, num_workers=1, **_kwargs)
+
+            return ParallelEnv(num_workers, make_env)
+
+        return super().__call__(*args, **kwargs)
+
+class HabitatEnv(GymEnv, metaclass=_HabitatMeta):
     """A wrapper for habitat envs.
 
     This class currently serves as placeholder and compatibility security.
@@ -84,6 +108,9 @@ class HabitatEnv(GymEnv):
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
             for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
+        num_workers (int, optional): if provided and greater than 1, a
+            :class:`torchrl.envs.ParallelEnv` will be instantiated with
+            ``num_workers`` copies of ``HabitatEnv``. Defaults to ``None``.
 
     Attributes:
         available_envs (List[str]): a list of environments to build.
