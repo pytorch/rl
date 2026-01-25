@@ -294,7 +294,7 @@ conditions the action_space.</p></li>
 of type <a class="reference internal" href="torchrl.modules.DistributionalDQNnet.html#torchrl.modules.DistributionalDQNnet" title="torchrl.modules.DistributionalDQNnet"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.modules.DistributionalDQNnet</span></code></a>, a log-softmax
 operation will be applied along dimension -2 of the action value tensor.</p></li>
 <li><p><strong>action_value_key</strong> (<em>str</em><em> or </em><em>tuple</em><em> of </em><em>str</em><em>, </em><em>optional</em>) – if the input module
-is a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModuleBase</span></code></a> instance, it must
+is a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModuleBase</span></code></a> instance, it must
 match one of its output keys. Otherwise, this string represents
 the name of the action-value entry in the output tensordict.</p></li>
 <li><p><strong>action_mask_key</strong> (<em>str</em><em> or </em><em>tuple</em><em> of </em><em>str</em><em>, </em><em>optional</em>) – The input key

@@ -300,7 +300,7 @@ able to simulate multiple environments on a GPU to speed up computation.</p></li
 <li><p>How to use competitive multi-agent environments in TorchRL, how their specs work, and how they integrate with the library;</p></li>
 <li><p>How to use Parallel PettingZoo and VMAS environments with multiple agent groups in TorchRL;</p></li>
 <li><p>How to create different multi-agent network architectures in TorchRL (e.g., using parameter sharing, centralised critic)</p></li>
-<li><p>How we can use <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> to carry multi-agent multi-group data;</p></li>
+<li><p>How we can use <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> to carry multi-agent multi-group data;</p></li>
 <li><p>How we can tie all the library components (collectors, modules, replay buffers, and losses) in an off-policy multi-agent MADDPG/IDDPG training loop.</p></li>
 </ul>
 <p>If you are running this in Google Colab, make sure you install the following dependencies:</p>
@@ -956,7 +956,7 @@ all the values along the <code class="docutils literal notranslate"><span class=
 </pre></div>
 </div>
 <p>Let us try our policy and critic modules. As pointed earlier, the usage of
-<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> makes it possible to directly read the output
+<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> makes it possible to directly read the output
 of the environment to run these modules, as they know what information to read
 and where to write it.</p>
 <p>We can see that after each group’s networks are run their output keys are added to the data under the
@@ -1265,16 +1265,16 @@ The steps include:</p>
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>episode_reward_mean_adversary = 0, episode_reward_mean_agent = 0:   0%|          | 0/10 [00:00&lt;?, ?it/s]
-episode_reward_mean_adversary = 3.0, episode_reward_mean_agent = -3.0:  10%|█         | 1/10 [00:02&lt;00:24,  2.67s/it]
-episode_reward_mean_adversary = 4.0, episode_reward_mean_agent = -4.0:  20%|██        | 2/10 [00:05&lt;00:21,  2.74s/it]
-episode_reward_mean_adversary = 1.0, episode_reward_mean_agent = -1.0:  30%|███       | 3/10 [00:08&lt;00:19,  2.78s/it]
-episode_reward_mean_adversary = 110.0, episode_reward_mean_agent = -110.0:  40%|████      | 4/10 [00:11&lt;00:16,  2.81s/it]
-episode_reward_mean_adversary = 209.0, episode_reward_mean_agent = -209.0:  50%|█████     | 5/10 [00:14&lt;00:14,  2.83s/it]
-episode_reward_mean_adversary = 224.0, episode_reward_mean_agent = -224.0:  60%|██████    | 6/10 [00:16&lt;00:11,  2.83s/it]
-episode_reward_mean_adversary = 1035.0, episode_reward_mean_agent = -1035.0:  70%|███████   | 7/10 [00:18&lt;00:07,  2.59s/it]
-episode_reward_mean_adversary = 1147.0, episode_reward_mean_agent = -1147.0:  80%|████████  | 8/10 [00:21&lt;00:04,  2.44s/it]
-episode_reward_mean_adversary = 722.0, episode_reward_mean_agent = -722.0:  90%|█████████ | 9/10 [00:23&lt;00:02,  2.35s/it]
-episode_reward_mean_adversary = 867.0, episode_reward_mean_agent = -867.0: 100%|██████████| 10/10 [00:25&lt;00:00,  2.31s/it]
+episode_reward_mean_adversary = 3.0, episode_reward_mean_agent = -3.0:  10%|█         | 1/10 [00:02&lt;00:23,  2.63s/it]
+episode_reward_mean_adversary = 4.0, episode_reward_mean_agent = -4.0:  20%|██        | 2/10 [00:05&lt;00:21,  2.72s/it]
+episode_reward_mean_adversary = 1.0, episode_reward_mean_agent = -1.0:  30%|███       | 3/10 [00:08&lt;00:19,  2.77s/it]
+episode_reward_mean_adversary = 110.0, episode_reward_mean_agent = -110.0:  40%|████      | 4/10 [00:11&lt;00:16,  2.79s/it]
+episode_reward_mean_adversary = 209.0, episode_reward_mean_agent = -209.0:  50%|█████     | 5/10 [00:13&lt;00:14,  2.83s/it]
+episode_reward_mean_adversary = 224.0, episode_reward_mean_agent = -224.0:  60%|██████    | 6/10 [00:16&lt;00:11,  2.82s/it]
+episode_reward_mean_adversary = 1035.0, episode_reward_mean_agent = -1035.0:  70%|███████   | 7/10 [00:18&lt;00:07,  2.57s/it]
+episode_reward_mean_adversary = 1147.0, episode_reward_mean_agent = -1147.0:  80%|████████  | 8/10 [00:20&lt;00:04,  2.42s/it]
+episode_reward_mean_adversary = 722.0, episode_reward_mean_agent = -722.0:  90%|█████████ | 9/10 [00:23&lt;00:02,  2.32s/it]
+episode_reward_mean_adversary = 867.0, episode_reward_mean_agent = -867.0: 100%|██████████| 10/10 [00:25&lt;00:00,  2.27s/it]
 </pre></div>
 </div>
 </section>
@@ -1342,7 +1342,7 @@ logger <cite>video_logger</cite>. Note that this code may require some external 
 <ul class="simple">
 <li><p>How to create a competitive multi-group multi-agent environment in TorchRL, how its specs work, and how it integrates with the library;</p></li>
 <li><p>How to create multi-agent network architectures in TorchRL for multiple groups;</p></li>
-<li><p>How we can use <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code></a> to carry multi-agent multi-group data;</p></li>
+<li><p>How we can use <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code></a> to carry multi-agent multi-group data;</p></li>
 <li><p>How we can tie all the library components (collectors, modules, replay buffers, and losses) in a multi-agent multi-group MADDPG/IDDPG training loop.</p></li>
 </ul>
 <p>Now that you are proficient with multi-agent DDPG, you can check out all the TorchRL multi-agent implementations in the
@@ -1360,7 +1360,7 @@ Here are a few videos of some possible scenarios you can try in VMAS.</p>
 <p><span class="caption-text">Scenarios available in <a class="reference external" href="https://github.com/proroklab/VectorizedMultiAgentSimulator">VMAS</a></span><a class="headerlink" href="#id3" title="Link to this image">¶</a></p>
 </figcaption>
 </figure>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 25.714 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 25.468 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-multiagent-competitive-ddpg-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/f3b53654a2b96b82010dd96f73ff5151/multiagent_competitive_ddpg.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">multiagent_competitive_ddpg.ipynb</span></code></a></p>

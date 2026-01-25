@@ -280,7 +280,7 @@ using multithreading. Defaults to None (no prefetching).</p></li>
 <li><p><strong>transform</strong> (<a class="reference internal" href="torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.Transform"><em>Transform</em></a><em>, </em><em>optional</em>) – Transform to be executed when
 sample() is called.
 To chain transforms use the <code class="xref py py-class docutils literal notranslate"><span class="pre">Compose</span></code> class.
-Transforms should be used with <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code></a>
+Transforms should be used with <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code></a>
 content. If used with other structures, the transforms should be
 encoded with a <code class="docutils literal notranslate"><span class="pre">&quot;data&quot;</span></code> leading key that will be used to
 construct a tensordict from the non-tensordict content.</p></li>
@@ -336,7 +336,7 @@ and <code class="docutils literal notranslate"><span class="pre">False</span></c
 <p>Generic prioritized replay buffers (ie. non-tensordict backed) require
 calling <a class="reference internal" href="#torchrl.data.PrioritizedReplayBuffer.sample" title="torchrl.data.PrioritizedReplayBuffer.sample"><code class="xref py py-meth docutils literal notranslate"><span class="pre">sample()</span></code></a> with the <code class="docutils literal notranslate"><span class="pre">return_info</span></code> argument set to
 <code class="docutils literal notranslate"><span class="pre">True</span></code> to have access to the indices, and hence update the priority.
-Using <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code></a> and the related
+Using <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code></a> and the related
 <a class="reference internal" href="torchrl.data.TensorDictPrioritizedReplayBuffer.html#torchrl.data.TensorDictPrioritizedReplayBuffer" title="torchrl.data.TensorDictPrioritizedReplayBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPrioritizedReplayBuffer</span></code></a> simplifies this
 process.</p>
 </div>

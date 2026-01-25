@@ -295,7 +295,7 @@ a Convolutional Neural Network (CNN) as backbones.</p>
 <section id="tensordictmodules">
 <h2>TensorDictModules<a class="headerlink" href="#tensordictmodules" title="Link to this heading">¶</a></h2>
 <p>Similar to how environments interact with instances of
-<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, the modules used to represent policies and
+<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, the modules used to represent policies and
 value functions also do the same. The core idea is simple: encapsulate a
 standard <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> (or any other function) within a class
 that knows which entries need to be read and passed to the module, and then
@@ -424,7 +424,7 @@ normal distribution using three components:</p>
 <ul class="simple">
 <li><p>An <a class="reference internal" href="../reference/generated/torchrl.modules.MLP.html#torchrl.modules.MLP" title="torchrl.modules.MLP"><code class="xref py py-class docutils literal notranslate"><span class="pre">MLP</span></code></a> backbone reading observations of size
 <code class="docutils literal notranslate"><span class="pre">[3]</span></code> and outputting a single tensor of size <code class="docutils literal notranslate"><span class="pre">[2]</span></code>;</p></li>
-<li><p>A <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.distributions.NormalParamExtractor.html#tensordict.nn.distributions.NormalParamExtractor" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NormalParamExtractor</span></code></a> module that
+<li><p>A <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.distributions.NormalParamExtractor.html#tensordict.nn.distributions.NormalParamExtractor" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NormalParamExtractor</span></code></a> module that
 will split this output on two chunks, a mean and a standard deviation of
 size <code class="docutils literal notranslate"><span class="pre">[1]</span></code>;</p></li>
 <li><p>A <a class="reference internal" href="../reference/generated/torchrl.modules.tensordict_module.ProbabilisticActor.html#torchrl.modules.tensordict_module.ProbabilisticActor" title="torchrl.modules.tensordict_module.ProbabilisticActor"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticActor</span></code></a> that will
@@ -531,7 +531,7 @@ to <a class="reference internal" href="../reference/generated/torchrl.modules.EG
 </div>
 <p>To build our explorative policy, we only had to concatenate the
 deterministic policy module with the exploration module within a
-<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> module (which is the analogous
+<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> module (which is the analogous
 to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="(in PyTorch v2.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code></a> in the tensordict realm).</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">exploration_policy</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictSequential</span></a><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a><span class="p">,</span> <span class="n">exploration_module</span><span class="p">)</span>
 
@@ -641,7 +641,7 @@ is to look at the <a class="reference internal" href="../reference/modules.html#
 <p>Next steps:</p>
 <ul class="simple">
 <li><p>Check how to use compound distributions with
-<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code></a> when the
+<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code></a> when the
 action is composite (e.g., a discrete and a continuous action are
 required by the env);</p></li>
 <li><p>Have a look at how you can use an RNN within the policy (a
@@ -649,7 +649,7 @@ required by the env);</p></li>
 <li><p>Compare this to the usage of transformers with the Decision Transformers
 examples (see the <code class="docutils literal notranslate"><span class="pre">example</span></code> directory on GitHub).</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.070 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.069 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-getting-started-1-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/c4e061fa0d0af4f742988ea6303991f1/getting-started-1.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">getting-started-1.ipynb</span></code></a></p>

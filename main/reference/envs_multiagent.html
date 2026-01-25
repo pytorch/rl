@@ -259,7 +259,7 @@ Some of the main differences between these paradigms include:</p>
 <li><p><strong>reward</strong> can be per-agent or shared</p></li>
 <li><p><strong>done</strong> (and <code class="docutils literal notranslate"><span class="pre">&quot;truncated&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;terminated&quot;</span></code>) can be per-agent or shared.</p></li>
 </ul>
-<p>TorchRL accommodates all these possible paradigms thanks to its <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code></a> data carrier.
+<p>TorchRL accommodates all these possible paradigms thanks to its <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code></a> data carrier.
 In particular, in multi-agent environments, per-agent keys will be carried in a nested “agents” TensorDict.
 This TensorDict will have the additional agent dimension and thus group data that is different for each agent.
 The shared keys, on the other hand, will be kept in the first level, as in single-agent cases.</p>

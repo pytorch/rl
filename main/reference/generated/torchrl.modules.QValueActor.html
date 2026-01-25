@@ -258,14 +258,14 @@ such that the action values are used to select an action.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>module</strong> (<em>nn.Module</em>) – a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> used to map the input to
 the output parameter space. If the class provided is not compatible
-with <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModuleBase</span></code></a>, it will be
-wrapped in a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModule</span></code></a> with
+with <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModuleBase</span></code></a>, it will be
+wrapped in a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModule</span></code></a> with
 <code class="docutils literal notranslate"><span class="pre">in_keys</span></code> indicated by the following keyword argument.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
 <li><p><strong>in_keys</strong> (<em>iterable</em><em> of </em><em>str</em><em>, </em><em>optional</em>) – If the class provided is not
-compatible with <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModuleBase</span></code></a>, this
+compatible with <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModuleBase</span></code></a>, this
 list of keys indicates what observations need to be passed to the
 wrapped module to get the action values.
 Defaults to <code class="docutils literal notranslate"><span class="pre">[&quot;observation&quot;]</span></code>.</p></li>
@@ -285,7 +285,7 @@ method. Default is <code class="docutils literal notranslate"><span class="pre">
 This argument is exclusive with <code class="docutils literal notranslate"><span class="pre">spec</span></code>, since <code class="docutils literal notranslate"><span class="pre">spec</span></code>
 conditions the action_space.</p></li>
 <li><p><strong>action_value_key</strong> (<em>str</em><em> or </em><em>tuple</em><em> of </em><em>str</em><em>, </em><em>optional</em>) – if the input module
-is a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModuleBase</span></code></a> instance, it must
+is a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModuleBase</span></code></a> instance, it must
 match one of its output keys. Otherwise, this string represents
 the name of the action-value entry in the output tensordict.</p></li>
 <li><p><strong>action_mask_key</strong> (<em>str</em><em> or </em><em>tuple</em><em> of </em><em>str</em><em>, </em><em>optional</em>) – The input key
@@ -295,7 +295,7 @@ representing the action mask. Defaults to <code class="docutils literal notransl
 </dl>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p><code class="docutils literal notranslate"><span class="pre">out_keys</span></code> cannot be passed. If the module is a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModule</span></code></a>
+<p><code class="docutils literal notranslate"><span class="pre">out_keys</span></code> cannot be passed. If the module is a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModule</span></code></a>
 instance, the out_keys will be updated accordingly. For regular
 <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> instance, the triplet <code class="docutils literal notranslate"><span class="pre">[&quot;action&quot;,</span> <span class="pre">action_value_key,</span> <span class="pre">&quot;chosen_action_value&quot;]</span></code>
 will be used.</p>

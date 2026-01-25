@@ -428,7 +428,7 @@ fine in most cases. We’ll be using
 <a class="reference internal" href="../reference/generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage" title="torchrl.data.replay_buffers.LazyMemmapStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyMemmapStorage</span></code></a>
 in this tutorial, which enjoys two nice properties: first, being “lazy”,
 you don’t  need to explicitly tell it what your data looks like in advance.
-Second, it uses <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a> as a backend to save
+Second, it uses <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a> as a backend to save
 your data on disk in an efficient way. The only thing you need to know is
 how big you want your buffer to be.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.data.replay_buffers</span> <span class="kn">import</span> <span class="n">LazyMemmapStorage</span><span class="p">,</span> <span class="n">ReplayBuffer</span>
@@ -511,7 +511,7 @@ simplicity. Try it out for yourself: build a buffer and indicate its
 batch-size in the constructor, then try to iterate over it. This is
 equivalent to calling <code class="docutils literal notranslate"><span class="pre">rb.sample()</span></code> within a loop!</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.082 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.080 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-getting-started-3-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/5cb0ffc0980a276546c9aeed94b0aa13/getting-started-3.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">getting-started-3.ipynb</span></code></a></p>

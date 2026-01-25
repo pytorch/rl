@@ -279,7 +279,7 @@ occur because of exploration policies or numerical under/overflow
 issues. If this value is out of bounds, it is projected back onto the
 desired space using the <code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorSpec.project</span></code>
 method. Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>default_interaction_type</strong> (<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType" title="(in tensordict v0.10)"><em>tensordict.nn.InteractionType</em></a><em>, </em><em>optional</em>) – <p>keyword-only argument.
+<li><p><strong>default_interaction_type</strong> (<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType" title="(in tensordict v0.11)"><em>tensordict.nn.InteractionType</em></a><em>, </em><em>optional</em>) – <p>keyword-only argument.
 Default method to be used to retrieve
 the output value. Should be one of: <code class="docutils literal notranslate"><span class="pre">InteractionType.MODE</span></code>, <code class="docutils literal notranslate"><span class="pre">InteractionType.DETERMINISTIC</span></code>,
 <code class="docutils literal notranslate"><span class="pre">InteractionType.MEDIAN</span></code>, <code class="docutils literal notranslate"><span class="pre">InteractionType.MEAN</span></code> or
@@ -303,10 +303,10 @@ instances will use <cite>set_interaction_type</cite> to
 <li><p><strong>distribution_class</strong> (<em>Type</em><em>, </em><em>optional</em>) – <p>keyword-only argument.
 A <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distributions.Distribution</span></code> class to
 be used for sampling.
-Default is <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.distributions.Delta.html#tensordict.nn.distributions.Delta" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.distributions.Delta</span></code></a>.</p>
+Default is <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.distributions.Delta.html#tensordict.nn.distributions.Delta" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.distributions.Delta</span></code></a>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>if <code class="docutils literal notranslate"><span class="pre">distribution_class</span></code> is of type <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code></a>,
+<p>if <code class="docutils literal notranslate"><span class="pre">distribution_class</span></code> is of type <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code></a>,
 the keys will be inferred from the <code class="docutils literal notranslate"><span class="pre">distribution_map</span></code> / <code class="docutils literal notranslate"><span class="pre">name_map</span></code> keyword arguments of that
 distribution. If this distribution is used with another constructor (e.g.,  partial or lambda function)
 then the out_keys will need to be provided explicitly.

@@ -53,6 +53,7 @@ Documentation Sections
    modules_actors
    modules_exploration
    modules_critics
+   modules_mcts
    modules_models
    modules_distributions
    modules_utils
