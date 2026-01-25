@@ -42,8 +42,8 @@ from torchrl.envs.utils import (
     set_exploration_type,
 )
 from torchrl.modules import RandomPolicy, set_exploration_modules_spec_from_env
-from torchrl.weight_update import WeightSyncScheme
 from torchrl.weight_update.utils import _resolve_model
+from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
 
 
 class _CollectorProfiler:
