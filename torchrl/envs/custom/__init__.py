@@ -7,5 +7,6 @@ from .chess import ChessEnv
 from .llm import LLMHashingEnv
 from .pendulum import PendulumEnv
 from .tictactoeenv import TicTacToeEnv
+from .trading import FinancialRegimeEnv
 
-__all__ = ["ChessEnv", "LLMHashingEnv", "PendulumEnv", "TicTacToeEnv"]
+__all__ = ["ChessEnv", "LLMHashingEnv", "PendulumEnv", "TicTacToeEnv", "FinancialRegimeEnv"]
