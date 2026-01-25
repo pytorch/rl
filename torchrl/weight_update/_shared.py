@@ -10,8 +10,7 @@ from tensordict import TensorDict, TensorDictBase
 
 from torch import multiprocessing as mp, nn
 
-from torchrl._utils import logger as torchrl_logger
-from torchrl.collectors._constants import WEIGHT_SYNC_TIMEOUT
+from torchrl._utils import logger as torchrl_logger, WEIGHT_SYNC_TIMEOUT
 
 from torchrl.weight_update.utils import _resolve_model
 from torchrl.weight_update.weight_sync_schemes import (
