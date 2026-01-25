@@ -2381,11 +2381,11 @@ class TestHabitat:
         if from_pixels:
             assert "pixels" in rollout.keys()
 
-    def test_num_workers_returns_lazy_parallel_env(self):
+    def test_num_workers_returns_lazy_parallel_env(self, envname):
         """Ensure HabitatEnv with num_workers > 1 returns a lazy ParallelEnv."""
         from torchrl.envs.batched_envs import ParallelEnv
 
-        env = HabitatEnv("HabitatRenderPick-v0", num_workers=3)
+        env = HabitatEnv(envname, num_workers=3)
         try:
             assert isinstance(env, ParallelEnv)
             assert env.num_workers == 3
@@ -2403,19 +2403,19 @@ class TestHabitat:
         finally:
             env.close()
 
-    def test_set_seed_and_reset_works(self):
+    def test_set_seed_and_reset_works(self, envname):
         """Smoke test that setting seed and reset works (seed forwarded into build)."""
-        env = HabitatEnv("HabitatRenderPick-v0")
+        env = HabitatEnv(envname)
         final_seed = env.set_seed(0)
         assert final_seed is not None
         td = env.reset()
         assert isinstance(td, TensorDict)
         env.close()
     
-    def test_habitat_kwargs_preserved_with_seed(self):
+    def test_habitat_kwargs_preserved_with_seed(self, envname):
         """Test that kwargs like camera_id are preserved when seed is provided."""
         env = HabitatEnv(
-            "HabitatRenderPick-v0",
+            envname,
             from_pixels=True,
             pixels_only=True,
             camera_id=1,  # Non-default camera_id
