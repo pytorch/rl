@@ -250,41 +250,11 @@
 <h1>set_exploration_modules_spec_from_env<a class="headerlink" href="#set-exploration-modules-spec-from-env" title="Link to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.modules.set_exploration_modules_spec_from_env">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.</span></span><span class="sig-name descname"><span class="pre">set_exploration_modules_spec_from_env</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">policy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">nn.Module</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><span class="pre">EnvBase</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/tensordict_module/exploration.html#set_exploration_modules_spec_from_env"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.set_exploration_modules_spec_from_env" title="Link to this definition">¶</a></dt>
-<dd><p>Set spec on exploration modules in a policy with action_spec from environment.</p>
-<p>This helper function automatically sets the action_spec on exploration modules
-(like AdditiveGaussianModule) that were instantiated without a spec. This
-enables delayed initialization when using config systems where the spec
-depends on the environment and should be set inside the collector.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>policy</strong> – The policy module (may contain exploration modules). Can be None.</p></li>
-<li><p><strong>env</strong> – The environment to extract action_spec from.</p></li>
-</ul>
-</dd>
-</dl>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictSequential</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">GymEnv</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <span class="n">AdditiveGaussianModule</span><span class="p">,</span> <span class="n">Actor</span><span class="p">,</span> <span class="n">set_exploration_modules_spec_from_env</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create environment</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create policy with exploration module without spec</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">actor</span> <span class="o">=</span> <span class="n">Actor</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">module</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
-<span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">],</span>
-<span class="gp">... </span>    <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">],</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">exploration</span> <span class="o">=</span> <span class="n">AdditiveGaussianModule</span><span class="p">(</span><span class="n">spec</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>  <span class="c1"># spec will be set later</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">policy</span> <span class="o">=</span> <span class="n">TensorDictSequential</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">exploration</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Set spec from environment</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">set_exploration_modules_spec_from_env</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">env</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">exploration</span><span class="o">.</span><span class="n">_spec</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>  <span class="c1"># spec is now set</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
-</pre></div>
-</div>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.</span></span><span class="sig-name descname"><span class="pre">set_exploration_modules_spec_from_env</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">policy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">nn.Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><span class="pre">EnvBase</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/tensordict_module/exploration.html#set_exploration_modules_spec_from_env"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.set_exploration_modules_spec_from_env" title="Link to this definition">¶</a></dt>
+<dd><p>Sets exploration module specs from an environment action spec.</p>
+<p>This is intended for cases where exploration modules (e.g. AdditiveGaussianModule)
+are instantiated with <code class="docutils literal notranslate"><span class="pre">spec=None</span></code> and must be configured once the environment
+is known (e.g. inside a collector).</p>
 </dd></dl>
 
 </section>

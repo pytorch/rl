@@ -279,12 +279,9 @@
     <span class="n">_make_compatible_policy</span><span class="p">,</span>
     <span class="n">set_exploration_type</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <span class="n">RandomPolicy</span>
-<span class="kn">from</span> <span class="nn">torchrl.modules.tensordict_module.exploration</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">set_exploration_modules_spec_from_env</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="kn">from</span> <span class="nn">torchrl.weight_update</span> <span class="kn">import</span> <span class="n">WeightSyncScheme</span>
+<span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <span class="n">RandomPolicy</span><span class="p">,</span> <span class="n">set_exploration_modules_spec_from_env</span>
 <span class="kn">from</span> <span class="nn">torchrl.weight_update.utils</span> <span class="kn">import</span> <span class="n">_resolve_model</span>
+<span class="kn">from</span> <span class="nn">torchrl.weight_update.weight_sync_schemes</span> <span class="kn">import</span> <span class="n">WeightSyncScheme</span>
 
 
 <span class="k">class</span> <span class="nc">_CollectorProfiler</span><span class="p">:</span>
@@ -758,9 +755,6 @@
         <span class="c1"># Set up policy and weights</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_setup_policy_and_weights</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
 
-        <span class="c1"># Configure exploration modules with action_spec from environment</span>
-        <span class="n">set_exploration_modules_spec_from_env</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">)</span>
-
         <span class="c1"># Apply environment device</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_apply_env_device</span><span class="p">()</span>
 
@@ -1013,6 +1007,10 @@
             <span class="k">else</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">policy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span> <span class="o">=</span> <span class="n">policy</span>
 
+            <span class="c1"># Auto-configure exploration modules if needed (e.g. spec=None)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+                <span class="n">set_exploration_modules_spec_from_env</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">)</span>
+
             <span class="c1"># For meta-parameter policies, keep the internal (worker-side) policy</span>
             <span class="c1"># as the reference for collector state_dict / load_state_dict.</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
@@ -1041,6 +1039,10 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span> <span class="o">=</span> <span class="n">wrapped_policy</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">policy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span> <span class="o">=</span> <span class="n">policy</span>
+
+            <span class="c1"># Auto-configure exploration modules if needed (e.g. spec=None)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+                <span class="n">set_exploration_modules_spec_from_env</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">)</span>
 
             <span class="c1"># Use the internal, unwrapped policy (cast to the correct device) as the</span>
             <span class="c1"># reference for state_dict / load_state_dict and legacy weight extractors.</span>
