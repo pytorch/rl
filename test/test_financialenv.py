@@ -1,9 +1,3 @@
-import os
-import sys
-
-sys.path.insert(0, os.path.abspath("."))
-
-import pytest
 import torch
 
 from torchrl.envs.custom.trading import FinancialRegimeEnv
@@ -20,7 +14,6 @@ def test_trading_logic():
     td = env.reset()
 
     # Define your sequence: Buy (1), Hold (0), Sell (2)
-    actions = [1, 0, 2]
 
     # Step 1: BUY
     td["action"] = torch.tensor([1], dtype=torch.long)
