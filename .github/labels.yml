@@ -13,6 +13,10 @@
   description: "New feature or request"
   color: "a2eeef"
 
+- name: Feature
+  description: "New feature"
+  color: "a2eeef"
+
 - name: documentation
   description: "Improvements or additions to documentation"
   color: "0075ca"
@@ -40,6 +44,18 @@
 - name: Deprecation
   description: "Marks deprecated features or deprecation-related changes"
   color: "FEF2C0"
+
+- name: Tests
+  description: "Related to tests"
+  color: "BFDADC"
+
+- name: Refactoring
+  description: "Code refactoring without functional changes"
+  color: "C2E0C6"
+
+- name: performance
+  description: "Performance improvements"
+  color: "FBCA04"
 
 # =============================================================================
 # Category Labels
