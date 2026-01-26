@@ -1,115 +1,222 @@
+# TorchRL Release Workflow
+#
+# This workflow automates the release process for TorchRL:
+# 1. Sanity checks (version matching, branch/tag validation, tensordict compatibility)
+# 2. Triggers wheel builds across all platforms (sequentially to avoid test-infra conflicts)
+# 3. Collects wheels into a single artifact
+# 4. Updates gh-pages docs (stable symlink)
+# 5. Creates draft GitHub release with wheels attached
+# 6. Publishes to PyPI using OIDC trusted publishing
+#
+# Triggers:
+# - Manual workflow_dispatch only (no automatic triggers)
+#
+# TensorDict Installation:
+# - release/* branches and release tags: install from PyPI (stable)
+# - main, nightly, PRs: install from git (latest dev)
+# - Can be overridden with tensordict_source input
+#
+# Wheel Variants:
+# - cpu (default): Recommended for torchrl - avoids duplicate filename conflicts
+# - gpu: Only CUDA builds
+# - all: All variants (with deduplication to prevent corruption)
+#
+# NOTE: This workflow is NOT automatically triggered on tag push to avoid
+# race conditions with wheel builds. Use workflow_dispatch to trigger releases.
+
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Git tag to release (e.g., v0.11.0)'
+        description: 'Release tag (e.g., v0.11.0)'
         required: true
         type: string
       pytorch_release:
         description: 'PyTorch release branch (e.g., release/2.8)'
-        required: true
+        required: false
         type: string
+        default: 'main'
       skip_sanity_checks:
-        description: 'Skip sanity checks (for retry after fixing issues)'
+        description: 'Skip sanity checks'
+        required: false
         type: boolean
         default: false
       dry_run:
-        description: 'Dry run - do everything except publish to PyPI'
+        description: 'Dry run (skip docs push, GitHub release, PyPI publish)'
+        required: false
         type: boolean
         default: false
+      tensordict_source:
+        description: 'TensorDict source: stable (PyPI) or git (latest dev). Auto-detected from branch if not specified.'
+        required: false
+        type: choice
+        options:
+          - 'auto'
+          - 'stable'
+          - 'git'
+        default: 'auto'
+      wheel_variants:
+        description: 'Which wheel variants to collect (cpu recommended for torchrl)'
+        required: false
+        type: choice
+        options:
+          - 'cpu'
+          - 'gpu'
+          - 'all'
+        default: 'cpu'
 
+# Ensure only one release workflow runs at a time
+# cancel-in-progress: true means new runs cancel previous ones
 concurrency:
-  group: release-${{ github.ref_name }}
-  cancel-in-progress: false
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
-  id-token: write
   contents: write
+  id-token: write
+
+env:
+  # Release tag from manual input
+  RELEASE_TAG: ${{ inputs.tag }}
+  # Determine the test-infra ref: from manual input or default to main
+  TEST_INFRA_REF: ${{ inputs.pytorch_release || 'main' }}
+  # Dry run mode from input
+  DRY_RUN: ${{ inputs.dry_run }}
+  # TensorDict source: stable (PyPI), git, or auto (branch-based detection)
+  # Note: This env var is for documentation. The actual detection happens in build scripts
+  # using GITHUB_REF_NAME/GITHUB_REF_TYPE since env vars don't propagate to called workflows.
+  TENSORDICT_SOURCE: ${{ inputs.tensordict_source || 'auto' }}
 
 jobs:
   # =============================================================================
-  # Sanity Checks
+  # SANITY CHECKS
   # =============================================================================
   sanity-checks:
-    if: ${{ !inputs.skip_sanity_checks }}
+    name: Sanity Checks
     runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_sanity_checks }}
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      short_version: ${{ steps.version.outputs.short_version }}
+      version: ${{ steps.parse-version.outputs.version }}
+      version_major_minor: ${{ steps.parse-version.outputs.version_major_minor }}
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref_name }}
           fetch-depth: 0
 
-      - name: Extract version info
-        id: version
+      - name: Parse version from tag
+        id: parse-version
         run: |
-          TAG="${{ inputs.tag || github.ref_name }}"
-          # Remove 'v' prefix: v0.11.0 -> 0.11.0
+          TAG="${{ env.RELEASE_TAG }}"
+          echo "Processing tag: $TAG"
+
+          # Validate tag format
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid tag format: $TAG. Expected format: v0.11.0"
+            exit 1
+          fi
+
+          # Extract version without 'v' prefix
           VERSION="${TAG#v}"
-          # Short version for docs: 0.11.0 -> 0.11
-          SHORT_VERSION=$(echo "$VERSION" | sed 's/\.[0-9]*$//')
-          
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "short_version=$SHORT_VERSION" >> $GITHUB_OUTPUT
-          echo "Tag: $TAG"
-          echo "Version: $VERSION"
-          echo "Short version: $SHORT_VERSION"
 
-      - name: Validate release branch exists
+          # Extract major.minor for docs folder
+          VERSION_MAJOR_MINOR=$(echo "$VERSION" | sed 's/\([0-9]\+\)\.\([0-9]\+\)\.[0-9]\+/\1.\2/')
+          echo "version_major_minor=$VERSION_MAJOR_MINOR" >> $GITHUB_OUTPUT
+
+          echo "Parsed version: $VERSION"
+          echo "Major.minor: $VERSION_MAJOR_MINOR"
+
+      - name: Check branch name matches tag
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          echo "Checking for release branch: release/$VERSION"
-          
-          if ! git ls-remote --exit-code origin "refs/heads/release/$VERSION"; then
-            echo "::error::Release branch 'release/$VERSION' does not exist"
+          TAG="${{ env.RELEASE_TAG }}"
+          VERSION="${{ steps.parse-version.outputs.version }}"
+
+          # Get the branch that contains this tag
+          BRANCHES=$(git branch -r --contains "$TAG" 2>/dev/null || echo "")
+
+          if [[ -z "$BRANCHES" ]]; then
+            echo "::warning::Tag $TAG is not on any remote branch yet (may be a new tag)"
+          else
+            echo "Tag $TAG is on branches: $BRANCHES"
+
+            # Check if it's on a release branch matching the version
+            EXPECTED_BRANCH="release/${VERSION%.*}"
+            if echo "$BRANCHES" | grep -q "origin/$EXPECTED_BRANCH"; then
+              echo "Tag is on expected release branch: $EXPECTED_BRANCH"
+            else
+              echo "::warning::Tag $TAG is not on expected branch $EXPECTED_BRANCH"
+            fi
+          fi
+
+      - name: Check all version files match tag
+        run: |
+          VERSION="${{ steps.parse-version.outputs.version }}"
+
+          echo "=============================================="
+          echo "Checking all 3 version files match tag: $VERSION"
+          echo "=============================================="
+
+          # Read all 3 version files
+          ROOT_VERSION=$(cat version.txt | tr -d '[:space:]')
+          SCRIPT_SH_VERSION=$(grep -E '^export TORCHRL_BUILD_VERSION=' .github/scripts/td_script.sh | cut -d'=' -f2)
+          SCRIPT_BAT_VERSION=$(grep -E '^set TORCHRL_BUILD_VERSION=' .github/scripts/version_script.bat | cut -d'=' -f2)
+
+          echo ""
+          echo "Version file contents:"
+          echo "  Tag version:                              $VERSION"
+          echo "  version.txt:                              $ROOT_VERSION"
+          echo "  .github/scripts/td_script.sh:             $SCRIPT_SH_VERSION"
+          echo "  .github/scripts/version_script.bat:       $SCRIPT_BAT_VERSION"
+          echo ""
+
+          # Check all files match each other first
+          MISMATCH=0
+
+          if [[ "$ROOT_VERSION" != "$SCRIPT_SH_VERSION" ]]; then
+            echo "::error::version.txt ($ROOT_VERSION) != td_script.sh ($SCRIPT_SH_VERSION)"
+            MISMATCH=1
+          fi
+
+          if [[ "$ROOT_VERSION" != "$SCRIPT_BAT_VERSION" ]]; then
+            echo "::error::version.txt ($ROOT_VERSION) != version_script.bat ($SCRIPT_BAT_VERSION)"
+            echo "::error::Windows wheels will be built with wrong version!"
+            MISMATCH=1
+          fi
+
+          if [[ "$MISMATCH" == "1" ]]; then
+            echo ""
+            echo "::error::Version files are inconsistent! All 3 files must have the same version."
+            echo "::error::Please update all files listed in RELEASE_AGENT_PROMPT.md"
             exit 1
           fi
-          echo "Release branch exists"
 
-      - name: Validate tag exists on release branch
-        run: |
-          TAG="${{ inputs.tag || github.ref_name }}"
-          VERSION="${{ steps.version.outputs.version }}"
-          
-          # Check that the tag commit is on the release branch
-          TAG_COMMIT=$(git rev-list -n 1 "$TAG")
-          git fetch origin "release/$VERSION"
-          
-          if ! git merge-base --is-ancestor "$TAG_COMMIT" "origin/release/$VERSION"; then
-            echo "::error::Tag $TAG is not on branch release/$VERSION"
+          echo "✓ All version files are consistent with each other"
+
+          # Now check they match the tag
+          if [[ "$ROOT_VERSION" != "$VERSION" ]]; then
+            echo ""
+            echo "::error::Version files ($ROOT_VERSION) do not match tag version ($VERSION)"
+            echo "::error::Either the tag is wrong or the version files need to be updated."
             exit 1
           fi
-          echo "Tag $TAG is on release/$VERSION branch"
 
-      - name: Validate version.txt matches tag
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          FILE_VERSION=$(cat version.txt | tr -d '[:space:]')
-          
-          if [[ "$FILE_VERSION" != "$VERSION" ]]; then
-            echo "::error::version.txt contains '$FILE_VERSION' but tag is 'v$VERSION'"
-            exit 1
-          fi
-          echo "version.txt matches tag: $FILE_VERSION"
+          echo "✓ All version files match the tag version ($VERSION)"
+          echo ""
+          echo "Version check passed!"
 
       - name: Validate tensordict version compatibility
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
+          VERSION="${{ steps.parse-version.outputs.version }}"
           # Extract major.minor from version (0.11.0 -> 0.11)
           MAJOR_MINOR=$(echo "$VERSION" | sed 's/\.[0-9]*$//')
-          
+
           # Parse tensordict requirement from pyproject.toml
           TD_REQ=$(grep -E '"tensordict[^"]*"' pyproject.toml | head -1)
           echo "TensorDict requirement: $TD_REQ"
-          
+
           # Check that the requirement includes the same major.minor version
           if ! echo "$TD_REQ" | grep -q "$MAJOR_MINOR"; then
             echo "::error::TensorDict version in pyproject.toml should match major version $MAJOR_MINOR"
@@ -118,88 +225,163 @@ jobs:
           fi
           echo "TensorDict version constraint is compatible"
 
-      - name: Validate TORCHRL_BUILD_VERSION in td_script.sh
+      - name: Check stable docs version
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          BUILD_VERSION=$(grep -E '^export TORCHRL_BUILD_VERSION=' .github/scripts/td_script.sh | cut -d'=' -f2)
-          
-          if [[ "$BUILD_VERSION" != "$VERSION" ]]; then
-            echo "::error::TORCHRL_BUILD_VERSION in td_script.sh is '$BUILD_VERSION' but should be '$VERSION'"
-            exit 1
+          VERSION_MAJOR_MINOR="${{ steps.parse-version.outputs.version_major_minor }}"
+
+          # Fetch the stable docs index page
+          DOCS_URL="https://pytorch.org/rl/stable/index.html"
+
+          # Try to check if the page exists and contains version info
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$DOCS_URL" || echo "000")
+
+          if [[ "$HTTP_STATUS" == "200" ]]; then
+            echo "Stable docs are accessible at $DOCS_URL"
+            echo "::notice::Docs will be updated to point to version $VERSION_MAJOR_MINOR"
+          elif [[ "$HTTP_STATUS" == "404" ]]; then
+            echo "::notice::Stable docs not found at $DOCS_URL (may be a first release)"
+          else
+            echo "::warning::Could not check stable docs (HTTP $HTTP_STATUS)"
           fi
-          echo "TORCHRL_BUILD_VERSION matches: $BUILD_VERSION"
-
-      - name: Check stable docs will be correct
-        run: |
-          SHORT_VERSION="${{ steps.version.outputs.short_version }}"
-          
-          # Verify the docs folder exists on gh-pages (or will be created)
-          echo "After release, stable docs will point to version: $SHORT_VERSION"
-          echo "Docs URL will be: https://docs.pytorch.org/rl/$SHORT_VERSION/index.html"
 
   # =============================================================================
-  # Build Wheels (all platforms in parallel)
+  # BUILD WHEELS - All Platforms (Sequential to avoid concurrency conflicts)
   # =============================================================================
+  # NOTE: Builds run sequentially because pytorch/test-infra workflows use a
+  # shared concurrency group that causes parallel builds to cancel each other.
+
   build-linux:
+    name: Build Linux Wheels
     needs: [sanity-checks]
     if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     uses: ./.github/workflows/build-wheels-linux.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
-    secrets: inherit
-
-  build-linux-aarch64:
-    needs: [sanity-checks]
-    if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
-    uses: ./.github/workflows/build-wheels-aarch64-linux.yml
-    with:
-      test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
-    secrets: inherit
-
-  build-macos:
-    needs: [sanity-checks]
-    if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
-    uses: ./.github/workflows/build-wheels-m1.yml
-    with:
-      test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+      tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
     secrets: inherit
 
   build-windows:
-    needs: [sanity-checks]
+    name: Build Windows Wheels
+    needs: [sanity-checks, build-linux]
+    # Run after Linux build completes (success or failure) to avoid concurrency conflicts
     if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     uses: ./.github/workflows/build-wheels-windows.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+      tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
+    secrets: inherit
+
+  build-macos:
+    name: Build macOS Wheels
+    needs: [sanity-checks, build-windows]
+    # Run after Windows build completes (success or failure) to avoid concurrency conflicts
+    if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
+    uses: ./.github/workflows/build-wheels-m1.yml
+    with:
+      test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+      tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
+    secrets: inherit
+
+  build-aarch64:
+    name: Build Aarch64 Linux Wheels
+    needs: [sanity-checks, build-macos]
+    # Run after macOS build completes (success or failure) to avoid concurrency conflicts
+    if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
+    uses: ./.github/workflows/build-wheels-aarch64-linux.yml
+    with:
+      test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+      tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
     secrets: inherit
 
   # =============================================================================
-  # Collect all wheels into single artifact
+  # COLLECT WHEELS
   # =============================================================================
   collect-wheels:
-    needs: [build-linux, build-linux-aarch64, build-macos, build-windows]
-    if: always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    name: Collect Wheels
+    needs: [sanity-checks, build-linux, build-windows, build-macos, build-aarch64]
+    # Only run when ALL build jobs succeed. This ensures:
+    # 1. Incomplete wheel sets are never collected
+    # 2. If a build fails, this job is "skipped" (not "failed")
+    # 3. Re-running the failed build job will also trigger this job
+    if: |
+      always() && !cancelled() &&
+      needs.build-linux.result == 'success' &&
+      needs.build-windows.result == 'success' &&
+      needs.build-macos.result == 'success' &&
+      needs.build-aarch64.result == 'success' &&
+      (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
-      - name: Download all wheel artifacts
+      - name: Check build results
+        run: |
+          echo "Build results:"
+          echo "  Linux: ${{ needs.build-linux.result }}"
+          echo "  Windows: ${{ needs.build-windows.result }}"
+          echo "  macOS: ${{ needs.build-macos.result }}"
+          echo "  Aarch64: ${{ needs.build-aarch64.result }}"
+          echo ""
+          echo "All builds succeeded - proceeding with wheel collection"
+
+      - name: Download wheel artifacts
         uses: actions/download-artifact@v4
         with:
-          path: wheels/
-          pattern: '*wheel*'
+          path: wheels-raw
+          # Pattern based on wheel_variants input:
+          # - cpu: Only CPU builds (recommended - avoids duplicate wheel conflicts)
+          # - gpu: Only CUDA builds
+          # - all: All variants (requires deduplication)
+          # pytorch/test-infra uploads artifacts named like: pytorch_torchrl__3.11_cpu_x86_64
+          pattern: ${{ inputs.wheel_variants == 'gpu' && 'pytorch_torchrl__*_cu*' || inputs.wheel_variants == 'all' && 'pytorch_torchrl*' || 'pytorch_torchrl__*_cpu_*' }}
           merge-multiple: true
+
+      - name: Deduplicate and verify wheels
+        run: |
+          # When downloading gpu/all variants, multiple artifacts may contain
+          # wheels with the same filename (e.g., CUDA 12.6 and CUDA 12.8 both
+          # produce torchrl-X.Y.Z-cpXX-cpXX-manylinux_x86_64.whl).
+          # merge-multiple can cause corruption when this happens.
+          # We deduplicate by keeping only unique wheel filenames.
+          mkdir -p wheels
+          echo "Processing wheels..."
+          
+          # Find all wheels and copy unique ones (first occurrence wins)
+          for wheel in $(find wheels-raw -name "*.whl" -type f | sort); do
+            basename=$(basename "$wheel")
+            if [[ ! -f "wheels/$basename" ]]; then
+              cp "$wheel" "wheels/$basename"
+              echo "  Kept: $basename"
+            else
+              echo "  Skip duplicate: $basename"
+            fi
+          done
+          
+          # Verify all wheels are valid zip files
+          echo ""
+          echo "Verifying wheel integrity..."
+          CORRUPTED=0
+          for wheel in wheels/*.whl; do
+            if python3 -c "import zipfile; zipfile.ZipFile('$wheel')" 2>/dev/null; then
+              echo "  OK: $(basename $wheel)"
+            else
+              echo "  CORRUPTED: $(basename $wheel)"
+              CORRUPTED=1
+            fi
+          done
+          
+          if [[ $CORRUPTED -eq 1 ]]; then
+            echo ""
+            echo "ERROR: One or more wheels are corrupted!"
+            exit 1
+          fi
 
       - name: List collected wheels
         run: |
           echo "Collected wheels:"
-          find wheels/ -name "*.whl" -type f | sort
-          WHEEL_COUNT=$(find wheels/ -name "*.whl" -type f | wc -l)
-          echo "Total wheels: $WHEEL_COUNT"
-          
-          if [[ $WHEEL_COUNT -eq 0 ]]; then
-            echo "::error::No wheels were collected!"
-            exit 1
-          fi
+          ls -la wheels/*.whl | sort
+          echo ""
+          echo "Total wheels: $(ls wheels/*.whl 2>/dev/null | wc -l)"
 
-      - name: Upload merged wheel artifact
+      - name: Upload combined wheels artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-wheels
@@ -207,190 +389,180 @@ jobs:
           if-no-files-found: error
 
   # =============================================================================
-  # Update documentation on gh-pages
+  # UPDATE GH-PAGES DOCS
   # =============================================================================
   update-docs:
+    name: Update Stable Docs
     needs: [sanity-checks, collect-wheels]
-    if: always() && needs.collect-wheels.result == 'success'
+    if: always() && needs.collect-wheels.result == 'success' && needs.sanity-checks.result != 'failure'
     runs-on: ubuntu-latest
     steps:
+      - name: Get version info
+        id: version
+        run: |
+          TAG="${{ env.RELEASE_TAG }}"
+          VERSION="${TAG#v}"
+          VERSION_MAJOR_MINOR=$(echo "$VERSION" | sed 's/\([0-9]\+\)\.\([0-9]\+\)\.[0-9]\+/\1.\2/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version_major_minor=$VERSION_MAJOR_MINOR" >> $GITHUB_OUTPUT
+
       - name: Checkout gh-pages branch
         uses: actions/checkout@v4
         with:
           ref: gh-pages
-          fetch-depth: 1
+          fetch-depth: 0
 
-      - name: Get version info
-        id: version
+      - name: Update stable symlink and versions.html
+        if: ${{ env.DRY_RUN != 'true' }}
         run: |
-          TAG="${{ inputs.tag || github.ref_name }}"
-          VERSION="${TAG#v}"
-          SHORT_VERSION=$(echo "$VERSION" | sed 's/\.[0-9]*$//')
-          
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "short_version=$SHORT_VERSION" >> $GITHUB_OUTPUT
+          VERSION_MAJOR_MINOR="${{ steps.version.outputs.version_major_minor }}"
 
-      - name: Check if docs update needed
-        id: check
-        run: |
-          SHORT_VERSION="${{ steps.version.outputs.short_version }}"
-          CURRENT_STABLE=$(cat stable 2>/dev/null || echo "")
-          
-          echo "Current stable pointer: $CURRENT_STABLE"
-          echo "New version: $SHORT_VERSION"
-          
-          if [[ "$CURRENT_STABLE" == "$SHORT_VERSION" ]]; then
-            echo "Stable symlink already points to $SHORT_VERSION"
-            echo "needs_update=false" >> $GITHUB_OUTPUT
-          else
-            echo "needs_update=true" >> $GITHUB_OUTPUT
+          echo "Updating stable docs to version $VERSION_MAJOR_MINOR"
+
+          # Check if the version folder exists
+          if [[ ! -d "$VERSION_MAJOR_MINOR" ]]; then
+            echo "::error::Docs folder for $VERSION_MAJOR_MINOR does not exist. Run docs workflow first."
+            exit 1
           fi
 
-      - name: Update stable symlink
-        if: steps.check.outputs.needs_update == 'true'
-        run: |
-          SHORT_VERSION="${{ steps.version.outputs.short_version }}"
-          echo "$SHORT_VERSION" > stable
-          echo "Updated stable to point to: $SHORT_VERSION"
+          # Update stable symlink
+          rm -f stable
+          ln -sf "$VERSION_MAJOR_MINOR" stable
+          echo "Updated stable symlink -> $VERSION_MAJOR_MINOR"
 
-      - name: Update versions.html
-        if: steps.check.outputs.needs_update == 'true'
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          SHORT_VERSION="${{ steps.version.outputs.short_version }}"
-          
-          # Check if version already exists in versions.html
-          if grep -q "href=\"$SHORT_VERSION/\"" versions.html; then
-            echo "Version $SHORT_VERSION already in versions.html"
-          else
-            echo "Adding version $SHORT_VERSION to versions.html"
-            # This is a simplified update - in practice, may need more complex HTML manipulation
+          # Update versions.html if it exists
+          if [[ -f "versions.html" ]]; then
+            # Update the "(stable release)" marker
+            # Remove old stable marker
+            sed -i 's/ (stable release)//g' versions.html
+
+            # Add new stable marker to the current version
+            sed -i "s|href=\"$VERSION_MAJOR_MINOR/\">v$VERSION_MAJOR_MINOR|href=\"$VERSION_MAJOR_MINOR/\">v$VERSION_MAJOR_MINOR (stable release)|g" versions.html
+
+            # Check if this version is in versions.html
+            if ! grep -q "\"$VERSION_MAJOR_MINOR\"" versions.html; then
+              echo "::notice::Version $VERSION_MAJOR_MINOR not in versions.html, may need manual update"
+            fi
           fi
-          
-          # Update the "(stable release)" marker
-          # Remove old stable marker
-          sed -i 's/ (stable release)//g' versions.html
-          
-          # Add new stable marker to the current version
-          sed -i "s|href=\"$SHORT_VERSION/\">v$SHORT_VERSION|href=\"$SHORT_VERSION/\">v$SHORT_VERSION (stable release)|g" versions.html
-          
-          echo "Updated versions.html"
-          grep -A2 -B2 "stable release" versions.html || true
 
-      - name: Commit and push docs update
-        if: steps.check.outputs.needs_update == 'true' && !inputs.dry_run
-        run: |
+          # Check if changes were made
+          if git diff --quiet; then
+            echo "::notice::Stable docs already point to $VERSION_MAJOR_MINOR. No changes needed."
+            exit 0
+          fi
+
+          # Commit and push
           git config user.name 'pytorchbot'
           git config user.email 'soumith+bot@pytorch.org'
-          
-          git add stable versions.html
-          
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
+          git add stable versions.html 2>/dev/null || git add stable
+          git commit -m "Update stable docs to $VERSION_MAJOR_MINOR"
+          git push
+
+          echo "Successfully updated stable docs"
+
+      - name: Dry run - show what would be changed
+        if: ${{ env.DRY_RUN == 'true' }}
+        run: |
+          VERSION_MAJOR_MINOR="${{ steps.version.outputs.version_major_minor }}"
+          echo "DRY RUN: Would update stable symlink to point to $VERSION_MAJOR_MINOR"
+
+          if [[ -L "stable" ]]; then
+            CURRENT=$(readlink stable)
+            echo "Current stable points to: $CURRENT"
           else
-            git commit -m "Update docs for release ${{ inputs.tag || github.ref_name }}"
-            git push
-            echo "Pushed docs update"
+            echo "stable is not a symlink (or doesn't exist)"
           fi
 
-      - name: Dry run - show docs changes
-        if: steps.check.outputs.needs_update == 'true' && inputs.dry_run
-        run: |
-          echo "::notice::DRY RUN - Would update docs but skipping push"
-          echo "Changes that would be made:"
-          echo "- stable symlink: ${{ steps.version.outputs.short_version }}"
-          git diff || true
-
   # =============================================================================
-  # Create draft GitHub release
+  # CREATE GITHUB RELEASE
   # =============================================================================
-  create-draft-release:
-    needs: [collect-wheels]
-    if: always() && needs.collect-wheels.result == 'success'
+  create-release:
+    name: Create GitHub Release
+    needs: [sanity-checks, collect-wheels, update-docs]
+    if: always() && needs.collect-wheels.result == 'success' && needs.sanity-checks.result != 'failure'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Download wheels
         uses: actions/download-artifact@v4
         with:
           name: release-wheels
-          path: dist/
+          path: wheels
 
-      - name: Get tag name
-        id: tag
+      - name: List wheels to attach
         run: |
-          TAG="${{ inputs.tag || github.ref_name }}"
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Wheels to attach to release:"
+          find wheels -name "*.whl" -type f | sort
 
-      - name: List wheels (dry run info)
+      - name: Flatten wheel directory
         run: |
-          echo "Wheels that would be attached to release:"
-          ls -la dist/
-          echo ""
-          echo "Total: $(find dist/ -name '*.whl' | wc -l) wheels"
-
-      - name: Check if release exists
-        id: check_release
-        if: ${{ !inputs.dry_run }}
-        run: |
-          TAG="${{ steps.tag.outputs.tag }}"
-          if gh release view "$TAG" &>/dev/null; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Release $TAG already exists"
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Move all wheels to wheels/ root for release upload
+          find wheels -name "*.whl" -exec mv {} wheels/ \;
+          find wheels -type d -empty -delete
+          echo "Wheels prepared for upload:"
+          ls -la wheels/
 
       - name: Create draft release
-        if: ${{ !inputs.dry_run && steps.check_release.outputs.exists == 'false' }}
-        run: |
-          TAG="${{ steps.tag.outputs.tag }}"
-          
-          # Create draft release with wheels attached
-          # Note: Release notes should be manually written, not auto-generated
-          gh release create "$TAG" \
-            --draft \
-            --title "Release $TAG" \
-            --notes "Release notes pending. Please edit before publishing." \
-            dist/*.whl
-          
-          echo "Created draft release: $TAG"
-          echo "Please edit the release notes before publishing!"
+        if: ${{ env.DRY_RUN != 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload wheels to existing release
-        if: ${{ !inputs.dry_run && steps.check_release.outputs.exists == 'true' }}
         run: |
-          TAG="${{ steps.tag.outputs.tag }}"
-          
-          # Upload wheels to existing release
-          for wheel in dist/*.whl; do
-            echo "Uploading $wheel"
-            gh release upload "$TAG" "$wheel" --clobber || true
-          done
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG="${{ env.RELEASE_TAG }}"
 
-      - name: Dry run summary
-        if: ${{ inputs.dry_run }}
+          # Check if release already exists
+          if gh release view "$TAG" &>/dev/null; then
+            echo "Release $TAG already exists. Updating..."
+            # Upload wheels to existing release
+            find wheels -name "*.whl" -type f -exec gh release upload "$TAG" {} --clobber \;
+          else
+            echo "Creating draft release for $TAG"
+            # Create draft release without auto-generated notes
+            gh release create "$TAG" \
+              --draft \
+              --title "TorchRL $TAG" \
+              --notes "Release notes for TorchRL $TAG
+
+          ## Highlights
+
+          <!-- Add release highlights here -->
+
+          ## What's Changed
+
+          <!-- Release notes will be written manually -->
+
+          ## Installation
+
+          \`\`\`bash
+          pip install torchrl==${TAG#v}
+          \`\`\`
+          " \
+              wheels/*.whl
+          fi
+
+          echo "Draft release created/updated: $TAG"
+          echo "Please review and publish the release manually."
+
+      - name: Dry run - show release info
+        if: ${{ env.DRY_RUN == 'true' }}
         run: |
-          TAG="${{ steps.tag.outputs.tag }}"
-          echo "::notice::DRY RUN - Would create/update draft release for $TAG"
-          echo "::notice::DRY RUN - Would attach $(find dist/ -name '*.whl' | wc -l) wheels"
+          TAG="${{ env.RELEASE_TAG }}"
+          WHEEL_COUNT=$(find wheels -name "*.whl" -type f | wc -l)
+          echo "DRY RUN: Would create draft release for $TAG"
+          echo "Would attach $WHEEL_COUNT wheel files"
 
   # =============================================================================
-  # Publish to PyPI (requires manual approval via environment)
+  # PUBLISH TO PYPI
   # =============================================================================
   publish-pypi:
-    needs: [collect-wheels, update-docs, create-draft-release]
-    if: always() && needs.collect-wheels.result == 'success' && !inputs.dry_run
+    name: Publish to PyPI
+    needs: [sanity-checks, collect-wheels, create-release]
+    if: always() && needs.collect-wheels.result == 'success' && needs.sanity-checks.result != 'failure'
     runs-on: ubuntu-latest
-    environment: pypi-publish
+    environment:
+      name: pypi
+      url: https://pypi.org/project/torchrl/
     permissions:
       id-token: write
     steps:
@@ -398,51 +570,68 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: release-wheels
-          path: dist/
+          path: dist
 
-      - name: List wheels to publish
+      - name: Flatten wheel directory
         run: |
-          echo "Wheels to publish to PyPI:"
+          # Move all wheels to dist/ root for PyPI upload
+          find dist -name "*.whl" -exec mv {} dist/ \;
+          find dist -type d -empty -delete
+          echo "Wheels prepared for upload:"
           ls -la dist/
-          
-          # Verify we have wheels
-          WHEEL_COUNT=$(find dist/ -name "*.whl" -type f | wc -l)
-          if [[ $WHEEL_COUNT -eq 0 ]]; then
-            echo "::error::No wheels found to publish!"
-            exit 1
-          fi
-          echo "Publishing $WHEEL_COUNT wheels"
 
-      - name: Publish to PyPI
+      - name: Publish to PyPI (OIDC)
+        if: ${{ env.DRY_RUN != 'true' }}
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          # Uses OIDC trusted publishing - no API token needed
-          # Requires setup at: https://pypi.org/manage/project/torchrl/settings/publishing/
+          # Using OIDC trusted publishing - no token needed
+          # Repository must be configured in PyPI to trust this workflow
           verbose: true
+          print-hash: true
+
+      - name: Dry run - show what would be published
+        if: ${{ env.DRY_RUN == 'true' }}
+        run: |
+          echo "DRY RUN: Would publish the following wheels to PyPI:"
+          ls -la dist/
+          echo ""
+          echo "Total: $(ls dist/*.whl | wc -l) wheels"
 
   # =============================================================================
-  # Dry run summary (only runs in dry run mode)
+  # SUMMARY
   # =============================================================================
-  dry-run-summary:
-    needs: [sanity-checks, collect-wheels, update-docs, create-draft-release]
-    if: always() && inputs.dry_run && needs.collect-wheels.result == 'success'
+  release-summary:
+    name: Release Summary
+    needs: [sanity-checks, build-linux, build-windows, build-macos, build-aarch64, collect-wheels, update-docs, create-release, publish-pypi]
+    if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Dry run complete
+      - name: Print summary
         run: |
-          echo "=============================================="
-          echo "DRY RUN COMPLETE"
-          echo "=============================================="
-          echo ""
-          echo "The following steps were executed:"
-          echo "  [x] Sanity checks (branch, tag, version files)"
-          echo "  [x] Build wheels for all platforms"
-          echo "  [x] Collect and verify wheels"
-          echo ""
-          echo "The following steps were SKIPPED (dry run):"
-          echo "  [ ] Update gh-pages docs (stable symlink)"
-          echo "  [ ] Create/update GitHub draft release"
-          echo "  [ ] Publish to PyPI"
-          echo ""
-          echo "To perform a real release, re-run without dry_run option."
-          echo "=============================================="
+          echo "## Release Summary for ${{ env.RELEASE_TAG }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Sanity Checks | ${{ needs.sanity-checks.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Linux | ${{ needs.build-linux.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Windows | ${{ needs.build-windows.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build macOS | ${{ needs.build-macos.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Aarch64 | ${{ needs.build-aarch64.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Collect Wheels | ${{ needs.collect-wheels.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Update Docs | ${{ needs.update-docs.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Create Release | ${{ needs.create-release.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Publish PyPI | ${{ needs.publish-pypi.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ env.DRY_RUN }}" == "true" ]]; then
+            echo "**Note: This was a dry run. No changes were pushed.**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Determine overall status
+          if [[ "${{ needs.publish-pypi.result }}" == "success" ]]; then
+            echo "### Release completed successfully!" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ needs.collect-wheels.result }}" == "success" ]]; then
+            echo "### Wheels built successfully. Check individual steps for issues." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Release encountered issues. Please review the logs." >> $GITHUB_STEP_SUMMARY
+          fi

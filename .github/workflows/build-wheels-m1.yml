@@ -19,10 +19,21 @@ on:
         required: false
         type: string
         default: 'main'
+      tensordict-source:
+        description: 'TensorDict source: stable (PyPI), git, or auto (branch-based detection)'
+        required: false
+        type: string
+        default: 'auto'
 
 permissions:
   id-token: write
   contents: read
+
+env:
+  # TensorDict source passed to build scripts
+  # Note: This may not propagate to pytorch/test-infra called workflows;
+  # scripts also use GITHUB_REF_NAME for branch-based detection as fallback.
+  TENSORDICT_SOURCE: ${{ inputs.tensordict-source || 'auto' }}
 
 jobs:
   generate-matrix:
