@@ -10,12 +10,8 @@ from enum import IntEnum
 import torch
 from tensordict import TensorDict, TensorDictBase
 
-from torchrl.data.tensor_specs import (
-    Binary,
-    Categorical,
-    Composite,
-    UnboundedContinuous,
-)
+from torchrl.data.tensor_specs import (Binary, Categorical, Composite,
+                                       UnboundedContinuous)
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import make_composite_from_td
 
