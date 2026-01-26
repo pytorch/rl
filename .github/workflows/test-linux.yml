@@ -171,7 +171,7 @@ jobs:
         export CU_VERSION="cu118"
         # Olddeps runs on Python 3.9: pin tensordict to a Python-3.9-compatible range.
         # (Avoid installing tensordict from git main, which may drop older Python support.)
-        export TORCHRL_TENSORDICT_SPEC="tensordict>=0.10.0,<0.11.0"
+        export TORCHRL_TENSORDICT_SPEC="tensordict>=0.11.0,<0.12.0"
         export TAR_OPTIONS="--no-same-owner"
         if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
