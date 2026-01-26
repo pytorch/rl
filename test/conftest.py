@@ -136,6 +136,18 @@ def pytest_runtest_setup(item):
 def pytest_configure(config):
     config.addinivalue_line("markers", "slow: mark test as slow to run")
 
+    # Set the global multiprocessing start method to 'fork' if --mp_fork is passed.
+    # This ensures that collectors and other components that use _get_mp_ctx() will
+    # use fork instead of spawn, avoiding file descriptor issues on older Python/PyTorch.
+    if not IS_OSX and config.getoption("--mp_fork", default=False):
+        import torch.multiprocessing as mp
+
+        try:
+            mp.set_start_method("fork", force=True)
+        except RuntimeError:
+            # Already set by another test or import
+            pass
+
 
 def pytest_collection_modifyitems(config, items):
     if config.getoption("--runslow"):
