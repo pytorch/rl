@@ -115,11 +115,3 @@ conda deactivate && conda activate "${env_dir}"
 
 conda env update --file "${this_dir}/environment.yml" --prune
 #conda install -c conda-forge fltk -y
-
-# ROM licence for Atari
-wget https://www.rarlab.com/rar/rarlinux-x64-5.7.1.tar.gz
-tar -xzvf rarlinux-x64-5.7.1.tar.gz
-mkdir Roms
-wget http://www.atarimania.com/roms/Roms.rar
-./rar/unrar e Roms.rar ./Roms -y
-python -m atari_py.import_roms Roms
