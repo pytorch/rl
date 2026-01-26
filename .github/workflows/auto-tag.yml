@@ -23,7 +23,9 @@
 name: PR Label
 
 on:
-  pull_request:
+  # Using pull_request_target to have write access for PRs from forks
+  # This is safe because we only read PR metadata (title), not code from the fork
+  pull_request_target:
     types: [opened, edited, synchronize, reopened]
 
 jobs:
