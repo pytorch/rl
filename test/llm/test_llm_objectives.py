@@ -164,11 +164,11 @@ def _mock_data_grpo(vocab_size: int, device: torch.device | str = "cpu") -> Tens
         {
             "advantage": advantage,
             "history": history,
-            "tokens": tokens_full % vocab_size,
+            "tokens": tokens_full,
             "masks": masks,
             "next": {
                 "history": next_history,
-                "tokens": next_tokens % vocab_size,
+                "tokens": next_tokens,
                 "reward": reward,
                 "done": done,
             },
