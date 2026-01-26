@@ -4152,6 +4152,124 @@ class TestCheckpointers:
             assert_allclose_td(rb_test[:], rb[:])
             assert rb.writer._cursor == rb_test._writer._cursor
 
+    @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
+    def test_incremental_checkpointing(self, storage_type, tmpdir):
+        """Test incremental checkpointing saves only changed data."""
+        from torchrl.data.replay_buffers.checkpointers import TensorStorageCheckpointer
+
+        torch.manual_seed(0)
+        buffer_size = 100
+        batch_size = 20
+
+        # Create buffer with incremental checkpointing enabled
+        rb = ReplayBuffer(
+            storage=storage_type(buffer_size),
+            batch_size=batch_size,
+        )
+        rb.storage.checkpointer = TensorStorageCheckpointer(incremental=True)
+
+        # Create a second buffer to verify loads work correctly
+        rb_test = ReplayBuffer(
+            storage=storage_type(buffer_size),
+            batch_size=batch_size,
+        )
+        rb_test.storage.checkpointer = TensorStorageCheckpointer(incremental=True)
+
+        checkpoint_path = Path(tmpdir) / "checkpoint"
+
+        # Add first batch and checkpoint
+        data1 = TensorDict(
+            {
+                "obs": torch.randn(batch_size, 4),
+                "action": torch.randint(0, 2, (batch_size,)),
+            },
+            batch_size=[batch_size],
+        )
+        rb.extend(data1)
+        rb.dumps(checkpoint_path)
+
+        # Verify checkpoint cursor was set
+        assert rb.storage._last_checkpoint_cursor is not None
+        first_cursor = rb.storage._last_checkpoint_cursor
+
+        # Load and verify
+        rb_test.loads(checkpoint_path)
+        assert_allclose_td(rb_test[:], rb[:])
+        assert rb_test.storage._last_checkpoint_cursor == first_cursor
+
+        # Add second batch and checkpoint (should be incremental)
+        data2 = TensorDict(
+            {
+                "obs": torch.randn(batch_size, 4),
+                "action": torch.randint(0, 2, (batch_size,)),
+            },
+            batch_size=[batch_size],
+        )
+        rb.extend(data2)
+        rb.dumps(checkpoint_path)
+
+        # Verify cursor advanced
+        assert rb.storage._last_checkpoint_cursor > first_cursor
+
+        # Load and verify
+        rb_test.loads(checkpoint_path)
+        assert_allclose_td(rb_test[:], rb[:])
+
+        # Add more data until buffer wraps around
+        for _ in range(5):
+            data = TensorDict(
+                {
+                    "obs": torch.randn(batch_size, 4),
+                    "action": torch.randint(0, 2, (batch_size,)),
+                },
+                batch_size=[batch_size],
+            )
+            rb.extend(data)
+
+        # Checkpoint after wrap-around (should do full save)
+        rb.dumps(checkpoint_path)
+
+        # Load and verify
+        rb_test.loads(checkpoint_path)
+        assert_allclose_td(rb_test[:], rb[:])
+
+    @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
+    def test_incremental_checkpointing_no_changes(self, storage_type, tmpdir):
+        """Test incremental checkpoint when no data changed."""
+        from torchrl.data.replay_buffers.checkpointers import TensorStorageCheckpointer
+
+        torch.manual_seed(0)
+        buffer_size = 50
+        batch_size = 10
+
+        rb = ReplayBuffer(
+            storage=storage_type(buffer_size),
+            batch_size=batch_size,
+        )
+        rb.storage.checkpointer = TensorStorageCheckpointer(incremental=True)
+
+        checkpoint_path = Path(tmpdir) / "checkpoint"
+
+        # Add data and checkpoint
+        data = TensorDict(
+            {"obs": torch.randn(batch_size, 4)},
+            batch_size=[batch_size],
+        )
+        rb.extend(data)
+        rb.dumps(checkpoint_path)
+
+        # Checkpoint again without adding data
+        rb.dumps(checkpoint_path)
+
+        # Load and verify
+        rb_test = ReplayBuffer(
+            storage=storage_type(buffer_size),
+            batch_size=batch_size,
+        )
+        rb_test.storage.checkpointer = TensorStorageCheckpointer(incremental=True)
+        rb_test.loads(checkpoint_path)
+        assert_allclose_td(rb_test[:], rb[:])
+
 
 @pytest.mark.skipif(not _has_ray, reason="ray required for this test.")
 class TestRayRB:
