@@ -144,7 +144,11 @@ def _mock_data_grpo(vocab_size: int, device: torch.device | str = "cpu") -> Tens
     reward = torch.randn(batch_size, seq_len, 1, device=device)
     done = torch.zeros(batch_size, seq_len, 1, dtype=torch.bool, device=device)
     advantage = torch.randn(batch_size, seq_len, 1, device=device)
-    log_probs = torch.randn_like(tokens_full, dtype=torch.float32, device=device)
+    log_probs = tokens_full.apply(
+        lambda x: torch.randn_like(x, dtype=torch.float32)
+        if isinstance(x, torch.Tensor)
+        else x
+    )
 
     # Create attention mask (all ones for non-padded tokens)
     attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool, device=device)
@@ -164,11 +168,15 @@ def _mock_data_grpo(vocab_size: int, device: torch.device | str = "cpu") -> Tens
         {
             "advantage": advantage,
             "history": history,
-            "tokens": tokens_full % vocab_size,
+            "tokens": tokens_full.apply(
+                lambda x: x % vocab_size if isinstance(x, torch.Tensor) else x
+            ),
             "masks": masks,
             "next": {
                 "history": next_history,
-                "tokens": next_tokens % vocab_size,
+                "tokens": next_tokens.apply(
+                    lambda x: x % vocab_size if isinstance(x, torch.Tensor) else x
+                ),
                 "reward": reward,
                 "done": done,
             },
