@@ -338,6 +338,18 @@ class ChatHistory(TensorClass["nocast"]):
         """
         from tensordict.utils import _zip_strict
 
+        # Handle nested batch dimensions by recursively processing and lazy stacking
+        if self.batch_dims > 1:
+            results = [
+                self[i].to_tokens(
+                    tokenizer=tokenizer,
+                    chat_template_name=chat_template_name,
+                    chat_template=chat_template,
+                )
+                for i in range(self.batch_size[0])
+            ]
+            return lazy_stack(results)
+
         tokenizer_kwargs = {}
         if chat_template_name is not None:
             tokenizer_kwargs["chat_template_name"] = chat_template_name
@@ -432,6 +444,18 @@ class ChatHistory(TensorClass["nocast"]):
             - Response is computed by removing prompt prefix from full text
         """
         from tensordict.utils import _zip_strict
+
+        # Handle nested batch dimensions by recursively processing and lazy stacking
+        if self.batch_dims > 1:
+            results = [
+                self[i].to_text(
+                    tokenizer=tokenizer,
+                    chat_template_name=chat_template_name,
+                    chat_template=chat_template,
+                )
+                for i in range(self.batch_size[0])
+            ]
+            return lazy_stack(results)
 
         tokenizer_kwargs = {}
         if chat_template_name is not None:
