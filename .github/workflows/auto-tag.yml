@@ -1,10 +1,23 @@
 # Automatically add a label to PRs based on the [Label] prefix in the title
 #
 # Usage:
-#  - PR title must start with [Label] where Label is the desired label
-#  - Example: "[Bug] Fix memory leak" will add the "Bug" label
-#  - Fails if no [Label] prefix is found
+#  - PR title must start with an EXACT [Label] prefix (case-sensitive)
+#  - Example: "[BugFix] Fix memory leak" will add the "BugFix" label
+#  - Fails if no valid prefix is found
 #  - When title is edited, old auto-label is replaced with the new one
+#
+# Supported prefixes (CASE-SENSITIVE - must match exactly):
+#  - [BugFix] → BugFix
+#  - [Feature] → Feature
+#  - [Doc] → Documentation
+#  - [Refactor] → Refactoring
+#  - [CI] → CI
+#  - [Tests] → Tests
+#  - [Environments] → Environments
+#  - [Data] → Data
+#  - [Performance] → Performance
+#  - [BC-Breaking] → bc breaking
+#  - [Deprecation] → Deprecation
 #------------------------------------------------------------
 
 name: PR Label
@@ -25,24 +38,105 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
-          # Known auto-labels that this workflow manages (add new ones here)
-          AUTO_LABELS: "Bug Feature Enhancement CI Doc Refactor Test Performance Breaking Deprecation"
+          # Known auto-labels that this workflow manages (actual GitHub label names)
+          AUTO_LABELS: "BugFix Feature Documentation Refactoring CI Tests Environments Data Performance bc breaking Deprecation"
         run: |
           set -euo pipefail
+
+          post_help_comment() {
+            local reason="$1"
+            local current_title="$2"
+            cat > /tmp/pr_comment.md << 'COMMENT_EOF'
+          ## ⚠️ PR Title Label Error
+
+          REASON_PLACEHOLDER
+
+          **Current title:** `TITLE_PLACEHOLDER`
+
+          ### Supported Prefixes (case-sensitive)
+
+          Your PR title must start with **exactly** one of these prefixes:
+
+          | Prefix | Label Applied | Example |
+          |--------|---------------|---------|
+          | `[BugFix]` | BugFix | `[BugFix] Fix memory leak in collector` |
+          | `[Feature]` | Feature | `[Feature] Add new optimizer` |
+          | `[Doc]` | Documentation | `[Doc] Update installation guide` |
+          | `[Refactor]` | Refactoring | `[Refactor] Clean up module imports` |
+          | `[CI]` | CI | `[CI] Fix workflow permissions` |
+          | `[Tests]` | Tests | `[Tests] Add unit tests for buffer` |
+          | `[Environments]` | Environments | `[Environments] Add Gymnasium support` |
+          | `[Data]` | Data | `[Data] Fix replay buffer sampling` |
+          | `[Performance]` | Performance | `[Performance] Optimize tensor ops` |
+          | `[BC-Breaking]` | bc breaking | `[BC-Breaking] Remove deprecated API` |
+          | `[Deprecation]` | Deprecation | `[Deprecation] Mark old function` |
+
+          **Note:** Prefixes are case-sensitive. Use `[BugFix]` not `[bugfix]` or `[Bugfix]`.
+          COMMENT_EOF
+            # Strip leading spaces from heredoc (YAML indentation artifact)
+            sed -i 's/^          //' /tmp/pr_comment.md
+            sed -i "s/REASON_PLACEHOLDER/$reason/" /tmp/pr_comment.md
+            sed -i "s|TITLE_PLACEHOLDER|$current_title|" /tmp/pr_comment.md
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file /tmp/pr_comment.md
+          }
 
           echo "PR Title: $PR_TITLE"
 
           # Check if title starts with [...]
           if [[ ! "$PR_TITLE" =~ ^\[([^\]]+)\] ]]; then
             echo "::error::PR title must start with [Label]. Got: '$PR_TITLE'"
+            post_help_comment "PR title must start with a label prefix in brackets (e.g., \`[BugFix]\`)." "$PR_TITLE"
             exit 1
           fi
 
-          # Extract the label and normalize case (capitalize first letter of each word)
-          RAW_LABEL="${BASH_REMATCH[1]}"
-          LABEL="$(echo "$RAW_LABEL" | sed 's/.*/\L&/' | sed 's/\b\w/\u&/g')"
+          # Extract the prefix (case-sensitive, no normalization)
+          PREFIX="${BASH_REMATCH[1]}"
 
-          echo "Extracted label: $LABEL (from: $RAW_LABEL)"
+          echo "Extracted prefix: $PREFIX"
+
+          # Map EXACT prefixes to GitHub label names (case-sensitive)
+          case "$PREFIX" in
+            BugFix)
+              LABEL="BugFix"
+              ;;
+            Feature)
+              LABEL="Feature"
+              ;;
+            Doc)
+              LABEL="Documentation"
+              ;;
+            Refactor)
+              LABEL="Refactoring"
+              ;;
+            CI)
+              LABEL="CI"
+              ;;
+            Tests)
+              LABEL="Tests"
+              ;;
+            Environments)
+              LABEL="Environments"
+              ;;
+            Data)
+              LABEL="Data"
+              ;;
+            Performance)
+              LABEL="Performance"
+              ;;
+            BC-Breaking)
+              LABEL="bc breaking"
+              ;;
+            Deprecation)
+              LABEL="Deprecation"
+              ;;
+            *)
+              echo "::error::Unknown or invalid prefix '[$PREFIX]'. Prefixes are case-sensitive."
+              post_help_comment "Unknown or invalid prefix \`[$PREFIX]\`. Prefixes are case-sensitive." "$PR_TITLE"
+              exit 1
+              ;;
+          esac
+
+          echo "Mapped to label: $LABEL"
 
           # Get current labels on the PR
           CURRENT_LABELS=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels --jq '.labels[].name' 2>/dev/null || echo "")
