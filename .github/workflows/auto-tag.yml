@@ -24,7 +24,7 @@ name: PR Label
 
 on:
   pull_request:
-    types: [opened, edited]
+    types: [opened, edited, synchronize, reopened]
 
 jobs:
   add-label:
