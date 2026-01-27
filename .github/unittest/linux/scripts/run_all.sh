@@ -115,6 +115,7 @@ uv_pip_install \
   pytest-forked \
   pytest-asyncio \
   pytest-isolate \
+  pytest-xdist \
   expecttest \
   "pybind11[global]>=2.13" \
   pyyaml \
@@ -298,10 +299,18 @@ run_non_distributed_tests() {
   # TORCHRL_TEST_SHARD can be: "all" (default), "1", "2", or "3"
   # - Shard 1: test_transforms.py (heaviest file, 571 parametrize decorators)
   # - Shard 2: test_envs.py, test_collectors.py (multiprocessing-heavy)
-  # - Shard 3: Everything else
+  # - Shard 3: Everything else (can use pytest-xdist for parallelism)
   local shard="${TORCHRL_TEST_SHARD:-all}"
   local common_ignores="--ignore test/test_rlhf.py --ignore test/test_distributed.py --ignore test/llm --ignore test/test_setup.py"
   local common_args="--instafail --durations 200 -vv --capture no --timeout=120 --mp_fork_if_no_cuda"
+  
+  # pytest-xdist parallelism: use -n auto for shard 3 (fewer multiprocessing tests)
+  # Set TORCHRL_XDIST=0 to disable parallel execution
+  local xdist_args=""
+  if [ "${TORCHRL_XDIST:-1}" = "1" ] && [ "${shard}" = "3" ]; then
+    xdist_args="-n auto --dist loadgroup"
+    echo "Using pytest-xdist for parallel execution"
+  fi
 
   case "${shard}" in
     1)
@@ -321,6 +330,7 @@ run_non_distributed_tests() {
         --ignore test/test_transforms.py \
         --ignore test/test_envs.py \
         --ignore test/test_collectors.py \
+        ${xdist_args} \
         ${common_args}
       ;;
     all|"")
