@@ -112,7 +112,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.10.0) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.11.0) &#x25BC</span></a>
     </div>
     
 
@@ -279,30 +279,40 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 </dd>
 </dl>
 <p class="rubric">Examples</p>
+<p>Traditional API (requires <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">noqa:</span> <span class="pre">F811</span></code> on redefinitions):</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="s2">&quot;0.13&quot;</span><span class="p">,</span> <span class="s2">&quot;0.14&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">fun</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+<span class="gp">... </span><span class="k">def</span> <span class="nf">fun</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="c1"># Older gym versions will return x + 1</span>
 <span class="gp">... </span>    <span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">1</span>
 <span class="gp">...</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="s2">&quot;0.14&quot;</span><span class="p">,</span> <span class="s2">&quot;0.23&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">fun</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+<span class="gp">... </span><span class="k">def</span> <span class="nf">fun</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
 <span class="gp">... </span>    <span class="c1"># More recent gym versions will return x + 2</span>
 <span class="gp">... </span>    <span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">2</span>
-<span class="gp">...</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nd">@implement_for</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">import_module</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">),</span> <span class="s2">&quot;0.23&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">fun</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="c1"># More recent gym versions will return x + 2</span>
-<span class="gp">... </span>    <span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">2</span>
-<span class="gp">...</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">fun</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="c1"># If gymnasium is to be used instead of gym, x+3 will be returned</span>
-<span class="gp">... </span>    <span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">3</span>
-<span class="gp">...</span>
 </pre></div>
 </div>
 <p>This indicates that the function is compatible with gym 0.13+,
 but doesn’t with gym 0.14+.</p>
+<p>Register API (recommended, no <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">noqa</span></code> needed):</p>
+<p>The decorated function has a <code class="docutils literal notranslate"><span class="pre">.register()</span></code> method similar to
+<code class="docutils literal notranslate"><span class="pre">functools.singledispatch</span></code>. Use <code class="docutils literal notranslate"><span class="pre">_</span></code> as the function name for
+registered implementations to avoid linter warnings:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;numpy&quot;</span><span class="p">)</span>
+<span class="gp">... </span><span class="k">def</span> <span class="nf">process_array</span><span class="p">(</span><span class="n">arr</span><span class="p">):</span>
+<span class="gp">... </span><span class="w">    </span><span class="sd">&#39;&#39;&#39;Process array with version-specific implementation.&#39;&#39;&#39;</span>
+<span class="gp">... </span>    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;No matching implementation&quot;</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@process_array</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">from_version</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">to_version</span><span class="o">=</span><span class="s2">&quot;2.0.0&quot;</span><span class="p">)</span>
+<span class="gp">... </span><span class="k">def</span> <span class="nf">_</span><span class="p">(</span><span class="n">arr</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="c1"># numpy &lt; 2.0 implementation</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">arr</span> <span class="o">*</span> <span class="mi">2</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@process_array</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">from_version</span><span class="o">=</span><span class="s2">&quot;2.0.0&quot;</span><span class="p">)</span>
+<span class="gp">... </span><span class="k">def</span> <span class="nf">_</span><span class="p">(</span><span class="n">arr</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="c1"># numpy &gt;= 2.0 implementation</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">arr</span> <span class="o">*</span> <span class="mi">3</span>
+</pre></div>
+</div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.implement_for.get_class_that_defined_method">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_class_that_defined_method</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">f</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/pyvers/implement_for.html#implement_for.get_class_that_defined_method"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.implement_for.get_class_that_defined_method" title="Link to this definition">¶</a></dt>

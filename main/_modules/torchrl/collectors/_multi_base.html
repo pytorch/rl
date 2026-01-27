@@ -109,7 +109,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.11.0) &#x25BC</span></a>
     </div>
     
 
@@ -1248,11 +1248,10 @@
         <span class="n">ctx</span> <span class="o">=</span> <span class="n">_get_mp_ctx</span><span class="p">()</span>
         <span class="c1"># Best-effort global init (only if unset) to keep other mp users consistent.</span>
         <span class="n">_set_mp_start_method_if_unset</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">get_start_method</span><span class="p">())</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="n">sys</span><span class="o">.</span><span class="n">platform</span> <span class="o">==</span> <span class="s2">&quot;linux&quot;</span>
-            <span class="ow">and</span> <span class="n">sys</span><span class="o">.</span><span class="n">version_info</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="n">ctx</span><span class="o">.</span><span class="n">get_start_method</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;spawn&quot;</span>
-        <span class="p">):</span>
+        <span class="k">if</span> <span class="n">sys</span><span class="o">.</span><span class="n">platform</span> <span class="o">==</span> <span class="s2">&quot;linux&quot;</span> <span class="ow">and</span> <span class="n">ctx</span><span class="o">.</span><span class="n">get_start_method</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;spawn&quot;</span><span class="p">:</span>
+            <span class="c1"># On older PyTorch versions (&lt; 2.8), pickling Process objects for &quot;spawn&quot;</span>
+            <span class="c1"># can pass file descriptors for shared storages, causing spawn-time failures.</span>
+            <span class="c1"># The strategy function returns &quot;file_system&quot; for old PyTorch, None otherwise.</span>
             <span class="n">strategy</span> <span class="o">=</span> <span class="n">_mp_sharing_strategy_for_spawn</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">strategy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">mp</span><span class="o">.</span><span class="n">set_sharing_strategy</span><span class="p">(</span><span class="n">strategy</span><span class="p">)</span>

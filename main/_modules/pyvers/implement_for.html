@@ -109,7 +109,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.10.0) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.11.0) &#x25BC</span></a>
     </div>
     
 
@@ -236,21 +236,35 @@
              <article itemprop="articleBody" class="pytorch-article">
               
   <h1>Source code for pyvers.implement_for</h1><div class="highlight"><pre>
-<span></span><span class="c1"># Dynamic dispatch implementation based on module versions.</span>
+<span></span><span class="c1"># Dynamic dispatch implementation based on module versions.</span>
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">collections</span>
 <span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">re</span>
 <span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span>
 <span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">copy</span>
-<span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">wraps</span>
+<span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">partial</span><span class="p">,</span> <span class="n">update_wrapper</span><span class="p">,</span> <span class="n">wraps</span>
 <span class="kn">from</span> <span class="nn">importlib</span> <span class="kn">import</span> <span class="n">import_module</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">TypeVar</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">TypeVar</span>
 
-<span class="kn">from</span> <span class="nn">packaging.version</span> <span class="kn">import</span> <span class="n">parse</span>
+
+<span class="k">def</span> <span class="nf">_parse_version</span><span class="p">(</span><span class="n">version</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse a version string into a tuple of integers for comparison.</span>
+
+<span class="sd">    Handles PEP 440 versions by extracting the release segment (numeric parts).</span>
+<span class="sd">    Examples: &quot;1.2.3&quot; -&gt; (1, 2, 3), &quot;2.0.0rc1&quot; -&gt; (2, 0, 0), &quot;1.0a1&quot; -&gt; (1, 0)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Extract only the numeric release parts, stopping at first non-numeric segment</span>
+    <span class="n">parts</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;[^0-9]+&quot;</span><span class="p">,</span> <span class="n">version</span><span class="p">)</span>
+    <span class="c1"># Filter out empty strings and convert to integers</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parts</span> <span class="k">if</span> <span class="n">p</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Self</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
@@ -258,6 +272,90 @@
 <span class="n">VERBOSE</span> <span class="o">=</span> <span class="kc">False</span>
 
 <span class="n">T</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;T&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="n">Callable</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">_RegisterableFunction</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Wrapper that provides .register() for version-specific implementations.</span>
+
+<span class="sd">    This class wraps a function decorated with @implement_for and provides a</span>
+<span class="sd">    .register() method similar to functools.singledispatch, allowing users to</span>
+<span class="sd">    register additional implementations for different version ranges without</span>
+<span class="sd">    triggering linter warnings about function redefinition.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; @implement_for(&quot;numpy&quot;)</span>
+<span class="sd">        ... def process_array(arr):</span>
+<span class="sd">        ...     raise NotImplementedError(&quot;No matching implementation&quot;)</span>
+<span class="sd">        ...</span>
+<span class="sd">        &gt;&gt;&gt; @process_array.register(from_version=None, to_version=&quot;2.0.0&quot;)</span>
+<span class="sd">        ... def _(arr):</span>
+<span class="sd">        ...     # numpy &lt; 2.0 implementation</span>
+<span class="sd">        ...     return arr * 2</span>
+<span class="sd">        ...</span>
+<span class="sd">        &gt;&gt;&gt; @process_array.register(from_version=&quot;2.0.0&quot;)</span>
+<span class="sd">        ... def _(arr):</span>
+<span class="sd">        ...     # numpy &gt;= 2.0 implementation</span>
+<span class="sd">        ...     return arr * 3</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">implement_for_instance</span><span class="p">:</span> <span class="n">implement_for</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_impl</span> <span class="o">=</span> <span class="n">implement_for_instance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fn</span> <span class="o">=</span> <span class="n">fn</span>
+        <span class="n">update_wrapper</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__get__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">objtype</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Implement the descriptor protocol to bind self for instance methods.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">obj</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span>
+        <span class="c1"># Return a bound method-like callable that passes obj as first argument</span>
+        <span class="k">return</span> <span class="n">partial</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">register</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">from_version</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">to_version</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">T</span><span class="p">],</span> <span class="n">Self</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Register an implementation for a specific version range.</span>
+
+<span class="sd">        This method provides a singledispatch-style API for registering</span>
+<span class="sd">        version-specific implementations. Use ``_`` as the function name</span>
+<span class="sd">        to avoid linter warnings about redefinition.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            from_version: Version from which this implementation is compatible.</span>
+<span class="sd">                Can be None for open lower bound.</span>
+<span class="sd">            to_version: Version from which this implementation is no longer</span>
+<span class="sd">                compatible. Can be None for open upper bound.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A decorator that registers the implementation and returns self.</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            &gt;&gt;&gt; @my_function.register(from_version=&quot;1.0.0&quot;, to_version=&quot;2.0.0&quot;)</span>
+<span class="sd">            ... def _(x):</span>
+<span class="sd">            ...     return x + 1</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">def</span> <span class="nf">decorator</span><span class="p">(</span><span class="n">impl_fn</span><span class="p">:</span> <span class="n">T</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Self</span><span class="p">:</span>
+            <span class="n">setter</span> <span class="o">=</span> <span class="n">implement_for</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_impl</span><span class="o">.</span><span class="n">module_name</span><span class="p">,</span>
+                <span class="n">from_version</span><span class="p">,</span>
+                <span class="n">to_version</span><span class="p">,</span>
+                <span class="n">class_method</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_impl</span><span class="o">.</span><span class="n">class_method</span><span class="p">,</span>
+                <span class="n">compilable</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_impl</span><span class="o">.</span><span class="n">_compilable</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="c1"># Use the original function name for registration</span>
+            <span class="n">setter</span><span class="o">.</span><span class="n">func_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_impl</span><span class="o">.</span><span class="n">func_name</span>
+            <span class="n">setter</span><span class="o">.</span><span class="n">fn</span> <span class="o">=</span> <span class="n">impl_fn</span>
+            <span class="n">implement_for</span><span class="o">.</span><span class="n">_lazy_impl</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_impl</span><span class="o">.</span><span class="n">func_name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">setter</span><span class="o">.</span><span class="n">_call</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span>
+
+        <span class="k">return</span> <span class="n">decorator</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;&lt;RegisterableFunction </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_impl</span><span class="o">.</span><span class="n">func_name</span><span class="si">}</span><span class="s2">&gt;&quot;</span>
+
 
 <div class="viewcode-block" id="implement_for">
 <a class="viewcode-back" href="../../reference/generated/torchrl.implement_for.html#torchrl.implement_for">[docs]</a>
@@ -289,29 +387,41 @@
 <span class="sd">            Defaults to ``False``.</span>
 
 <span class="sd">    Examples:</span>
+<span class="sd">        Traditional API (requires ``# noqa: F811`` on redefinitions):</span>
+
 <span class="sd">        &gt;&gt;&gt; @implement_for(&quot;gym&quot;, &quot;0.13&quot;, &quot;0.14&quot;)</span>
-<span class="sd">        &gt;&gt;&gt; def fun(self, x):</span>
+<span class="sd">        ... def fun(self, x):</span>
 <span class="sd">        ...     # Older gym versions will return x + 1</span>
 <span class="sd">        ...     return x + 1</span>
 <span class="sd">        ...</span>
 <span class="sd">        &gt;&gt;&gt; @implement_for(&quot;gym&quot;, &quot;0.14&quot;, &quot;0.23&quot;)</span>
-<span class="sd">        &gt;&gt;&gt; def fun(self, x):</span>
+<span class="sd">        ... def fun(self, x):  # noqa: F811</span>
 <span class="sd">        ...     # More recent gym versions will return x + 2</span>
 <span class="sd">        ...     return x + 2</span>
-<span class="sd">        ...</span>
-<span class="sd">        &gt;&gt;&gt; @implement_for(lambda: import_module(&quot;gym&quot;), &quot;0.23&quot;, None)</span>
-<span class="sd">        &gt;&gt;&gt; def fun(self, x):</span>
-<span class="sd">        ...     # More recent gym versions will return x + 2</span>
-<span class="sd">        ...     return x + 2</span>
-<span class="sd">        ...</span>
-<span class="sd">        &gt;&gt;&gt; @implement_for(&quot;gymnasium&quot;, None, &quot;1.0.0&quot;)</span>
-<span class="sd">        &gt;&gt;&gt; def fun(self, x):</span>
-<span class="sd">        ...     # If gymnasium is to be used instead of gym, x+3 will be returned</span>
-<span class="sd">        ...     return x + 3</span>
-<span class="sd">        ...</span>
 
 <span class="sd">        This indicates that the function is compatible with gym 0.13+,</span>
 <span class="sd">        but doesn&#39;t with gym 0.14+.</span>
+
+<span class="sd">        Register API (recommended, no ``# noqa`` needed):</span>
+
+<span class="sd">        The decorated function has a ``.register()`` method similar to</span>
+<span class="sd">        ``functools.singledispatch``. Use ``_`` as the function name for</span>
+<span class="sd">        registered implementations to avoid linter warnings:</span>
+
+<span class="sd">        &gt;&gt;&gt; @implement_for(&quot;numpy&quot;)</span>
+<span class="sd">        ... def process_array(arr):</span>
+<span class="sd">        ...     &#39;&#39;&#39;Process array with version-specific implementation.&#39;&#39;&#39;</span>
+<span class="sd">        ...     raise NotImplementedError(&quot;No matching implementation&quot;)</span>
+<span class="sd">        ...</span>
+<span class="sd">        &gt;&gt;&gt; @process_array.register(from_version=None, to_version=&quot;2.0.0&quot;)</span>
+<span class="sd">        ... def _(arr):</span>
+<span class="sd">        ...     # numpy &lt; 2.0 implementation</span>
+<span class="sd">        ...     return arr * 2</span>
+<span class="sd">        ...</span>
+<span class="sd">        &gt;&gt;&gt; @process_array.register(from_version=&quot;2.0.0&quot;)</span>
+<span class="sd">        ... def _(arr):</span>
+<span class="sd">        ...     # numpy &gt;= 2.0 implementation</span>
+<span class="sd">        ...     return arr * 3</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="c1"># Stores pointers to fitting implementations: dict[func_name] = func_pointer</span>
@@ -342,10 +452,10 @@
     <span class="k">def</span> <span class="nf">check_version</span><span class="p">(</span>
         <span class="n">version</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">from_version</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">to_version</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-        <span class="n">version</span> <span class="o">=</span> <span class="n">parse</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">parse</span><span class="p">(</span><span class="n">version</span><span class="p">)</span><span class="o">.</span><span class="n">release</span><span class="p">]))</span>
-        <span class="k">return</span> <span class="p">(</span><span class="n">from_version</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">version</span> <span class="o">&gt;=</span> <span class="n">parse</span><span class="p">(</span><span class="n">from_version</span><span class="p">))</span> <span class="ow">and</span> <span class="p">(</span>
-            <span class="n">to_version</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">version</span> <span class="o">&lt;</span> <span class="n">parse</span><span class="p">(</span><span class="n">to_version</span><span class="p">)</span>
-        <span class="p">)</span>
+        <span class="n">version_tuple</span> <span class="o">=</span> <span class="n">_parse_version</span><span class="p">(</span><span class="n">version</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">from_version</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">version_tuple</span> <span class="o">&gt;=</span> <span class="n">_parse_version</span><span class="p">(</span><span class="n">from_version</span><span class="p">)</span>
+        <span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">to_version</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">version_tuple</span> <span class="o">&lt;</span> <span class="n">_parse_version</span><span class="p">(</span><span class="n">to_version</span><span class="p">))</span>
 
 <div class="viewcode-block" id="implement_for.get_class_that_defined_method">
 <a class="viewcode-back" href="../../reference/generated/torchrl.implement_for.html#torchrl.implement_for.get_class_that_defined_method">[docs]</a>
@@ -358,6 +468,11 @@
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">get_func_name</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="c1"># Unwrap _RegisterableFunction to get the underlying function</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="n">_RegisterableFunction</span><span class="p">):</span>
+            <span class="c1"># Use the stored func_name from the implement_for instance</span>
+            <span class="k">return</span> <span class="n">fn</span><span class="o">.</span><span class="n">_impl</span><span class="o">.</span><span class="n">func_name</span>
+
         <span class="c1"># produces a name like module.Class.method or module.function</span>
         <span class="n">fn_str</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">fn_str</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;&lt;bound method &quot;</span><span class="p">):</span>
@@ -390,27 +505,34 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Sets the function in its module, if it exists already.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
-        <span class="n">prev_setter</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_implementations</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_func_name</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fn</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="c1"># Use self.func_name if set (for registered implementations),</span>
+        <span class="c1"># otherwise compute from fn</span>
+        <span class="n">func_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">func_name</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_func_name</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fn</span><span class="p">)</span>
+        <span class="n">prev_setter</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_implementations</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">func_name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">prev_setter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">prev_setter</span><span class="o">.</span><span class="n">do_set</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_implementations</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">get_func_name</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fn</span><span class="p">)]</span> <span class="o">=</span> <span class="bp">self</span>
+        <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_implementations</span><span class="p">[</span><span class="n">func_name</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span>
         <span class="bp">cls</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_class_that_defined_method</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fn</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">cls</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;function&quot;</span><span class="p">:</span>
+            <span class="c1"># If cls is not a class (it&#39;s a function, _RegisterableFunction, or other</span>
+            <span class="c1"># callable), use the module instead</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="nb">type</span><span class="p">):</span>
                 <span class="bp">cls</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getmodule</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fn</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># class not yet defined</span>
             <span class="k">return</span>
         <span class="k">try</span><span class="p">:</span>
+            <span class="n">existing</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">fn</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
             <span class="nb">delattr</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">fn</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
-            <span class="k">pass</span>
+            <span class="n">existing</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="n">name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fn</span><span class="o">.</span><span class="vm">__name__</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">class_method</span><span class="p">:</span>
             <span class="n">fn</span> <span class="o">=</span> <span class="nb">classmethod</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fn</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">fn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fn</span>
+
         <span class="nb">setattr</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">fn</span><span class="p">)</span></div>
 
 
@@ -441,7 +563,7 @@
             <span class="n">out</span> <span class="o">=</span> <span class="n">local_call</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">out</span>
 
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">:</span> <span class="n">T</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">:</span> <span class="n">T</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">T</span> <span class="o">|</span> <span class="n">_RegisterableFunction</span><span class="p">:</span>
         <span class="c1"># function names are unique</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">func_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_func_name</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">fn</span> <span class="o">=</span> <span class="n">fn</span>
@@ -453,7 +575,8 @@
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">class_method</span> <span class="ow">and</span> <span class="n">_call_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">return</span> <span class="nb">classmethod</span><span class="p">(</span><span class="n">_call_fn</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
 
-            <span class="k">return</span> <span class="n">_call_fn</span> <span class="k">if</span> <span class="n">_call_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">fn</span>
+            <span class="n">result_fn</span> <span class="o">=</span> <span class="n">_call_fn</span> <span class="k">if</span> <span class="n">_call_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">fn</span>
+            <span class="k">return</span> <span class="n">_RegisterableFunction</span><span class="p">(</span><span class="n">result_fn</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>
 
         <span class="nd">@wraps</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
         <span class="k">def</span> <span class="nf">_lazy_call_fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
@@ -467,7 +590,7 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">class_method</span><span class="p">:</span>
             <span class="k">return</span> <span class="nb">classmethod</span><span class="p">(</span><span class="n">_lazy_call_fn</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
 
-        <span class="k">return</span> <span class="n">_lazy_call_fn</span>  <span class="c1"># type: ignore</span>
+        <span class="k">return</span> <span class="n">_RegisterableFunction</span><span class="p">(</span><span class="n">_lazy_call_fn</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_check_backend_conflict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">version</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">func_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if there&#39;s a backend conflict and handle it.&quot;&quot;&quot;</span>
