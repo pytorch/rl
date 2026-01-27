@@ -35,7 +35,7 @@ CKPT_BACKEND=torch MUJOCO_GL=egl python .github/unittest/helpers/coverage_run_pa
     --ignore test/test_rlhf.py \
     --ignore test/llm \
     -k "not HalfCheetah-v2" \
-    --mp_fork
+    --mp_fork_if_no_cuda
 
 #pytest --instafail -v --durations 200
 #python test/test_libs.py
