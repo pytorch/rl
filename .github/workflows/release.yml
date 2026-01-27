@@ -258,6 +258,7 @@ jobs:
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
+      channel: release
     secrets: inherit
 
   build-windows:
@@ -269,6 +270,7 @@ jobs:
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
+      channel: release
     secrets: inherit
 
   build-macos:
@@ -280,6 +282,7 @@ jobs:
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
+      channel: release
     secrets: inherit
 
   build-aarch64:
@@ -291,6 +294,7 @@ jobs:
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
+      channel: release
     secrets: inherit
 
   # =============================================================================
