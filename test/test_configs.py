@@ -1701,6 +1701,7 @@ env:
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_collector_parsing_with_file(self, tmpdir):
         """Test collector parsing with file config."""
         yaml_config = """
@@ -1742,6 +1743,7 @@ collector:
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_trainer_parsing_with_file(self, tmpdir):
         """Test trainer parsing with file config."""
         import os
