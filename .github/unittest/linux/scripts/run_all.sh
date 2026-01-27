@@ -293,12 +293,47 @@ run_distributed_tests() {
 run_non_distributed_tests() {
   # Note: we always ignore distributed tests here (they can be run in a separate job).
   # Also ignore test_setup.py as it's tested in the dedicated test-setup-minimal job.
-  python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
-    --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
-    --ignore test/test_distributed.py \
-    --ignore test/llm \
-    --ignore test/test_setup.py \
-    --timeout=120 --mp_fork_if_no_cuda
+  #
+  # Test sharding: Split tests into groups for parallel execution.
+  # TORCHRL_TEST_SHARD can be: "all" (default), "1", "2", or "3"
+  # - Shard 1: test_transforms.py (heaviest file, 571 parametrize decorators)
+  # - Shard 2: test_envs.py, test_collectors.py (multiprocessing-heavy)
+  # - Shard 3: Everything else
+  local shard="${TORCHRL_TEST_SHARD:-all}"
+  local common_ignores="--ignore test/test_rlhf.py --ignore test/test_distributed.py --ignore test/llm --ignore test/test_setup.py"
+  local common_args="--instafail --durations 200 -vv --capture no --timeout=120 --mp_fork_if_no_cuda"
+
+  case "${shard}" in
+    1)
+      echo "Running shard 1: test_transforms.py only"
+      python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_transforms.py \
+        ${common_args}
+      ;;
+    2)
+      echo "Running shard 2: test_envs.py and test_collectors.py"
+      python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_envs.py test/test_collectors.py \
+        ${common_args}
+      ;;
+    3)
+      echo "Running shard 3: All other tests"
+      python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
+        ${common_ignores} \
+        --ignore test/test_transforms.py \
+        --ignore test/test_envs.py \
+        --ignore test/test_collectors.py \
+        ${common_args}
+      ;;
+    all|"")
+      echo "Running all tests (no sharding)"
+      python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
+        ${common_ignores} \
+        ${common_args}
+      ;;
+    *)
+      echo "Unknown TORCHRL_TEST_SHARD='${shard}'. Expected: all|1|2|3."
+      exit 2
+      ;;
+  esac
 }
 
 case "${TORCHRL_TEST_SUITE}" in
