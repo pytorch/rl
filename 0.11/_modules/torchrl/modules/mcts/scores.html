@@ -1,0 +1,1139 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.modules.mcts.scores &mdash; torchrl 0.11 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../../_static/pytorch.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+
+  
+  <script src="../../../../_static/js/modernizr.min.js"></script>
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+  <div>
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../../versions.html"><span style="font-size:110%">0.11 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.modules.mcts.scores</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
+        </div>
+
+        <div class="pytorch-content-left">
+    
+    
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" class="pytorch-article">
+              
+  <h1>Source code for torchrl.modules.mcts.scores</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">from</span> <span class="nn">abc</span> <span class="kn">import</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModuleBase</span>
+
+
+<div class="viewcode-block" id="MCTSScore">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.mcts.MCTSScore.html#torchrl.modules.mcts.MCTSScore">[docs]</a>
+<span class="k">class</span> <span class="nc">MCTSScore</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Abstract base class for MCTS score computation modules.&quot;&quot;&quot;</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">pass</span></div>
+
+
+
+<div class="viewcode-block" id="PUCTScore">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.mcts.PUCTScore.html#torchrl.modules.mcts.PUCTScore">[docs]</a>
+<span class="k">class</span> <span class="nc">PUCTScore</span><span class="p">(</span><span class="n">MCTSScore</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Computes the PUCT (Polynomial Upper Confidence Trees) score for MCTS.</span>
+
+<span class="sd">    PUCT is a widely used score in MCTS algorithms, notably in AlphaGo and AlphaZero,</span>
+<span class="sd">    to balance exploration and exploitation. It incorporates prior probabilities from a</span>
+<span class="sd">    policy network, encouraging exploration of actions deemed promising by the policy,</span>
+<span class="sd">    while also considering visit counts and accumulated rewards.</span>
+
+<span class="sd">    The formula used is:</span>
+<span class="sd">    `score = (win_count / visits) + c * prior_prob * sqrt(total_visits) / (1 + visits)`</span>
+
+<span class="sd">    Where:</span>
+<span class="sd">    - `win_count`: Sum of rewards (or win counts) for the action.</span>
+<span class="sd">    - `visits`: Visit count for the action.</span>
+<span class="sd">    - `total_visits`: Visit count of the parent node (N).</span>
+<span class="sd">    - `prior_prob`: Prior probability of selecting the action (e.g., from a policy network).</span>
+<span class="sd">    - `c`: The exploration constant, controlling the trade-off between exploitation</span>
+<span class="sd">      (first term) and exploration (second term).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        c (float): The exploration constant.</span>
+<span class="sd">        win_count_key (NestedKey, optional): Key for the tensor in the input `TensorDictBase`</span>
+<span class="sd">            containing the sum of rewards (or win counts) for each action.</span>
+<span class="sd">            Defaults to &quot;win_count&quot;.</span>
+<span class="sd">        visits_key (NestedKey, optional): Key for the tensor containing the visit</span>
+<span class="sd">            count for each action. Defaults to &quot;visits&quot;.</span>
+<span class="sd">        total_visits_key (NestedKey, optional): Key for the tensor (or scalar)</span>
+<span class="sd">            representing the visit count of the parent node (N). Defaults to &quot;total_visits&quot;.</span>
+<span class="sd">        prior_prob_key (NestedKey, optional): Key for the tensor containing the</span>
+<span class="sd">            prior probabilities for each action. Defaults to &quot;prior_prob&quot;.</span>
+<span class="sd">        score_key (NestedKey, optional): Key where the calculated PUCT scores</span>
+<span class="sd">            will be stored in the output `TensorDictBase`. Defaults to &quot;score&quot;.</span>
+
+<span class="sd">    Input Keys:</span>
+<span class="sd">        - `win_count_key` (torch.Tensor): Tensor of shape (..., num_actions)</span>
+<span class="sd">          or matching `visits_key`.</span>
+<span class="sd">        - `visits_key` (torch.Tensor): Tensor of shape (..., num_actions). If an action</span>
+<span class="sd">          has zero visits, its exploitation term (win_count / visits) will result in NaN</span>
+<span class="sd">          if win_count is also zero, or +/-inf if win_count is non-zero. The exploration</span>
+<span class="sd">          term will still be valid due to `(1 + visits)`.</span>
+<span class="sd">        - `total_visits_key` (torch.Tensor): Scalar or tensor broadcastable to other inputs,</span>
+<span class="sd">          representing the parent node&#39;s visit count.</span>
+<span class="sd">        - `prior_prob_key` (torch.Tensor): Tensor of shape (..., num_actions) containing</span>
+<span class="sd">          prior probabilities.</span>
+
+<span class="sd">    Output Keys:</span>
+<span class="sd">        - `score_key` (torch.Tensor): Tensor of the same shape as `visits_key`, containing</span>
+<span class="sd">          the calculated PUCT scores.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        ```python</span>
+<span class="sd">        from tensordict import TensorDict</span>
+<span class="sd">        from torchrl.modules.mcts.scores import PUCTScore</span>
+
+<span class="sd">        # Create a PUCTScore instance</span>
+<span class="sd">        puct = PUCTScore(c=1.5)</span>
+
+<span class="sd">        # Define a TensorDict with required keys</span>
+<span class="sd">        node = TensorDict(</span>
+<span class="sd">            {</span>
+<span class="sd">                &quot;win_count&quot;: torch.tensor([10.0, 20.0]),</span>
+<span class="sd">                &quot;visits&quot;: torch.tensor([5.0, 10.0]),</span>
+<span class="sd">                &quot;total_visits&quot;: torch.tensor(50.0),</span>
+<span class="sd">                &quot;prior_prob&quot;: torch.tensor([0.6, 0.4]),</span>
+<span class="sd">            },</span>
+<span class="sd">            batch_size=[],</span>
+<span class="sd">        )</span>
+
+<span class="sd">        # Compute the PUCT scores</span>
+<span class="sd">        result = puct(node)</span>
+<span class="sd">        print(result[&quot;score&quot;])  # Output: Tensor with PUCT scores</span>
+<span class="sd">        ```</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">c</span><span class="p">:</span> <span class="nb">float</span>
+
+<div class="viewcode-block" id="PUCTScore.__init__">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.mcts.PUCTScore.html#torchrl.modules.mcts.PUCTScore.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">c</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">win_count_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;win_count&quot;</span><span class="p">,</span>
+        <span class="n">visits_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;visits&quot;</span><span class="p">,</span>
+        <span class="n">total_visits_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;total_visits&quot;</span><span class="p">,</span>
+        <span class="n">prior_prob_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;prior_prob&quot;</span><span class="p">,</span>
+        <span class="n">score_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;score&quot;</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">c</span> <span class="o">=</span> <span class="n">c</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">win_count_key</span> <span class="o">=</span> <span class="n">win_count_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">visits_key</span> <span class="o">=</span> <span class="n">visits_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">total_visits_key</span> <span class="o">=</span> <span class="n">total_visits_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prior_prob_key</span> <span class="o">=</span> <span class="n">prior_prob_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">score_key</span> <span class="o">=</span> <span class="n">score_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">win_count_key</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">prior_prob_key</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">total_visits_key</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">visits_key</span><span class="p">,</span>
+        <span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">score_key</span><span class="p">]</span></div>
+
+
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">win_count</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">win_count_key</span><span class="p">)</span>
+        <span class="n">visits</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">visits_key</span><span class="p">)</span>
+        <span class="n">n_total</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">total_visits_key</span><span class="p">)</span>
+        <span class="n">prior_prob</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">prior_prob_key</span><span class="p">)</span>
+        <span class="c1"># Handle broadcasting for batched inputs</span>
+        <span class="k">if</span> <span class="n">n_total</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">n_total</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&lt;</span> <span class="n">visits</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+            <span class="n">n_total</span> <span class="o">=</span> <span class="n">n_total</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">node</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">score_key</span><span class="p">,</span>
+            <span class="p">(</span><span class="n">win_count</span> <span class="o">/</span> <span class="n">visits</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">c</span> <span class="o">*</span> <span class="n">prior_prob</span> <span class="o">*</span> <span class="n">n_total</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">visits</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">node</span></div>
+
+
+
+<div class="viewcode-block" id="UCBScore">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.mcts.UCBScore.html#torchrl.modules.mcts.UCBScore">[docs]</a>
+<span class="k">class</span> <span class="nc">UCBScore</span><span class="p">(</span><span class="n">MCTSScore</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Computes the UCB (Upper Confidence Bound) score, specifically UCB1, for MCTS.</span>
+
+<span class="sd">    UCB1 is a classic algorithm for the multi-armed bandit problem that balances</span>
+<span class="sd">    exploration and exploitation. In MCTS, it&#39;s used to select which action to</span>
+<span class="sd">    explore from a given node. The score encourages trying actions with high</span>
+<span class="sd">    empirical rewards and actions that have been visited less frequently.</span>
+
+<span class="sd">    The formula used is:</span>
+<span class="sd">    `score = (win_count / visits) + c * sqrt(total_visits) / (1 + visits)`</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        c (float): The exploration constant. A common value is `sqrt(2)`.</span>
+<span class="sd">        win_count_key (NestedKey, optional): Key for the tensor in the input `TensorDictBase`</span>
+<span class="sd">            containing the sum of rewards (or win counts) for each action.</span>
+<span class="sd">            Defaults to &quot;win_count&quot;.</span>
+<span class="sd">        visits_key (NestedKey, optional): Key for the tensor containing the visit</span>
+<span class="sd">            count for each action. Defaults to &quot;visits&quot;.</span>
+<span class="sd">        total_visits_key (NestedKey, optional): Key for the tensor (or scalar)</span>
+<span class="sd">            representing the visit count of the parent node (N). This is used in the</span>
+<span class="sd">            exploration term. Defaults to &quot;total_visits&quot;.</span>
+<span class="sd">        score_key (NestedKey, optional): Key where the calculated UCB scores</span>
+<span class="sd">            will be stored in the output `TensorDictBase`. Defaults to &quot;score&quot;.</span>
+
+<span class="sd">    Input Keys:</span>
+<span class="sd">        - `win_count_key` (torch.Tensor): Tensor of shape (..., num_actions).</span>
+<span class="sd">        - `visits_key` (torch.Tensor): Tensor of shape (..., num_actions).</span>
+<span class="sd">        - `total_visits_key` (torch.Tensor): Scalar or tensor broadcastable to other inputs.</span>
+
+<span class="sd">    Output Keys:</span>
+<span class="sd">        - `score_key` (torch.Tensor): Tensor of the same shape as `visits_key`, containing</span>
+<span class="sd">          the calculated UCB scores.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        ```python</span>
+<span class="sd">        from tensordict import TensorDict</span>
+<span class="sd">        from torchrl.modules.mcts.scores import UCBScore</span>
+
+<span class="sd">        # Create a UCBScore instance</span>
+<span class="sd">        ucb = UCBScore(c=1.414)</span>
+
+<span class="sd">        # Define a TensorDict with required keys</span>
+<span class="sd">        node = TensorDict(</span>
+<span class="sd">            {</span>
+<span class="sd">                &quot;win_count&quot;: torch.tensor([15.0, 25.0]),</span>
+<span class="sd">                &quot;visits&quot;: torch.tensor([10.0, 20.0]),</span>
+<span class="sd">                &quot;total_visits&quot;: torch.tensor(100.0),</span>
+<span class="sd">            },</span>
+<span class="sd">            batch_size=[],</span>
+<span class="sd">        )</span>
+
+<span class="sd">        # Compute the UCB scores</span>
+<span class="sd">        result = ucb(node)</span>
+<span class="sd">        print(result[&quot;score&quot;])  # Output: Tensor with UCB scores</span>
+<span class="sd">        ```</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">c</span><span class="p">:</span> <span class="nb">float</span>
+
+<div class="viewcode-block" id="UCBScore.__init__">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.mcts.UCBScore.html#torchrl.modules.mcts.UCBScore.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">c</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">win_count_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;win_count&quot;</span><span class="p">,</span>
+        <span class="n">visits_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;visits&quot;</span><span class="p">,</span>
+        <span class="n">total_visits_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;total_visits&quot;</span><span class="p">,</span>
+        <span class="n">score_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;score&quot;</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">c</span> <span class="o">=</span> <span class="n">c</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">win_count_key</span> <span class="o">=</span> <span class="n">win_count_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">visits_key</span> <span class="o">=</span> <span class="n">visits_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">total_visits_key</span> <span class="o">=</span> <span class="n">total_visits_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">score_key</span> <span class="o">=</span> <span class="n">score_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">win_count_key</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_visits_key</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">visits_key</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">score_key</span><span class="p">]</span></div>
+
+
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">win_count</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">win_count_key</span><span class="p">)</span>
+        <span class="n">visits</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">visits_key</span><span class="p">)</span>
+        <span class="n">n_total</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">total_visits_key</span><span class="p">)</span>
+        <span class="c1"># Handle broadcasting for batched inputs</span>
+        <span class="k">if</span> <span class="n">n_total</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">n_total</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&lt;</span> <span class="n">visits</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+            <span class="n">n_total</span> <span class="o">=</span> <span class="n">n_total</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">node</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">score_key</span><span class="p">,</span>
+            <span class="p">(</span><span class="n">win_count</span> <span class="o">/</span> <span class="n">visits</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">c</span> <span class="o">*</span> <span class="n">n_total</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">visits</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">node</span></div>
+
+
+
+<div class="viewcode-block" id="EXP3Score">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.mcts.EXP3Score.html#torchrl.modules.mcts.EXP3Score">[docs]</a>
+<span class="k">class</span> <span class="nc">EXP3Score</span><span class="p">(</span><span class="n">MCTSScore</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Computes action selection probabilities for the EXP3 algorithm in MCTS.</span>
+
+<span class="sd">    EXP3 (Exponential-weight algorithm for Exploration and Exploitation) is a bandit</span>
+<span class="sd">    algorithm that performs well in adversarial or non-stationary environments.</span>
+<span class="sd">    It maintains weights for each action and adjusts them based on received rewards.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        gamma (float, optional): Exploration factor, balancing uniform exploration</span>
+<span class="sd">            and exploitation of current weights. Must be in [0, 1]. Defaults to 0.1.</span>
+<span class="sd">        weights_key (NestedKey, optional): Key in the input `TensorDictBase` for</span>
+<span class="sd">            the tensor containing current action weights. Defaults to &quot;weights&quot;.</span>
+<span class="sd">        action_prob_key (NestedKey, optional): Key to store the calculated action</span>
+<span class="sd">            probabilities. Defaults to &quot;action_prob&quot;.</span>
+<span class="sd">        score_key (NestedKey, optional): Key where the calculated action probabilities</span>
+<span class="sd">            will be stored. Defaults to &quot;score&quot;.</span>
+<span class="sd">        num_actions_key (NestedKey, optional): Key for the number of available</span>
+<span class="sd">            actions (K). Defaults to &quot;num_actions&quot;.</span>
+
+<span class="sd">    Input Keys:</span>
+<span class="sd">        - `weights_key` (torch.Tensor): Tensor of shape (..., num_actions).</span>
+<span class="sd">        - `num_actions_key` (int or torch.Tensor): Scalar representing K, the number of actions.</span>
+
+<span class="sd">    Output Keys:</span>
+<span class="sd">        - `score_key` (torch.Tensor): Tensor of shape (..., num_actions) containing</span>
+<span class="sd">          the calculated action probabilities.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        ```python</span>
+<span class="sd">        from tensordict import TensorDict</span>
+<span class="sd">        from torchrl.modules.mcts.scores import EXP3Score</span>
+
+<span class="sd">        # Create an EXP3Score instance</span>
+<span class="sd">        exp3 = EXP3Score(gamma=0.1)</span>
+
+<span class="sd">        # Define a TensorDict with required keys</span>
+<span class="sd">        node = TensorDict(</span>
+<span class="sd">            {</span>
+<span class="sd">                &quot;weights&quot;: torch.tensor([1.0, 1.0]),</span>
+<span class="sd">                &quot;num_actions&quot;: torch.tensor(2),</span>
+<span class="sd">            },</span>
+<span class="sd">            batch_size=[],</span>
+<span class="sd">        )</span>
+
+<span class="sd">        # Compute the action probabilities</span>
+<span class="sd">        result = exp3(node)</span>
+<span class="sd">        print(result[&quot;score&quot;])  # Output: Tensor with action probabilities</span>
+<span class="sd">        ```</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="EXP3Score.__init__">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.mcts.EXP3Score.html#torchrl.modules.mcts.EXP3Score.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">weights_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;weights&quot;</span><span class="p">,</span>
+        <span class="n">action_prob_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action_prob&quot;</span><span class="p">,</span>
+        <span class="n">reward_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span><span class="p">,</span>
+        <span class="n">score_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;score&quot;</span><span class="p">,</span>
+        <span class="n">num_actions_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;num_actions&quot;</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">gamma</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;gamma must be between 0 and 1, got </span><span class="si">{</span><span class="n">gamma</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gamma</span> <span class="o">=</span> <span class="n">gamma</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weights_key</span> <span class="o">=</span> <span class="n">weights_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_prob_key</span> <span class="o">=</span> <span class="n">action_prob_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reward_key</span> <span class="o">=</span> <span class="n">reward_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">score_key</span> <span class="o">=</span> <span class="n">score_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_actions_key</span> <span class="o">=</span> <span class="n">num_actions_key</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">weights_key</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_actions_key</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">score_key</span><span class="p">]</span></div>
+
+
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">num_actions</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_actions_key</span><span class="p">)</span>
+
+        <span class="c1"># Extract scalar value from num_actions (handles batched tensors too)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">num_actions</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="c1"># For batched tensors, take the first element (all should be same)</span>
+            <span class="n">k</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">num_actions</span><span class="o">.</span><span class="n">flatten</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">num_actions</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="n">k</span> <span class="o">=</span> <span class="n">num_actions</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">num_actions_key</span><span class="si">}</span><span class="s2">&#39; (&#39;num_actions&#39;) must be an integer or a tensor.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">weights_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+            <span class="n">batch_size</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">batch_size</span>
+            <span class="n">weights_shape</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">weights_shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">node</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">node</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">weights_key</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">weights_key</span><span class="p">)</span>
+
+        <span class="n">k_from_weights</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">k_from_weights</span> <span class="o">!=</span> <span class="n">k</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Shape of weights </span><span class="si">{</span><span class="n">weights</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> implies </span><span class="si">{</span><span class="n">k_from_weights</span><span class="si">}</span><span class="s2"> actions, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;but num_actions is </span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">sum_weights</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">sum_weights</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+            <span class="n">sum_weights</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">sum_weights</span><span class="p">),</span> <span class="n">sum_weights</span>
+        <span class="p">)</span>
+
+        <span class="n">p_i</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">gamma</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">weights</span> <span class="o">/</span> <span class="n">sum_weights</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gamma</span> <span class="o">/</span> <span class="n">k</span><span class="p">)</span>
+        <span class="n">node</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">score_key</span><span class="p">,</span> <span class="n">p_i</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_prob_key</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">score_key</span><span class="p">:</span>
+            <span class="n">node</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_prob_key</span><span class="p">,</span> <span class="n">p_i</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">node</span>
+
+    <span class="k">def</span> <span class="nf">update_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">action_idx</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">reward</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Updates the weight of the chosen action based on the reward.</span>
+
+<span class="sd">        This method updates the weight of the selected action using the EXP3 algorithm.</span>
+<span class="sd">        The weight update formula is:</span>
+<span class="sd">        `w_i(t+1) = w_i(t) * exp((gamma / K) * (reward / p_i(t)))`</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            node (TensorDictBase): The node containing the current weights and probabilities.</span>
+<span class="sd">                Must include the keys specified by `weights_key` and `score_key`.</span>
+<span class="sd">            action_idx (int): The index of the action that was selected.</span>
+<span class="sd">            reward (float): The reward received for the selected action. Must be in the range [0, 1].</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If the reward is not in the range [0, 1].</span>
+<span class="sd">            ValueError: If the probability of the selected action is less than or equal to 0.</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            ```python</span>
+<span class="sd">            from tensordict import TensorDict</span>
+<span class="sd">            from torchrl.modules.mcts.scores import EXP3Score</span>
+
+<span class="sd">            # Create an EXP3Score instance</span>
+<span class="sd">            exp3 = EXP3Score(gamma=0.1)</span>
+
+<span class="sd">            # Define a TensorDict with required keys</span>
+<span class="sd">            node = TensorDict(</span>
+<span class="sd">                {</span>
+<span class="sd">                    &quot;weights&quot;: torch.tensor([1.0, 1.0]),</span>
+<span class="sd">                    &quot;num_actions&quot;: torch.tensor(2),</span>
+<span class="sd">                },</span>
+<span class="sd">                batch_size=[],</span>
+<span class="sd">            )</span>
+
+<span class="sd">            # Compute the action probabilities</span>
+<span class="sd">            result = exp3(node)</span>
+<span class="sd">            print(result[&quot;score&quot;])  # Output: Tensor with action probabilities</span>
+
+<span class="sd">            # Update the weights based on the reward for action 0</span>
+<span class="sd">            exp3.update_weights(node, action_idx=0, reward=0.8)</span>
+<span class="sd">            print(node[&quot;weights&quot;])  # Updated weights</span>
+<span class="sd">            ```</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">reward</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Reward </span><span class="si">{</span><span class="n">reward</span><span class="si">}</span><span class="s2"> is outside the expected [0,1] range for EXP3.&quot;</span><span class="p">,</span>
+                <span class="ne">UserWarning</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="n">weights</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">weights_key</span><span class="p">)</span>
+        <span class="n">action_probs</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">score_key</span><span class="p">)</span>
+        <span class="n">k</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">weights</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">current_weight</span> <span class="o">=</span> <span class="n">weights</span><span class="p">[</span><span class="n">action_idx</span><span class="p">]</span>
+            <span class="n">prob_i</span> <span class="o">=</span> <span class="n">action_probs</span><span class="p">[</span><span class="n">action_idx</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">weights</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">current_weight</span> <span class="o">=</span> <span class="n">weights</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">action_idx</span><span class="p">]</span>
+            <span class="n">prob_i</span> <span class="o">=</span> <span class="n">action_probs</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">action_idx</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid weights dimensions: </span><span class="si">{</span><span class="n">weights</span><span class="o">.</span><span class="n">ndim</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">prob_i</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">):</span>
+            <span class="n">prob_i_val</span> <span class="o">=</span> <span class="n">prob_i</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="k">if</span> <span class="n">prob_i</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">prob_i</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Probability p_i(t) for action </span><span class="si">{</span><span class="n">action_idx</span><span class="si">}</span><span class="s2"> is </span><span class="si">{</span><span class="n">prob_i_val</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="s2">&quot;Weight will not be updated for zero probability actions.&quot;</span><span class="p">,</span>
+                <span class="ne">UserWarning</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="c1"># Don&#39;t update weights for zero probability - just return</span>
+            <span class="k">return</span>
+
+        <span class="n">reward_tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span>
+            <span class="n">reward</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">current_weight</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">current_weight</span><span class="o">.</span><span class="n">dtype</span>
+        <span class="p">)</span>
+        <span class="n">exponent</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gamma</span> <span class="o">/</span> <span class="n">k</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">reward_tensor</span> <span class="o">/</span> <span class="n">prob_i</span><span class="p">)</span>
+        <span class="n">new_weight</span> <span class="o">=</span> <span class="n">current_weight</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">exponent</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">weights</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">weights</span><span class="p">[</span><span class="n">action_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_weight</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">weights</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">action_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_weight</span>
+        <span class="n">node</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">weights_key</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="UCB1TunedScore">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.mcts.UCB1TunedScore.html#torchrl.modules.mcts.UCB1TunedScore">[docs]</a>
+<span class="k">class</span> <span class="nc">UCB1TunedScore</span><span class="p">(</span><span class="n">MCTSScore</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Computes the UCB1-Tuned score for MCTS, using variance estimation.</span>
+
+<span class="sd">    UCB1-Tuned is an enhancement of the UCB1 algorithm that incorporates an estimate</span>
+<span class="sd">    of the variance of rewards for each action. This allows for a more refined</span>
+<span class="sd">    balance between exploration and exploitation, potentially leading to better</span>
+<span class="sd">    performance, especially when reward variances differ significantly across actions.</span>
+
+<span class="sd">    The score for an action `i` is calculated as:</span>
+<span class="sd">    `score_i = avg_reward_i + sqrt(log(N) / N_i * min(0.25, V_i))`</span>
+
+<span class="sd">    The variance estimate `V_i` for action `i` is calculated as:</span>
+<span class="sd">    `V_i = (sum_squared_rewards_i / N_i) - avg_reward_i^2 + sqrt(exploration_constant * log(N) / N_i)`</span>
+
+<span class="sd">    Where:</span>
+<span class="sd">    - `avg_reward_i`: Average reward obtained from action `i`.</span>
+<span class="sd">    - `N_i`: Number of times action `i` has been visited.</span>
+<span class="sd">    - `N`: Total number of times the parent node has been visited.</span>
+<span class="sd">    - `sum_squared_rewards_i`: Sum of the squares of rewards received from action `i`.</span>
+<span class="sd">    - `exploration_constant`: A constant used in the bias correction term of `V_i`.</span>
+<span class="sd">      Auer et al. (2002) suggest a value of 2.0 for rewards in the range [0,1].</span>
+<span class="sd">    - The term `min(0.25, V_i)` implies that rewards are scaled to `[0, 1]`, as 0.25 is</span>
+<span class="sd">      the maximum variance for a distribution in this range (e.g., Bernoulli(0.5)).</span>
+
+<span class="sd">    Reference: &quot;Finite-time Analysis of the Multiarmed Bandit Problem&quot;</span>
+<span class="sd">    (Auer, Cesa-Bianchi, Fischer, 2002).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        exploration_constant (float, optional): The constant `C` used in the bias</span>
+<span class="sd">            correction term for the variance estimate `V_i`. Defaults to `2.0`,</span>
+<span class="sd">            as suggested for rewards in `[0,1]`.</span>
+<span class="sd">        win_count_key (NestedKey, optional): Key for the tensor in the input `TensorDictBase`</span>
+<span class="sd">            containing the sum of rewards for each action (Q_i * N_i). Defaults to &quot;win_count&quot;.</span>
+<span class="sd">        visits_key (NestedKey, optional): Key for the tensor containing the visit</span>
+<span class="sd">            count for each action (N_i). Defaults to &quot;visits&quot;.</span>
+<span class="sd">        total_visits_key (NestedKey, optional): Key for the tensor (or scalar)</span>
+<span class="sd">            representing the visit count of the parent node (N). Defaults to &quot;total_visits&quot;.</span>
+<span class="sd">        sum_squared_rewards_key (NestedKey, optional): Key for the tensor containing</span>
+<span class="sd">            the sum of squared rewards received for each action. This is crucial for</span>
+<span class="sd">            calculating the empirical variance. Defaults to &quot;sum_squared_rewards&quot;.</span>
+<span class="sd">        score_key (NestedKey, optional): Key where the calculated UCB1-Tuned scores</span>
+<span class="sd">            will be stored in the output `TensorDictBase`. Defaults to &quot;score&quot;.</span>
+
+<span class="sd">    Input Keys:</span>
+<span class="sd">        - `win_count_key` (torch.Tensor): Sum of rewards for each action.</span>
+<span class="sd">        - `visits_key` (torch.Tensor): Visit counts for each action (N_i).</span>
+<span class="sd">        - `total_visits_key` (torch.Tensor): Parent node&#39;s visit count (N).</span>
+<span class="sd">        - `sum_squared_rewards_key` (torch.Tensor): Sum of squared rewards for each action.</span>
+
+<span class="sd">    Output Keys:</span>
+<span class="sd">        - `score_key` (torch.Tensor): Calculated UCB1-Tuned scores for each action.</span>
+
+<span class="sd">    Important Notes:</span>
+<span class="sd">        - **Unvisited Nodes**: Actions with zero visits (`visits_key` is 0) are assigned a</span>
+<span class="sd">          very large positive score to ensure they are selected for exploration.</span>
+<span class="sd">        - **Reward Range**: The `min(0.25, V_i)` term is theoretically most sound when</span>
+<span class="sd">          rewards are normalized to the range `[0, 1]`.</span>
+<span class="sd">        - **Logarithm of N**: `log(N)` (log of parent visits) is calculated using `torch.log(torch.clamp(N, min=1.0))`</span>
+<span class="sd">          to prevent issues with `N=0` or `N` between 0 and 1.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="UCB1TunedScore.__init__">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.mcts.UCB1TunedScore.html#torchrl.modules.mcts.UCB1TunedScore.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">win_count_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;win_count&quot;</span><span class="p">,</span>
+        <span class="n">visits_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;visits&quot;</span><span class="p">,</span>
+        <span class="n">total_visits_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;total_visits&quot;</span><span class="p">,</span>
+        <span class="n">sum_squared_rewards_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;sum_squared_rewards&quot;</span><span class="p">,</span>
+        <span class="n">score_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;score&quot;</span><span class="p">,</span>
+        <span class="n">exploration_constant</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2.0</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">win_count_key</span> <span class="o">=</span> <span class="n">win_count_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">visits_key</span> <span class="o">=</span> <span class="n">visits_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">total_visits_key</span> <span class="o">=</span> <span class="n">total_visits_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sum_squared_rewards_key</span> <span class="o">=</span> <span class="n">sum_squared_rewards_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">score_key</span> <span class="o">=</span> <span class="n">score_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">exploration_constant</span> <span class="o">=</span> <span class="n">exploration_constant</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">win_count_key</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">visits_key</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">total_visits_key</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sum_squared_rewards_key</span><span class="p">,</span>
+        <span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">score_key</span><span class="p">]</span></div>
+
+
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">q_sum_i</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">win_count_key</span><span class="p">)</span>
+        <span class="n">n_i</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">visits_key</span><span class="p">)</span>
+        <span class="n">n_parent</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">total_visits_key</span><span class="p">)</span>
+        <span class="n">sum_sq_rewards_i</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sum_squared_rewards_key</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">n_parent</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">n_parent</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&lt;</span> <span class="n">q_sum_i</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+            <span class="n">n_parent_expanded</span> <span class="o">=</span> <span class="n">n_parent</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">n_parent_expanded</span> <span class="o">=</span> <span class="n">n_parent</span>
+
+        <span class="n">safe_n_parent_for_log</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">n_parent_expanded</span><span class="p">,</span> <span class="nb">min</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+        <span class="n">log_n_parent</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">safe_n_parent_for_log</span><span class="p">)</span>
+
+        <span class="n">scores</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">q_sum_i</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">q_sum_i</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="n">visited_mask</span> <span class="o">=</span> <span class="n">n_i</span> <span class="o">&gt;</span> <span class="mi">0</span>
+
+        <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">visited_mask</span><span class="p">):</span>
+            <span class="n">q_sum_i_v</span> <span class="o">=</span> <span class="n">q_sum_i</span><span class="p">[</span><span class="n">visited_mask</span><span class="p">]</span>
+            <span class="n">n_i_v</span> <span class="o">=</span> <span class="n">n_i</span><span class="p">[</span><span class="n">visited_mask</span><span class="p">]</span>
+            <span class="n">sum_sq_rewards_i_v</span> <span class="o">=</span> <span class="n">sum_sq_rewards_i</span><span class="p">[</span><span class="n">visited_mask</span><span class="p">]</span>
+
+            <span class="n">log_n_parent_v</span> <span class="o">=</span> <span class="n">log_n_parent</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">n_i</span><span class="p">)[</span><span class="n">visited_mask</span><span class="p">]</span>
+
+            <span class="n">avg_reward_i_v</span> <span class="o">=</span> <span class="n">q_sum_i_v</span> <span class="o">/</span> <span class="n">n_i_v</span>
+
+            <span class="n">empirical_variance_v</span> <span class="o">=</span> <span class="p">(</span><span class="n">sum_sq_rewards_i_v</span> <span class="o">/</span> <span class="n">n_i_v</span><span class="p">)</span> <span class="o">-</span> <span class="n">avg_reward_i_v</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">bias_correction_v</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">exploration_constant</span> <span class="o">*</span> <span class="n">log_n_parent_v</span> <span class="o">/</span> <span class="n">n_i_v</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
+
+            <span class="n">v_i_v</span> <span class="o">=</span> <span class="n">empirical_variance_v</span> <span class="o">+</span> <span class="n">bias_correction_v</span>
+            <span class="n">v_i_v</span> <span class="o">=</span> <span class="n">v_i_v</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="nb">min</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+            <span class="n">min_variance_term_v</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">full_like</span><span class="p">(</span><span class="n">v_i_v</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">),</span> <span class="n">v_i_v</span><span class="p">)</span>
+            <span class="n">exploration_component_v</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">log_n_parent_v</span> <span class="o">/</span> <span class="n">n_i_v</span> <span class="o">*</span> <span class="n">min_variance_term_v</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
+
+            <span class="n">scores</span><span class="p">[</span><span class="n">visited_mask</span><span class="p">]</span> <span class="o">=</span> <span class="n">avg_reward_i_v</span> <span class="o">+</span> <span class="n">exploration_component_v</span>
+
+        <span class="n">unvisited_mask</span> <span class="o">=</span> <span class="o">~</span><span class="n">visited_mask</span>
+        <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">unvisited_mask</span><span class="p">):</span>
+            <span class="n">scores</span><span class="p">[</span><span class="n">unvisited_mask</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">finfo</span><span class="p">(</span><span class="n">scores</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">max</span> <span class="o">/</span> <span class="mf">10.0</span>
+
+        <span class="n">node</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">score_key</span><span class="p">,</span> <span class="n">scores</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">node</span></div>
+
+
+
+<div class="viewcode-block" id="MCTSScores">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.mcts.MCTSScores.html#torchrl.modules.mcts.MCTSScores">[docs]</a>
+<span class="k">class</span> <span class="nc">MCTSScores</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Enum providing factory functions for common MCTS score configurations.&quot;&quot;&quot;</span>
+
+    <span class="n">PUCT</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">PUCTScore</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>  <span class="c1"># AlphaGo default value</span>
+    <span class="n">UCB</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">UCBScore</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>  <span class="c1"># default from Auer et al. 2002</span>
+    <span class="n">UCB1_TUNED</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span>
+        <span class="n">UCB1TunedScore</span><span class="p">,</span> <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">2.0</span>
+    <span class="p">)</span>  <span class="c1"># Auer et al. (2002) C=2 for rewards in [0,1]</span>
+    <span class="n">EXP3</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">EXP3Score</span><span class="p">,</span> <span class="n">gamma</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span></div>
+
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../../../',
+            VERSION:'0.11',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../../../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+      <script type="text/javascript" src="../../../../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../../../../_static/design-tabs.js"></script>
+
+  
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="#">Get Started</a>
+          </li>
+
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+    })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
+  </script>
+</body>
+</html>

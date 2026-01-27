@@ -1,0 +1,902 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Vectorized and Parallel Environments &mdash; torchrl 0.11 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../_static/pytorch.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="SerialEnv" href="generated/torchrl.envs.SerialEnv.html" />
+    <link rel="prev" title="terminated_or_truncated" href="generated/torchrl.envs.terminated_or_truncated.html" /> 
+
+  
+  <script src="../_static/js/modernizr.min.js"></script>
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+  <div>
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../versions.html"><span style="font-size:110%">0.11 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="index.html">API Reference</a> &gt;</li>
+        
+          <li><a href="envs.html">torchrl.envs package</a> &gt;</li>
+        
+      <li>Vectorized and Parallel Environments</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/reference/envs_vectorized.rst.txt" rel="nofollow"><img src="../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
+        </div>
+
+        <div class="pytorch-content-left">
+    
+    
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" class="pytorch-article">
+              
+  <section id="vectorized-and-parallel-environments">
+<h1>Vectorized and Parallel Environments<a class="headerlink" href="#vectorized-and-parallel-environments" title="Link to this heading">¶</a></h1>
+<p>Vectorized (or better: parallel) environments is a common feature in Reinforcement Learning
+where executing the environment step can be cpu-intensive.
+Some libraries such as <a class="reference external" href="https://github.com/openai/gym3">gym3</a> or <a class="reference external" href="https://github.com/sail-sg/envpool">EnvPool</a>
+offer interfaces to execute batches of environments simultaneously.
+While they often offer a very competitive computational advantage, they do not
+necessarily scale to the wide variety of environment libraries supported by TorchRL.
+Therefore, TorchRL offers its own, generic <a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> class to run multiple
+environments in parallel.
+As this class inherits from <a class="reference internal" href="generated/torchrl.envs.SerialEnv.html#torchrl.envs.SerialEnv" title="torchrl.envs.SerialEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">SerialEnv</span></code></a>, it enjoys the exact same API as other environment.
+Of course, a <a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> will have a batch size that corresponds to its environment count:</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Given the library’s many optional dependencies (eg, Gym, Gymnasium, and many others)
+warnings can quickly become quite annoying in multiprocessed / distributed settings.
+By default, TorchRL filters out these warnings in sub-processes. If one still wishes to
+see these warnings, they can be displayed by setting <code class="docutils literal notranslate"><span class="pre">torchrl.filter_warnings_subprocess=False</span></code>.</p>
+</div>
+<p>It is important that your environment specs match the input and output that it sends and receives, as
+<a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> will create buffers from these specs to communicate with the spawn processes.
+Check the <code class="xref py py-func docutils literal notranslate"><span class="pre">check_env_specs()</span></code> method for a sanity check.</p>
+<div class="literal-block-wrapper docutils container" id="id2">
+<div class="code-block-caption"><span class="caption-text">Parallel environment</span><a class="headerlink" href="#id2" title="Link to this code">¶</a></div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>     <span class="o">&gt;&gt;&gt;</span> <span class="k">def</span> <span class="nf">make_env</span><span class="p">():</span>
+     <span class="o">...</span>     <span class="k">return</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">,</span> <span class="n">from_pixels</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">g</span><span class="o">=</span><span class="mf">9.81</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span>
+     <span class="o">&gt;&gt;&gt;</span> <span class="n">check_env_specs</span><span class="p">(</span><span class="n">env</span><span class="p">)</span>  <span class="c1"># this must pass for ParallelEnv to work</span>
+     <span class="o">&gt;&gt;&gt;</span> <span class="n">env</span> <span class="o">=</span> <span class="n">ParallelEnv</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">make_env</span><span class="p">)</span>
+     <span class="o">&gt;&gt;&gt;</span> <span class="nb">print</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
+     <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="mi">4</span><span class="p">])</span>
+</pre></div>
+</div>
+</div>
+<p><a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> allows to retrieve the attributes from its contained environments:
+one can simply call:</p>
+<div class="literal-block-wrapper docutils container" id="id3">
+<div class="code-block-caption"><span class="caption-text">Parallel environment attributes</span><a class="headerlink" href="#id3" title="Link to this code">¶</a></div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>     <span class="o">&gt;&gt;&gt;</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">d</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">g</span>  <span class="c1"># gets the g-force of the various envs, which we set to 9.81 before</span>
+     <span class="o">&gt;&gt;&gt;</span> <span class="nb">print</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+     <span class="mf">9.81</span>
+</pre></div>
+</div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><em>A note on performance</em>: launching a <a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> can take quite some time
+as it requires to launch as many python instances as there are processes. Due to
+the time that it takes to run <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">torch</span></code> (and other imports), starting the
+parallel env can be a bottleneck. This is why, for instance, TorchRL tests are so slow.
+Once the environment is launched, a great speedup should be observed.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><em>TorchRL requires precise specs</em>: Another thing to take in consideration is
+that <a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> (as well as data collectors)
+will create data buffers based on the environment specs to pass data from one process
+to another. This means that a misspecified spec (input, observation or reward) will
+cause a breakage at runtime as the data can’t be written on the preallocated buffer.
+In general, an environment should be tested using the <code class="xref py py-func docutils literal notranslate"><span class="pre">check_env_specs()</span></code>
+test function before being used in a <a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a>. This function will raise
+an assertion error whenever the preallocated buffer and the collected data mismatch.</p>
+</div>
+<p>We also offer the <a class="reference internal" href="generated/torchrl.envs.SerialEnv.html#torchrl.envs.SerialEnv" title="torchrl.envs.SerialEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">SerialEnv</span></code></a> class that enjoys the exact same API but is executed
+serially. This is mostly useful for testing purposes, when one wants to assess the
+behavior of a <a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> without launching the subprocesses.</p>
+<p>In addition to <a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a>, which offers process-based parallelism, we also provide a way to create
+multithreaded environments with <code class="xref py py-class docutils literal notranslate"><span class="pre">MultiThreadedEnv</span></code>. This class uses <a class="reference external" href="https://github.com/sail-sg/envpool">EnvPool</a>
+library underneath, which allows for higher performance, but at the same time restricts flexibility - one can only
+create environments implemented in <code class="docutils literal notranslate"><span class="pre">EnvPool</span></code>. This covers many popular RL environments types (Atari, Classic Control,
+etc.), but one can not use an arbitrary TorchRL environment, as it is possible with <a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a>. Run
+<cite>benchmarks/benchmark_batched_envs.py</cite> to compare performance of different ways to parallelize batched environments.</p>
+<section id="vectorized-environment-classes">
+<h2>Vectorized environment classes<a class="headerlink" href="#vectorized-environment-classes" title="Link to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.SerialEnv.html#torchrl.envs.SerialEnv" title="torchrl.envs.SerialEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SerialEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Creates a series of environments in the same process.Batched environments allow the user to query an arbitrary method / attribute of the environment running remotely.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Creates one environment per process.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.EnvCreator.html#torchrl.envs.EnvCreator" title="torchrl.envs.EnvCreator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnvCreator</span></code></a>(create_env_fn[, ...])</p></td>
+<td><p>Environment creator class.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="partial-steps-and-partial-resets">
+<h2>Partial steps and partial resets<a class="headerlink" href="#partial-steps-and-partial-resets" title="Link to this heading">¶</a></h2>
+<p>TorchRL allows environments to reset some but not all the environments, or run a step in one but not all environments.
+If there is only one environment in the batch, then a partial reset / step is also allowed with the behavior detailed
+below.</p>
+<section id="batching-environments-and-locking-the-batch">
+<h3>Batching environments and locking the batch<a class="headerlink" href="#batching-environments-and-locking-the-batch" title="Link to this heading">¶</a></h3>
+<p id="ref-batch-locked">Before detailing what partial resets and partial steps do, we must distinguish cases where an environment has
+a batch size of its own (mostly stateful environments) or when the environment is just a mere module that, given an
+input of arbitrary size, batches the operations over all elements (mostly stateless environments).</p>
+<p>This is controlled via the <code class="xref py py-attr docutils literal notranslate"><span class="pre">batch_locked</span></code> attribute: a batch-locked environment requires all input
+tensordicts to have the same batch-size as the env’s. Typical examples of these environments are
+<a class="reference internal" href="generated/torchrl.envs.GymEnv.html#torchrl.envs.GymEnv" title="torchrl.envs.GymEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">GymEnv</span></code></a> and related. Batch-unlocked envs are by contrast allowed to work with any input size.
+Notable examples are <a class="reference internal" href="generated/torchrl.envs.BraxEnv.html#torchrl.envs.BraxEnv" title="torchrl.envs.BraxEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">BraxEnv</span></code></a> or <a class="reference internal" href="generated/torchrl.envs.JumanjiEnv.html#torchrl.envs.JumanjiEnv" title="torchrl.envs.JumanjiEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">JumanjiEnv</span></code></a>.</p>
+<p>Executing partial steps in a batch-unlocked environment is straightforward: one just needs to mask the part of the
+tensordict that does not need to be executed, pass the other part to <cite>step</cite> and merge the results with the previous
+input.</p>
+<p>Batched environments (<a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> and <a class="reference internal" href="generated/torchrl.envs.SerialEnv.html#torchrl.envs.SerialEnv" title="torchrl.envs.SerialEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">SerialEnv</span></code></a>) can also deal with
+partial steps easily, they just pass the actions to the sub-environments that are required to be executed.</p>
+<p>In all other cases, TorchRL assumes that the environment handles the partial steps correctly.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This means that custom environments may silently run the non-required steps as there is no way for torchrl
+to control what happens within the <cite>_step</cite> method!</p>
+</div>
+</section>
+<section id="partial-steps">
+<h3>Partial Steps<a class="headerlink" href="#partial-steps" title="Link to this heading">¶</a></h3>
+<p id="ref-partial-steps">Partial steps are controlled via the temporary key <cite>“_step”</cite> which points to a boolean mask of the
+size of the tensordict that holds it. The classes armed to deal with this are:</p>
+<ul class="simple">
+<li><p>Batched environments: <a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> and <a class="reference internal" href="generated/torchrl.envs.SerialEnv.html#torchrl.envs.SerialEnv" title="torchrl.envs.SerialEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">SerialEnv</span></code></a> will dispatch the
+action to and only to the environments where <cite>“_step”</cite> is <cite>True</cite>;</p></li>
+<li><p>Batch-unlocked environments;</p></li>
+<li><p>Unbatched environments (i.e., environments without batch size). In these environments, the <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#id4" title="torchrl.envs.EnvBase.step"><code class="xref py py-meth docutils literal notranslate"><span class="pre">step()</span></code></a>
+method will first look for a <cite>“_step”</cite> entry and, if present, act accordingly.
+If a <code class="xref py py-class docutils literal notranslate"><span class="pre">Transform</span></code> instance passes a <cite>“_step”</cite> entry to the tensordict, it is also captured by
+<code class="xref py py-class docutils literal notranslate"><span class="pre">TransformedEnv</span></code>’s own <cite>_step</cite> method which will skip the <cite>base_env.step</cite> as well as any further
+transformation.</p></li>
+</ul>
+<p>When dealing with partial steps, the strategy is always to use the step output and mask missing values with the previous
+content of the input tensordict, if present, or a <cite>0</cite>-valued tensor if the tensor cannot be found. This means that
+if the input tensordict does not contain all the previous observations, then the output tensordict will be 0-valued for
+all the non-stepped elements. Within batched environments, data collectors and rollouts utils, this is an issue that
+is not observed because these classes handle the passing of data properly.</p>
+<p>Partial steps are an essential feature of <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#id2" title="torchrl.envs.EnvBase.rollout"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rollout()</span></code></a> when <cite>break_when_all_done</cite> is <cite>True</cite>,
+as the environments with a <cite>True</cite> done state will need to be skipped during calls to <cite>_step</cite>.</p>
+<p>The <code class="xref py py-class docutils literal notranslate"><span class="pre">ConditionalSkip</span></code> transform allows you to programmatically ask for (partial) step skips.</p>
+</section>
+<section id="partial-resets">
+<h3>Partial Resets<a class="headerlink" href="#partial-resets" title="Link to this heading">¶</a></h3>
+<p id="ref-partial-resets">Partial resets work pretty much like partial steps, but with the <cite>“_reset”</cite> entry.</p>
+<p>The same restrictions of partial steps apply to partial resets.</p>
+<p>Likewise, partial resets are an essential feature of <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#id2" title="torchrl.envs.EnvBase.rollout"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rollout()</span></code></a> when <cite>break_when_any_done</cite> is <cite>True</cite>,
+as the environments with a <cite>True</cite> done state will need to be reset, but not others.</p>
+<p>See te following paragraph for a deep dive in partial resets within batched and vectorized environments.</p>
+</section>
+<section id="partial-resets-in-detail">
+<h3>Partial resets in detail<a class="headerlink" href="#partial-resets-in-detail" title="Link to this heading">¶</a></h3>
+<p>TorchRL uses a private <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> key to indicate to the environment which
+component (sub-environments or agents) should be reset.
+This allows to reset some but not all of the components.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> key has two distinct functionalities:</p>
+<ol class="arabic">
+<li><p>During a call to <code class="xref py py-meth docutils literal notranslate"><span class="pre">_reset()</span></code>, the <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> key may or may
+not be present in the input tensordict. TorchRL’s convention is that the
+absence of the <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> key at a given <code class="docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code> level indicates
+a total reset of that level (unless a <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> key was found at a level
+above, see details below).
+If it is present, it is expected that those entries and only those components
+where the <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> entry is <code class="docutils literal notranslate"><span class="pre">True</span></code> (along key and shape dimension) will be reset.</p>
+<p>The way an environment deals with the <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> keys in its <code class="xref py py-meth docutils literal notranslate"><span class="pre">_reset()</span></code>
+method is proper to its class.
+Designing an environment that behaves according to <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> inputs is the
+developer’s responsibility, as TorchRL has no control over the inner logic
+of <code class="xref py py-meth docutils literal notranslate"><span class="pre">_reset()</span></code>. Nevertheless, the following point should be
+kept in mind when designing that method.</p>
+</li>
+<li><p>After a call to <code class="xref py py-meth docutils literal notranslate"><span class="pre">_reset()</span></code>, the output will be masked with the
+<code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> entries and the output of the previous <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#id4" title="torchrl.envs.EnvBase.step"><code class="xref py py-meth docutils literal notranslate"><span class="pre">step()</span></code></a>
+will be written wherever the <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> was <code class="docutils literal notranslate"><span class="pre">False</span></code>. In practice, this
+means that if a <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> modifies data that isn’t exposed by it, this
+modification will be lost. After this masking operation, the <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code>
+entries will be erased from the <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#id1" title="torchrl.envs.EnvBase.reset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reset()</span></code></a> outputs.</p></li>
+</ol>
+<p>It must be pointed out that <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> is a private key, and it should only be
+used when coding specific environment features that are internal facing.
+In other words, this should NOT be used outside of the library, and developers
+will keep the right to modify the logic of partial resets through <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code>
+setting without preliminary warranty, as long as they don’t affect TorchRL
+internal tests.</p>
+<p>Finally, the following assumptions are made and should be kept in mind when
+designing reset functionalities:</p>
+<ul class="simple">
+<li><p>Each <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> is paired with a <code class="docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code> entry (+ <code class="docutils literal notranslate"><span class="pre">&quot;terminated&quot;</span></code> and,
+possibly, <code class="docutils literal notranslate"><span class="pre">&quot;truncated&quot;</span></code>). This means that the following structure is not
+allowed: <code class="docutils literal notranslate"><span class="pre">TensorDict({&quot;done&quot;:</span> <span class="pre">done,</span> <span class="pre">&quot;nested&quot;:</span> <span class="pre">{&quot;_reset&quot;:</span> <span class="pre">reset}},</span> <span class="pre">[])</span></code>, as
+the <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> lives at a different nesting level than the <code class="docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code>.</p></li>
+<li><p>A reset at one level does not preclude the presence of a <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> at lower
+levels, but it annihilates its effects. The reason is simply that
+whether the <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> at the root level corresponds to an <code class="docutils literal notranslate"><span class="pre">all()</span></code>, <code class="docutils literal notranslate"><span class="pre">any()</span></code>
+or custom call to the nested <code class="docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code> entries cannot be known in advance,
+and it is explicitly assumed that the <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> at the root was placed
+there to supersede the nested values (for an example, have a look at
+<code class="xref py py-class docutils literal notranslate"><span class="pre">PettingZooWrapper</span></code> implementation where each group has one or more
+<code class="docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code> entries associated which is aggregated at the root level with a
+<code class="docutils literal notranslate"><span class="pre">any</span></code> or <code class="docutils literal notranslate"><span class="pre">all</span></code> logic depending on the task).</p></li>
+<li><p>When calling <code class="xref py py-meth docutils literal notranslate"><span class="pre">env.reset(tensordict)()</span></code> with a partial <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> entry
+that will reset some but not all the done sub-environments, the input data
+should contain the data of the sub-environments that are __not__ being reset.
+The reason for this constrain lies in the fact that the output of the
+<code class="docutils literal notranslate"><span class="pre">env._reset(data)</span></code> can only be predicted for the entries that are reset.
+For the others, TorchRL cannot know in advance if they will be meaningful or
+not. For instance, one could perfectly just pad the values of the non-reset
+components, in which case the non-reset data will be meaningless and should
+be discarded.</p></li>
+</ul>
+<p>Below, we give some examples of the expected effect that <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> keys will
+have on an environment returning zeros after reset:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># single reset at the root</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;val&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="s2">&quot;_reset&quot;</span><span class="p">:</span> <span class="p">[</span><span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">]},</span> <span class="p">[])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;val&quot;</span><span class="p">))</span>  <span class="c1"># only the second value is 0</span>
+<span class="go">tensor([1, 0])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># nested resets</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span>
+<span class="gp">... </span>    <span class="p">(</span><span class="s2">&quot;agent0&quot;</span><span class="p">,</span> <span class="s2">&quot;val&quot;</span><span class="p">):</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">(</span><span class="s2">&quot;agent0&quot;</span><span class="p">,</span> <span class="s2">&quot;_reset&quot;</span><span class="p">):</span> <span class="p">[</span><span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="p">(</span><span class="s2">&quot;agent1&quot;</span><span class="p">,</span> <span class="s2">&quot;val&quot;</span><span class="p">):</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="p">(</span><span class="s2">&quot;agent1&quot;</span><span class="p">,</span> <span class="s2">&quot;_reset&quot;</span><span class="p">):</span> <span class="p">[</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">},</span> <span class="p">[])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;agent0&quot;</span><span class="p">,</span> <span class="s2">&quot;val&quot;</span><span class="p">)))</span>  <span class="c1"># only the second value is 0</span>
+<span class="go">tensor([1, 0])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;agent1&quot;</span><span class="p">,</span> <span class="s2">&quot;val&quot;</span><span class="p">)))</span>  <span class="c1"># only the first value is 0</span>
+<span class="go">tensor([0, 2])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># nested resets are overridden by a &quot;_reset&quot; at the root</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span>
+<span class="gp">... </span>    <span class="s2">&quot;_reset&quot;</span><span class="p">:</span> <span class="p">[</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="p">(</span><span class="s2">&quot;agent0&quot;</span><span class="p">,</span> <span class="s2">&quot;val&quot;</span><span class="p">):</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">(</span><span class="s2">&quot;agent0&quot;</span><span class="p">,</span> <span class="s2">&quot;_reset&quot;</span><span class="p">):</span> <span class="p">[</span><span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="p">(</span><span class="s2">&quot;agent1&quot;</span><span class="p">,</span> <span class="s2">&quot;val&quot;</span><span class="p">):</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="p">(</span><span class="s2">&quot;agent1&quot;</span><span class="p">,</span> <span class="s2">&quot;_reset&quot;</span><span class="p">):</span> <span class="p">[</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">},</span> <span class="p">[])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;agent0&quot;</span><span class="p">,</span> <span class="s2">&quot;val&quot;</span><span class="p">)))</span>  <span class="c1"># reset at the root overrides nested</span>
+<span class="go">tensor([0, 0])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;agent1&quot;</span><span class="p">,</span> <span class="s2">&quot;val&quot;</span><span class="p">)))</span>  <span class="c1"># reset at the root overrides nested</span>
+<span class="go">tensor([0, 0])</span>
+</pre></div>
+</div>
+<div class="literal-block-wrapper docutils container" id="id4">
+<div class="code-block-caption"><span class="caption-text">Parallel environment reset</span><a class="headerlink" href="#id4" title="Link to this code">¶</a></div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>     <span class="o">&gt;&gt;&gt;</span> <span class="n">tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;_reset&quot;</span><span class="p">:</span> <span class="p">[[</span><span class="kc">True</span><span class="p">],</span> <span class="p">[</span><span class="kc">False</span><span class="p">],</span> <span class="p">[</span><span class="kc">True</span><span class="p">],</span> <span class="p">[</span><span class="kc">True</span><span class="p">]]},</span> <span class="p">[</span><span class="mi">4</span><span class="p">])</span>
+     <span class="o">&gt;&gt;&gt;</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>  <span class="c1"># eliminates the &quot;_reset&quot; entry</span>
+     <span class="n">TensorDict</span><span class="p">(</span>
+         <span class="n">fields</span><span class="o">=</span><span class="p">{</span>
+             <span class="n">terminated</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+             <span class="n">done</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+             <span class="n">pixels</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="mi">4</span><span class="p">,</span> <span class="mi">500</span><span class="p">,</span> <span class="mi">500</span><span class="p">,</span> <span class="mi">3</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
+             <span class="n">truncated</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+         <span class="n">batch_size</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="mi">4</span><span class="p">]),</span>
+         <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+         <span class="n">is_shared</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</section>
+</section>
+<section id="async-environments">
+<h2>Async environments<a class="headerlink" href="#async-environments" title="Link to this heading">¶</a></h2>
+<p>Asynchronous environments allow for parallel execution of multiple environments, which can significantly speed up the
+data collection process in reinforcement learning.</p>
+<p>The <cite>AsyncEnvPool</cite> class and its subclasses provide a flexible interface for managing these environments using different
+backends, such as threading and multiprocessing.</p>
+<p>The <cite>AsyncEnvPool</cite> class serves as a base class for asynchronous environment pools, providing a common interface for
+managing multiple environments concurrently. It supports different backends for parallel execution, such as threading
+and multiprocessing, and provides methods for asynchronous stepping and resetting of environments.</p>
+<p>Contrary to <a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a>, <a class="reference internal" href="generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool" title="torchrl.envs.AsyncEnvPool"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncEnvPool</span></code></a> and its subclasses permit the
+execution of a given set of sub-environments while another task performed, allowing for complex asynchronous jobs to be
+run at the same time. For instance, it is possible to execute some environments while the policy is running based on
+the output of others.</p>
+<p>This family of classes is particularly interesting when dealing with environments that have a high (and/or variable)
+latency.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This class and its subclasses should work when nested in with <code class="xref py py-class docutils literal notranslate"><span class="pre">TransformedEnv</span></code> and
+batched environments, but users won’t currently be able to use the async features of the base environment when
+it’s nested in these classes. One should prefer nested transformed envs within an <cite>AsyncEnvPool</cite> instead.
+If this is not possible, please raise an issue.</p>
+</div>
+<section id="classes">
+<h3>Classes<a class="headerlink" href="#classes" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p><a class="reference internal" href="generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool" title="torchrl.envs.AsyncEnvPool"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncEnvPool</span></code></a>: A base class for asynchronous environment pools. It determines the backend
+implementation to use based on the provided arguments and manages the lifecycle of the environments.</p></li>
+<li><p><a class="reference internal" href="generated/torchrl.envs.ProcessorAsyncEnvPool.html#torchrl.envs.ProcessorAsyncEnvPool" title="torchrl.envs.ProcessorAsyncEnvPool"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProcessorAsyncEnvPool</span></code></a>: An implementation of <a class="reference internal" href="generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool" title="torchrl.envs.AsyncEnvPool"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncEnvPool</span></code></a> using
+multiprocessing for parallel execution of environments. This class manages a pool of environments, each running in
+its own process, and provides methods for asynchronous stepping and resetting of environments using inter-process
+communication. It is automatically instantiated when <cite>“multiprocessing”</cite> is passed as a backend during the
+<a class="reference internal" href="generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool" title="torchrl.envs.AsyncEnvPool"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncEnvPool</span></code></a> instantiation.</p></li>
+<li><p><a class="reference internal" href="generated/torchrl.envs.ThreadingAsyncEnvPool.html#torchrl.envs.ThreadingAsyncEnvPool" title="torchrl.envs.ThreadingAsyncEnvPool"><code class="xref py py-class docutils literal notranslate"><span class="pre">ThreadingAsyncEnvPool</span></code></a>: An implementation of <a class="reference internal" href="generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool" title="torchrl.envs.AsyncEnvPool"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncEnvPool</span></code></a> using
+threading for parallel execution of environments. This class manages a pool of environments, each running in its own
+thread, and provides methods for asynchronous stepping and resetting of environments using a thread pool executor.
+It is automatically instantiated when <cite>“threading”</cite> is passed as a backend during the
+<a class="reference internal" href="generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool" title="torchrl.envs.AsyncEnvPool"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncEnvPool</span></code></a> instantiation.</p></li>
+</ul>
+</section>
+<section id="example">
+<h3>Example<a class="headerlink" href="#example" title="Link to this heading">¶</a></h3>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">partial</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">AsyncEnvPool</span><span class="p">,</span> <span class="n">GymEnv</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Choose backend</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">backend</span> <span class="o">=</span> <span class="s2">&quot;threading&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">AsyncEnvPool</span><span class="p">(</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="p">[</span><span class="n">partial</span><span class="p">(</span><span class="n">GymEnv</span><span class="p">,</span> <span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">),</span> <span class="n">partial</span><span class="p">(</span><span class="n">GymEnv</span><span class="p">,</span> <span class="s2">&quot;CartPole-v1&quot;</span><span class="p">)],</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">stack</span><span class="o">=</span><span class="s2">&quot;lazy&quot;</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">backend</span><span class="o">=</span><span class="n">backend</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Execute a synchronous reset</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reset</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">reset</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Execute a synchronous step</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">rand_step</span><span class="p">(</span><span class="n">reset</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Execute an asynchronous step in env 0</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s0</span> <span class="o">=</span> <span class="n">s</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s0</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s0</span><span class="p">[</span><span class="s2">&quot;env_index&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">async_step_send</span><span class="p">(</span><span class="n">s0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Receive data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s0_result</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">async_step_recv</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;result&#39;</span><span class="p">,</span> <span class="n">s0_result</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Close env</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</pre></div>
+</div>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool" title="torchrl.envs.AsyncEnvPool"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AsyncEnvPool</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A base class for asynchronous environment pools, providing a common interface for managing multiple environments concurrently.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.ProcessorAsyncEnvPool.html#torchrl.envs.ProcessorAsyncEnvPool" title="torchrl.envs.ProcessorAsyncEnvPool"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProcessorAsyncEnvPool</span></code></a>(*args, **kwargs)</p></td>
+<td><p>An implementation of <cite>AsyncEnvPool</cite> using multiprocessing for parallel execution of environments.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.ThreadingAsyncEnvPool.html#torchrl.envs.ThreadingAsyncEnvPool" title="torchrl.envs.ThreadingAsyncEnvPool"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ThreadingAsyncEnvPool</span></code></a>(*args, **kwargs)</p></td>
+<td><p>An implementation of <cite>AsyncEnvPool</cite> using threading for parallel execution of environments.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="generated/torchrl.envs.SerialEnv.html" class="btn btn-neutral float-right" title="SerialEnv" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="generated/torchrl.envs.terminated_or_truncated.html" class="btn btn-neutral" title="terminated_or_truncated" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">Vectorized and Parallel Environments</a><ul>
+<li><a class="reference internal" href="#vectorized-environment-classes">Vectorized environment classes</a></li>
+<li><a class="reference internal" href="#partial-steps-and-partial-resets">Partial steps and partial resets</a><ul>
+<li><a class="reference internal" href="#batching-environments-and-locking-the-batch">Batching environments and locking the batch</a></li>
+<li><a class="reference internal" href="#partial-steps">Partial Steps</a></li>
+<li><a class="reference internal" href="#partial-resets">Partial Resets</a></li>
+<li><a class="reference internal" href="#partial-resets-in-detail">Partial resets in detail</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#async-environments">Async environments</a><ul>
+<li><a class="reference internal" href="#classes">Classes</a></li>
+<li><a class="reference internal" href="#example">Example</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../',
+            VERSION:'0.11',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../_static/doctools.js"></script>
+      <script type="text/javascript" src="../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../_static/design-tabs.js"></script>
+
+  
+
+  <script type="text/javascript" src="../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="#">Get Started</a>
+          </li>
+
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+    })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
+  </script>
+</body>
+</html>

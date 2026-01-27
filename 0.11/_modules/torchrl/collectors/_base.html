@@ -1,0 +1,1618 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.collectors._base &mdash; torchrl 0.11 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../_static/pytorch.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+
+  
+  <script src="../../../_static/js/modernizr.min.js"></script>
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+  <div>
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../versions.html"><span style="font-size:110%">0.11 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.collectors._base</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
+        </div>
+
+        <div class="pytorch-content-left">
+    
+    
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" class="pytorch-article">
+              
+  <h1>Source code for torchrl.collectors._base</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">abc</span>
+<span class="kn">import</span> <span class="nn">contextlib</span>
+<span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">import</span> <span class="nn">typing</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span>
+<span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">deepcopy</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">overload</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span> <span class="nn">tensordict.base</span> <span class="kn">import</span> <span class="n">NO_DEFAULT</span>
+<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModule</span><span class="p">,</span> <span class="n">TensorDictModuleBase</span>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span> <span class="k">as</span> <span class="n">nn</span>
+<span class="kn">from</span> <span class="nn">torch.utils.data</span> <span class="kn">import</span> <span class="n">IterableDataset</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors.utils</span> <span class="kn">import</span> <span class="n">_map_weight</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.collectors.weight_update</span> <span class="kn">import</span> <span class="n">WeightUpdaterBase</span>
+<span class="kn">from</span> <span class="nn">torchrl.weight_update.utils</span> <span class="kn">import</span> <span class="n">_resolve_attr</span>
+<span class="kn">from</span> <span class="nn">torchrl.weight_update.weight_sync_schemes</span> <span class="kn">import</span> <span class="n">WeightSyncScheme</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">ProfileConfig</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Configuration for profiling collector workers.</span>
+
+<span class="sd">    This class holds all the settings for profiling collector rollouts</span>
+<span class="sd">    using PyTorch&#39;s profiler. It&#39;s designed to work across all collector types.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        workers: List of worker indices to profile. For single-process collectors</span>
+<span class="sd">            (like Collector), this is ignored. For multi-process collectors</span>
+<span class="sd">            (like MultiSyncCollector, MultiAsyncCollector), only the specified</span>
+<span class="sd">            workers will be profiled. Defaults to [0].</span>
+<span class="sd">        num_rollouts: Total number of rollouts to profile (including warmup).</span>
+<span class="sd">            After this many rollouts, profiling stops. Defaults to 3.</span>
+<span class="sd">        warmup_rollouts: Number of rollouts to skip before starting actual</span>
+<span class="sd">            profiling. This allows JIT/compile warmup. Defaults to 1.</span>
+<span class="sd">        save_path: Path to save the profiling trace. If None, traces are saved</span>
+<span class="sd">            to &quot;./collector_profile_{worker_idx}.json&quot;. Supports {worker_idx}</span>
+<span class="sd">            placeholder for worker-specific files.</span>
+<span class="sd">        activities: List of profiler activities. Defaults to CPU and CUDA.</span>
+<span class="sd">        record_shapes: Whether to record tensor shapes. Defaults to True.</span>
+<span class="sd">        profile_memory: Whether to profile memory usage. Defaults to False.</span>
+<span class="sd">        with_stack: Whether to record stack traces. Defaults to True.</span>
+<span class="sd">        with_flops: Whether to compute FLOPS. Defaults to False.</span>
+<span class="sd">        on_trace_ready: Optional callback when trace is ready. If None,</span>
+<span class="sd">            traces are exported to Chrome trace format at save_path.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.collectors import MultiSyncCollector, ProfileConfig</span>
+<span class="sd">        &gt;&gt;&gt; collector = MultiSyncCollector(...)</span>
+<span class="sd">        &gt;&gt;&gt; collector.enable_profile(</span>
+<span class="sd">        ...     workers=[0],</span>
+<span class="sd">        ...     num_rollouts=5,</span>
+<span class="sd">        ...     warmup_rollouts=2,</span>
+<span class="sd">        ...     save_path=&quot;./traces/worker_{worker_idx}.json&quot;,</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; for data in collector:</span>
+<span class="sd">        ...     # First worker will be profiled for rollouts 2-4</span>
+<span class="sd">        ...     process(data)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">workers</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">num_rollouts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span>
+    <span class="n">warmup_rollouts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">save_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">activities</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="s2">&quot;cuda&quot;</span><span class="p">])</span>
+    <span class="n">record_shapes</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">profile_memory</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">with_stack</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">with_flops</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">on_trace_ready</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate configuration after initialization.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_rollouts</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">warmup_rollouts</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;num_rollouts (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">num_rollouts</span><span class="si">}</span><span class="s2">) must be greater than &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;warmup_rollouts (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">warmup_rollouts</span><span class="si">}</span><span class="s2">)&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">warmup_rollouts</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;warmup_rollouts must be &gt;= 0, got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">warmup_rollouts</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">get_save_path</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the save path for a specific worker.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            worker_idx: The worker index.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Path object for the trace file.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">save_path</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;./collector_profile_</span><span class="si">{</span><span class="n">worker_idx</span><span class="si">}</span><span class="s2">.json&quot;</span><span class="p">)</span>
+        <span class="n">path_str</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">save_path</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">worker_idx</span><span class="o">=</span><span class="n">worker_idx</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">path_str</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">get_activities</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get PyTorch profiler activity list.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            List of torch.profiler.ProfilerActivity values.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span> <span class="nn">torch.profiler</span>
+
+        <span class="n">activity_map</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;cpu&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">profiler</span><span class="o">.</span><span class="n">ProfilerActivity</span><span class="o">.</span><span class="n">CPU</span><span class="p">,</span>
+            <span class="s2">&quot;cuda&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">profiler</span><span class="o">.</span><span class="n">ProfilerActivity</span><span class="o">.</span><span class="n">CUDA</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">activity</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">activities</span><span class="p">:</span>
+            <span class="n">activity_lower</span> <span class="o">=</span> <span class="n">activity</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">activity_lower</span> <span class="ow">in</span> <span class="n">activity_map</span><span class="p">:</span>
+                <span class="c1"># Only add CUDA if CUDA is available</span>
+                <span class="k">if</span> <span class="n">activity_lower</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+                    <span class="k">continue</span>
+                <span class="n">result</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">activity_map</span><span class="p">[</span><span class="n">activity_lower</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="k">def</span> <span class="nf">should_profile_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if a specific worker should be profiled.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            worker_idx: The worker index to check.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            True if this worker should be profiled.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">worker_idx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">workers</span>
+
+
+<div class="viewcode-block" id="BaseCollector">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector">[docs]</a>
+<span class="k">class</span> <span class="nc">BaseCollector</span><span class="p">(</span><span class="n">IterableDataset</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Base class for data collectors.&quot;&quot;&quot;</span>
+
+    <span class="n">_task</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">_iterator</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">_iteration_started</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">requested_frames_per_batch</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">trust_policy</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">compiled_policy</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">cudagraphed_policy</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">_weight_updater</span><span class="p">:</span> <span class="n">WeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">_weight_sync_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightSyncScheme</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">_profile_config</span><span class="p">:</span> <span class="n">ProfileConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="BaseCollector.enable_profile">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.enable_profile">[docs]</a>
+    <span class="k">def</span> <span class="nf">enable_profile</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">workers</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_rollouts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span>
+        <span class="n">warmup_rollouts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">save_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">activities</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">record_shapes</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">profile_memory</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">with_stack</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">with_flops</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">on_trace_ready</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Enable profiling for collector worker rollouts.</span>
+
+<span class="sd">        This method configures the collector to profile rollouts using PyTorch&#39;s</span>
+<span class="sd">        profiler. For multi-process collectors, profiling happens in the worker</span>
+<span class="sd">        processes. For single-process collectors (Collector), profiling happens</span>
+<span class="sd">        in the main process.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            workers: List of worker indices to profile. Defaults to [0].</span>
+<span class="sd">                For single-process collectors, this is ignored.</span>
+<span class="sd">            num_rollouts: Total number of rollouts to run the profiler for</span>
+<span class="sd">                (including warmup). Profiling stops after this many rollouts.</span>
+<span class="sd">                Defaults to 3.</span>
+<span class="sd">            warmup_rollouts: Number of rollouts to skip before starting actual</span>
+<span class="sd">                profiling. Useful for JIT/compile warmup. The profiler runs</span>
+<span class="sd">                but discards data during warmup. Defaults to 1.</span>
+<span class="sd">            save_path: Path to save the profiling trace. Supports {worker_idx}</span>
+<span class="sd">                placeholder for worker-specific files. If None, traces are</span>
+<span class="sd">                saved to &quot;./collector_profile_{worker_idx}.json&quot;.</span>
+<span class="sd">            activities: List of profiler activities (&quot;cpu&quot;, &quot;cuda&quot;).</span>
+<span class="sd">                Defaults to [&quot;cpu&quot;, &quot;cuda&quot;].</span>
+<span class="sd">            record_shapes: Whether to record tensor shapes. Defaults to True.</span>
+<span class="sd">            profile_memory: Whether to profile memory usage. Defaults to False.</span>
+<span class="sd">            with_stack: Whether to record Python stack traces. Defaults to True.</span>
+<span class="sd">            with_flops: Whether to compute FLOPS. Defaults to False.</span>
+<span class="sd">            on_trace_ready: Optional callback when trace is ready. If None,</span>
+<span class="sd">                traces are exported to Chrome trace format at save_path.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            RuntimeError: If called after iteration has started.</span>
+<span class="sd">            ValueError: If num_rollouts &lt;= warmup_rollouts.</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.collectors import MultiSyncCollector</span>
+<span class="sd">            &gt;&gt;&gt; collector = MultiSyncCollector(</span>
+<span class="sd">            ...     create_env_fn=[make_env] * 4,</span>
+<span class="sd">            ...     policy=policy,</span>
+<span class="sd">            ...     frames_per_batch=1000,</span>
+<span class="sd">            ...     total_frames=100000,</span>
+<span class="sd">            ... )</span>
+<span class="sd">            &gt;&gt;&gt; collector.enable_profile(</span>
+<span class="sd">            ...     workers=[0],</span>
+<span class="sd">            ...     num_rollouts=5,</span>
+<span class="sd">            ...     warmup_rollouts=2,</span>
+<span class="sd">            ...     save_path=&quot;./traces/worker_{worker_idx}.json&quot;,</span>
+<span class="sd">            ... )</span>
+<span class="sd">            &gt;&gt;&gt; # Worker 0 will be profiled for rollouts 2, 3, 4</span>
+<span class="sd">            &gt;&gt;&gt; for data in collector:</span>
+<span class="sd">            ...     train(data)</span>
+<span class="sd">            &gt;&gt;&gt; collector.shutdown()</span>
+
+<span class="sd">        Note:</span>
+<span class="sd">            - Profiling adds overhead, so only profile specific workers</span>
+<span class="sd">            - The trace file can be viewed in Chrome&#39;s trace viewer</span>
+<span class="sd">              (chrome://tracing) or with PyTorch&#39;s TensorBoard plugin</span>
+<span class="sd">            - For multi-process collectors, this must be called BEFORE</span>
+<span class="sd">              iteration starts as it needs to configure workers</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_iteration_started</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot enable profiling after iteration has started. &quot;</span>
+                <span class="s2">&quot;Call enable_profile() before iterating over the collector.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">workers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">workers</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">activities</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">activities</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="s2">&quot;cuda&quot;</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span> <span class="o">=</span> <span class="n">ProfileConfig</span><span class="p">(</span>
+            <span class="n">workers</span><span class="o">=</span><span class="n">workers</span><span class="p">,</span>
+            <span class="n">num_rollouts</span><span class="o">=</span><span class="n">num_rollouts</span><span class="p">,</span>
+            <span class="n">warmup_rollouts</span><span class="o">=</span><span class="n">warmup_rollouts</span><span class="p">,</span>
+            <span class="n">save_path</span><span class="o">=</span><span class="n">save_path</span><span class="p">,</span>
+            <span class="n">activities</span><span class="o">=</span><span class="n">activities</span><span class="p">,</span>
+            <span class="n">record_shapes</span><span class="o">=</span><span class="n">record_shapes</span><span class="p">,</span>
+            <span class="n">profile_memory</span><span class="o">=</span><span class="n">profile_memory</span><span class="p">,</span>
+            <span class="n">with_stack</span><span class="o">=</span><span class="n">with_stack</span><span class="p">,</span>
+            <span class="n">with_flops</span><span class="o">=</span><span class="n">with_flops</span><span class="p">,</span>
+            <span class="n">on_trace_ready</span><span class="o">=</span><span class="n">on_trace_ready</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">profile_config</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ProfileConfig</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the profiling configuration.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            ProfileConfig if profiling is enabled, None otherwise.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">weight_updater</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">WeightUpdaterBase</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_updater</span>
+
+    <span class="nd">@weight_updater</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">weight_updater</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">WeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">WeightUpdaterBase</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">callable</span><span class="p">(</span>
+                <span class="n">value</span>
+            <span class="p">):</span>  <span class="c1"># Fall back to default constructor</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="p">()</span>
+            <span class="n">value</span><span class="o">.</span><span class="n">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">collector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Failed to register collector.&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_weight_updater</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">worker_idx</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the worker index for this collector.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The worker index (0-indexed).</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            RuntimeError: If worker_idx has not been set.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_worker_idx&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;worker_idx has not been set. This collector may not have been &quot;</span>
+                <span class="s2">&quot;initialized as a worker in a distributed setup.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span>
+
+    <span class="nd">@worker_idx</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">worker_idx</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set the worker index for this collector.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            value: The worker index (0-indexed) or None.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span> <span class="o">=</span> <span class="n">value</span>
+
+<div class="viewcode-block" id="BaseCollector.cascade_execute">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.cascade_execute">[docs]</a>
+    <span class="k">def</span> <span class="nf">cascade_execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Execute a method on a nested attribute of this collector.</span>
+
+<span class="sd">        This method allows remote callers to invoke methods on nested attributes</span>
+<span class="sd">        of the collector without needing to know the full structure. It&#39;s particularly</span>
+<span class="sd">        useful for calling methods on weight sync schemes from the sender side.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            attr_path: Full path to the callable, e.g.,</span>
+<span class="sd">                &quot;_receiver_schemes[&#39;model_id&#39;]._set_dist_connection_info&quot;</span>
+<span class="sd">            *args: Positional arguments to pass to the method.</span>
+<span class="sd">            **kwargs: Keyword arguments to pass to the method.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The return value of the method call.</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            &gt;&gt;&gt; collector.cascade_execute(</span>
+<span class="sd">            ...     &quot;_receiver_schemes[&#39;policy&#39;]._set_dist_connection_info&quot;,</span>
+<span class="sd">            ...     connection_info_ref,</span>
+<span class="sd">            ...     worker_idx=0</span>
+<span class="sd">            ... )</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">attr</span> <span class="o">=</span> <span class="n">_resolve_attr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr_path</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">attr</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">attr</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">args</span> <span class="ow">or</span> <span class="n">kwargs</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Arguments and keyword arguments are not supported for non-callable attributes. Got </span><span class="si">{</span><span class="n">args</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="n">kwargs</span><span class="si">}</span><span class="s2"> for </span><span class="si">{</span><span class="n">attr_path</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="n">attr</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_get_policy_and_device</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">policy</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">policy_device</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">NO_DEFAULT</span><span class="p">,</span>
+        <span class="n">env_maker</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">env_maker_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">TensorDictModule</span><span class="p">,</span> <span class="kc">None</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="nb">dict</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Util method to get a policy and its device given the collector __init__ inputs.</span>
+
+<span class="sd">        We want to copy the policy and then move the data there, not call policy.to(device).</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            policy (TensorDictModule, optional): a policy to be used</span>
+<span class="sd">            policy_device (torch.device, optional): the device where the policy should be placed.</span>
+<span class="sd">                Defaults to self.policy_device</span>
+<span class="sd">            env_maker (a callable or a batched env, optional): the env_maker function for this device/policy pair.</span>
+<span class="sd">            env_maker_kwargs (a dict, optional): the env_maker function kwargs.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">policy_device</span> <span class="ow">is</span> <span class="n">NO_DEFAULT</span><span class="p">:</span>
+            <span class="n">policy_device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">policy_device</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">policy</span><span class="p">,</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+            <span class="n">param_and_buf</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">as_module</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Because we want to reach the warning</span>
+            <span class="n">param_and_buf</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">()</span>
+
+        <span class="n">i</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">param_and_buf</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">policy_device</span><span class="p">:</span>
+                <span class="c1"># Then we need casting</span>
+                <span class="k">break</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">trust_policy</span><span class="p">:</span>
+                <span class="c1"># We trust that the policy policy device is adequate</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="s2">&quot;A policy device was provided but no parameter/buffer could be found in &quot;</span>
+                    <span class="s2">&quot;the policy. Casting to policy_device is therefore impossible. &quot;</span>
+                    <span class="s2">&quot;The collector will trust that the devices match. To suppress this &quot;</span>
+                    <span class="s2">&quot;warning, set `trust_policy=True` when building the collector.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="n">policy</span><span class="p">,</span> <span class="kc">None</span>
+
+        <span class="c1"># Create a stateless policy, then populate this copy with params on device</span>
+        <span class="k">def</span> <span class="nf">get_original_weights</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">):</span>
+            <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">td</span><span class="o">.</span><span class="n">data</span>
+
+        <span class="c1"># We need to use &quot;.data&quot; otherwise buffers may disappear from the `get_original_weights` function</span>
+        <span class="k">with</span> <span class="n">param_and_buf</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;meta&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">policy</span><span class="p">):</span>
+            <span class="n">policy_new_device</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
+
+        <span class="n">param_and_buf_new_device</span> <span class="o">=</span> <span class="n">param_and_buf</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+            <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">_map_weight</span><span class="p">,</span> <span class="n">policy_device</span><span class="o">=</span><span class="n">policy_device</span><span class="p">),</span>
+            <span class="n">filter_empty</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">param_and_buf_new_device</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">policy_new_device</span><span class="p">)</span>
+        <span class="c1"># Sanity check</span>
+        <span class="k">if</span> <span class="nb">set</span><span class="p">(</span><span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy_new_device</span><span class="p">)</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">set</span><span class="p">(</span>
+            <span class="n">get_original_weights</span><span class="p">()</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Failed to map weights. The weight sets mismatch.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">policy_new_device</span><span class="p">,</span> <span class="n">get_original_weights</span>
+
+<div class="viewcode-block" id="BaseCollector.start">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.start">[docs]</a>
+    <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Starts the collector for asynchronous data collection.</span>
+
+<span class="sd">        This method initiates the background collection of data, allowing for decoupling of data collection and training.</span>
+
+<span class="sd">        The collected data is typically stored in a replay buffer passed during the collector&#39;s initialization.</span>
+
+<span class="sd">        .. note:: After calling this method, it&#39;s essential to shut down the collector using :meth:`~.async_shutdown`</span>
+<span class="sd">            when you&#39;re done with it to free up resources.</span>
+
+<span class="sd">        .. warning:: Asynchronous data collection can significantly impact training performance due to its decoupled nature.</span>
+<span class="sd">            Ensure you understand the implications for your specific algorithm before using this mode.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            NotImplementedError: If not implemented by a subclass.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Collector start() is not implemented for </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseCollector.pause">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.pause">[docs]</a>
+    <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
+    <span class="k">def</span> <span class="nf">pause</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Context manager that pauses the collector if it is running free.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Collector pause() is not implemented for </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseCollector.async_shutdown">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.async_shutdown">[docs]</a>
+    <span class="k">def</span> <span class="nf">async_shutdown</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">close_env</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Shuts down the collector when started asynchronously with the `start` method.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            timeout (float, optional): The maximum time to wait for the collector to shutdown.</span>
+<span class="sd">            close_env (bool, optional): If True, the collector will close the contained environment.</span>
+<span class="sd">                Defaults to `True`.</span>
+
+<span class="sd">        .. seealso:: :meth:`~.start`</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span> <span class="n">close_env</span><span class="o">=</span><span class="n">close_env</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_extract_weights_if_needed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract weights from a model if needed.</span>
+
+<span class="sd">        For the new weight sync scheme system, weight preparation is handled</span>
+<span class="sd">        by the scheme&#39;s prepare_weights() method. This method now only handles</span>
+<span class="sd">        legacy weight updater cases.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            weights: Either already-extracted weights or a model to extract from.</span>
+<span class="sd">            model_id: The model identifier for resolving string paths.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Extracted weights in the appropriate format.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># New weight sync schemes handle preparation themselves</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="p">:</span>
+            <span class="c1"># Just pass through - WeightSender will call scheme.prepare_weights()</span>
+            <span class="k">return</span> <span class="n">weights</span>
+
+        <span class="c1"># Legacy weight updater path</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_legacy_extract_weights</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">model_id</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_legacy_extract_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Legacy weight extraction for old weight updater system.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            weights: Either already-extracted weights or a model to extract from.</span>
+<span class="sd">            model_id: The model identifier.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Extracted weights.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">model_id</span> <span class="o">==</span> <span class="s2">&quot;policy&quot;</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;policy_weights&quot;</span><span class="p">):</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span>
+            <span class="k">elif</span> <span class="n">model_id</span> <span class="o">==</span> <span class="s2">&quot;policy&quot;</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_policy_weights_dict&quot;</span><span class="p">):</span>
+                <span class="n">policy_device</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span>
+                    <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="p">)</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">policy_device</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="k">return</span> <span class="n">weights</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">_legacy_weight_updater</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_updater</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+    <span class="c1"># Overloads for update_policy_weights_ to support multiple calling conventions</span>
+    <span class="nd">@overload</span>
+    <span class="k">def</span> <span class="nf">update_policy_weights_</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="o">/</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="o">...</span>
+
+    <span class="nd">@overload</span>
+    <span class="k">def</span> <span class="nf">update_policy_weights_</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="o">/</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="o">...</span>
+
+    <span class="nd">@overload</span>
+    <span class="k">def</span> <span class="nf">update_policy_weights_</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="o">...</span>
+
+    <span class="nd">@overload</span>
+    <span class="k">def</span> <span class="nf">update_policy_weights_</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">policy</span><span class="p">:</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+        <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="o">...</span>
+
+    <span class="nd">@overload</span>
+    <span class="k">def</span> <span class="nf">update_policy_weights_</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">weights_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span>
+            <span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span> <span class="o">|</span> <span class="nb">dict</span>
+        <span class="p">],</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="o">...</span>
+
+<div class="viewcode-block" id="BaseCollector.update_policy_weights_">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.update_policy_weights_">[docs]</a>
+    <span class="k">def</span> <span class="nf">update_policy_weights_</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+        <span class="o">|</span> <span class="n">TensorDictModuleBase</span>
+        <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span>
+        <span class="o">|</span> <span class="nb">dict</span>
+        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">policy</span><span class="p">:</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weights_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update policy weights for the data collector.</span>
+
+<span class="sd">        This method synchronizes the policy weights used by the collector with the latest</span>
+<span class="sd">        trained weights. It supports both local and remote weight updates, depending on</span>
+<span class="sd">        the collector configuration.</span>
+
+<span class="sd">        The method accepts weights in multiple forms for convenience:</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            &gt;&gt;&gt; # Pass policy module as positional argument</span>
+<span class="sd">            &gt;&gt;&gt; collector.update_policy_weights_(policy_module)</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; # Pass TensorDict weights as positional argument</span>
+<span class="sd">            &gt;&gt;&gt; collector.update_policy_weights_(weights_tensordict)</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; # Use keyword arguments for clarity</span>
+<span class="sd">            &gt;&gt;&gt; collector.update_policy_weights_(weights=weights_td, model_id=&quot;actor&quot;)</span>
+<span class="sd">            &gt;&gt;&gt; collector.update_policy_weights_(policy=actor_module, model_id=&quot;actor&quot;)</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; # Update multiple models atomically</span>
+<span class="sd">            &gt;&gt;&gt; collector.update_policy_weights_(weights_dict={</span>
+<span class="sd">            ...     &quot;actor&quot;: actor_weights,</span>
+<span class="sd">            ...     &quot;critic&quot;: critic_weights,</span>
+<span class="sd">            ... })</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            policy_or_weights: The weights to update with. Can be:</span>
+
+<span class="sd">                - ``nn.Module``: A policy module whose weights will be extracted</span>
+<span class="sd">                - ``TensorDictModuleBase``: A TensorDict module whose weights will be extracted</span>
+<span class="sd">                - ``TensorDictBase``: A TensorDict containing weights</span>
+<span class="sd">                - ``dict``: A regular dict containing weights</span>
+<span class="sd">                - ``None``: Will try to get weights from server using ``_get_server_weights()``</span>
+
+<span class="sd">        Keyword Args:</span>
+<span class="sd">            weights: Alternative to positional argument. A TensorDict or dict containing</span>
+<span class="sd">                weights to update. Cannot be used together with ``policy_or_weights`` or ``policy``.</span>
+<span class="sd">            policy: Alternative to positional argument. An ``nn.Module`` or ``TensorDictModuleBase``</span>
+<span class="sd">                whose weights will be extracted. Cannot be used together with ``policy_or_weights``</span>
+<span class="sd">                or ``weights``.</span>
+<span class="sd">            worker_ids: Identifiers for the workers to update. Relevant when the collector</span>
+<span class="sd">                has multiple workers. Can be int, list of ints, device, or list of devices.</span>
+<span class="sd">            model_id: The model identifier to update (default: ``&quot;policy&quot;``).</span>
+<span class="sd">                Cannot be used together with ``weights_dict``.</span>
+<span class="sd">            weights_dict: Dictionary mapping model_id to weights for updating</span>
+<span class="sd">                multiple models atomically. Keys should match model_ids registered in</span>
+<span class="sd">                ``weight_sync_schemes``. Cannot be used together with ``model_id``,</span>
+<span class="sd">                ``policy_or_weights``, ``weights``, or ``policy``.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            TypeError: If ``worker_ids`` is provided but no ``weight_updater`` is configured.</span>
+<span class="sd">            ValueError: If conflicting parameters are provided.</span>
+
+<span class="sd">        .. note:: Users should extend the ``WeightUpdaterBase`` classes to customize</span>
+<span class="sd">            the weight update logic for specific use cases.</span>
+
+<span class="sd">        .. seealso:: :class:`~torchrl.collectors.LocalWeightsUpdaterBase` and</span>
+<span class="sd">            :meth:`~torchrl.collectors.RemoteWeightsUpdaterBase`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Handle the different keyword argument forms</span>
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">policy_or_weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Cannot specify both positional &#39;policy_or_weights&#39; and keyword &#39;weights&#39;&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot specify both &#39;weights&#39; and &#39;policy&#39;&quot;</span><span class="p">)</span>
+            <span class="n">policy_or_weights</span> <span class="o">=</span> <span class="n">weights</span>
+
+        <span class="k">if</span> <span class="n">policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">policy_or_weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Cannot specify both positional &#39;policy_or_weights&#39; and keyword &#39;policy&#39;&quot;</span>
+                <span class="p">)</span>
+            <span class="n">policy_or_weights</span> <span class="o">=</span> <span class="n">policy</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_legacy_weight_updater</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_legacy_weight_update_impl</span><span class="p">(</span>
+                <span class="n">policy_or_weights</span><span class="o">=</span><span class="n">policy_or_weights</span><span class="p">,</span>
+                <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">,</span>
+                <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span>
+                <span class="n">weights_dict</span><span class="o">=</span><span class="n">weights_dict</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_update_impl</span><span class="p">(</span>
+                <span class="n">policy_or_weights</span><span class="o">=</span><span class="n">policy_or_weights</span><span class="p">,</span>
+                <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">,</span>
+                <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span>
+                <span class="n">weights_dict</span><span class="o">=</span><span class="n">weights_dict</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_legacy_weight_update_impl</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weights_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">weights_dict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;weights_dict is not supported with legacy weight updater&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">model_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;model_id is not supported with legacy weight updater&quot;</span><span class="p">)</span>
+        <span class="c1"># Fall back to old weight updater system</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span><span class="p">(</span>
+            <span class="n">policy_or_weights</span><span class="o">=</span><span class="n">policy_or_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_weight_update_impl</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weights_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="s2">&quot;policy_weights&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;`policy_weights` is deprecated. Use `policy_or_weights` instead.&quot;</span><span class="p">,</span>
+                <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">policy_or_weights</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;policy_weights&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">weights_dict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">model_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot specify both &#39;weights_dict&#39; and &#39;model_id&#39;&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">weights_dict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">policy_or_weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot specify both &#39;weights_dict&#39; and &#39;policy_or_weights&#39;&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">model_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">model_id</span> <span class="o">=</span> <span class="s2">&quot;policy&quot;</span>
+            <span class="k">if</span> <span class="n">policy_or_weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">weights_dict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># Use model_id as the key, not hardcoded &quot;policy&quot;</span>
+                <span class="n">weights_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">model_id</span><span class="p">:</span> <span class="n">policy_or_weights</span><span class="p">}</span>
+            <span class="k">elif</span> <span class="n">weights_dict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">weights_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">model_id</span><span class="p">:</span> <span class="n">policy_or_weights</span><span class="p">}</span>
+            <span class="k">for</span> <span class="n">target_model_id</span><span class="p">,</span> <span class="n">weights</span> <span class="ow">in</span> <span class="n">weights_dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">target_model_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Model &#39;</span><span class="si">{</span><span class="n">target_model_id</span><span class="si">}</span><span class="s2">&#39; not found in registered weight sync schemes. &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;Available models: </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">processed_weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extract_weights_if_needed</span><span class="p">(</span>
+                    <span class="n">weights</span><span class="p">,</span> <span class="n">target_model_id</span>
+                <span class="p">)</span>
+                <span class="c1"># Use new send() API with worker_ids support</span>
+                <span class="n">scheme</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">target_model_id</span><span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">scheme</span><span class="p">,</span> <span class="n">WeightSyncScheme</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected WeightSyncScheme, got </span><span class="si">{</span><span class="n">target_model_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_send_weights_scheme</span><span class="p">(</span>
+                    <span class="n">scheme</span><span class="o">=</span><span class="n">scheme</span><span class="p">,</span>
+                    <span class="n">processed_weights</span><span class="o">=</span><span class="n">processed_weights</span><span class="p">,</span>
+                    <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">,</span>
+                    <span class="n">model_id</span><span class="o">=</span><span class="n">target_model_id</span><span class="p">,</span>
+                <span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_updater</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># unreachable</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># No weight updater configured, try fallback</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_fallback_update</span><span class="p">(</span><span class="n">policy_or_weights</span><span class="p">,</span> <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_maybe_fallback_update</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fallback weight update when no scheme is configured.</span>
+
+<span class="sd">        Override in subclasses to provide custom fallback behavior.</span>
+<span class="sd">        By default, this is a no-op.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">_send_weights_scheme</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">model_id</span><span class="p">,</span> <span class="n">scheme</span><span class="p">,</span> <span class="n">processed_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="p">):</span>
+        <span class="c1"># method to override if the scheme requires an RPC call to receive the weights</span>
+        <span class="n">scheme</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">weights</span><span class="o">=</span><span class="n">processed_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_receive_weights_scheme</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Receive weights for all registered receiver schemes.</span>
+
+<span class="sd">        scheme.receive() handles both applying weights locally and cascading</span>
+<span class="sd">        to sub-collectors via context.update_policy_weights_().</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_receiver_schemes&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;No receiver schemes registered.&quot;</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">scheme</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_schemes</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">scheme</span><span class="o">.</span><span class="n">receive</span><span class="p">()</span>
+
+    <span class="c1"># Overloads for receive_weights to support multiple calling conventions</span>
+    <span class="nd">@overload</span>
+    <span class="k">def</span> <span class="nf">receive_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="o">...</span>
+
+    <span class="nd">@overload</span>
+    <span class="k">def</span> <span class="nf">receive_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="o">/</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="o">...</span>
+
+    <span class="nd">@overload</span>
+    <span class="k">def</span> <span class="nf">receive_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="o">...</span>
+
+    <span class="nd">@overload</span>
+    <span class="k">def</span> <span class="nf">receive_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">policy</span><span class="p">:</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="o">...</span>
+
+<div class="viewcode-block" id="BaseCollector.receive_weights">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.receive_weights">[docs]</a>
+    <span class="k">def</span> <span class="nf">receive_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+        <span class="o">|</span> <span class="n">TensorDictModuleBase</span>
+        <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span>
+        <span class="o">|</span> <span class="nb">dict</span>
+        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">policy</span><span class="p">:</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Receive and apply weights to the collector&#39;s policy.</span>
+
+<span class="sd">        This method applies weights to the local policy. When receiver schemes are</span>
+<span class="sd">        registered, it delegates to those schemes. Otherwise, it directly applies</span>
+<span class="sd">        the provided weights.</span>
+
+<span class="sd">        The method accepts weights in multiple forms for convenience:</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            &gt;&gt;&gt; # Receive from registered schemes (distributed collectors)</span>
+<span class="sd">            &gt;&gt;&gt; collector.receive_weights()</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; # Apply weights from a policy module (positional)</span>
+<span class="sd">            &gt;&gt;&gt; collector.receive_weights(trained_policy)</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; # Apply weights from a TensorDict (positional)</span>
+<span class="sd">            &gt;&gt;&gt; collector.receive_weights(weights_tensordict)</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; # Use keyword arguments for clarity</span>
+<span class="sd">            &gt;&gt;&gt; collector.receive_weights(weights=weights_td)</span>
+<span class="sd">            &gt;&gt;&gt; collector.receive_weights(policy=trained_policy)</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            policy_or_weights: The weights to apply. Can be:</span>
+
+<span class="sd">                - ``nn.Module``: A policy module whose weights will be extracted and applied</span>
+<span class="sd">                - ``TensorDictModuleBase``: A TensorDict module whose weights will be extracted</span>
+<span class="sd">                - ``TensorDictBase``: A TensorDict containing weights</span>
+<span class="sd">                - ``dict``: A regular dict containing weights</span>
+<span class="sd">                - ``None``: Receive from registered schemes or mirror from original policy</span>
+
+<span class="sd">        Keyword Args:</span>
+<span class="sd">            weights: Alternative to positional argument. A TensorDict or dict containing</span>
+<span class="sd">                weights to apply. Cannot be used together with ``policy_or_weights`` or ``policy``.</span>
+<span class="sd">            policy: Alternative to positional argument. An ``nn.Module`` or ``TensorDictModuleBase``</span>
+<span class="sd">                whose weights will be extracted. Cannot be used together with ``policy_or_weights``</span>
+<span class="sd">                or ``weights``.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If conflicting parameters are provided or if arguments are passed</span>
+<span class="sd">                when receiver schemes are registered.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Handle the different keyword argument forms</span>
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">policy_or_weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Cannot specify both positional &#39;policy_or_weights&#39; and keyword &#39;weights&#39;&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot specify both &#39;weights&#39; and &#39;policy&#39;&quot;</span><span class="p">)</span>
+            <span class="n">policy_or_weights</span> <span class="o">=</span> <span class="n">weights</span>
+
+        <span class="k">if</span> <span class="n">policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">policy_or_weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Cannot specify both positional &#39;policy_or_weights&#39; and keyword &#39;policy&#39;&quot;</span>
+                <span class="p">)</span>
+            <span class="n">policy_or_weights</span> <span class="o">=</span> <span class="n">policy</span>
+
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_receiver_schemes&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">policy_or_weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Cannot specify &#39;policy_or_weights&#39; when using &#39;receiver_schemes&#39;. Schemes should know how to get the weights.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_receive_weights_scheme</span><span class="p">()</span>
+            <span class="k">return</span>
+
+        <span class="c1"># No weight updater configured</span>
+        <span class="c1"># For single-process collectors, apply weights locally if explicitly provided</span>
+        <span class="k">if</span> <span class="n">policy_or_weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">torchrl.weight_update.weight_sync_schemes</span> <span class="kn">import</span> <span class="n">WeightStrategy</span>
+
+            <span class="c1"># Use WeightStrategy to apply weights properly</span>
+            <span class="n">strategy</span> <span class="o">=</span> <span class="n">WeightStrategy</span><span class="p">(</span><span class="n">extract_as</span><span class="o">=</span><span class="s2">&quot;tensordict&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Extract weights if needed</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_or_weights</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+                <span class="n">weights</span> <span class="o">=</span> <span class="n">strategy</span><span class="o">.</span><span class="n">extract_weights</span><span class="p">(</span><span class="n">policy_or_weights</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">weights</span> <span class="o">=</span> <span class="n">policy_or_weights</span>
+
+            <span class="c1"># Apply to local policy</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;policy&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+                <span class="n">strategy</span><span class="o">.</span><span class="n">apply_weights</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span></div>
+
+        <span class="c1"># Otherwise, no action needed - policy is local and changes are immediately visible</span>
+
+<div class="viewcode-block" id="BaseCollector.register_scheme_receiver">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.register_scheme_receiver">[docs]</a>
+    <span class="k">def</span> <span class="nf">register_scheme_receiver</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">weight_recv_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightSyncScheme</span><span class="p">],</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">synchronize_weights</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">):</span>  <span class="c1"># noqa: D417</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set up receiver schemes for this collector to receive weights from parent collectors.</span>
+
+<span class="sd">        This method initializes receiver schemes and stores them in _receiver_schemes</span>
+<span class="sd">        for later use by _receive_weights_scheme() and receive_weights().</span>
+
+<span class="sd">        Receiver schemes enable cascading weight updates across collector hierarchies:</span>
+<span class="sd">        - Parent collector sends weights via its weight_sync_schemes (senders)</span>
+<span class="sd">        - Child collector receives weights via its weight_recv_schemes (receivers)</span>
+<span class="sd">        - If child is also a parent (intermediate node), it can propagate to its own children</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            weight_recv_schemes (dict[str, WeightSyncScheme]): Dictionary of {model_id: WeightSyncScheme} to set up as receivers.</span>
+<span class="sd">                These schemes will receive weights from parent collectors.</span>
+
+<span class="sd">        Keyword Args:</span>
+<span class="sd">            synchronize_weights (bool, optional): If True, synchronize weights immediately after registering the schemes.</span>
+<span class="sd">                Defaults to `True`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Initialize _receiver_schemes if not already present</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_receiver_schemes&quot;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_schemes</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="c1"># Initialize each scheme on the receiver side</span>
+        <span class="k">for</span> <span class="n">model_id</span><span class="p">,</span> <span class="n">scheme</span> <span class="ow">in</span> <span class="n">weight_recv_schemes</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">scheme</span><span class="o">.</span><span class="n">initialized_on_receiver</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">scheme</span><span class="o">.</span><span class="n">initialized_on_sender</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                        <span class="s2">&quot;Weight sync scheme cannot be initialized on both sender and receiver.&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">scheme</span><span class="o">.</span><span class="n">init_on_receiver</span><span class="p">(</span>
+                    <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span>
+                    <span class="n">context</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span>
+                    <span class="n">worker_idx</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">worker_idx</span><span class="p">,</span>
+                <span class="p">)</span>
+
+            <span class="c1"># Store the scheme for later use in receive_weights()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_schemes</span><span class="p">[</span><span class="n">model_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">scheme</span>
+
+        <span class="c1"># Perform initial synchronization</span>
+        <span class="k">if</span> <span class="n">synchronize_weights</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">scheme</span> <span class="ow">in</span> <span class="n">weight_recv_schemes</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">scheme</span><span class="o">.</span><span class="n">synchronized_on_receiver</span><span class="p">:</span>
+                    <span class="n">scheme</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">worker_idx</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">worker_idx</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">]:</span>
+        <span class="c1"># Mark that iteration has started (used by enable_profile check)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_iteration_started</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">iterator</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+            <span class="k">raise</span>
+
+    <span class="k">def</span> <span class="nf">next</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_iterator</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_iterator</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_iterator</span><span class="p">)</span>
+            <span class="c1"># if any, we don&#39;t want the device ref to be passed in distributed settings</span>
+            <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">):</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span><span class="o">.</span><span class="n">clear_device_</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">out</span>
+        <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">shutdown</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">close_env</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">raise_on_error</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">static_seed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OrderedDict</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">:</span> <span class="n">OrderedDict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span> <span class="nf">_read_compile_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">compile_policy</span><span class="p">,</span> <span class="n">cudagraph_policy</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">compiled_policy</span> <span class="o">=</span> <span class="n">compile_policy</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cudagraphed_policy</span> <span class="o">=</span> <span class="n">cudagraph_policy</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">compiled_policy_kwargs</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">{}</span> <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">compile_policy</span><span class="p">,</span> <span class="n">typing</span><span class="o">.</span><span class="n">Mapping</span><span class="p">)</span> <span class="k">else</span> <span class="n">compile_policy</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cudagraphed_policy_kwargs</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">{}</span> <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cudagraph_policy</span><span class="p">,</span> <span class="n">typing</span><span class="o">.</span><span class="n">Mapping</span><span class="p">)</span> <span class="k">else</span> <span class="n">cudagraph_policy</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="n">string</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">()&quot;</span>
+        <span class="k">return</span> <span class="n">string</span>
+
+    <span class="k">def</span> <span class="nf">__class_getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span> <span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="o">-</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span> <span class="o">//</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">requested_frames_per_batch</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Non-terminating collectors do not have a length&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="BaseCollector.init_updater">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.init_updater">[docs]</a>
+    <span class="k">def</span> <span class="nf">init_updater</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the weight updater with custom arguments.</span>
+
+<span class="sd">        This method passes the arguments to the weight updater&#39;s init method.</span>
+<span class="sd">        If no weight updater is set, this is a no-op.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            *args: Positional arguments for weight updater initialization</span>
+<span class="sd">            **kwargs: Keyword arguments for weight updater initialization</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+</div>
+
+
+
+<span class="k">def</span> <span class="nf">_make_legacy_metaclass</span><span class="p">(</span><span class="n">parent_metaclass</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a legacy metaclass for deprecated collector names.</span>
+
+<span class="sd">    This factory creates a metaclass that inherits from the given parent metaclass</span>
+<span class="sd">    to avoid metaclass conflicts.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">class</span> <span class="nc">_LegacyMeta</span><span class="p">(</span><span class="n">parent_metaclass</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Metaclass for deprecated collector class names.</span>
+
+<span class="sd">        Raises a deprecation warning when the old class name is instantiated,</span>
+<span class="sd">        and ensures isinstance() checks work for both old and new names.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> has been deprecated and will be removed in v0.13. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Please use </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__bases__</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> instead.&quot;</span><span class="p">,</span>
+                <span class="n">category</span><span class="o">=</span><span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">def</span> <span class="fm">__instancecheck__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">instance</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__instancecheck__</span><span class="p">(</span><span class="n">instance</span><span class="p">):</span>
+                <span class="k">return</span> <span class="kc">True</span>
+            <span class="n">parent_cls</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__bases__</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">instance</span><span class="p">,</span> <span class="n">parent_cls</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">_LegacyMeta</span>
+
+
+<span class="c1"># Default legacy metaclass for classes with abc.ABCMeta</span>
+<span class="n">_LegacyCollectorMeta</span> <span class="o">=</span> <span class="n">_make_legacy_metaclass</span><span class="p">(</span><span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">DataCollectorBase</span><span class="p">(</span><span class="n">BaseCollector</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_LegacyCollectorMeta</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Deprecated version of :class:`~torchrl.collectors.BaseCollector`.&quot;&quot;&quot;</span>
+
+    <span class="o">...</span>
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../../',
+            VERSION:'0.11',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../../../_static/doctools.js"></script>
+      <script type="text/javascript" src="../../../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../../../_static/design-tabs.js"></script>
+
+  
+
+  <script type="text/javascript" src="../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="#">Get Started</a>
+          </li>
+
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+    })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
+  </script>
+</body>
+</html>

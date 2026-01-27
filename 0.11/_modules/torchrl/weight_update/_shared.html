@@ -1,0 +1,1457 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.weight_update._shared &mdash; torchrl 0.11 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../_static/pytorch.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+
+  
+  <script src="../../../_static/js/modernizr.min.js"></script>
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+  <div>
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../versions.html"><span style="font-size:110%">0.11 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.weight_update._shared</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
+        </div>
+
+        <div class="pytorch-content-left">
+    
+    
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" class="pytorch-article">
+              
+  <h1>Source code for torchrl.weight_update._shared</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.distributed</span>
+
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">multiprocessing</span> <span class="k">as</span> <span class="n">mp</span><span class="p">,</span> <span class="n">nn</span>
+
+<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span> <span class="n">WEIGHT_SYNC_TIMEOUT</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.weight_update.utils</span> <span class="kn">import</span> <span class="n">_resolve_model</span>
+<span class="kn">from</span> <span class="nn">torchrl.weight_update.weight_sync_schemes</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">TransportBackend</span><span class="p">,</span>
+    <span class="n">WeightStrategy</span><span class="p">,</span>
+    <span class="n">WeightSyncScheme</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_close_mp_queue</span><span class="p">(</span><span class="n">queue</span><span class="p">:</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Close a multiprocessing Queue and wait for its feeder thread to exit.&quot;&quot;&quot;</span>
+    <span class="n">queue</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="n">queue</span><span class="o">.</span><span class="n">join_thread</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="SharedMemTransport">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport">[docs]</a>
+<span class="k">class</span> <span class="nc">SharedMemTransport</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Shared memory transport for in-place weight updates.</span>
+
+<span class="sd">    This transport uses queue-based buffer distribution for initialization, then</span>
+<span class="sd">    updates shared memory tensors directly for subsequent weight updates.</span>
+<span class="sd">    Workers automatically see weight updates without explicit communication.</span>
+
+<span class="sd">    Initialization flow:</span>
+<span class="sd">    - Shared memory buffers are created and sent to workers via per-worker queues</span>
+<span class="sd">    - Workers receive the buffer reference and apply weights to their models</span>
+<span class="sd">    - Subsequent updates are pure in-place shared memory (zero-copy)</span>
+
+<span class="sd">    Both CPU and CUDA tensors maintain shared references when sent through mp.Queue.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_params_map</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># a dict[worker_idx, TensorDictBase] map</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_weight_queues</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="kc">None</span>  <span class="c1"># Dict of per-worker queues for distributing shared weights</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">unique_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the unique weights.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The unique weights.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Unique weights not set. Call register_weights() first.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span>
+
+<div class="viewcode-block" id="SharedMemTransport.register_weights">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport.register_weights">[docs]</a>
+    <span class="k">def</span> <span class="nf">register_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">params_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">],</span> <span class="n">init_queues</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize per-worker queues for shared memory buffer distribution.&quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">torchrl.collectors.utils</span> <span class="kn">import</span> <span class="n">_cast</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_weight_queues</span> <span class="o">=</span> <span class="n">init_queues</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_params_map</span> <span class="o">=</span> <span class="n">params_map</span>
+        <span class="c1"># Create set of the unique weights</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">weights</span> <span class="ow">in</span> <span class="n">params_map</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="k">if</span> <span class="nb">id</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span> <span class="ow">in</span> <span class="p">[</span><span class="nb">id</span><span class="p">(</span><span class="n">w</span><span class="p">)</span> <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span><span class="p">]:</span>
+                <span class="k">continue</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_cast</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SharedMemTransport.setup_connection_and_weights_on_sender">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport.setup_connection_and_weights_on_sender">[docs]</a>
+    <span class="k">def</span> <span class="nf">setup_connection_and_weights_on_sender</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Send shared memory buffer reference to workers via their per-worker queues.</span>
+
+<span class="sd">        Both CPU and CUDA tensors maintain shared references through queues.</span>
+<span class="sd">        Each worker reads from its own dedicated queue, to avoid race conditions.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_queues</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Queues not created yet. Call init_on_sender() first.&quot;</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">worker_idx</span><span class="p">,</span> <span class="n">queue</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_queues</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_params_map</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span>
+            <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SharedMemTransport.setup_connection_and_weights_on_receiver">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport.setup_connection_and_weights_on_receiver">[docs]</a>
+    <span class="k">def</span> <span class="nf">setup_connection_and_weights_on_receiver</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">strategy</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">WEIGHT_SYNC_TIMEOUT</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Receive shared memory buffer reference from sender via their per-worker queues.</span>
+
+<span class="sd">        Each worker reads from its own dedicated queue, to avoid race conditions.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            worker_idx: The worker index.</span>
+<span class="sd">            weights: Ignored (weights come from queue).</span>
+<span class="sd">            model: Ignored.</span>
+<span class="sd">            strategy: Ignored.</span>
+<span class="sd">            timeout: Timeout for reading from queue.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The shared memory weights TensorDict.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_queues</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Queues not created yet. Call init_on_sender() first.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_queues</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Worker </span><span class="si">{</span><span class="n">worker_idx</span><span class="si">}</span><span class="s2"> not registered in queues.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Read from dedicated queue for this worker</span>
+        <span class="n">worker_queue</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span>
+        <span class="n">received_weights</span> <span class="o">=</span> <span class="n">worker_queue</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">received_weights</span></div>
+
+
+<div class="viewcode-block" id="SharedMemTransport.send_weights">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport.send_weights">[docs]</a>
+    <span class="k">def</span> <span class="nf">send_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update weights in-place in shared memory.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            weights: New weights to send. Can be a TensorDictBase or dict.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If weights type is unsupported.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Update shared memory in-place (workers see this automatically)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported weights type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="c1"># Unflatten if needed to match shared buffer structure</span>
+        <span class="n">weights_to_update</span> <span class="o">=</span> <span class="n">weights</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="s2">&quot;.&quot;</span> <span class="ow">in</span> <span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">weights</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
+            <span class="n">weights_to_update</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">unflatten_keys</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Detach weights to allow in-place updates (gradients are not needed for weight sync)</span>
+        <span class="n">weights_to_update</span> <span class="o">=</span> <span class="n">weights_to_update</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Unique weights not set. Call register_weights() first.&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">buffer</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">buffer</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;Gradients should not be required for shared memory buffers.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">weights_to_update</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Gradients should not be required for weights.&quot;</span><span class="p">)</span>
+            <span class="n">buffer</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">weights_to_update</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="SharedMemTransport.receive_weights">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport.receive_weights">[docs]</a>
+    <span class="k">def</span> <span class="nf">receive_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">strategy</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply shared memory weights to the model.</span>
+
+<span class="sd">        For shared memory, weights are already available (passed via the weights arg).</span>
+<span class="sd">        This method applies them to the model, matching the pattern of other transports.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            timeout: Ignored (shared memory access is instant).</span>
+<span class="sd">            weights: The shared memory buffer containing current weights.</span>
+<span class="sd">            model: The model to apply weights to.</span>
+<span class="sd">            strategy: Strategy for applying weights.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The applied weights, or None if not applied.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Apply weights to model if provided (same pattern as other transports)</span>
+        <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">strategy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Applying shared memory weights to model.&quot;</span><span class="p">)</span>
+            <span class="n">strategy</span><span class="o">.</span><span class="n">apply_weights</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">weights</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="SharedMemTransport.send_ack">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport.send_ack">[docs]</a>
+    <span class="k">def</span> <span class="nf">send_ack</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;updated&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;No-op for shared memory - no acknowledgment needed.&quot;&quot;&quot;</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="SharedMemWeightSyncScheme">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.SharedMemWeightSyncScheme.html#torchrl.weight_update.SharedMemWeightSyncScheme">[docs]</a>
+<span class="k">class</span> <span class="nc">SharedMemWeightSyncScheme</span><span class="p">(</span><span class="n">WeightSyncScheme</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Weight synchronization using shared memory.</span>
+
+<span class="sd">    This scheme uses shared memory for in-place weight updates. Workers</span>
+<span class="sd">    automatically see weight updates without explicit message passing.</span>
+
+<span class="sd">    A background thread on the receiver side listens for &quot;receive&quot; instructions</span>
+<span class="sd">    from the sender. When an instruction arrives, the thread applies the current</span>
+<span class="sd">    shared memory weights to the model and sends an acknowledgment.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        strategy: The weight transmission strategy (default: &quot;tensordict&quot;).</span>
+<span class="sd">        sync: If True (default), send() blocks until receiver acknowledges.</span>
+<span class="sd">            If False, send() returns immediately (use send_async/wait_async).</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; # Basic usage</span>
+<span class="sd">        &gt;&gt;&gt; scheme = SharedMemWeightSyncScheme()</span>
+<span class="sd">        &gt;&gt;&gt; # Weights are initialized via init_on_sender()</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">strategy</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;tensordict&quot;</span><span class="p">,</span>
+        <span class="n">sync</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">strategy</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sync</span> <span class="o">=</span> <span class="n">sync</span>
+        <span class="c1"># Create a single shared transport for all workers</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shared_transport</span> <span class="o">=</span> <span class="n">SharedMemTransport</span><span class="p">()</span>
+
+        <span class="c1"># Create per-worker queues to avoid race conditions</span>
+        <span class="c1"># Each worker gets its own queue for weight initialization</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_weight_init_queues</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># worker_idx -&gt; Queue</span>
+
+        <span class="c1"># Instruction queues: sender puts &quot;receive&quot; instruction, receiver&#39;s background thread reads</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># worker_idx -&gt; Queue</span>
+
+        <span class="c1"># Acknowledgment queues: receiver puts &quot;updated&quot; ack, sender reads for sync mode</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># worker_idx -&gt; Queue</span>
+
+        <span class="c1"># Receiver&#39;s instruction queue reference (set during init_on_receiver)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_instruction_queue</span><span class="p">:</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_ack_queue</span><span class="p">:</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">_init_on_sender_impl</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">context</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">params_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">devices</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device_map_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">int</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize on the main process (sender side).</span>
+
+<span class="sd">        We create a map dict[worker_idx, weights_on_device]. Each model will be assigned a device. If two workers</span>
+<span class="sd">        share the same device, the entry in the dict will be the same.</span>
+<span class="sd">        To do this, we need to know the number of workers, their assigned device, and have access to the parameters.</span>
+<span class="sd">        If a context is provided, we read the devices from it. If not, the dict[worker_idx, device] map must be provided</span>
+<span class="sd">        explicitly.</span>
+
+<span class="sd">        In some cases, the policy on the worker side will be on multiple devices which may or may not be the same as the</span>
+<span class="sd">        devices on the main process. In this case, init_on_sender() needs to receive a mapping function as argument that</span>
+<span class="sd">        will take as input the worker_idx and the parameters and return a new set of parameters on the desired devices.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            model_id: Identifier for the model being synchronized</span>
+<span class="sd">            context: Optional context object providing device_to_workers mapping and model access</span>
+<span class="sd">            weights: Pre-extracted weights as TensorDict (for policy factory usage)</span>
+<span class="sd">            model: Model to extract weights from</span>
+<span class="sd">            params_map: Direct mapping of worker_idx to weights on device (most explicit)</span>
+<span class="sd">            devices: List of devices for each worker</span>
+<span class="sd">            device_map_fn: Custom function to map worker_idx and weights to device-specific weights</span>
+<span class="sd">            num_workers: Number of workers (required with device_map_fn)</span>
+<span class="sd">            ctx: Multiprocessing context. Defaults to `mp.get_context()`.</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            Simple usage with collector context (stateful policy):</span>
+
+<span class="sd">            &gt;&gt;&gt; policy = make_stateful_policy()</span>
+<span class="sd">            &gt;&gt;&gt; scheme = SharedMemWeightSyncScheme(strategy=&quot;tensordict&quot;)</span>
+<span class="sd">            &gt;&gt;&gt; collector = MultiSyncCollector(</span>
+<span class="sd">            ...     create_env_fn=[lambda: GymEnv(&quot;CartPole-v1&quot;)],</span>
+<span class="sd">            ...     policy=policy,</span>
+<span class="sd">            ...     frames_per_batch=100,</span>
+<span class="sd">            ...     total_frames=1000,</span>
+<span class="sd">            ...     weight_sync_schemes={&quot;policy&quot;: scheme},</span>
+<span class="sd">            ... )</span>
+<span class="sd">            &gt;&gt;&gt; # scheme.init_on_sender() is called automatically by collector</span>
+
+<span class="sd">            Pre-initialized usage (policy factory):</span>
+
+<span class="sd">            &gt;&gt;&gt; policy_on_main = make_stateful_policy()</span>
+<span class="sd">            &gt;&gt;&gt; scheme = SharedMemWeightSyncScheme(strategy=&quot;tensordict&quot;)</span>
+<span class="sd">            &gt;&gt;&gt; # Must initialize before collector creation when using policy_factory</span>
+<span class="sd">            &gt;&gt;&gt; scheme.init_on_sender(</span>
+<span class="sd">            ...     model_id=&quot;policy&quot;,</span>
+<span class="sd">            ...     weights=TensorDict.from_module(policy_on_main),</span>
+<span class="sd">            ...     devices=[torch.device(&quot;cuda:0&quot;), torch.device(&quot;cuda:1&quot;)],</span>
+<span class="sd">            ...     num_workers=2,</span>
+<span class="sd">            ... )</span>
+<span class="sd">            &gt;&gt;&gt; collector = MultiSyncCollector(</span>
+<span class="sd">            ...     create_env_fn=[lambda: GymEnv(&quot;CartPole-v1&quot;)],</span>
+<span class="sd">            ...     policy_factory=[make_stateful_policy],</span>
+<span class="sd">            ...     frames_per_batch=100,</span>
+<span class="sd">            ...     total_frames=1000,</span>
+<span class="sd">            ...     weight_sync_schemes={&quot;policy&quot;: scheme},</span>
+<span class="sd">            ... )</span>
+
+<span class="sd">            Direct params_map usage (advanced):</span>
+
+<span class="sd">            &gt;&gt;&gt; weights_cpu = TensorDict.from_module(policy).share_memory_()</span>
+<span class="sd">            &gt;&gt;&gt; weights_cuda = weights_cpu.to(&quot;cuda&quot;).share_memory_()</span>
+<span class="sd">            &gt;&gt;&gt; scheme = SharedMemWeightSyncScheme(strategy=&quot;tensordict&quot;)</span>
+<span class="sd">            &gt;&gt;&gt; scheme.init_on_sender(</span>
+<span class="sd">            ...     model_id=&quot;policy&quot;,</span>
+<span class="sd">            ...     params_map={0: weights_cpu, 1: weights_cuda, 2: weights_cuda},</span>
+<span class="sd">            ... )</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Plan: the goal of this init is to obtain a map dict[worker_idx, weights_on_device] that we can use to init</span>
+        <span class="c1">#       the weights on the workers.</span>
+        <span class="c1">#       Scenarios:</span>
+        <span class="c1">#           - Easiest scenario: the user provides the map directly (params_map). Nothing to do other than creating</span>
+        <span class="c1">#                 the transport and registering the workers etc.</span>
+        <span class="c1">#           - The user provides a model or its params and a device map. We need to create the map from the params</span>
+        <span class="c1">#                 explicitly.</span>
+        <span class="c1">#           - The user provides a context (e.g. a Collector) and a model_id. Same as above, except that we need</span>
+        <span class="c1">#                 to collect the model from the context.</span>
+        <span class="n">params_map</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_params_map</span><span class="p">(</span>
+            <span class="n">context</span><span class="o">=</span><span class="n">context</span><span class="p">,</span>
+            <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span>
+            <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span>
+            <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+            <span class="n">params_map</span><span class="o">=</span><span class="n">params_map</span><span class="p">,</span>
+            <span class="n">devices</span><span class="o">=</span><span class="n">devices</span><span class="p">,</span>
+            <span class="n">device_map_fn</span><span class="o">=</span><span class="n">device_map_fn</span><span class="p">,</span>
+            <span class="n">num_workers</span><span class="o">=</span><span class="n">num_workers</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Create per-worker queues if not already created</span>
+        <span class="c1"># Collect all unique worker indices</span>
+        <span class="n">all_workers</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">params_map</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+
+        <span class="k">if</span> <span class="n">ctx</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ctx</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">get_context</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">worker_idx</span> <span class="ow">in</span> <span class="n">all_workers</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_init_queues</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_weight_init_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+            <span class="c1"># Create instruction queues for background receiver</span>
+            <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+            <span class="c1"># Create ack queues for synchronous mode</span>
+            <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+
+        <span class="c1"># Set worker info in transport</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shared_transport</span><span class="o">.</span><span class="n">register_weights</span><span class="p">(</span><span class="n">params_map</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_init_queues</span><span class="p">)</span>
+
+        <span class="c1"># Store model_id and context on scheme</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_id</span> <span class="o">=</span> <span class="n">model_id</span>
+        <span class="k">if</span> <span class="n">context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">context</span> <span class="o">=</span> <span class="n">context</span>
+
+    <span class="k">def</span> <span class="nf">_get_params_map</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">context</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">params_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">devices</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device_map_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">int</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the params_map for init_on_sender().&quot;&quot;&quot;</span>
+        <span class="c1"># Import _cast locally to avoid circular imports</span>
+        <span class="kn">from</span> <span class="nn">torchrl.collectors.utils</span> <span class="kn">import</span> <span class="n">_cast</span>
+
+        <span class="k">if</span> <span class="n">params_map</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Sanity check: params_map must be a dict[int, TensorDictBase]</span>
+            <span class="c1"># All other args must be None</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">params_map</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span>
+                <span class="ow">or</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">params_map</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+                <span class="ow">or</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">params_map</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;params_map must be a dict[int, TensorDictBase]&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">model_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;model_id, weights, and model cannot be provided if params_map is provided&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;context cannot be provided if params_map is provided&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">devices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;devices cannot be provided if params_map is provided&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">device_map_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;device_map_fn cannot be provided if params_map is provided&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">num_workers</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;num_workers cannot be provided if params_map is provided&quot;</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="n">params_map</span>
+        <span class="k">elif</span> <span class="n">context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">devices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;devices cannot be provided if context is provided&quot;</span><span class="p">)</span>
+            <span class="c1"># Sanity check: model_id must be provided if context is provided</span>
+            <span class="c1"># All other args must be None</span>
+            <span class="k">if</span> <span class="n">model_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;model_id must be provided if context is provided&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;model cannot be provided if context is provided&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;weights cannot be provided if context is provided&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">device_map_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;device_map_fn cannot be provided if context is provided&quot;</span>
+                <span class="p">)</span>
+            <span class="c1"># Get device map: the devices are stored as policy_device in the collector -- other contexts will be customized later</span>
+            <span class="n">devices</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">policy_device</span>
+            <span class="k">if</span> <span class="n">num_workers</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">num_workers</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">devices</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;num_workers cannot be provided if context is provided&quot;</span>
+                <span class="p">)</span>
+            <span class="c1"># Get the weights</span>
+            <span class="n">model</span> <span class="o">=</span> <span class="n">_resolve_model</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">model_id</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">model_id</span> <span class="o">==</span> <span class="s2">&quot;policy&quot;</span><span class="p">:</span>
+                    <span class="c1"># we need to get a copy of the weights from the factory</span>
+                    <span class="n">model</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">policy_factory</span><span class="p">[</span><span class="mi">0</span><span class="p">]()</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;weights cannot be provided if model is provided&quot;</span><span class="p">)</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_cast</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
+        <span class="c1"># To make the map, we need the list of devices, or the map fn</span>
+        <span class="k">if</span> <span class="n">devices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Get the unique devices</span>
+            <span class="n">devices_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">devices</span><span class="p">)</span>
+            <span class="n">weights_devices</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="p">{</span><span class="n">p</span><span class="o">.</span><span class="n">device</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">weights</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)}</span>
+                <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="nb">set</span><span class="p">()</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">weights_devices</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">weights_device</span> <span class="o">=</span> <span class="n">weights_devices</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">weights_device</span> <span class="o">=</span> <span class="kc">None</span>
+
+            <span class="c1"># Create device map with proper Parameter handling using _cast</span>
+            <span class="c1"># _cast ensures Parameters stay as Parameters (with requires_grad=False)</span>
+            <span class="n">device_map</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">devices_set</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">d</span> <span class="o">!=</span> <span class="n">weights_device</span><span class="p">:</span>
+                    <span class="c1"># Move to device and apply _cast to preserve Parameter/Buffer types</span>
+                    <span class="n">weights_on_device</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
+                    <span class="n">weights_on_device</span> <span class="o">=</span> <span class="n">weights_on_device</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_cast</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
+                    <span class="n">device_map</span><span class="p">[</span><span class="n">d</span><span class="p">]</span> <span class="o">=</span> <span class="n">weights_on_device</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># Already on correct device, just apply _cast</span>
+                    <span class="n">device_map</span><span class="p">[</span><span class="n">d</span><span class="p">]</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_cast</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
+
+            <span class="c1"># Create the map</span>
+            <span class="n">params_map</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">worker_idx</span><span class="p">:</span> <span class="n">device_map</span><span class="p">[</span><span class="n">device</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">worker_idx</span><span class="p">,</span> <span class="n">device</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">devices</span><span class="p">)</span>
+            <span class="p">}</span>
+            <span class="k">return</span> <span class="n">params_map</span>
+        <span class="k">if</span> <span class="n">device_map_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="n">worker_idx</span><span class="p">:</span> <span class="n">device_map_fn</span><span class="p">(</span><span class="n">worker_idx</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">worker_idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_workers</span><span class="p">)</span>
+            <span class="p">}</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Either params_map, model_id + context or model/weights + devices must be provided.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_init_on_receiver_impl</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">context</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize on worker process (receiver side).</span>
+
+<span class="sd">        Reads from the worker&#39;s dedicated queue to receive shared weights,</span>
+<span class="sd">        then registers them in the transport. The receiver then applies these weights</span>
+<span class="sd">        to the model.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            model_id: Identifier for the model being synchronized</span>
+<span class="sd">            context: Optional context object providing model and worker_idx</span>
+<span class="sd">            model: Model being synchronized</span>
+<span class="sd">            worker_idx: Worker index</span>
+<span class="sd">            **kwargs: Alternative to context (model, worker_idx, timeout, etc.)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Extract parameters from context or kwargs</span>
+        <span class="k">if</span> <span class="n">context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">model_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;model_id is required when context is provided&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="s2">&quot;get_model&quot;</span><span class="p">):</span>
+                <span class="n">model</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">get_model</span><span class="p">(</span><span class="n">model_id</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">model</span> <span class="o">=</span> <span class="n">_resolve_model</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">model_id</span><span class="p">)</span>
+            <span class="n">worker_idx</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="s2">&quot;worker_idx&quot;</span><span class="p">,</span> <span class="n">worker_idx</span><span class="p">)</span>
+
+        <span class="c1"># Store on scheme directly</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_id</span> <span class="o">=</span> <span class="n">model_id</span>
+        <span class="k">if</span> <span class="n">context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">context</span> <span class="o">=</span> <span class="n">context</span>
+
+        <span class="c1"># Register the model</span>
+        <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
+
+        <span class="c1"># Store worker_idx for synchronize_weights</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">worker_idx</span> <span class="o">=</span> <span class="n">worker_idx</span>
+
+        <span class="c1"># Store references to instruction and ack queues for this worker</span>
+        <span class="c1"># These are created by init_on_sender and passed via pickle</span>
+        <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_instruction_queue</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_ack_queue</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">create_transport</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_wait_for_instruction</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Block until an instruction arrives from the sender.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            timeout: Maximum time to wait for instruction (seconds).</span>
+<span class="sd">                None means block indefinitely.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The instruction string (e.g., &quot;receive&quot;, &quot;stop&quot;), or None if</span>
+<span class="sd">            stop event is set or timeout expires.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_instruction_queue</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Instruction queue not set. init_on_receiver() must be called first.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Check stop event periodically while waiting</span>
+            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
+                    <span class="k">return</span> <span class="kc">None</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="c1"># Use short timeout to allow checking stop event</span>
+                    <span class="n">instruction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_instruction_queue</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="n">instruction</span>
+                <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                    <span class="c1"># Queue.Empty - continue waiting</span>
+                    <span class="k">if</span> <span class="n">timeout</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">timeout</span> <span class="o">-=</span> <span class="mf">0.1</span>
+                        <span class="k">if</span> <span class="n">timeout</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+                            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error waiting for instruction: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">_send_instruction</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">instruction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;receive&quot;</span><span class="p">,</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Send instruction to receiver(s) to trigger weight reception.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            instruction: The instruction to send (default: &quot;receive&quot;).</span>
+<span class="sd">            worker_ids: Which workers to send to (None = all workers).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Instruction queues not created. init_on_sender() must be called first.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">worker_ids</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">target_workers</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">worker_ids</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="n">target_workers</span> <span class="o">=</span> <span class="p">[</span><span class="n">worker_ids</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">target_workers</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">worker_ids</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">worker_idx</span> <span class="ow">in</span> <span class="n">target_workers</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Worker </span><span class="si">{</span><span class="n">worker_idx</span><span class="si">}</span><span class="s2"> not registered&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">instruction</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_send_ack</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;updated&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Send acknowledgment back to sender after receiving weights.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            message: The acknowledgment message (default: &quot;updated&quot;).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_ack_queue</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_ack_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_wait_for_ack</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Wait for acknowledgment from receiver(s).</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            worker_ids: Which workers to wait for (None = all workers).</span>
+<span class="sd">            timeout: Maximum time to wait (seconds). None means block indefinitely.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="p">:</span>
+            <span class="k">return</span>  <span class="c1"># No ack queues, nothing to wait for</span>
+
+        <span class="k">if</span> <span class="n">worker_ids</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">target_workers</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">worker_ids</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="n">target_workers</span> <span class="o">=</span> <span class="p">[</span><span class="n">worker_ids</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">target_workers</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">worker_ids</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">worker_idx</span> <span class="ow">in</span> <span class="n">target_workers</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Worker </span><span class="si">{</span><span class="n">worker_idx</span><span class="si">}</span><span class="s2"> not registered&quot;</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">ack</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">ack</span> <span class="o">!=</span> <span class="s2">&quot;updated&quot;</span><span class="p">:</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Unexpected ack from worker </span><span class="si">{</span><span class="n">worker_idx</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">ack</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Timeout waiting for ack from worker </span><span class="si">{</span><span class="n">worker_idx</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+
+<div class="viewcode-block" id="SharedMemWeightSyncScheme.create_transport">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.SharedMemWeightSyncScheme.html#torchrl.weight_update.SharedMemWeightSyncScheme.create_transport">[docs]</a>
+    <span class="k">def</span> <span class="nf">create_transport</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransportBackend</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create shared memory transport.</span>
+
+<span class="sd">        Returns the shared transport instance that all workers will use.</span>
+<span class="sd">        Since this is shared memory, there&#39;s only one transport shared by all workers.</span>
+
+<span class="sd">        Note:</span>
+<span class="sd">            This is used internally by init_on_sender/init_on_receiver.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_transport</span></div>
+
+
+<div class="viewcode-block" id="SharedMemWeightSyncScheme.prepare_weights">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.SharedMemWeightSyncScheme.html#torchrl.weight_update.SharedMemWeightSyncScheme.prepare_weights">[docs]</a>
+    <span class="k">def</span> <span class="nf">prepare_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">strategy</span><span class="p">:</span> <span class="n">WeightStrategy</span><span class="p">,</span>
+        <span class="n">context</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Prepare weights for SharedMemWeightSyncScheme.</span>
+
+<span class="sd">        When weights=None, we extract fresh weights from the model and update</span>
+<span class="sd">        the shared memory buffer in-place so workers see the change.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            weights: Raw weights input</span>
+<span class="sd">            model_id: The model identifier</span>
+<span class="sd">            strategy: WeightStrategy for extracting/converting weights</span>
+<span class="sd">            context: Optional context (e.g., collector) for cache lookup</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Shared memory weights ready to send</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># If weights are explicitly provided, use them directly</span>
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">fresh_weights</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">prepare_weights</span><span class="p">(</span>
+                <span class="n">weights</span><span class="p">,</span> <span class="n">model_id</span><span class="p">,</span> <span class="n">strategy</span><span class="p">,</span> <span class="n">context</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Extract fresh weights from the model (base class handles this)</span>
+            <span class="n">fresh_weights</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">prepare_weights</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">model_id</span><span class="p">,</span> <span class="n">strategy</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">fresh_weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="c1"># Update the shared memory buffer in-place so workers see the change</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shared_transport</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_transport</span><span class="o">.</span><span class="n">unique_weights</span><span class="p">:</span>
+            <span class="n">shared_weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_transport</span><span class="o">.</span><span class="n">unique_weights</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="c1"># In-place update of shared memory buffer with fresh weights</span>
+            <span class="n">shared_weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">fresh_weights</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">shared_weights</span>
+
+        <span class="c1"># If no shared transport, just return the fresh weights</span>
+        <span class="k">return</span> <span class="n">fresh_weights</span></div>
+
+
+<div class="viewcode-block" id="SharedMemWeightSyncScheme.send">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.SharedMemWeightSyncScheme.html#torchrl.weight_update.SharedMemWeightSyncScheme.send">[docs]</a>
+    <span class="k">def</span> <span class="nf">send</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Send weights via shared memory (in-place update).</span>
+
+<span class="sd">        For SharedMemWeightSyncScheme:</span>
+<span class="sd">        1. prepare_weights() updates the shared memory buffer in-place</span>
+<span class="sd">        2. _send_instruction() tells workers to apply the new weights</span>
+<span class="sd">        3. If sync=True, waits for acknowledgments from all workers</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            weights: Weights to send (can be None to extract from model).</span>
+<span class="sd">            worker_ids: Which workers to notify (None = all workers).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized_on_sender</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Must be initialized on sender before sending weights&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">synchronized_on_sender</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Must be synchronized on sender before sending weights&quot;</span><span class="p">)</span>
+
+        <span class="c1"># prepare_weights updates the shared buffer in-place</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prepare_weights</span><span class="p">(</span>
+            <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span>
+            <span class="n">model_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_model_id</span><span class="p">,</span>
+            <span class="n">strategy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="p">,</span>
+            <span class="n">context</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Send instruction to workers&#39; background threads to apply the weights</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_send_instruction</span><span class="p">(</span><span class="n">instruction</span><span class="o">=</span><span class="s2">&quot;receive&quot;</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">)</span>
+
+        <span class="c1"># Wait for acknowledgments if in synchronous mode</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sync</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_ack</span><span class="p">(</span><span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the current weights from shared memory.</span>
+
+<span class="sd">        For SharedMemWeightSyncScheme:</span>
+<span class="sd">        - On sender side: weights are in transport&#39;s _unique_weights</span>
+<span class="sd">        - On receiver side: weights are in _receiver_shared_weights (stored during connect())</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The weights TensorDict if available, None otherwise.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># On receiver side, use the stored shared buffer reference</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_receiver_shared_weights&quot;</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_shared_weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_shared_weights</span>
+
+        <span class="c1"># On sender side, get from the shared transport</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shared_transport</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_transport</span><span class="o">.</span><span class="n">unique_weights</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_transport</span><span class="o">.</span><span class="n">unique_weights</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="c1"># Fall back to parent implementation</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">weights</span>
+
+    <span class="k">def</span> <span class="nf">_setup_connection_and_weights_on_receiver_impl</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Synchronize weights on receiver side for shared memory.</span>
+
+<span class="sd">        Reads the shared memory buffer from the queue and applies it to the model.</span>
+<span class="sd">        Then starts a background thread that listens for &quot;receive&quot; instructions</span>
+<span class="sd">        from the sender and applies weights when instructed.</span>
+
+<span class="sd">        If a receiver_transport is set (e.g., for MultiProcessWeightSyncScheme),</span>
+<span class="sd">        defers to the base class implementation.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># If receiver_transport is set (e.g., MultiProcess subclass), use base behavior</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_transport</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_setup_connection_and_weights_on_receiver_impl</span><span class="p">(</span>
+                <span class="n">worker_idx</span><span class="o">=</span><span class="n">worker_idx</span>
+            <span class="p">)</span>
+
+        <span class="c1"># SharedMem-specific: use shared_transport</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shared_transport</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;SharedMemWeightSyncScheme requires shared_transport to be set.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Use stored worker_idx if not provided</span>
+        <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">worker_idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker_idx</span>
+
+        <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;worker_idx must be provided for _setup_connection_and_weights_on_receiver_impl.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Read shared memory buffer from queue</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shared_transport</span><span class="o">.</span><span class="n">setup_connection_and_weights_on_receiver</span><span class="p">(</span>
+            <span class="n">worker_idx</span><span class="o">=</span><span class="n">worker_idx</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Store the shared buffer reference for later receive() calls</span>
+        <span class="c1"># This is the actual shared memory buffer that the sender updates</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_shared_weights</span> <span class="o">=</span> <span class="n">weights</span>
+
+        <span class="c1"># Apply weights to model</span>
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="o">.</span><span class="n">apply_weights</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">weights</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="c1"># Start background receiver thread that listens for instructions</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_start_background_receiver</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_background_receive_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Background thread loop that waits for instructions and applies weights.</span>
+
+<span class="sd">        This loop:</span>
+<span class="sd">        1. Waits for a &quot;receive&quot; instruction from the sender</span>
+<span class="sd">        2. Applies the current shared memory weights to the model</span>
+<span class="sd">        3. Sends an acknowledgment back to the sender</span>
+<span class="sd">        4. Repeats until stop event is set or &quot;stop&quot; instruction received</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">instruction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_instruction</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">instruction</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="c1"># Stop event was set or timeout</span>
+                    <span class="k">continue</span>
+                <span class="k">if</span> <span class="n">instruction</span> <span class="o">==</span> <span class="s2">&quot;receive&quot;</span><span class="p">:</span>
+                    <span class="c1"># Apply the current shared memory weights to the model</span>
+                    <span class="c1"># The weights are already updated in shared memory by the sender</span>
+                    <span class="k">if</span> <span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_shared_weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                        <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                    <span class="p">):</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="o">.</span><span class="n">apply_weights</span><span class="p">(</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_shared_weights</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span>
+                        <span class="p">)</span>
+
+                    <span class="c1"># Cascade weight update to sub-collectors if context supports it</span>
+                    <span class="n">model_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_id</span> <span class="ow">or</span> <span class="s2">&quot;policy&quot;</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span> <span class="s2">&quot;update_policy_weights_&quot;</span>
+                    <span class="p">):</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span>
+                            <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span>
+                            <span class="n">policy_or_weights</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_receiver_shared_weights</span><span class="p">,</span>
+                        <span class="p">)</span>
+
+                    <span class="c1"># Send acknowledgment</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_send_ack</span><span class="p">(</span><span class="s2">&quot;updated&quot;</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">instruction</span> <span class="o">==</span> <span class="s2">&quot;stop&quot;</span><span class="p">:</span>
+                    <span class="k">break</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;SharedMemWeightSyncScheme: Unknown instruction: </span><span class="si">{</span><span class="n">instruction</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;SharedMemWeightSyncScheme: Background receiver error: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Prepare the scheme for pickling.&quot;&quot;&quot;</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__getstate__</span><span class="p">()</span>
+        <span class="c1"># mp.Queue objects can be pickled and shared across processes</span>
+        <span class="c1"># Keep them in state so workers have access</span>
+        <span class="k">return</span> <span class="n">state</span>
+
+<div class="viewcode-block" id="SharedMemWeightSyncScheme.shutdown">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.SharedMemWeightSyncScheme.html#torchrl.weight_update.SharedMemWeightSyncScheme.shutdown">[docs]</a>
+    <span class="k">def</span> <span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Stop the background receiver thread and clean up.&quot;&quot;&quot;</span>
+        <span class="c1"># Check if already shutdown</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_is_shutdown&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_is_shutdown</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="c1"># Signal all workers to stop</span>
+        <span class="n">instruction_queues</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_instruction_queues&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">instruction_queues</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">queue</span> <span class="ow">in</span> <span class="n">instruction_queues</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="s2">&quot;stop&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Let base class handle background thread cleanup</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+
+        <span class="c1"># Close all multiprocessing queues created by the scheme.</span>
+        <span class="n">queues_to_close</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;_weight_init_queues&quot;</span><span class="p">,</span> <span class="s2">&quot;_instruction_queues&quot;</span><span class="p">,</span> <span class="s2">&quot;_ack_queues&quot;</span><span class="p">):</span>
+            <span class="n">mapping</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">mapping</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">queues_to_close</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">mapping</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+            <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="p">{})</span>
+
+        <span class="n">unique</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="n">queues_to_close</span><span class="p">:</span>
+            <span class="n">unique</span><span class="p">[</span><span class="nb">id</span><span class="p">(</span><span class="n">q</span><span class="p">)]</span> <span class="o">=</span> <span class="n">q</span>
+        <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="n">unique</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">_close_mp_queue</span><span class="p">(</span><span class="n">q</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../../',
+            VERSION:'0.11',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../../../_static/doctools.js"></script>
+      <script type="text/javascript" src="../../../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../../../_static/design-tabs.js"></script>
+
+  
+
+  <script type="text/javascript" src="../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="#">Get Started</a>
+          </li>
+
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+    })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
+  </script>
+</body>
+</html>

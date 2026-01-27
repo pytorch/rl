@@ -1,0 +1,856 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.envs.llm.transforms.reason &mdash; torchrl 0.11 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../../../_static/pytorch.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" /> 
+
+  
+  <script src="../../../../../_static/js/modernizr.min.js"></script>
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+  <div>
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../../../versions.html"><span style="font-size:110%">0.11 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.envs.llm.transforms.reason</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
+        </div>
+
+        <div class="pytorch-content-left">
+    
+    
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" class="pytorch-article">
+              
+  <h1>Source code for torchrl.envs.llm.transforms.reason</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Literal</span>
+
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">lazy_stack</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.data.llm.history</span> <span class="kn">import</span> <span class="n">History</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">Transform</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">EnvBase</span>
+
+
+<div class="viewcode-block" id="AddThinkingPrompt">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.AddThinkingPrompt.html#torchrl.envs.llm.transforms.AddThinkingPrompt">[docs]</a>
+<span class="k">class</span> <span class="nc">AddThinkingPrompt</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A transform that adds thinking prompts to encourage the LLM to reconsider its response.</span>
+
+<span class="sd">    This transform can either add a new thinking prompt as a separate message or edit the last</span>
+<span class="sd">    assistant response to include a thinking prompt before the final answer. This is useful for</span>
+<span class="sd">    training LLMs to self-correct and think more carefully when their initial responses are</span>
+<span class="sd">    incorrect or incomplete.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        cond (Callable[[TensorDictBase], bool], optional): Condition function that determines</span>
+<span class="sd">            when to add the thinking prompt. Takes a tensordict and returns `True` if the prompt</span>
+<span class="sd">            should be added.</span>
+<span class="sd">        prompt (str, optional): The thinking prompt to add. If None, a default prompt is used.</span>
+<span class="sd">            Defaults to `&quot;But wait, let me think about this more carefully...&quot;`.</span>
+<span class="sd">        random_prompt (bool, optional): Whether to randomly select from predefined prompts.</span>
+<span class="sd">            Defaults to `False`.</span>
+<span class="sd">        role (Literal[&quot;user&quot;, &quot;assistant&quot;], optional): The role for the thinking prompt.</span>
+<span class="sd">            If `&quot;assistant&quot;`, the prompt is added to the assistant&#39;s response. If `&quot;user&quot;`, it&#39;s</span>
+<span class="sd">            added as a separate user message. Defaults to `&quot;assistant&quot;`.</span>
+<span class="sd">        edit_last_turn (bool, optional): Whether to edit the last assistant response instead</span>
+<span class="sd">            of adding a new message. Only works with `role=&quot;assistant&quot;`. Defaults to `True`.</span>
+<span class="sd">        zero_reward (bool, optional): Whether to zero out the reward when the thinking prompt</span>
+<span class="sd">            is added. If `None`, defaults to the value of `edit_last_turn`. Defaults to the same value as `edit_last_turn`.</span>
+<span class="sd">        undo_done (bool, optional): Whether to undo the done flag when the thinking prompt</span>
+<span class="sd">            is added. Defaults to `True`.</span>
+<span class="sd">        egocentric (bool, optional): Whether the thinking prompt is written from the perspective of the assistant.</span>
+<span class="sd">            Defaults to `None`, which means that the prompt is written from the perspective of the user if `role=&quot;user&quot;`</span>
+<span class="sd">            and from the perspective of the assistant if `role=&quot;assistant&quot;`.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs.llm.transforms import AddThinkingPrompt</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs.llm import GSM8KEnv</span>
+<span class="sd">        &gt;&gt;&gt; from transformers import AutoTokenizer</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Create environment with thinking prompt transform</span>
+<span class="sd">        &gt;&gt;&gt; tokenizer = AutoTokenizer.from_pretrained(&quot;Qwen/Qwen2.5-3B&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; env = GSM8KEnv(tokenizer=tokenizer, max_steps=10)</span>
+<span class="sd">        &gt;&gt;&gt; env = env.append_transform(</span>
+<span class="sd">        ...     AddThinkingPrompt(</span>
+<span class="sd">        ...         cond=lambda td: td[&quot;reward&quot;] &lt; 50,</span>
+<span class="sd">        ...         role=&quot;assistant&quot;,</span>
+<span class="sd">        ...         edit_last_turn=True,</span>
+<span class="sd">        ...         zero_reward=True,</span>
+<span class="sd">        ...         undo_done=True</span>
+<span class="sd">        ...     )</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Test with wrong answer (low reward)</span>
+<span class="sd">        &gt;&gt;&gt; reset = env.reset()</span>
+<span class="sd">        &gt;&gt;&gt; wrong_answer = (</span>
+<span class="sd">        ...     &quot;&lt;think&gt;Let me solve this step by step. Natalia sold clips to 48 friends in April. &quot;</span>
+<span class="sd">        ...     &quot;Then she sold half as many in May. Half of 48 is 24. So in May she sold 24 clips. &quot;</span>
+<span class="sd">        ...     &quot;To find the total, I need to add April and May: 48 + 24 = 72. &quot;</span>
+<span class="sd">        ...     &quot;Therefore, Natalia sold 72 clips altogether in April and May.&lt;/think&gt;&quot;</span>
+<span class="sd">        ...     &quot;&lt;answer&gt;322 clips&lt;/answer&gt;&lt;|im_end|&gt;&quot;</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; reset[&quot;text_response&quot;] = [wrong_answer]</span>
+<span class="sd">        &gt;&gt;&gt; s = env.step(reset)</span>
+<span class="sd">        &gt;&gt;&gt; assert (s[&quot;next&quot;, &quot;reward&quot;] == 0).all()  # Reward zeroed</span>
+<span class="sd">        &gt;&gt;&gt; assert (s[&quot;next&quot;, &quot;done&quot;] == 0).all()    # Done undone</span>
+<span class="sd">        &gt;&gt;&gt; assert s[&quot;next&quot;, &quot;history&quot;].shape == (1, 3)  # History modified</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Test with correct answer (high reward)</span>
+<span class="sd">        &gt;&gt;&gt; reset = env.reset()</span>
+<span class="sd">        &gt;&gt;&gt; correct_answer = (</span>
+<span class="sd">        ...     &quot;&lt;think&gt;Let me solve this step by step. Natalia sold clips to 48 friends in April. &quot;</span>
+<span class="sd">        ...     &quot;Then she sold half as many in May. Half of 48 is 24. So in May she sold 24 clips. &quot;</span>
+<span class="sd">        ...     &quot;To find the total, I need to add April and May: 48 + 24 = 72. &quot;</span>
+<span class="sd">        ...     &quot;Therefore, Natalia sold 72 clips altogether in April and May.&lt;/think&gt;&quot;</span>
+<span class="sd">        ...     &quot;&lt;answer&gt;72&lt;/answer&gt;&lt;|im_end|&gt;&quot;</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; reset[&quot;text_response&quot;] = [correct_answer]</span>
+<span class="sd">        &gt;&gt;&gt; s = env.step(reset)</span>
+<span class="sd">        &gt;&gt;&gt; assert (s[&quot;next&quot;, &quot;reward&quot;] != 0).all()  # Reward not zeroed</span>
+<span class="sd">        &gt;&gt;&gt; assert s[&quot;next&quot;, &quot;done&quot;].all()           # Done remains True</span>
+<span class="sd">        &gt;&gt;&gt; assert s[&quot;next&quot;, &quot;history&quot;].shape == (1, 3)  # History unchanged</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># Predefined thinking prompts</span>
+    <span class="n">DEFAULT_PROMPTS_EG</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="s2">&quot;But wait, let me think about this more carefully...&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Actually, let me reconsider this...&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;But we can do better. Let me think about it step by step...&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Wait, I need to double-check my reasoning...&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Actually, let me think about it more carefully...&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;It looks like I made a mistake. Let me think about it step by step...&quot;</span><span class="p">,</span>
+    <span class="p">]</span>
+    <span class="n">DEFAULT_PROMPTS_COG</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="s2">&quot;But wait, think about this more carefully...&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Actually, reconsider this...&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;But we can do better. Let&#39;s think about it step by step...&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Wait, you need to double-check your reasoning...&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Actually, think about it more carefully...&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;It looks like you made a mistake. Can you see what went wrong? Let&#39;s think about it step by step...&quot;</span><span class="p">,</span>
+    <span class="p">]</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">cond</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="nb">bool</span><span class="p">],</span>
+        <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">random_prompt</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">role</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;assistant&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span>
+        <span class="n">edit_last_turn</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">zero_reward</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">undo_done</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">egocentric</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="c1"># Set condition and role</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cond</span> <span class="o">=</span> <span class="n">cond</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">role</span> <span class="o">=</span> <span class="n">role</span>
+        <span class="k">if</span> <span class="n">egocentric</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">egocentric</span> <span class="o">=</span> <span class="n">role</span> <span class="o">==</span> <span class="s2">&quot;assistant&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">egocentric</span> <span class="o">=</span> <span class="n">egocentric</span>
+
+        <span class="c1"># Set the prompt</span>
+        <span class="k">if</span> <span class="n">prompt</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">prompt</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">DEFAULT_PROMPTS_EG</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">egocentric</span>
+                <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">DEFAULT_PROMPTS_COG</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_prompt</span> <span class="o">=</span> <span class="n">prompt</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">random_prompt</span> <span class="o">=</span> <span class="n">random_prompt</span>
+
+        <span class="c1"># Validate edit_last_turn constraint</span>
+        <span class="k">if</span> <span class="n">edit_last_turn</span> <span class="ow">and</span> <span class="n">role</span> <span class="o">!=</span> <span class="s2">&quot;assistant&quot;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;edit_last_turn can only be used with role=&#39;assistant&#39;&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">edit_last_turn</span> <span class="o">=</span> <span class="n">edit_last_turn</span>
+
+        <span class="c1"># Set zero_reward behavior</span>
+        <span class="k">if</span> <span class="n">zero_reward</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">zero_reward</span> <span class="o">=</span> <span class="n">edit_last_turn</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">zero_reward</span> <span class="o">=</span> <span class="n">zero_reward</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">undo_done</span> <span class="o">=</span> <span class="n">undo_done</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">prompt</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">random_prompt</span><span class="p">:</span>
+            <span class="kn">import</span> <span class="nn">random</span>
+
+            <span class="k">return</span> <span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">DEFAULT_PROMPTS_EG</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">egocentric</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">DEFAULT_PROMPTS_COG</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prompt</span>
+
+    <span class="k">def</span> <span class="nf">_step</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Process the tensordict and add thinking prompts based on the condition.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordict: The current tensordict</span>
+<span class="sd">            next_tensordict: The next tensordict containing the most recent history and reward</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The modified next_tensordict</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Handle batch dimensions</span>
+        <span class="k">if</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">batch_dims</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">ntds</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">td</span><span class="p">,</span> <span class="n">next_td</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)):</span>
+                <span class="n">ntds</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_step</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">next_td</span><span class="p">))</span>
+            <span class="n">next_tensordict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">lazy_stack</span><span class="p">(</span><span class="n">ntds</span><span class="p">))</span>
+            <span class="k">return</span> <span class="n">next_tensordict</span>
+
+        <span class="c1"># Check that base_env is on history mode</span>
+        <span class="n">parent</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span>
+        <span class="k">if</span> <span class="n">parent</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;AddThinkingPrompt must be used with a ChatEnv&quot;</span><span class="p">)</span>
+        <span class="n">base_env</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">base_env</span>
+        <span class="k">if</span> <span class="n">base_env</span><span class="o">.</span><span class="n">input_mode</span> <span class="o">!=</span> <span class="s2">&quot;history&quot;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;AddThinkingPrompt must be used with a ChatEnv in history mode&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Check if we should add the thinking prompt</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cond</span><span class="p">(</span><span class="n">next_tensordict</span><span class="p">):</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Adding thinking prompt.&quot;</span><span class="p">)</span>
+            <span class="n">history</span><span class="p">:</span> <span class="n">History</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">prompt</span>
+            <span class="n">last_turn</span> <span class="o">=</span> <span class="n">history</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">edit_last_turn</span><span class="p">:</span>
+
+                <span class="c1"># Edit the last assistant response</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">last_turn</span><span class="o">.</span><span class="n">content</span>
+                <span class="n">modified_content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_replace_answer_with_prompt</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
+
+                <span class="c1"># Create new history entry with modified content</span>
+                <span class="n">new_turn</span> <span class="o">=</span> <span class="n">History</span><span class="p">(</span>
+                    <span class="n">role</span><span class="o">=</span><span class="s2">&quot;assistant&quot;</span><span class="p">,</span>
+                    <span class="n">content</span><span class="o">=</span><span class="n">modified_content</span><span class="p">,</span>
+                    <span class="n">batch_size</span><span class="o">=</span><span class="n">last_turn</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">last_turn</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="p">)</span>
+
+                <span class="c1"># Replace the last turn in history</span>
+                <span class="n">history</span> <span class="o">=</span> <span class="n">history</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">new_turn</span><span class="p">)</span>
+                <span class="n">next_tensordict</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">prompt</span> <span class="o">=</span> <span class="n">history</span>
+
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Add a new message</span>
+                <span class="n">prompt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prompt</span>
+
+                <span class="n">history</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">History</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">role</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">prompt</span><span class="p">))</span>
+                <span class="n">next_tensordict</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">prompt</span> <span class="o">=</span> <span class="n">history</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">undo_done</span><span class="p">:</span>
+                <span class="n">parent</span><span class="p">:</span> <span class="n">EnvBase</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span>
+                <span class="k">if</span> <span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">done_keys</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">done_keys</span>
+                    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">done_keys</span><span class="p">:</span>
+                        <span class="n">done</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="n">done</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                            <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">done</span><span class="o">.</span><span class="n">zero_</span><span class="p">())</span>
+
+            <span class="c1"># Zero out reward if requested</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">zero_reward</span><span class="p">:</span>
+                <span class="n">parent</span><span class="p">:</span> <span class="n">EnvBase</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span>
+                <span class="k">if</span> <span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">reward_keys</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">reward_keys</span>
+                    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">reward_keys</span><span class="p">:</span>
+                        <span class="n">reward</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="n">reward</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                            <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">reward</span><span class="o">.</span><span class="n">zero_</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Not adding thinking prompt.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">next_tensordict</span>
+
+    <span class="k">def</span> <span class="nf">_replace_answer_with_prompt</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">content</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Replace the last answer section with a thinking prompt.</span>
+
+<span class="sd">        This method uses regex to find and replace the last &lt;answer&gt;...&lt;/answer&gt; section</span>
+<span class="sd">        with the thinking prompt, preserving any content before the answer tag.</span>
+<span class="sd">        Only the last answer block is replaced to avoid interfering with earlier</span>
+<span class="sd">        examples or instructions that might contain answer tags.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            content: The original content string</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The modified content with the last answer replaced by the thinking prompt</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Pattern to match &lt;answer&gt;...&lt;/answer&gt; with optional EOS token</span>
+        <span class="c1"># Use non-greedy matching and be more specific about the end</span>
+        <span class="n">answer_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;&lt;answer&gt;.*?&lt;/answer&gt;(?:\s*&lt;\|im_end\|&gt;)?&quot;</span>
+
+        <span class="c1"># Check if there&#39;s an answer tag</span>
+        <span class="k">if</span> <span class="s2">&quot;&lt;answer&gt;&quot;</span> <span class="ow">in</span> <span class="n">content</span><span class="p">:</span>
+            <span class="c1"># Find all matches to get the last one</span>
+            <span class="n">matches</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">re</span><span class="o">.</span><span class="n">finditer</span><span class="p">(</span><span class="n">answer_pattern</span><span class="p">,</span> <span class="n">content</span><span class="p">,</span> <span class="n">flags</span><span class="o">=</span><span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span><span class="p">))</span>
+
+            <span class="k">if</span> <span class="n">matches</span><span class="p">:</span>
+                <span class="c1"># Get the last match</span>
+                <span class="n">last_match</span> <span class="o">=</span> <span class="n">matches</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="o">=</span> <span class="n">last_match</span><span class="o">.</span><span class="n">span</span><span class="p">()</span>
+
+                <span class="c1"># Replace only the last answer section with the thinking prompt</span>
+                <span class="n">prompt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prompt</span>
+                <span class="n">modified_content</span> <span class="o">=</span> <span class="n">content</span><span class="p">[:</span><span class="n">start</span><span class="p">]</span> <span class="o">+</span> <span class="n">prompt</span> <span class="o">+</span> <span class="n">content</span><span class="p">[</span><span class="n">end</span><span class="p">:]</span>
+
+                <span class="c1"># Clean up any trailing whitespace</span>
+                <span class="n">modified_content</span> <span class="o">=</span> <span class="n">modified_content</span><span class="o">.</span><span class="n">rstrip</span><span class="p">()</span>
+
+                <span class="c1"># Ensure we end with the EOS token if the original content had it</span>
+                <span class="k">if</span> <span class="n">content</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;&lt;|im_end|&gt;&quot;</span><span class="p">):</span>
+                    <span class="n">modified_content</span> <span class="o">=</span> <span class="n">modified_content</span><span class="o">.</span><span class="n">rstrip</span><span class="p">()</span> <span class="o">+</span> <span class="s2">&quot;&lt;|im_end|&gt;&quot;</span>
+
+                <span class="c1"># Ensure proper spacing around the prompt</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">modified_content</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="n">prompt</span><span class="p">):</span>
+                    <span class="c1"># If the prompt wasn&#39;t properly inserted, append it</span>
+                    <span class="n">modified_content</span> <span class="o">=</span> <span class="n">content</span><span class="o">.</span><span class="n">rstrip</span><span class="p">()</span>
+                    <span class="k">if</span> <span class="n">modified_content</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;&lt;|im_end|&gt;&quot;</span><span class="p">):</span>
+                        <span class="n">modified_content</span> <span class="o">=</span> <span class="n">modified_content</span><span class="p">[</span>
+                            <span class="p">:</span> <span class="o">-</span><span class="nb">len</span><span class="p">(</span><span class="s2">&quot;&lt;|im_end|&gt;&quot;</span><span class="p">)</span>
+                        <span class="p">]</span><span class="o">.</span><span class="n">rstrip</span><span class="p">()</span>
+                    <span class="n">modified_content</span> <span class="o">=</span> <span class="n">modified_content</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="n">prompt</span> <span class="o">+</span> <span class="s2">&quot;&lt;|im_end|&gt;&quot;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># No matches found, just append the prompt</span>
+                <span class="n">prompt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prompt</span>
+                <span class="n">modified_content</span> <span class="o">=</span> <span class="n">content</span><span class="o">.</span><span class="n">rstrip</span><span class="p">()</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="n">prompt</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># No answer tag found, just append the prompt</span>
+            <span class="n">prompt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prompt</span>
+            <span class="n">modified_content</span> <span class="o">=</span> <span class="n">content</span><span class="o">.</span><span class="n">rstrip</span><span class="p">()</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="n">prompt</span>
+
+        <span class="k">return</span> <span class="n">modified_content</span>
+
+    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reset the transform state.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordict: The current tensordict</span>
+<span class="sd">            tensordict_reset: The reset tensordict</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The reset tensordict</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">tensordict_reset</span></div>
+
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../../../../',
+            VERSION:'0.11',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../../../../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../../../../../_static/doctools.js"></script>
+      <script type="text/javascript" src="../../../../../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../../../../../_static/design-tabs.js"></script>
+
+  
+
+  <script type="text/javascript" src="../../../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../../../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="#">Get Started</a>
+          </li>
+
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+    })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
+  </script>
+</body>
+</html>

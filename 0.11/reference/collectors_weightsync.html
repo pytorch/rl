@@ -1,0 +1,1274 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Weight Synchronization &mdash; torchrl 0.11 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../_static/pytorch.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="TransportBackend" href="generated/torchrl.weight_update.TransportBackend.html" />
+    <link rel="prev" title="RayCollector" href="generated/torchrl.collectors.distributed.RayCollector.html" /> 
+
+  
+  <script src="../_static/js/modernizr.min.js"></script>
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+  <div>
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../versions.html"><span style="font-size:110%">0.11 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="index.html">API Reference</a> &gt;</li>
+        
+          <li><a href="collectors.html">torchrl.collectors package</a> &gt;</li>
+        
+      <li>Weight Synchronization</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/reference/collectors_weightsync.rst.txt" rel="nofollow"><img src="../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
+        </div>
+
+        <div class="pytorch-content-left">
+    
+    
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" class="pytorch-article">
+              
+  <section id="weight-synchronization">
+<h1>Weight Synchronization<a class="headerlink" href="#weight-synchronization" title="Link to this heading">¶</a></h1>
+<p>RL pipelines are typically split in two big computational buckets: training, and inference.
+While the inference pipeline sends data to the training one, the training pipeline needs to occasionally
+synchronize its weights with the inference one.
+In the most basic setting (fully synchronized data collection with traditional neural networks), the same weights are
+used in both instances. From there, anything can happen:</p>
+<ul class="simple">
+<li><p>In multiprocessed or distributed settings, several copies of the policy can be held by the inference workers (named
+<cite>DataCollectors</cite> in TorchRL). When synchronizing the weights, each worker needs to receive a new copy of the weights
+for their instance of the policy.</p></li>
+<li><p>In some cases, the environment or the postprocessing hooks can rely on the usage of a model which itself needs
+synchronization. This means that there can be multiple ends in the data transfer API and one needs to think beyond
+policy-to-policy weight synchronization strategies.</p></li>
+<li><p>In the LLM world, the inference engine and the training one are very different: they will use different libraries,
+kernels and calling APIs (e.g., <cite>generate</cite> vs. <cite>forward</cite>). The weight format can also be drastically different (quantized
+vs non-quantized).
+This makes the weight synchronization much more complex, as one cannot simply dump and load a state dict on both ends.</p></li>
+<li><p>One typically also has to choose who instantiates a transfer: should this come from the inference engine who actively
+asks for new weights, or must it only be the trainer who pushes its weights to the workers? An intermediate approach
+is to store the weights on some intermediary server and let the workers fetch them when necessary.</p></li>
+</ul>
+<p>TorchRL tries to account for each of these problems in a flexible manner. We identify three basic components in a weight
+transfer:</p>
+<ul class="simple">
+<li><p>A <strong>Scheme</strong> class that orchestrates the entire weight synchronization lifecycle, including initialization,
+connection setup, and weight transfer coordination.</p></li>
+<li><p>A <strong>Transport</strong> class that handles the actual transfer of weights (through shared memory, queues, torch.distributed,
+Ray, etc.). Each scheme creates one or more transports for communication with workers.</p></li>
+<li><p>A <strong>Strategy</strong> class that determines the weight format (TensorDict or state_dict) and how weights are
+extracted from and applied to models.</p></li>
+</ul>
+<p>Each of these classes is detailed below.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>For most users, weight synchronization happens automatically.</strong> When using TorchRL collectors
+with the <code class="docutils literal notranslate"><span class="pre">weight_sync_schemes</span></code> argument, the collector handles all initialization, connection,
+and synchronization calls internally. You simply call <code class="docutils literal notranslate"><span class="pre">collector.update_policy_weights_()</span></code> and
+the weights are propagated to all workers.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">update_policy_weights_</span></code> method supports multiple calling conventions:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># No arguments - uses registered policy</span>
+<span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">()</span>
+
+<span class="c1"># Positional argument - policy module or TensorDict</span>
+<span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">policy_module</span><span class="p">)</span>
+<span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">weights_tensordict</span><span class="p">)</span>
+
+<span class="c1"># Keyword arguments for clarity</span>
+<span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">actor_module</span><span class="p">)</span>
+<span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">weights</span><span class="o">=</span><span class="n">weights_td</span><span class="p">,</span> <span class="n">model_id</span><span class="o">=</span><span class="s2">&quot;actor&quot;</span><span class="p">)</span>
+
+<span class="c1"># Multiple models atomically</span>
+<span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">weights_dict</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;actor&quot;</span><span class="p">:</span> <span class="n">actor_td</span><span class="p">,</span> <span class="s2">&quot;critic&quot;</span><span class="p">:</span> <span class="n">critic_td</span><span class="p">})</span>
+</pre></div>
+</div>
+<p>The detailed lifecycle documentation below is primarily intended for developers who want to:</p>
+<ul class="simple">
+<li><p>Understand the internals of weight synchronization</p></li>
+<li><p>Implement custom weight sync schemes for specialized use cases (e.g., new distributed backends, custom serialization)</p></li>
+<li><p>Debug synchronization issues in complex distributed setups</p></li>
+<li><p>Use weight sync schemes outside of collectors for custom multiprocessing scenarios</p></li>
+</ul>
+</div>
+<section id="lifecycle-of-weight-synchronization">
+<h2>Lifecycle of Weight Synchronization<a class="headerlink" href="#lifecycle-of-weight-synchronization" title="Link to this heading">¶</a></h2>
+<p>Weight synchronization follows a <strong>two-phase initialization pattern</strong> with a clear separation between
+local setup and inter-process communication.</p>
+<p>For <strong>queue / store-based schemes</strong> (e.g. multiprocessing, TCPStore), the receiver starts a small
+<strong>background loop</strong> that waits for “update” instructions and runs the actual receive/apply logic.</p>
+<p>For <strong>RPC / Ray schemes</strong>, the sender triggers the receiver via a <strong>remote call</strong> to
+<code class="docutils literal notranslate"><span class="pre">_receive_weights_scheme()</span></code>, which runs <code class="docutils literal notranslate"><span class="pre">scheme.receive()</span></code> on the receiver side (no dedicated
+background thread is required).</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>┌─────────────────────────────────────────────────────────────────────────┐
+│                        SENDER (Main Process)                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│  1. scheme.init_on_sender(model_id, context, ...)                       │
+│     └─ Sets up local state, creates transports, NO communication        │
+│                                                                         │
+│  2. Make scheme available on receiver (scheme-dependent)                │
+│     └─ e.g. via multiprocessing pickle/serialization, RPC, Ray actor init │
+│                                                                         │
+│  3. scheme.connect()  ◄──── BLOCKING RENDEZ-VOUS ────►                  │
+│     └─ Sets up connection / rendez-vous                                  │
+│     └─ May send initial weights (scheme-dependent)                        │
+│                                                                         │
+│  4. scheme.send(weights)  [ready for ongoing updates]                   │
+│     └─ Triggers receiver to run ``scheme.receive()``                     │
+│        (instruction queue / TCPStore / remote call, scheme-dependent)    │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                       RECEIVER (Worker Process)                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│  1. scheme.init_on_receiver(model_id, context, ...)                     │
+│     └─ Sets up local state, resolves model, NO communication             │
+│                                                                         │
+│  2. scheme.connect()  ◄──── BLOCKING RENDEZ-VOUS ────►                  │
+│     └─ Receives initial weights (scheme-dependent)                        │
+│     └─ If needed: starts a background loop for update instructions        │
+│                                                                         │
+│  3. Receiver-side handler (scheme-dependent)                             │
+│     └─ Background thread for queue/store schemes                           │
+│     └─ RPC/Ray remote call handler for RPC/Ray schemes                     │
+└─────────────────────────────────────────────────────────────────────────┘
+</pre></div>
+</div>
+<section id="phase-1-initialization-no-communication">
+<h3>Phase 1: Initialization (No Communication)<a class="headerlink" href="#phase-1-initialization-no-communication" title="Link to this heading">¶</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">init_on_sender()</span></code> and <code class="docutils literal notranslate"><span class="pre">init_on_receiver()</span></code> methods prepare local state without any
+inter-process communication:</p>
+<ul class="simple">
+<li><p>Set up local attributes and references (model, context, worker indices)</p></li>
+<li><p>Create transport objects and register them</p></li>
+<li><p>Prepare queues, buffers, or other communication primitives</p></li>
+<li><p><strong>Do NOT perform any inter-worker communication</strong></p></li>
+</ul>
+<p>This separation allows the scheme to be pickled and sent to worker processes after sender
+initialization but before any actual communication occurs.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># === SENDER (main process) ===</span>
+<span class="n">scheme</span> <span class="o">=</span> <span class="n">SharedMemWeightSyncScheme</span><span class="p">()</span>
+<span class="n">scheme</span><span class="o">.</span><span class="n">init_on_sender</span><span class="p">(</span>
+    <span class="n">model_id</span><span class="o">=</span><span class="s2">&quot;policy&quot;</span><span class="p">,</span>
+    <span class="n">context</span><span class="o">=</span><span class="n">collector</span><span class="p">,</span>  <span class="c1"># or explicit params like weights, devices, num_workers</span>
+<span class="p">)</span>
+
+<span class="c1"># === Scheme is passed to workers via multiprocessing ===</span>
+<span class="c1"># (The scheme object is pickled and sent to worker processes)</span>
+
+<span class="c1"># === RECEIVER (worker process) ===</span>
+<span class="n">scheme</span><span class="o">.</span><span class="n">init_on_receiver</span><span class="p">(</span>
+    <span class="n">model_id</span><span class="o">=</span><span class="s2">&quot;policy&quot;</span><span class="p">,</span>
+    <span class="n">context</span><span class="o">=</span><span class="n">inner_collector</span><span class="p">,</span>  <span class="c1"># or explicit params like model, worker_idx</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="phase-2-connection-and-initial-weights-rendez-vous">
+<h3>Phase 2: Connection and Initial Weights (Rendez-vous)<a class="headerlink" href="#phase-2-connection-and-initial-weights-rendez-vous" title="Link to this heading">¶</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">connect()</span></code> method performs the actual inter-process communication. <strong>In most schemes, both
+sender and receiver call this method</strong> (simultaneously or in the expected order for the scheme).
+Some specialized schemes can be sender-driven (e.g. <code class="docutils literal notranslate"><span class="pre">RayModuleTransformScheme</span></code> triggers receiver setup
+via a Ray call).</p>
+<ol class="arabic simple">
+<li><p><strong>Connection rendez-vous</strong>: Sender and receiver synchronize (e.g., torch.distributed process group
+initialization, shared memory buffer exchange via queues)</p></li>
+<li><p><strong>Initial weight transfer</strong> (scheme-dependent): Some schemes send initial weights during <code class="docutils literal notranslate"><span class="pre">connect()</span></code>
+(e.g. <code class="docutils literal notranslate"><span class="pre">SharedMemWeightSyncScheme</span></code>, <code class="docutils literal notranslate"><span class="pre">MultiProcessWeightSyncScheme</span></code>, <code class="docutils literal notranslate"><span class="pre">DistributedWeightSyncScheme</span></code>,
+<code class="docutils literal notranslate"><span class="pre">RayWeightSyncScheme</span></code>). Others (notably <code class="docutils literal notranslate"><span class="pre">RPCWeightSyncScheme</span></code>) typically start synchronizing on the
+first <code class="docutils literal notranslate"><span class="pre">send()</span></code> call.</p></li>
+<li><p><strong>Receiver readiness</strong>: For queue/store-based schemes, <code class="docutils literal notranslate"><span class="pre">connect()</span></code> starts a background loop on the
+receiver that waits for update instructions.</p></li>
+</ol>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># === Called simultaneously on both ends ===</span>
+
+<span class="c1"># Sender side (main process):</span>
+<span class="n">scheme</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>  <span class="c1"># Blocks until rendez-vous completes (scheme-dependent)</span>
+
+<span class="c1"># Receiver side (worker process):</span>
+<span class="n">scheme</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">worker_idx</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># Blocks until rendez-vous completes (scheme-dependent)</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">connect()</span></code> method is a <strong>blocking rendez-vous</strong> for most schemes. The exact behavior
+depends on the scheme:</p>
+<ul class="simple">
+<li><p><strong>Queue-based schemes</strong> (SharedMem, MultiProcess): Sender puts to queue, receiver blocks reading</p></li>
+<li><p><strong>Distributed schemes</strong> (Distributed, Ray): Both sides block on <code class="docutils literal notranslate"><span class="pre">torch.distributed.send/recv</span></code></p></li>
+<li><p><strong>RPC/Ray with remote calls</strong>: Receiver’s <code class="docutils literal notranslate"><span class="pre">connect()</span></code> may be a no-op if the sender triggers
+the receiver via a remote call (e.g., <code class="docutils literal notranslate"><span class="pre">RayModuleTransformScheme</span></code>)</p></li>
+</ul>
+</div>
+</section>
+<section id="phase-3-ongoing-weight-updates">
+<h3>Phase 3: Ongoing Weight Updates<a class="headerlink" href="#phase-3-ongoing-weight-updates" title="Link to this heading">¶</a></h3>
+<p>After <code class="docutils literal notranslate"><span class="pre">connect()</span></code> completes, the scheme is ready for ongoing weight synchronization. The sender
+calls <code class="docutils literal notranslate"><span class="pre">send()</span></code> / <code class="docutils literal notranslate"><span class="pre">send_async()</span></code> to push weights and trigger the receiver to run <code class="docutils literal notranslate"><span class="pre">scheme.receive()</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Training loop</span>
+<span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">dataloader</span><span class="p">:</span>
+    <span class="n">loss</span> <span class="o">=</span> <span class="n">train_step</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+    <span class="n">scheme</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">new_weights</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="scheme-specific-behavior">
+<h2>Scheme-Specific Behavior<a class="headerlink" href="#scheme-specific-behavior" title="Link to this heading">¶</a></h2>
+<section id="sharedmemweightsyncscheme">
+<h3>SharedMemWeightSyncScheme<a class="headerlink" href="#sharedmemweightsyncscheme" title="Link to this heading">¶</a></h3>
+<p>Uses shared memory for zero-copy weight updates. After initial setup, weight updates are instantaneous
+since all processes share the same memory buffers.</p>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Phase</p></th>
+<th class="head"><p>Sender</p></th>
+<th class="head"><p>Receiver</p></th>
+<th class="head"><p>Communication</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">init</span></code></p></td>
+<td><p>Creates shared buffers + instruction queues</p></td>
+<td><p>Stores model reference</p></td>
+<td><p>None</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">connect</span></code></p></td>
+<td><p>Sends buffer references + initial weights</p></td>
+<td><p>Receives buffers, applies weights, starts background thread</p></td>
+<td><p>mp.Queue (blocking)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">send</span></code></p></td>
+<td><p>Updates shared memory, sends instruction</p></td>
+<td><p>Background thread applies shared memory weights</p></td>
+<td><p>Zero-copy shared memory + mp.Queue</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="multiprocessweightsyncscheme">
+<h3>MultiProcessWeightSyncScheme<a class="headerlink" href="#multiprocessweightsyncscheme" title="Link to this heading">¶</a></h3>
+<p>Sends weight copies through multiprocessing queues. More flexible than shared memory but requires
+explicit data transfer for each update. Supports timeout for non-blocking receives.</p>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Phase</p></th>
+<th class="head"><p>Sender</p></th>
+<th class="head"><p>Receiver</p></th>
+<th class="head"><p>Communication</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">init</span></code></p></td>
+<td><p>Creates weight + instruction queues</p></td>
+<td><p>Gets queue references</p></td>
+<td><p>None</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">connect</span></code></p></td>
+<td><p>Sends initial weights</p></td>
+<td><p>Receives weights, applies via strategy, starts background thread</p></td>
+<td><p>mp.Queue (blocking)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">send</span></code></p></td>
+<td><p>Puts weights + instruction</p></td>
+<td><p>Background thread receives and applies weights</p></td>
+<td><p>mp.Queue (supports timeout)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="distributedweightsyncscheme">
+<h3>DistributedWeightSyncScheme<a class="headerlink" href="#distributedweightsyncscheme" title="Link to this heading">¶</a></h3>
+<p>Uses <code class="docutils literal notranslate"><span class="pre">torch.distributed</span></code> primitives with a TCPStore for signaling. Suitable for distributed
+training scenarios where processes are already part of a process group. Supports timeout via
+<code class="docutils literal notranslate"><span class="pre">irecv(return_premature=True)</span></code> for non-blocking receives.</p>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Phase</p></th>
+<th class="head"><p>Sender</p></th>
+<th class="head"><p>Receiver</p></th>
+<th class="head"><p>Communication</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">init</span></code></p></td>
+<td><p>Creates transports with TCPStore + rank</p></td>
+<td><p>Creates transport with store + rank</p></td>
+<td><p>None</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">connect</span></code></p></td>
+<td><p>Sends initial weights via <code class="docutils literal notranslate"><span class="pre">torch.distributed.send()</span></code></p></td>
+<td><p>Receives weights, applies via strategy, starts background thread</p></td>
+<td><p>torch.distributed send/recv</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">send</span></code></p></td>
+<td><p>Sets TCPStore flag + <code class="docutils literal notranslate"><span class="pre">torch.distributed.send()</span></code></p></td>
+<td><p>Background thread polls TCPStore and receives weights</p></td>
+<td><p>TCPStore + torch.distributed (supports timeout)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="rpcweightsyncscheme">
+<h3>RPCWeightSyncScheme<a class="headerlink" href="#rpcweightsyncscheme" title="Link to this heading">¶</a></h3>
+<p>Uses <code class="docutils literal notranslate"><span class="pre">torch.distributed.rpc</span></code> for signaling with <code class="docutils literal notranslate"><span class="pre">torch.distributed</span></code> for data transfer.
+The sender’s transport signals the remote collector via an RPC call to <code class="docutils literal notranslate"><span class="pre">_receive_weights_scheme()</span></code>,
+and then transfers weights via <code class="docutils literal notranslate"><span class="pre">torch.distributed</span></code> send/recv. Supports timeout via
+<code class="docutils literal notranslate"><span class="pre">irecv(return_premature=True)</span></code> for non-blocking receives.</p>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Phase</p></th>
+<th class="head"><p>Sender</p></th>
+<th class="head"><p>Receiver</p></th>
+<th class="head"><p>Communication</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">init</span></code></p></td>
+<td><p>Creates transports with RPC refs</p></td>
+<td><p>Stores model reference, creates transport</p></td>
+<td><p>None</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">connect</span></code></p></td>
+<td><p>No-op for RPC transport (no initial weight transfer)</p></td>
+<td><p>No-op</p></td>
+<td><p>None</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">send</span></code></p></td>
+<td><p>RPC call to <code class="docutils literal notranslate"><span class="pre">_receive_weights_scheme()</span></code> + <code class="docutils literal notranslate"><span class="pre">torch.distributed.send()</span></code></p></td>
+<td><p>Receiver runs <code class="docutils literal notranslate"><span class="pre">scheme.receive()</span></code> in the RPC call context and applies weights</p></td>
+<td><p>RPC + torch.distributed (supports timeout)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="rayweightsyncscheme">
+<h3>RayWeightSyncScheme<a class="headerlink" href="#rayweightsyncscheme" title="Link to this heading">¶</a></h3>
+<p>Uses Ray actors for coordination with <code class="docutils literal notranslate"><span class="pre">torch.distributed</span></code> for efficient weight transfer.
+Suitable for Ray-based distributed RL setups. Supports timeout via <code class="docutils literal notranslate"><span class="pre">irecv(return_premature=True)</span></code>
+for non-blocking receives.</p>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Phase</p></th>
+<th class="head"><p>Sender</p></th>
+<th class="head"><p>Receiver</p></th>
+<th class="head"><p>Communication</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">init</span></code></p></td>
+<td><p>Creates transports with Ray actor handles</p></td>
+<td><p>Creates transport, stores model</p></td>
+<td><p>None</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">connect</span></code></p></td>
+<td><p>Creates ConnectionInfo, <code class="docutils literal notranslate"><span class="pre">init_process_group(rank=0)</span></code>, sends initial weights</p></td>
+<td><p>Waits for ConnectionInfo, <code class="docutils literal notranslate"><span class="pre">init_process_group(rank=N)</span></code>, receives weights</p></td>
+<td><p>Ray actor + torch.distributed</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">send</span></code></p></td>
+<td><p>Ray remote call to <code class="docutils literal notranslate"><span class="pre">_receive_weights_scheme()</span></code> + <code class="docutils literal notranslate"><span class="pre">torch.distributed.isend()</span></code></p></td>
+<td><p>Receiver runs <code class="docutils literal notranslate"><span class="pre">scheme.receive()</span></code> in the Ray call context and applies weights</p></td>
+<td><p>Ray + torch.distributed (supports timeout)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="raymoduletransformscheme">
+<h3>RayModuleTransformScheme<a class="headerlink" href="#raymoduletransformscheme" title="Link to this heading">¶</a></h3>
+<p>Specialized scheme for synchronizing weights to a module running inside a <code class="docutils literal notranslate"><span class="pre">RayModuleTransform</span></code>.
+The sender triggers all receiver operations via Ray remote calls.</p>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Phase</p></th>
+<th class="head"><p>Sender</p></th>
+<th class="head"><p>Receiver</p></th>
+<th class="head"><p>Communication</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">init</span></code></p></td>
+<td><p>Creates transport for transform actor</p></td>
+<td><p>Creates transport, stores module</p></td>
+<td><p>None</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">connect</span></code></p></td>
+<td><p>Ray call triggers receiver init + weight send</p></td>
+<td><p>Triggered by Ray: joins process group, receives weights</p></td>
+<td><p>Ray + torch.distributed</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">send</span></code></p></td>
+<td><p>Ray remote call to <code class="docutils literal notranslate"><span class="pre">_receive_weights_scheme()</span></code> + <code class="docutils literal notranslate"><span class="pre">torch.distributed.isend()</span></code></p></td>
+<td><p>Receiver runs <code class="docutils literal notranslate"><span class="pre">scheme.receive()</span></code> in the Ray call context and applies weights</p></td>
+<td><p>Ray + torch.distributed</p></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">RayModuleTransformScheme</span></code> is unique in that even <code class="docutils literal notranslate"><span class="pre">connect</span></code> on the sender
+triggers the receiver initialization via a Ray remote call. The user only needs to call
+<code class="docutils literal notranslate"><span class="pre">connect()</span></code> on the sender side.</p>
+</div>
+</section>
+<section id="background-thread-architecture">
+<h3>Background Thread Architecture<a class="headerlink" href="#background-thread-architecture" title="Link to this heading">¶</a></h3>
+<p>Some schemes use a <strong>background receiver thread</strong> on the receiver side. This is used when the sender
+cannot directly invoke receiver logic (e.g. multiprocessing queues or TCPStore-based signaling).
+The thread is started during <code class="docutils literal notranslate"><span class="pre">connect()</span></code> and runs <code class="docutils literal notranslate"><span class="pre">scheme.receive()</span></code> when instructed by the sender.</p>
+<p><strong>Instruction mechanisms</strong> (scheme-specific):
+- <strong>SharedMem/MultiProcess</strong>: Queue-based (<code class="docutils literal notranslate"><span class="pre">queue.put(&quot;receive&quot;)</span></code>)
+- <strong>Distributed</strong>: TCPStore-based (<code class="docutils literal notranslate"><span class="pre">store.set(&quot;receive&quot;)</span></code>)
+- <strong>RPC/Ray</strong>: Remote calls to <code class="docutils literal notranslate"><span class="pre">_receive_weights_scheme()</span></code> (no dedicated background thread)</p>
+<p><strong>Benefits</strong>: non-blocking main process for queue/store-based schemes, sender-triggered updates,
+automatic cascading to sub-collectors, and graceful timeout handling.</p>
+</section>
+</section>
+<section id="usage-examples">
+<h2>Usage Examples<a class="headerlink" href="#usage-examples" title="Link to this heading">¶</a></h2>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>Runnable versions</strong> of these examples are available in the repository:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://github.com/pytorch/rl/blob/main/examples/collectors/weight_sync_standalone.py">examples/collectors/weight_sync_standalone.py</a>: Standalone weight synchronization</p></li>
+<li><p><a class="reference external" href="https://github.com/pytorch/rl/blob/main/examples/collectors/weight_sync_collectors.py">examples/collectors/weight_sync_collectors.py</a>: Collector integration</p></li>
+</ul>
+</div>
+<section id="using-weight-sync-schemes-with-collectors">
+<h3>Using Weight Sync Schemes with Collectors<a class="headerlink" href="#using-weight-sync-schemes-with-collectors" title="Link to this heading">¶</a></h3>
+<p>Weight sync schemes integrate seamlessly with TorchRL collectors. The collector handles calling
+<code class="docutils literal notranslate"><span class="pre">init_on_sender()</span></code>, <code class="docutils literal notranslate"><span class="pre">init_on_receiver()</span></code>, and <code class="docutils literal notranslate"><span class="pre">connect()</span></code> automatically:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
+<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModule</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">MultiCollector</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">GymEnv</span>
+<span class="kn">from</span> <span class="nn">torchrl.weight_update</span> <span class="kn">import</span> <span class="n">SharedMemWeightSyncScheme</span>
+
+<span class="c1"># Create environment and policy</span>
+<span class="n">env</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;CartPole-v1&quot;</span><span class="p">)</span>
+<span class="n">policy</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span>
+    <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">observation_spec</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+              <span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]),</span>
+    <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">],</span>
+    <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">],</span>
+<span class="p">)</span>
+
+<span class="c1"># Create scheme - collector handles initialization</span>
+<span class="n">scheme</span> <span class="o">=</span> <span class="n">SharedMemWeightSyncScheme</span><span class="p">(</span><span class="n">strategy</span><span class="o">=</span><span class="s2">&quot;tensordict&quot;</span><span class="p">)</span>
+
+<span class="n">collector</span> <span class="o">=</span> <span class="n">MultiCollector</span><span class="p">(</span>
+    <span class="n">sync</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">create_env_fn</span><span class="o">=</span><span class="p">[</span><span class="k">lambda</span><span class="p">:</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;CartPole-v1&quot;</span><span class="p">)]</span> <span class="o">*</span> <span class="mi">3</span><span class="p">,</span>
+    <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
+    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">192</span><span class="p">,</span>
+    <span class="n">total_frames</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span>
+    <span class="n">weight_sync_schemes</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;policy&quot;</span><span class="p">:</span> <span class="n">scheme</span><span class="p">},</span>
+<span class="p">)</span>
+
+<span class="c1"># Collect data and update weights</span>
+<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">collector</span><span class="p">):</span>
+    <span class="c1"># ... training step ...</span>
+
+    <span class="c1"># Update weights - multiple calling conventions supported:</span>
+    <span class="k">if</span> <span class="n">i</span> <span class="o">%</span> <span class="mi">10</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="c1"># Option 1: No arguments (uses registered policy)</span>
+        <span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">()</span>
+
+        <span class="c1"># Option 2: Pass policy module (positional)</span>
+        <span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
+
+        <span class="c1"># Option 3: Pass weights TensorDict (positional)</span>
+        <span class="c1"># collector.update_policy_weights_(weights_tensordict)</span>
+
+        <span class="c1"># Option 4: Use keyword arguments for clarity</span>
+        <span class="c1"># collector.update_policy_weights_(policy=policy)</span>
+        <span class="c1"># collector.update_policy_weights_(weights=weights_td, model_id=&quot;policy&quot;)</span>
+
+<span class="n">collector</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<section id="using-weight-sync-schemes-standalone">
+<h3>Using Weight Sync Schemes Standalone<a class="headerlink" href="#using-weight-sync-schemes-standalone" title="Link to this heading">¶</a></h3>
+<p>For custom multiprocessing scenarios, you can use schemes directly. The key is to follow the
+two-phase pattern: initialize first (no communication), then connect (blocking rendez-vous):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">multiprocessing</span> <span class="k">as</span> <span class="n">mp</span>
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="kn">from</span> <span class="nn">torchrl.weight_update</span> <span class="kn">import</span> <span class="n">SharedMemWeightSyncScheme</span>
+
+<span class="k">def</span> <span class="nf">worker_fn</span><span class="p">(</span><span class="n">scheme</span><span class="p">,</span> <span class="n">worker_idx</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Worker process - receives scheme via pickle.&quot;&quot;&quot;</span>
+    <span class="c1"># Create local model (weights will be overwritten by sender&#39;s weights)</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+
+    <span class="c1"># PHASE 1: Initialize on receiver (no communication yet)</span>
+    <span class="n">scheme</span><span class="o">.</span><span class="n">init_on_receiver</span><span class="p">(</span><span class="n">model_id</span><span class="o">=</span><span class="s2">&quot;policy&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">worker_idx</span><span class="o">=</span><span class="n">worker_idx</span><span class="p">)</span>
+
+    <span class="c1"># PHASE 2: Blocking rendez-vous - receive initial weights from sender</span>
+    <span class="n">scheme</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">worker_idx</span><span class="o">=</span><span class="n">worker_idx</span><span class="p">)</span>
+    <span class="c1"># model now has the sender&#39;s weights; background thread started</span>
+
+    <span class="c1"># Ready to work - background thread handles weight updates automatically</span>
+    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="c1"># ... use model for inference ...</span>
+
+<span class="c1"># === MAIN PROCESS (Sender) ===</span>
+<span class="n">policy</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="n">scheme</span> <span class="o">=</span> <span class="n">SharedMemWeightSyncScheme</span><span class="p">()</span>
+
+<span class="c1"># PHASE 1: Initialize on sender (no communication yet)</span>
+<span class="n">scheme</span><span class="o">.</span><span class="n">init_on_sender</span><span class="p">(</span>
+    <span class="n">model_id</span><span class="o">=</span><span class="s2">&quot;policy&quot;</span><span class="p">,</span>
+    <span class="n">weights</span><span class="o">=</span><span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy</span><span class="p">),</span>
+    <span class="n">devices</span><span class="o">=</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)]</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span>
+    <span class="n">num_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Spawn workers - scheme is pickled and sent to each worker</span>
+<span class="n">workers</span> <span class="o">=</span> <span class="p">[</span><span class="n">mp</span><span class="o">.</span><span class="n">Process</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">worker_fn</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">scheme</span><span class="p">,</span> <span class="n">i</span><span class="p">))</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">)]</span>
+<span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="n">workers</span><span class="p">:</span>
+    <span class="n">w</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+<span class="c1"># PHASE 2: Blocking rendez-vous - send initial weights to workers</span>
+<span class="n">scheme</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>
+<span class="c1"># Workers now have copies of policy&#39;s weights!</span>
+
+<span class="c1"># PHASE 3: Ongoing updates (zero-copy for shared memory)</span>
+<span class="k">for</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+    <span class="c1"># ... training step updates policy weights ...</span>
+    <span class="n">scheme</span><span class="o">.</span><span class="n">send</span><span class="p">()</span>  <span class="c1"># Background threads automatically apply weights</span>
+
+<span class="n">scheme</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>  <span class="c1"># Stop background threads</span>
+<span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="n">workers</span><span class="p">:</span>
+    <span class="n">w</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>With <code class="docutils literal notranslate"><span class="pre">SharedMemWeightSyncScheme</span></code>, weight updates are zero-copy since all processes share the same
+memory buffers. Background threads automatically apply updates when instructed by the sender.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">strategy</span></code> parameter determines the weight format: <code class="docutils literal notranslate"><span class="pre">&quot;state_dict&quot;</span></code> uses PyTorch’s native state
+dictionaries, while <code class="docutils literal notranslate"><span class="pre">&quot;tensordict&quot;</span></code> (default) uses TensorDict format which is more efficient for
+structured models and supports features like device mapping.</p>
+</div>
+</section>
+</section>
+<section id="transports">
+<h2>Transports<a class="headerlink" href="#transports" title="Link to this heading">¶</a></h2>
+<p>Transports handle the low-level communication between sender and receiver. Each scheme creates
+appropriate transport instances for its workers.</p>
+<section id="transport-interface">
+<h3>Transport Interface<a class="headerlink" href="#transport-interface" title="Link to this heading">¶</a></h3>
+<p>All transports implement the <code class="docutils literal notranslate"><span class="pre">TransportBackend</span></code> protocol with a stateless design. The key methods
+accept <code class="docutils literal notranslate"><span class="pre">weights</span></code>, <code class="docutils literal notranslate"><span class="pre">model</span></code>, and <code class="docutils literal notranslate"><span class="pre">strategy</span></code> as keyword arguments rather than storing them as
+instance attributes:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Transport methods accept model/weights/strategy as kwargs</span>
+<span class="n">transport</span><span class="o">.</span><span class="n">receive_weights</span><span class="p">(</span>
+    <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>      <span class="c1"># Optional timeout in seconds (None = blocking)</span>
+    <span class="n">weights</span><span class="o">=</span><span class="n">buffer</span><span class="p">,</span>    <span class="c1"># Pre-allocated weight buffer</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>      <span class="c1"># Model to apply weights to</span>
+    <span class="n">strategy</span><span class="o">=</span><span class="n">strategy</span><span class="p">,</span> <span class="c1"># WeightStrategy for weight application</span>
+<span class="p">)</span>
+
+<span class="n">transport</span><span class="o">.</span><span class="n">setup_connection_and_weights_on_receiver</span><span class="p">(</span>
+    <span class="n">worker_idx</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">weights</span><span class="o">=</span><span class="n">buffer</span><span class="p">,</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
+    <span class="n">strategy</span><span class="o">=</span><span class="n">strategy</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="timeout-support">
+<h3>Timeout Support<a class="headerlink" href="#timeout-support" title="Link to this heading">¶</a></h3>
+<p>Transports support timeout for non-blocking weight reception:</p>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Transport</p></th>
+<th class="head"><p>Timeout Support</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">MPTransport</span></code></p></td>
+<td><p>✅ Yes</p></td>
+<td><p>Uses <code class="docutils literal notranslate"><span class="pre">queue.get(timeout=...)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">RPCTransport</span></code></p></td>
+<td><p>✅ Yes</p></td>
+<td><p>Uses <code class="docutils literal notranslate"><span class="pre">irecv(return_premature=True)</span></code> with polling</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RayTransport</span></code></p></td>
+<td><p>✅ Yes</p></td>
+<td><p>Uses <code class="docutils literal notranslate"><span class="pre">irecv(return_premature=True)</span></code> with polling</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">DistributedTransport</span></code></p></td>
+<td><p>✅ Yes</p></td>
+<td><p>Uses <code class="docutils literal notranslate"><span class="pre">irecv(return_premature=True)</span></code> with polling</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">SharedMemTransport</span></code></p></td>
+<td><p>N/A</p></td>
+<td><p>Shared memory is instant (no waiting)</p></td>
+</tr>
+</tbody>
+</table>
+<p>When <code class="docutils literal notranslate"><span class="pre">timeout=None</span></code> (default), the receive operation blocks until weights arrive.
+When a timeout is specified, the method returns <code class="docutils literal notranslate"><span class="pre">None</span></code> if the timeout expires before
+weights are received.</p>
+</section>
+<section id="available-transports">
+<h3>Available Transports<a class="headerlink" href="#available-transports" title="Link to this heading">¶</a></h3>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.weight_update.TransportBackend.html#torchrl.weight_update.TransportBackend" title="torchrl.weight_update.TransportBackend"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransportBackend</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Abstract interface for different communication mechanisms.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.weight_update.MPTransport.html#torchrl.weight_update.MPTransport" title="torchrl.weight_update.MPTransport"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MPTransport</span></code></a>(weight_queue[, ack_queue, timeout])</p></td>
+<td><p>Multiprocessing transport using queues.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport" title="torchrl.weight_update.SharedMemTransport"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SharedMemTransport</span></code></a>()</p></td>
+<td><p>Shared memory transport for in-place weight updates.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.weight_update.RayTransport.html#torchrl.weight_update.RayTransport" title="torchrl.weight_update.RayTransport"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RayTransport</span></code></a>(*[, remote_actor, worker_idx, ...])</p></td>
+<td><p>Ray transport for communicating with a single Ray actor.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.weight_update.RPCTransport.html#torchrl.weight_update.RPCTransport" title="torchrl.weight_update.RPCTransport"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RPCTransport</span></code></a>([collector_info, ...])</p></td>
+<td><p>RPC transport for communicating with a single RPC remote collector.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.weight_update.DistributedTransport.html#torchrl.weight_update.DistributedTransport" title="torchrl.weight_update.DistributedTransport"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DistributedTransport</span></code></a>(*, weights_buffer[, ...])</p></td>
+<td><p>torch.distributed transport for communicating with a single distributed worker.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="schemes">
+<h2>Schemes<a class="headerlink" href="#schemes" title="Link to this heading">¶</a></h2>
+<p>Schemes orchestrate the weight synchronization lifecycle, managing initialization, connection setup,
+and ongoing weight transfers.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme" title="torchrl.weight_update.WeightSyncScheme"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WeightSyncScheme</span></code></a>([strategy])</p></td>
+<td><p>Configuration for how to synchronize ONE model across workers.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.weight_update.WeightStrategy.html#torchrl.weight_update.WeightStrategy" title="torchrl.weight_update.WeightStrategy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WeightStrategy</span></code></a>([extract_as])</p></td>
+<td><p>Unified strategy for weight transmission.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.weight_update.MultiProcessWeightSyncScheme.html#torchrl.weight_update.MultiProcessWeightSyncScheme" title="torchrl.weight_update.MultiProcessWeightSyncScheme"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiProcessWeightSyncScheme</span></code></a>([strategy, sync])</p></td>
+<td><p>Weight synchronization for multiprocess operations using queues.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.weight_update.SharedMemWeightSyncScheme.html#torchrl.weight_update.SharedMemWeightSyncScheme" title="torchrl.weight_update.SharedMemWeightSyncScheme"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SharedMemWeightSyncScheme</span></code></a>([strategy, sync])</p></td>
+<td><p>Weight synchronization using shared memory.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.weight_update.NoWeightSyncScheme.html#torchrl.weight_update.NoWeightSyncScheme" title="torchrl.weight_update.NoWeightSyncScheme"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NoWeightSyncScheme</span></code></a>([strategy])</p></td>
+<td><p>No-op weight synchronization scheme.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.weight_update.RayWeightSyncScheme.html#torchrl.weight_update.RayWeightSyncScheme" title="torchrl.weight_update.RayWeightSyncScheme"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RayWeightSyncScheme</span></code></a>([strategy, backend])</p></td>
+<td><p>Weight synchronization for Ray distributed computing.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.weight_update.RayModuleTransformScheme.html#torchrl.weight_update.RayModuleTransformScheme" title="torchrl.weight_update.RayModuleTransformScheme"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RayModuleTransformScheme</span></code></a>([strategy, backend])</p></td>
+<td><p>Weight synchronization for RayModuleTransform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.weight_update.RPCWeightSyncScheme.html#torchrl.weight_update.RPCWeightSyncScheme" title="torchrl.weight_update.RPCWeightSyncScheme"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RPCWeightSyncScheme</span></code></a>([strategy])</p></td>
+<td><p>Weight synchronization for torch.distributed.rpc.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.weight_update.DistributedWeightSyncScheme.html#torchrl.weight_update.DistributedWeightSyncScheme" title="torchrl.weight_update.DistributedWeightSyncScheme"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DistributedWeightSyncScheme</span></code></a>([backend, sync, ...])</p></td>
+<td><p>Weight synchronization for torch.distributed.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="legacy-weight-updaters">
+<h2>Legacy: Weight Updaters<a class="headerlink" href="#legacy-weight-updaters" title="Link to this heading">¶</a></h2>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>The <cite>WeightUpdater</cite> API is deprecated as of the 0.11 release.
+The Weight Sync Schemes API provides more flexibility and better compatibility with heavy
+weight transfers (e.g., LLMs) and should be preferred for all new code.</p>
+</div>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase" title="torchrl.collectors.WeightUpdaterBase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WeightUpdaterBase</span></code></a>()</p></td>
+<td><p>A base class for updating remote policy weights on inference workers.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.VanillaWeightUpdater.html#torchrl.collectors.VanillaWeightUpdater" title="torchrl.collectors.VanillaWeightUpdater"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VanillaWeightUpdater</span></code></a>(*[, weight_getter])</p></td>
+<td><p>A simple implementation of <a class="reference internal" href="generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase" title="torchrl.collectors.WeightUpdaterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">WeightUpdaterBase</span></code></a> for updating local policy weights.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.MultiProcessedWeightUpdater.html#torchrl.collectors.MultiProcessedWeightUpdater" title="torchrl.collectors.MultiProcessedWeightUpdater"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiProcessedWeightUpdater</span></code></a>(*, ...)</p></td>
+<td><p>A remote weight updater for synchronizing policy weights across multiple processes or devices.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater" title="torchrl.collectors.RayWeightUpdater"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RayWeightUpdater</span></code></a>(policy_weights, ...[, ...])</p></td>
+<td><p>A remote weight updater for synchronizing policy weights across remote workers using Ray.</p></td>
+</tr>
+</tbody>
+</table>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.distributed.RPCWeightUpdater.html#torchrl.collectors.distributed.RPCWeightUpdater" title="torchrl.collectors.distributed.RPCWeightUpdater"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RPCWeightUpdater</span></code></a>(collector_infos, ...)</p></td>
+<td><p>A remote weight updater for synchronizing policy weights across remote workers using RPC.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.distributed.DistributedWeightUpdater.html#torchrl.collectors.distributed.DistributedWeightUpdater" title="torchrl.collectors.distributed.DistributedWeightUpdater"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DistributedWeightUpdater</span></code></a>(store, ...)</p></td>
+<td><p>A remote weight updater for synchronizing policy weights across distributed workers.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="generated/torchrl.weight_update.TransportBackend.html" class="btn btn-neutral float-right" title="TransportBackend" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="generated/torchrl.collectors.distributed.RayCollector.html" class="btn btn-neutral" title="RayCollector" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">Weight Synchronization</a><ul>
+<li><a class="reference internal" href="#lifecycle-of-weight-synchronization">Lifecycle of Weight Synchronization</a><ul>
+<li><a class="reference internal" href="#phase-1-initialization-no-communication">Phase 1: Initialization (No Communication)</a></li>
+<li><a class="reference internal" href="#phase-2-connection-and-initial-weights-rendez-vous">Phase 2: Connection and Initial Weights (Rendez-vous)</a></li>
+<li><a class="reference internal" href="#phase-3-ongoing-weight-updates">Phase 3: Ongoing Weight Updates</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#scheme-specific-behavior">Scheme-Specific Behavior</a><ul>
+<li><a class="reference internal" href="#sharedmemweightsyncscheme">SharedMemWeightSyncScheme</a></li>
+<li><a class="reference internal" href="#multiprocessweightsyncscheme">MultiProcessWeightSyncScheme</a></li>
+<li><a class="reference internal" href="#distributedweightsyncscheme">DistributedWeightSyncScheme</a></li>
+<li><a class="reference internal" href="#rpcweightsyncscheme">RPCWeightSyncScheme</a></li>
+<li><a class="reference internal" href="#rayweightsyncscheme">RayWeightSyncScheme</a></li>
+<li><a class="reference internal" href="#raymoduletransformscheme">RayModuleTransformScheme</a></li>
+<li><a class="reference internal" href="#background-thread-architecture">Background Thread Architecture</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#usage-examples">Usage Examples</a><ul>
+<li><a class="reference internal" href="#using-weight-sync-schemes-with-collectors">Using Weight Sync Schemes with Collectors</a></li>
+<li><a class="reference internal" href="#using-weight-sync-schemes-standalone">Using Weight Sync Schemes Standalone</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#transports">Transports</a><ul>
+<li><a class="reference internal" href="#transport-interface">Transport Interface</a></li>
+<li><a class="reference internal" href="#timeout-support">Timeout Support</a></li>
+<li><a class="reference internal" href="#available-transports">Available Transports</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#schemes">Schemes</a></li>
+<li><a class="reference internal" href="#legacy-weight-updaters">Legacy: Weight Updaters</a><ul>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../',
+            VERSION:'0.11',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../_static/doctools.js"></script>
+      <script type="text/javascript" src="../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../_static/design-tabs.js"></script>
+
+  
+
+  <script type="text/javascript" src="../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="#">Get Started</a>
+          </li>
+
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+    })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,784 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Environment API &mdash; torchrl 0.11 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../_static/pytorch.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="EnvBase" href="generated/torchrl.envs.EnvBase.html" />
+    <link rel="prev" title="torchrl.envs package" href="envs.html" /> 
+
+  
+  <script src="../_static/js/modernizr.min.js"></script>
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+  <div>
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../versions.html"><span style="font-size:110%">0.11 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="index.html">API Reference</a> &gt;</li>
+        
+          <li><a href="envs.html">torchrl.envs package</a> &gt;</li>
+        
+      <li>Environment API</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/reference/envs_api.rst.txt" rel="nofollow"><img src="../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
+        </div>
+
+        <div class="pytorch-content-left">
+    
+    
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" class="pytorch-article">
+              
+  <section id="environment-api">
+<span id="id1"></span><h1>Environment API<a class="headerlink" href="#environment-api" title="Link to this heading">¶</a></h1>
+<p>TorchRL offers an API to handle environments of different backends, such as gym,
+dm-control, dm-lab, model-based environments as well as custom environments.
+The goal is to be able to swap environments in an experiment with little or no effort,
+even if these environments are simulated using different libraries.
+TorchRL offers some out-of-the-box environment wrappers under <code class="xref py py-mod docutils literal notranslate"><span class="pre">torchrl.envs.libs</span></code>,
+which we hope can be easily imitated for other libraries.
+The parent class <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvBase</span></code></a> is a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> subclass that implements
+some typical environment methods using <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code></a> as a data organiser. This allows this
+class to be generic and to handle an arbitrary number of input and outputs, as well as
+nested or batched data structures.</p>
+<p>Each env will have the following attributes:</p>
+<ul class="simple">
+<li><p><code class="xref py py-attr docutils literal notranslate"><span class="pre">env.batch_size</span></code>: a <a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Size</span></code></a> representing the number of envs
+batched together.</p></li>
+<li><p><code class="xref py py-attr docutils literal notranslate"><span class="pre">env.device</span></code>: the device where the input and output tensordict are expected to live.
+The environment device does not mean that the actual step operations will be computed on device
+(this is the responsibility of the backend, with which TorchRL can do little). The device of
+an environment just represents the device where the data is to be expected when input to the
+environment or retrieved from it. TorchRL takes care of mapping the data to the desired device.
+This is especially useful for transforms (see below). For parametric environments (e.g.
+model-based environments), the device does represent the hardware that will be used to
+compute the operations.</p></li>
+<li><p><code class="xref py py-attr docutils literal notranslate"><span class="pre">env.observation_spec</span></code>: a <a class="reference internal" href="generated/torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.Composite"><code class="xref py py-class docutils literal notranslate"><span class="pre">Composite</span></code></a> object
+containing all the observation key-spec pairs.</p></li>
+<li><p><code class="xref py py-attr docutils literal notranslate"><span class="pre">env.state_spec</span></code>: a <a class="reference internal" href="generated/torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.Composite"><code class="xref py py-class docutils literal notranslate"><span class="pre">Composite</span></code></a> object
+containing all the input key-spec pairs (except action). For most stateful
+environments, this container will be empty.</p></li>
+<li><p><code class="xref py py-attr docutils literal notranslate"><span class="pre">env.action_spec</span></code>: a <a class="reference internal" href="generated/torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorSpec</span></code></a> object
+representing the action spec.</p></li>
+<li><p><code class="xref py py-attr docutils literal notranslate"><span class="pre">env.reward_spec</span></code>: a <a class="reference internal" href="generated/torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorSpec</span></code></a> object representing
+the reward spec.</p></li>
+<li><p><code class="xref py py-attr docutils literal notranslate"><span class="pre">env.done_spec</span></code>: a <a class="reference internal" href="generated/torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorSpec</span></code></a> object representing
+the done-flag spec. See the section on trajectory termination below.</p></li>
+<li><p><code class="xref py py-attr docutils literal notranslate"><span class="pre">env.input_spec</span></code>: a <a class="reference internal" href="generated/torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.Composite"><code class="xref py py-class docutils literal notranslate"><span class="pre">Composite</span></code></a> object containing
+all the input keys (<code class="docutils literal notranslate"><span class="pre">&quot;full_action_spec&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;full_state_spec&quot;</span></code>).</p></li>
+<li><p><code class="xref py py-attr docutils literal notranslate"><span class="pre">env.output_spec</span></code>: a <a class="reference internal" href="generated/torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.Composite"><code class="xref py py-class docutils literal notranslate"><span class="pre">Composite</span></code></a> object containing
+all the output keys (<code class="docutils literal notranslate"><span class="pre">&quot;full_observation_spec&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;full_reward_spec&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;full_done_spec&quot;</span></code>).</p></li>
+</ul>
+<p>If the environment carries non-tensor data, a <a class="reference internal" href="generated/torchrl.data.NonTensor.html#torchrl.data.NonTensor" title="torchrl.data.NonTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensor</span></code></a>
+instance can be used.</p>
+<section id="env-specs-locks-and-batch-size">
+<h2>Env specs: locks and batch size<a class="headerlink" href="#env-specs-locks-and-batch-size" title="Link to this heading">¶</a></h2>
+<p id="environment-lock">Environment specs are locked by default (through a <code class="docutils literal notranslate"><span class="pre">spec_locked</span></code> arg passed to the env constructor).
+Locking specs means that any modification of the spec (or its children if it is a <a class="reference internal" href="generated/torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.Composite"><code class="xref py py-class docutils literal notranslate"><span class="pre">Composite</span></code></a>
+instance) will require to unlock it. This can be done via the <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.set_spec_lock_" title="torchrl.envs.EnvBase.set_spec_lock_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set_spec_lock_()</span></code></a>.
+The reason specs are locked by default is that it makes it easy to cache values such as action or reset keys and the
+likes.
+Unlocking an env should only be done if it expected that the specs will be modified often (which, in principle, should
+be avoided).
+Modifications of the specs such as <cite>env.observation_spec = new_spec</cite> are allowed: under the hood, TorchRL will erase
+the cache, unlock the specs, make the modification and relock the specs if the env was previously locked.</p>
+<p>Importantly, the environment spec shapes should contain the batch size, e.g.
+an environment with <code class="xref py py-attr docutils literal notranslate"><span class="pre">env.batch_size</span></code> <code class="docutils literal notranslate"><span class="pre">==</span> <span class="pre">torch.Size([4])</span></code> should have
+an <code class="xref py py-attr docutils literal notranslate"><span class="pre">env.action_spec</span></code> with shape <a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Size</span></code></a> <code class="docutils literal notranslate"><span class="pre">([4,</span> <span class="pre">action_size])</span></code>.
+This is helpful when preallocation tensors, checking shape consistency etc.</p>
+</section>
+<section id="env-methods">
+<h2>Env methods<a class="headerlink" href="#env-methods" title="Link to this heading">¶</a></h2>
+<p>With these, the following methods are implemented:</p>
+<ul>
+<li><p><code class="xref py py-meth docutils literal notranslate"><span class="pre">env.reset()</span></code>: a reset method that may (but not necessarily requires to) take
+a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code></a> input. It return the first tensordict of a rollout, usually
+containing a <code class="docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code> state and a set of observations. If not present,
+a <code class="docutils literal notranslate"><span class="pre">&quot;reward&quot;</span></code> key will be instantiated with 0s and the appropriate shape.</p></li>
+<li><p><code class="xref py py-meth docutils literal notranslate"><span class="pre">env.step()</span></code>: a step method that takes a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code></a> input
+containing an input action as well as other inputs (for model-based or stateless
+environments, for instance).</p></li>
+<li><p><code class="xref py py-meth docutils literal notranslate"><span class="pre">env.step_and_maybe_reset()</span></code>: executes a step, and (partially) resets the
+environments if it needs to. It returns the updated input with a <code class="docutils literal notranslate"><span class="pre">&quot;next&quot;</span></code>
+key containing the data of the next step, as well as a tensordict containing
+the input data for the next step (ie, reset or result or
+<code class="xref py py-func docutils literal notranslate"><span class="pre">step_mdp()</span></code>)
+This is done by reading the <code class="docutils literal notranslate"><span class="pre">done_keys</span></code> and
+assigning a <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> signal to each done state. This method allows
+to code non-stopping rollout functions with little effort:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">data_</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">data</span><span class="p">,</span> <span class="n">data_</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">step_and_maybe_reset</span><span class="p">(</span><span class="n">data_</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">result</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+</pre></div>
+</div>
+</li>
+<li><p><code class="xref py py-meth docutils literal notranslate"><span class="pre">env.set_seed()</span></code>: a seeding method that will return the next seed
+to be used in a multi-env setting. This next seed is deterministically computed
+from the preceding one, such that one can seed multiple environments with a different
+seed without risking to overlap seeds in consecutive experiments, while still
+having reproducible results.</p></li>
+<li><p><code class="xref py py-meth docutils literal notranslate"><span class="pre">env.rollout()</span></code>: executes a rollout in the environment for
+a maximum number of steps (<code class="docutils literal notranslate"><span class="pre">max_steps=N</span></code>) and using a policy (<code class="docutils literal notranslate"><span class="pre">policy=model</span></code>).
+The policy should be coded using a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModule</span></code></a>
+(or any other <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code></a>-compatible module).
+The resulting <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code></a> instance will be marked with
+a trailing <code class="docutils literal notranslate"><span class="pre">&quot;time&quot;</span></code> named dimension that can be used by other modules
+to treat this batched dimension as it should.</p></li>
+</ul>
+<p>The following figure summarizes how a rollout is executed in torchrl.</p>
+<figure class="align-default" id="id2">
+<img alt="../_images/rollout.gif" src="../_images/rollout.gif" />
+<figcaption>
+<p><span class="caption-text">TorchRL rollouts using TensorDict.</span><a class="headerlink" href="#id2" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>In brief, a TensorDict is created by the <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#id1" title="torchrl.envs.EnvBase.reset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reset()</span></code></a> method,
+then populated with an action by the policy before being passed to the
+<a class="reference internal" href="generated/torchrl.envs.EnvBase.html#id4" title="torchrl.envs.EnvBase.step"><code class="xref py py-meth docutils literal notranslate"><span class="pre">step()</span></code></a> method which writes the observations, done flag(s) and
+reward under the <code class="docutils literal notranslate"><span class="pre">&quot;next&quot;</span></code> entry. The result of this call is stored for
+delivery and the <code class="docutils literal notranslate"><span class="pre">&quot;next&quot;</span></code> entry is gathered by the <code class="xref py py-func docutils literal notranslate"><span class="pre">step_mdp()</span></code>
+function.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>In general, all TorchRL environment have a <code class="docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;terminated&quot;</span></code>
+entry in their output tensordict. If they are not present by design,
+the <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvBase</span></code></a> metaclass will ensure that every done or terminated
+is flanked with its dual.
+In TorchRL, <code class="docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code> strictly refers to the union of all the end-of-trajectory
+signals and should be interpreted as “the last step of a trajectory” or
+equivalently “a signal indicating the need to reset”.
+If the environment provides it (eg, Gymnasium), the truncation entry is also
+written in the <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#id4" title="torchrl.envs.EnvBase.step"><code class="xref py py-meth docutils literal notranslate"><span class="pre">EnvBase.step()</span></code></a> output under a <code class="docutils literal notranslate"><span class="pre">&quot;truncated&quot;</span></code> entry.
+If the environment carries a single value, it will interpreted as a <code class="docutils literal notranslate"><span class="pre">&quot;terminated&quot;</span></code>
+signal by default.
+By default, TorchRL’s collectors and rollout methods will be looking for the <code class="docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code>
+entry to assess if the environment should be reset.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The <cite>torchrl.collectors.utils.split_trajectories</cite> function can be used to
+slice adjacent trajectories. It relies on a <code class="docutils literal notranslate"><span class="pre">&quot;traj_ids&quot;</span></code> entry in the
+input tensordict, or to the junction of <code class="docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;truncated&quot;</span></code> key
+if the <code class="docutils literal notranslate"><span class="pre">&quot;traj_ids&quot;</span></code> is missing.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>In some contexts, it can be useful to mark the first step of a trajectory.
+TorchRL provides such functionality through the <code class="xref py py-class docutils literal notranslate"><span class="pre">InitTracker</span></code>
+transform.</p>
+</div>
+<p>Our environment <a class="reference internal" href="../tutorials/pendulum.html#pendulum-tuto"><span class="std std-ref">tutorial</span></a>
+provides more information on how to design a custom environment from scratch.</p>
+</section>
+<section id="base-classes">
+<h2>Base classes<a class="headerlink" href="#base-classes" title="Link to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnvBase</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Abstract environment parent class.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.GymLikeEnv.html#torchrl.envs.GymLikeEnv" title="torchrl.envs.GymLikeEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GymLikeEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A gym-like env is an environment.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.EnvMetaData.html#torchrl.envs.EnvMetaData" title="torchrl.envs.EnvMetaData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnvMetaData</span></code></a>(*, tensordict, specs, ...)</p></td>
+<td><p>A class for environment meta-data storage and passing in multiprocessed settings.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="custom-native-torchrl-environments">
+<h2>Custom native TorchRL environments<a class="headerlink" href="#custom-native-torchrl-environments" title="Link to this heading">¶</a></h2>
+<p>TorchRL offers a series of custom built-in environments.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.ChessEnv.html#torchrl.envs.ChessEnv" title="torchrl.envs.ChessEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChessEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A chess environment that follows the TorchRL API.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.PendulumEnv.html#torchrl.envs.PendulumEnv" title="torchrl.envs.PendulumEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PendulumEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A stateless Pendulum environment.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.TicTacToeEnv.html#torchrl.envs.TicTacToeEnv" title="torchrl.envs.TicTacToeEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TicTacToeEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A Tic-Tac-Toe implementation.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.LLMHashingEnv.html#torchrl.envs.LLMHashingEnv" title="torchrl.envs.LLMHashingEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMHashingEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A text generation environment that uses a hashing module to identify unique observations.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="domain-specific">
+<h2>Domain-specific<a class="headerlink" href="#domain-specific" title="Link to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.ModelBasedEnvBase.html#torchrl.envs.ModelBasedEnvBase" title="torchrl.envs.ModelBasedEnvBase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelBasedEnvBase</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Basic environment for Model Based RL sota-implementations.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.model_based.dreamer.DreamerEnv.html#torchrl.envs.model_based.dreamer.DreamerEnv" title="torchrl.envs.model_based.dreamer.DreamerEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">model_based.dreamer.DreamerEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Dreamer simulation environment.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.model_based.dreamer.DreamerDecoder.html#torchrl.envs.model_based.dreamer.DreamerDecoder" title="torchrl.envs.model_based.dreamer.DreamerDecoder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">model_based.dreamer.DreamerDecoder</span></code></a>([...])</p></td>
+<td><p>A transform to record the decoded observations in Dreamer.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="helpers">
+<h2>Helpers<a class="headerlink" href="#helpers" title="Link to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.check_env_specs.html#torchrl.envs.check_env_specs" title="torchrl.envs.check_env_specs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_env_specs</span></code></a>(env[, return_contiguous, ...])</p></td>
+<td><p>Tests an environment specs against the results of short rollout.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.exploration_type.html#torchrl.envs.exploration_type" title="torchrl.envs.exploration_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">exploration_type</span></code></a>()</p></td>
+<td><p>Returns the current sampling type.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.get_available_libraries.html#torchrl.envs.get_available_libraries" title="torchrl.envs.get_available_libraries"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_available_libraries</span></code></a>()</p></td>
+<td><p>Returns all the supported libraries.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.make_composite_from_td.html#torchrl.envs.make_composite_from_td" title="torchrl.envs.make_composite_from_td"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_composite_from_td</span></code></a>(data, *[, ...])</p></td>
+<td><p>Creates a Composite instance from a tensordict, assuming all values are unbounded.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.set_exploration_type.html#torchrl.envs.set_exploration_type" title="torchrl.envs.set_exploration_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_exploration_type</span></code></a></p></td>
+<td><p>alias of <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_interaction_type</span></code></a></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.step_mdp.html#torchrl.envs.step_mdp" title="torchrl.envs.step_mdp"><code class="xref py py-obj docutils literal notranslate"><span class="pre">step_mdp</span></code></a>(tensordict[, next_tensordict, ...])</p></td>
+<td><p>Creates a new tensordict that reflects a step in time of the input tensordict.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.terminated_or_truncated.html#torchrl.envs.terminated_or_truncated" title="torchrl.envs.terminated_or_truncated"><code class="xref py py-obj docutils literal notranslate"><span class="pre">terminated_or_truncated</span></code></a>(data[, ...])</p></td>
+<td><p>Reads the done / terminated / truncated keys within a tensordict, and writes a new tensor where the values of both signals are aggregated.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="generated/torchrl.envs.EnvBase.html" class="btn btn-neutral float-right" title="EnvBase" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="envs.html" class="btn btn-neutral" title="torchrl.envs package" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">Environment API</a><ul>
+<li><a class="reference internal" href="#env-specs-locks-and-batch-size">Env specs: locks and batch size</a></li>
+<li><a class="reference internal" href="#env-methods">Env methods</a></li>
+<li><a class="reference internal" href="#base-classes">Base classes</a></li>
+<li><a class="reference internal" href="#custom-native-torchrl-environments">Custom native TorchRL environments</a></li>
+<li><a class="reference internal" href="#domain-specific">Domain-specific</a></li>
+<li><a class="reference internal" href="#helpers">Helpers</a></li>
+</ul>
+</li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../',
+            VERSION:'0.11',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../_static/doctools.js"></script>
+      <script type="text/javascript" src="../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../_static/design-tabs.js"></script>
+
+  
+
+  <script type="text/javascript" src="../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="#">Get Started</a>
+          </li>
+
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+    })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,841 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.trainers.algorithms.sac &mdash; torchrl 0.11 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../../_static/pytorch.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+
+  
+  <script src="../../../../_static/js/modernizr.min.js"></script>
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+  <div>
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../../versions.html"><span style="font-size:110%">0.11 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.trainers.algorithms.sac</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
+        </div>
+
+        <div class="pytorch-content-left">
+    
+    
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" class="pytorch-article">
+              
+  <h1>Source code for torchrl.trainers.algorithms.sac</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">pathlib</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span>
+
+<span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">partial</span>
+
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">optim</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">BaseCollector</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.data.replay_buffers.replay_buffers</span> <span class="kn">import</span> <span class="n">ReplayBuffer</span>
+<span class="kn">from</span> <span class="nn">torchrl.objectives.common</span> <span class="kn">import</span> <span class="n">LossModule</span>
+<span class="kn">from</span> <span class="nn">torchrl.objectives.utils</span> <span class="kn">import</span> <span class="n">TargetNetUpdater</span>
+<span class="kn">from</span> <span class="nn">torchrl.record.loggers</span> <span class="kn">import</span> <span class="n">Logger</span>
+<span class="kn">from</span> <span class="nn">torchrl.trainers.trainers</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">LogScalar</span><span class="p">,</span>
+    <span class="n">ReplayBufferTrainer</span><span class="p">,</span>
+    <span class="n">TargetNetUpdaterHook</span><span class="p">,</span>
+    <span class="n">Trainer</span><span class="p">,</span>
+    <span class="n">UpdateWeights</span><span class="p">,</span>
+    <span class="n">UTDRHook</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<div class="viewcode-block" id="SACTrainer">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.algorithms.SACTrainer.html#torchrl.trainers.algorithms.SACTrainer">[docs]</a>
+<span class="k">class</span> <span class="nc">SACTrainer</span><span class="p">(</span><span class="n">Trainer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A trainer class for Soft Actor-Critic (SAC) algorithm.</span>
+
+<span class="sd">    This trainer implements the SAC algorithm, an off-policy actor-critic method that</span>
+<span class="sd">    optimizes a stochastic policy in an off-policy way, forming a bridge between</span>
+<span class="sd">    stochastic policy optimization and DDPG-style approaches. SAC incorporates the</span>
+<span class="sd">    entropy measure of the policy into the reward to encourage exploration.</span>
+
+<span class="sd">    The trainer handles:</span>
+<span class="sd">    - Replay buffer management for off-policy learning</span>
+<span class="sd">    - Target network updates with configurable update frequency</span>
+<span class="sd">    - Policy weight updates to the data collector</span>
+<span class="sd">    - Comprehensive logging of training metrics</span>
+<span class="sd">    - Gradient clipping and optimization steps</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        collector (BaseCollector): The data collector used to gather environment interactions.</span>
+<span class="sd">        total_frames (int): Total number of frames to collect during training.</span>
+<span class="sd">        frame_skip (int): Number of frames to skip between policy updates.</span>
+<span class="sd">        optim_steps_per_batch (int): Number of optimization steps per collected batch.</span>
+<span class="sd">        loss_module (LossModule | Callable): The SAC loss module or a callable that computes losses.</span>
+<span class="sd">        optimizer (optim.Optimizer, optional): The optimizer for training. If None, must be configured elsewhere.</span>
+<span class="sd">        logger (Logger, optional): Logger for recording training metrics. Defaults to None.</span>
+<span class="sd">        clip_grad_norm (bool, optional): Whether to clip gradient norms. Defaults to True.</span>
+<span class="sd">        clip_norm (float, optional): Maximum gradient norm for clipping. Defaults to None.</span>
+<span class="sd">        progress_bar (bool, optional): Whether to show a progress bar during training. Defaults to True.</span>
+<span class="sd">        seed (int, optional): Random seed for reproducibility. Defaults to None.</span>
+<span class="sd">        save_trainer_interval (int, optional): Interval for saving trainer state. Defaults to 10000.</span>
+<span class="sd">        log_interval (int, optional): Interval for logging metrics. Defaults to 10000.</span>
+<span class="sd">        save_trainer_file (str | pathlib.Path, optional): File path for saving trainer state. Defaults to None.</span>
+<span class="sd">        replay_buffer (ReplayBuffer, optional): Replay buffer for storing and sampling experiences. Defaults to None.</span>
+<span class="sd">        batch_size (int, optional): Batch size for sampling from replay buffer. Defaults to None.</span>
+<span class="sd">        enable_logging (bool, optional): Whether to enable metric logging. Defaults to True.</span>
+<span class="sd">        log_rewards (bool, optional): Whether to log reward statistics. Defaults to True.</span>
+<span class="sd">        log_actions (bool, optional): Whether to log action statistics. Defaults to True.</span>
+<span class="sd">        log_observations (bool, optional): Whether to log observation statistics. Defaults to False.</span>
+<span class="sd">        target_net_updater (TargetNetUpdater, optional): Target network updater for soft updates. Defaults to None.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.collectors import Collector</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.objectives import SACLoss</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import ReplayBuffer, LazyTensorStorage</span>
+<span class="sd">        &gt;&gt;&gt; from torch import optim</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Set up collector, loss, and replay buffer</span>
+<span class="sd">        &gt;&gt;&gt; collector = Collector(env, policy, frames_per_batch=1000)</span>
+<span class="sd">        &gt;&gt;&gt; loss_module = SACLoss(actor_network, qvalue_network)</span>
+<span class="sd">        &gt;&gt;&gt; optimizer = optim.Adam(loss_module.parameters(), lr=3e-4)</span>
+<span class="sd">        &gt;&gt;&gt; replay_buffer = ReplayBuffer(storage=LazyTensorStorage(100000))</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Create and run trainer</span>
+<span class="sd">        &gt;&gt;&gt; trainer = SACTrainer(</span>
+<span class="sd">        ...     collector=collector,</span>
+<span class="sd">        ...     total_frames=1000000,</span>
+<span class="sd">        ...     frame_skip=1,</span>
+<span class="sd">        ...     optim_steps_per_batch=100,</span>
+<span class="sd">        ...     loss_module=loss_module,</span>
+<span class="sd">        ...     optimizer=optimizer,</span>
+<span class="sd">        ...     replay_buffer=replay_buffer,</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; trainer.train()</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        This is an experimental/prototype feature. The API may change in future versions.</span>
+<span class="sd">        SAC is particularly effective for continuous control tasks and environments where</span>
+<span class="sd">        exploration is crucial due to its entropy regularization.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">collector</span><span class="p">:</span> <span class="n">BaseCollector</span><span class="p">,</span>
+        <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">frame_skip</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">optim_steps_per_batch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">loss_module</span><span class="p">:</span> <span class="n">LossModule</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">],</span>
+        <span class="n">optimizer</span><span class="p">:</span> <span class="n">optim</span><span class="o">.</span><span class="n">Optimizer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">clip_grad_norm</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">clip_norm</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">progress_bar</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">save_trainer_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10000</span><span class="p">,</span>
+        <span class="n">log_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10000</span><span class="p">,</span>
+        <span class="n">save_trainer_file</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">replay_buffer</span><span class="p">:</span> <span class="n">ReplayBuffer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">enable_logging</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">log_rewards</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">log_actions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">log_observations</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">target_net_updater</span><span class="p">:</span> <span class="n">TargetNetUpdater</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;SACTrainer is an experimental/prototype feature. The API may change in future versions. &quot;</span>
+            <span class="s2">&quot;Please report any issues or feedback to help improve this implementation.&quot;</span><span class="p">,</span>
+            <span class="ne">UserWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># try to get the action spec</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pass_action_spec_from_collector_to_loss</span><span class="p">(</span><span class="n">collector</span><span class="p">,</span> <span class="n">loss_module</span><span class="p">)</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">collector</span><span class="o">=</span><span class="n">collector</span><span class="p">,</span>
+            <span class="n">total_frames</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
+            <span class="n">frame_skip</span><span class="o">=</span><span class="n">frame_skip</span><span class="p">,</span>
+            <span class="n">optim_steps_per_batch</span><span class="o">=</span><span class="n">optim_steps_per_batch</span><span class="p">,</span>
+            <span class="n">loss_module</span><span class="o">=</span><span class="n">loss_module</span><span class="p">,</span>
+            <span class="n">optimizer</span><span class="o">=</span><span class="n">optimizer</span><span class="p">,</span>
+            <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span>
+            <span class="n">clip_grad_norm</span><span class="o">=</span><span class="n">clip_grad_norm</span><span class="p">,</span>
+            <span class="n">clip_norm</span><span class="o">=</span><span class="n">clip_norm</span><span class="p">,</span>
+            <span class="n">progress_bar</span><span class="o">=</span><span class="n">progress_bar</span><span class="p">,</span>
+            <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
+            <span class="n">save_trainer_interval</span><span class="o">=</span><span class="n">save_trainer_interval</span><span class="p">,</span>
+            <span class="n">log_interval</span><span class="o">=</span><span class="n">log_interval</span><span class="p">,</span>
+            <span class="n">save_trainer_file</span><span class="o">=</span><span class="n">save_trainer_file</span><span class="p">,</span>
+            <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
+            <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">replay_buffer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span> <span class="o">=</span> <span class="n">async_collection</span>
+
+        <span class="c1"># Note: SAC can use any sampler type, unlike PPO which requires SamplerWithoutReplacement</span>
+
+        <span class="k">if</span> <span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">rb_trainer</span> <span class="o">=</span> <span class="n">ReplayBufferTrainer</span><span class="p">(</span>
+                <span class="n">replay_buffer</span><span class="p">,</span>
+                <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                <span class="n">flatten_tensordicts</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">memmap</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="nb">getattr</span><span class="p">(</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">storage</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="s2">&quot;cpu&quot;</span><span class="p">),</span>
+                <span class="n">iterate</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_epoch&quot;</span><span class="p">,</span> <span class="n">rb_trainer</span><span class="o">.</span><span class="n">extend</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;process_optim_batch&quot;</span><span class="p">,</span> <span class="n">rb_trainer</span><span class="o">.</span><span class="n">sample</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_loss&quot;</span><span class="p">,</span> <span class="n">rb_trainer</span><span class="o">.</span><span class="n">update_priority</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_optim&quot;</span><span class="p">,</span> <span class="n">TargetNetUpdaterHook</span><span class="p">(</span><span class="n">target_net_updater</span><span class="p">))</span>
+
+        <span class="n">policy_weights_getter</span> <span class="o">=</span> <span class="n">partial</span><span class="p">(</span>
+            <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span><span class="o">.</span><span class="n">actor_network</span>
+        <span class="p">)</span>
+        <span class="n">update_weights</span> <span class="o">=</span> <span class="n">UpdateWeights</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">policy_weights_getter</span><span class="o">=</span><span class="n">policy_weights_getter</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_steps&quot;</span><span class="p">,</span> <span class="n">update_weights</span><span class="p">)</span>
+
+        <span class="c1"># Store logging configuration</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">enable_logging</span> <span class="o">=</span> <span class="n">enable_logging</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_rewards</span> <span class="o">=</span> <span class="n">log_rewards</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_actions</span> <span class="o">=</span> <span class="n">log_actions</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_observations</span> <span class="o">=</span> <span class="n">log_observations</span>
+
+        <span class="c1"># Set up comprehensive logging for SAC training</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">enable_logging</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_setup_sac_logging</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_pass_action_spec_from_collector_to_loss</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">collector</span><span class="p">:</span> <span class="n">BaseCollector</span><span class="p">,</span> <span class="n">loss</span><span class="p">:</span> <span class="n">LossModule</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Pass the action specification from the collector&#39;s environment to the loss module.</span>
+
+<span class="sd">        This method extracts the action specification from the collector&#39;s environment</span>
+<span class="sd">        and assigns it to the loss module if the loss module doesn&#39;t already have one.</span>
+<span class="sd">        This is necessary for SAC loss computation which requires knowledge of the</span>
+<span class="sd">        action space bounds for proper entropy calculation and action clipping.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            collector (BaseCollector): The data collector containing the environment.</span>
+<span class="sd">            loss (LossModule): The loss module that needs the action specification.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">loss</span><span class="p">,</span> <span class="s2">&quot;_action_spec&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">loss</span><span class="o">.</span><span class="n">_action_spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">action_spec</span> <span class="o">=</span> <span class="n">collector</span><span class="o">.</span><span class="n">getattr_env</span><span class="p">(</span><span class="s2">&quot;full_action_spec_unbatched&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span>
+            <span class="n">loss</span><span class="o">.</span><span class="n">_action_spec</span> <span class="o">=</span> <span class="n">action_spec</span>
+
+    <span class="k">def</span> <span class="nf">_setup_sac_logging</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set up logging hooks for SAC-specific metrics.</span>
+
+<span class="sd">        This method configures logging for common SAC metrics including:</span>
+<span class="sd">        - Training rewards (mean, max, total, and std)</span>
+<span class="sd">        - Action statistics (action norms)</span>
+<span class="sd">        - Episode completion rates (done percentage)</span>
+<span class="sd">        - Observation statistics (when enabled)</span>
+<span class="sd">        - Q-value and policy loss metrics (handled by loss module)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Always log done states as percentage (episode completion rate)</span>
+        <span class="n">log_done_percentage</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
+            <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">),</span>
+            <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;done_percentage&quot;</span><span class="p">,</span>
+            <span class="n">log_pbar</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">include_std</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># No std for binary values</span>
+            <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_steps_log&quot;</span><span class="p">,</span> <span class="n">log_done_percentage</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_optim_log&quot;</span><span class="p">,</span> <span class="n">log_done_percentage</span><span class="p">)</span>
+
+        <span class="c1"># Log rewards if enabled</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_rewards</span><span class="p">:</span>
+            <span class="c1"># 1. Log training rewards (most important metric for SAC)</span>
+            <span class="n">log_rewards</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
+                <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">),</span>
+                <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;r_training&quot;</span><span class="p">,</span>
+                <span class="n">log_pbar</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># Show in progress bar</span>
+                <span class="n">include_std</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_steps_log&quot;</span><span class="p">,</span> <span class="n">log_rewards</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># In the async case, use the batch passed to the optimizer</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_optim_log&quot;</span><span class="p">,</span> <span class="n">log_rewards</span><span class="p">)</span>
+
+            <span class="c1"># 2. Log maximum reward in batch (for monitoring best performance)</span>
+            <span class="n">log_max_reward</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
+                <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">),</span>
+                <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;r_max&quot;</span><span class="p">,</span>
+                <span class="n">log_pbar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">include_std</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;max&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_steps_log&quot;</span><span class="p">,</span> <span class="n">log_max_reward</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_optim_log&quot;</span><span class="p">,</span> <span class="n">log_max_reward</span><span class="p">)</span>
+
+            <span class="c1"># 3. Log total reward in batch (for monitoring cumulative performance)</span>
+            <span class="n">log_total_reward</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
+                <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward_sum&quot;</span><span class="p">),</span>
+                <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;r_total&quot;</span><span class="p">,</span>
+                <span class="n">log_pbar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">include_std</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;max&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_steps_log&quot;</span><span class="p">,</span> <span class="n">log_total_reward</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_optim_log&quot;</span><span class="p">,</span> <span class="n">log_total_reward</span><span class="p">)</span>
+
+        <span class="c1"># Log actions if enabled</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_actions</span><span class="p">:</span>
+            <span class="c1"># 4. Log action norms (useful for monitoring policy behavior)</span>
+            <span class="n">log_action_norm</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
+                <span class="n">key</span><span class="o">=</span><span class="s2">&quot;action&quot;</span><span class="p">,</span>
+                <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;action_norm&quot;</span><span class="p">,</span>
+                <span class="n">log_pbar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">include_std</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_steps_log&quot;</span><span class="p">,</span> <span class="n">log_action_norm</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_optim_log&quot;</span><span class="p">,</span> <span class="n">log_action_norm</span><span class="p">)</span>
+
+        <span class="c1"># Log observations if enabled</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_observations</span><span class="p">:</span>
+            <span class="c1"># 5. Log observation statistics (for monitoring state distributions)</span>
+            <span class="n">log_obs_norm</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
+                <span class="n">key</span><span class="o">=</span><span class="s2">&quot;observation&quot;</span><span class="p">,</span>
+                <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;obs_norm&quot;</span><span class="p">,</span>
+                <span class="n">log_pbar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">include_std</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_steps_log&quot;</span><span class="p">,</span> <span class="n">log_obs_norm</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_optim_log&quot;</span><span class="p">,</span> <span class="n">log_obs_norm</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_steps_log&quot;</span><span class="p">,</span> <span class="n">UTDRHook</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span></div>
+
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../../../',
+            VERSION:'0.11',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../../../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+      <script type="text/javascript" src="../../../../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../../../../_static/design-tabs.js"></script>
+
+  
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="#">Get Started</a>
+          </li>
+
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+    })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
+  </script>
+</body>
+</html>

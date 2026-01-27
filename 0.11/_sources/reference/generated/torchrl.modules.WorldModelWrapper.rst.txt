@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+WorldModelWrapper
+=================
+
+.. autoclass:: WorldModelWrapper
+    :members:

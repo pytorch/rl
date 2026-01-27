@@ -1,0 +1,890 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Library Wrappers &mdash; torchrl 0.11 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../_static/pytorch.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="BraxEnv" href="generated/torchrl.envs.BraxEnv.html" />
+    <link rel="prev" title="check_marl_grouping" href="generated/torchrl.envs.check_marl_grouping.html" /> 
+
+  
+  <script src="../_static/js/modernizr.min.js"></script>
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+  <div>
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../versions.html"><span style="font-size:110%">0.11 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="index.html">API Reference</a> &gt;</li>
+        
+          <li><a href="envs.html">torchrl.envs package</a> &gt;</li>
+        
+      <li>Library Wrappers</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/reference/envs_libraries.rst.txt" rel="nofollow"><img src="../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
+        </div>
+
+        <div class="pytorch-content-left">
+    
+    
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" class="pytorch-article">
+              
+  <section id="library-wrappers">
+<h1>Library Wrappers<a class="headerlink" href="#library-wrappers" title="Link to this heading">¶</a></h1>
+<p>TorchRL’s mission is to make the training of control and decision algorithm as
+easy as it gets, irrespective of the simulator being used (if any).
+Multiple wrappers are available for DMControl, Habitat, Jumanji and, naturally,
+for Gym.</p>
+<p>This last library has a special status in the RL community as being the mostly
+used framework for coding simulators. Its successful API has been foundational
+and inspired many other frameworks, among which TorchRL.
+However, Gym has gone through multiple design changes and it is sometimes hard
+to accommodate these as an external adoption library: users usually have their
+“preferred” version of the library. Moreover, gym is now being maintained
+by another group under the “gymnasium” name, which does not facilitate code
+compatibility. In practice, we must consider that users may have a version of
+gym <em>and</em> gymnasium installed in the same virtual environment, and we must
+allow both to work concomittantly.
+Fortunately, TorchRL provides a solution for this problem: a special decorator
+<code class="xref py py-class docutils literal notranslate"><span class="pre">set_gym_backend</span></code> allows to control which library will be used
+in the relevant functions:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs.libs.gym</span> <span class="kn">import</span> <span class="n">GymEnv</span><span class="p">,</span> <span class="n">set_gym_backend</span><span class="p">,</span> <span class="n">gym_backend</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">gymnasium</span><span class="o">,</span> <span class="nn">gym</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_gym_backend</span><span class="p">(</span><span class="n">gymnasium</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">gym_backend</span><span class="p">())</span>
+<span class="gp">... </span>    <span class="n">env1</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)</span>
+<span class="go">&lt;module &#39;gymnasium&#39; from &#39;/path/to/venv/python3.10/site-packages/gymnasium/__init__.py&#39;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_gym_backend</span><span class="p">(</span><span class="n">gym</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">gym_backend</span><span class="p">())</span>
+<span class="gp">... </span>    <span class="n">env2</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)</span>
+<span class="go">&lt;module &#39;gym&#39; from &#39;/path/to/venv/python3.10/site-packages/gym/__init__.py&#39;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">env1</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">env</span><span class="p">)</span>
+<span class="go">&lt;gymnasium.envs.classic_control.pendulum.PendulumEnv at 0x15147e190&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">env2</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">env</span><span class="p">)</span>
+<span class="go">&lt;gym.envs.classic_control.pendulum.PendulumEnv at 0x1629916a0&gt;</span>
+</pre></div>
+</div>
+<p>We can see that the two libraries modify the value returned by <code class="xref py py-func docutils literal notranslate"><span class="pre">gym_backend()</span></code>
+which can be further used to indicate which library needs to be used for
+the current computation. <code class="xref py py-class docutils literal notranslate"><span class="pre">set_gym_backend</span></code> is also a decorator:
+we can use it to tell to a specific function what gym backend needs to be used
+during its execution.
+The <code class="xref py py-func docutils literal notranslate"><span class="pre">torchrl.envs.libs.gym.gym_backend()</span></code> function allows you to gather
+the current gym backend or any of its modules:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">mo_gymnasium</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_gym_backend</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">wrappers</span> <span class="o">=</span> <span class="n">gym_backend</span><span class="p">(</span><span class="s1">&#39;wrappers&#39;</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">wrappers</span><span class="p">)</span>
+<span class="go">&lt;module &#39;gym.wrappers&#39; from &#39;/path/to/venv/python3.10/site-packages/gym/wrappers/__init__.py&#39;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_gym_backend</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">wrappers</span> <span class="o">=</span> <span class="n">gym_backend</span><span class="p">(</span><span class="s1">&#39;wrappers&#39;</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">wrappers</span><span class="p">)</span>
+<span class="go">&lt;module &#39;gymnasium.wrappers&#39; from &#39;/path/to/venv/python3.10/site-packages/gymnasium/wrappers/__init__.py&#39;&gt;</span>
+</pre></div>
+</div>
+<p>Another tool that comes in handy with gym and other external dependencies is
+the <code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl._utils.implement_for</span></code> class. Decorating a function
+with <code class="docutils literal notranslate"><span class="pre">&#64;implement_for</span></code> will tell torchrl that, depending on the version
+indicated, a specific behavior is to be expected. This allows us to easily
+support multiple versions of gym without requiring any effort from the user side.
+For example, considering that our virtual environment has the v0.26.2 installed,
+the following function will return <code class="docutils literal notranslate"><span class="pre">1</span></code> when queried:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">implement_for</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;0.26.0&quot;</span><span class="p">)</span>
+<span class="gp">... </span><span class="k">def</span> <span class="nf">fun</span><span class="p">():</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="mi">0</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="s2">&quot;0.26.0&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+<span class="gp">... </span><span class="k">def</span> <span class="nf">fun</span><span class="p">():</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="mi">1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">fun</span><span class="p">()</span>
+<span class="go">1</span>
+</pre></div>
+</div>
+<section id="available-wrappers">
+<h2>Available wrappers<a class="headerlink" href="#available-wrappers" title="Link to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.BraxEnv.html#torchrl.envs.BraxEnv" title="torchrl.envs.BraxEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BraxEnv</span></code></a>(*args[, num_workers])</p></td>
+<td><p>Google Brax environment wrapper built with the environment name.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.BraxWrapper.html#torchrl.envs.BraxWrapper" title="torchrl.envs.BraxWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BraxWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Google Brax environment wrapper.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.DMControlEnv.html#torchrl.envs.DMControlEnv" title="torchrl.envs.DMControlEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DMControlEnv</span></code></a>(*args[, num_workers])</p></td>
+<td><p>DeepMind Control lab environment wrapper.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.DMControlWrapper.html#torchrl.envs.DMControlWrapper" title="torchrl.envs.DMControlWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DMControlWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>DeepMind Control lab environment wrapper.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.GymEnv.html#torchrl.envs.GymEnv" title="torchrl.envs.GymEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GymEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>OpenAI Gym environment wrapper constructed by environment ID directly.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.GymWrapper.html#torchrl.envs.GymWrapper" title="torchrl.envs.GymWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GymWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>OpenAI Gym environment wrapper.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.HabitatEnv.html#torchrl.envs.HabitatEnv" title="torchrl.envs.HabitatEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HabitatEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A wrapper for habitat envs.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.IsaacGymEnv.html#torchrl.envs.IsaacGymEnv" title="torchrl.envs.IsaacGymEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IsaacGymEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A TorchRL Env interface for IsaacGym environments.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.IsaacGymWrapper.html#torchrl.envs.IsaacGymWrapper" title="torchrl.envs.IsaacGymWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IsaacGymWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Wrapper for IsaacGymEnvs environments.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.IsaacLabWrapper.html#torchrl.envs.IsaacLabWrapper" title="torchrl.envs.IsaacLabWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IsaacLabWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A wrapper for IsaacLab environments.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.JumanjiEnv.html#torchrl.envs.JumanjiEnv" title="torchrl.envs.JumanjiEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">JumanjiEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Jumanji environment wrapper built with the environment name.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.JumanjiWrapper.html#torchrl.envs.JumanjiWrapper" title="torchrl.envs.JumanjiWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">JumanjiWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Jumanji's environment wrapper.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.MeltingpotEnv.html#torchrl.envs.MeltingpotEnv" title="torchrl.envs.MeltingpotEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MeltingpotEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Meltingpot environment wrapper.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.MeltingpotWrapper.html#torchrl.envs.MeltingpotWrapper" title="torchrl.envs.MeltingpotWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MeltingpotWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Meltingpot environment wrapper.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.MOGymEnv.html#torchrl.envs.MOGymEnv" title="torchrl.envs.MOGymEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MOGymEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>FARAMA MO-Gymnasium environment wrapper.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.MOGymWrapper.html#torchrl.envs.MOGymWrapper" title="torchrl.envs.MOGymWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MOGymWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>FARAMA MO-Gymnasium environment wrapper.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.MultiThreadedEnv.html#torchrl.envs.MultiThreadedEnv" title="torchrl.envs.MultiThreadedEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiThreadedEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Multithreaded execution of environments based on EnvPool.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.MultiThreadedEnvWrapper.html#torchrl.envs.MultiThreadedEnvWrapper" title="torchrl.envs.MultiThreadedEnvWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiThreadedEnvWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Wrapper for envpool-based multithreaded environments.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.OpenMLEnv.html#torchrl.envs.OpenMLEnv" title="torchrl.envs.OpenMLEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpenMLEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>An environment interface to OpenML data to be used in bandits contexts.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.OpenSpielWrapper.html#torchrl.envs.OpenSpielWrapper" title="torchrl.envs.OpenSpielWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpenSpielWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Google DeepMind OpenSpiel environment wrapper.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.OpenSpielEnv.html#torchrl.envs.OpenSpielEnv" title="torchrl.envs.OpenSpielEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpenSpielEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Google DeepMind OpenSpiel environment wrapper built with the game string.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.PettingZooEnv.html#torchrl.envs.PettingZooEnv" title="torchrl.envs.PettingZooEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PettingZooEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>PettingZoo Environment.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.PettingZooWrapper.html#torchrl.envs.PettingZooWrapper" title="torchrl.envs.PettingZooWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PettingZooWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>PettingZoo environment wrapper.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.ProcgenWrapper.html#torchrl.envs.ProcgenWrapper" title="torchrl.envs.ProcgenWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProcgenWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>OpenAI Procgen environment wrapper.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.RoboHiveEnv.html#torchrl.envs.RoboHiveEnv" title="torchrl.envs.RoboHiveEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RoboHiveEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A wrapper for RoboHive gym environments.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.SMACv2Env.html#torchrl.envs.SMACv2Env" title="torchrl.envs.SMACv2Env"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SMACv2Env</span></code></a>(*args, **kwargs)</p></td>
+<td><p>SMACv2 (StarCraft Multi-Agent Challenge v2) environment wrapper.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.SMACv2Wrapper.html#torchrl.envs.SMACv2Wrapper" title="torchrl.envs.SMACv2Wrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SMACv2Wrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>SMACv2 (StarCraft Multi-Agent Challenge v2) environment wrapper.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.UnityMLAgentsEnv.html#torchrl.envs.UnityMLAgentsEnv" title="torchrl.envs.UnityMLAgentsEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnityMLAgentsEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Unity ML-Agents environment wrapper.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.UnityMLAgentsWrapper.html#torchrl.envs.UnityMLAgentsWrapper" title="torchrl.envs.UnityMLAgentsWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnityMLAgentsWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Unity ML-Agents environment wrapper.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.VmasEnv.html#torchrl.envs.VmasEnv" title="torchrl.envs.VmasEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VmasEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Vmas environment wrapper.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.VmasWrapper.html#torchrl.envs.VmasWrapper" title="torchrl.envs.VmasWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VmasWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Vmas environment wrapper.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.gym_backend.html#torchrl.envs.gym_backend" title="torchrl.envs.gym_backend"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gym_backend</span></code></a>([submodule])</p></td>
+<td><p>Returns the gym backend, or a sumbodule of it.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.set_gym_backend.html#torchrl.envs.set_gym_backend" title="torchrl.envs.set_gym_backend"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_gym_backend</span></code></a>(backend)</p></td>
+<td><p>Sets the gym-backend to a certain value.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.register_gym_spec_conversion.html#torchrl.envs.register_gym_spec_conversion" title="torchrl.envs.register_gym_spec_conversion"><code class="xref py py-obj docutils literal notranslate"><span class="pre">register_gym_spec_conversion</span></code></a>(spec_type)</p></td>
+<td><p>Decorator to register a conversion function for a specific spec type.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="auto-resetting-environments">
+<h2>Auto-resetting Environments<a class="headerlink" href="#auto-resetting-environments" title="Link to this heading">¶</a></h2>
+<p id="autoresetting-envs">Auto-resetting environments are environments where calls to <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#id1" title="torchrl.envs.EnvBase.reset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reset()</span></code></a> are not expected when
+the environment reaches a <code class="docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code> state during a rollout, as the reset happens automatically.
+Usually, in such cases the observations delivered with the done and reward (which effectively result from performing the
+action in the environment) are actually the first observations of a new episode, and not the last observations of the
+current episode.</p>
+<p>To handle these cases, torchrl provides a <code class="xref py py-class docutils literal notranslate"><span class="pre">AutoResetTransform</span></code> that will copy the observations
+that result from the call to <cite>step</cite> to the next <cite>reset</cite> and skip the calls to <cite>reset</cite> during rollouts (in both
+<a class="reference internal" href="generated/torchrl.envs.EnvBase.html#id2" title="torchrl.envs.EnvBase.rollout"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rollout()</span></code></a> and <code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code> iterations).
+This transform class also provides a fine-grained control over the behavior to be adopted for the invalid observations,
+which can be masked with <cite>“nan”</cite> or any other values, or not masked at all.</p>
+<p>To tell torchrl that an environment is auto-resetting, it is sufficient to provide an <code class="docutils literal notranslate"><span class="pre">auto_reset</span></code> argument
+during construction. If provided, an <code class="docutils literal notranslate"><span class="pre">auto_reset_replace</span></code> argument can also control whether the values of the last
+observation of an episode should be replaced with some placeholder or not.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">GymEnv</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">set_gym_backend</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">AutoResettingGymEnv</span><span class="p">(</span><span class="n">GymEnv</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">def</span> <span class="nf">_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="n">tensordict</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_step</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="k">if</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;done&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+<span class="gp">... </span>            <span class="n">td_reset</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+<span class="gp">... </span>            <span class="n">tensordict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">td_reset</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">done_keys</span><span class="p">))</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">tensordict</span>
+<span class="gp">...</span>
+<span class="gp">... </span>    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s2">&quot;_reset&quot;</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="p">:</span>
+<span class="gp">... </span>            <span class="k">return</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_reset</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_gym_backend</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">env</span> <span class="o">=</span> <span class="n">AutoResettingGymEnv</span><span class="p">(</span><span class="s2">&quot;CartPole-v1&quot;</span><span class="p">,</span> <span class="n">auto_reset</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_reset_replace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">env</span><span class="o">.</span><span class="n">set_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">r</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="mi">30</span><span class="p">,</span> <span class="n">break_when_any_done</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">squeeze</span><span class="p">())</span>
+<span class="go">tensor([False, False, False, False, False, False, False, False, False, False,</span>
+<span class="go">        False, False, False,  True, False, False, False, False, False, False,</span>
+<span class="go">        False, False, False, False, False,  True, False, False, False, False])</span>
+</pre></div>
+</div>
+</section>
+<section id="dynamic-specs">
+<h2>Dynamic Specs<a class="headerlink" href="#dynamic-specs" title="Link to this heading">¶</a></h2>
+<p id="dynamic-envs">Running environments in parallel is usually done via the creation of memory buffers used to pass information from one
+process to another. In some cases, it may be impossible to forecast whether an environment will or will not have
+consistent inputs or outputs during a rollout, as their shape may be variable. We refer to this as dynamic specs.</p>
+<p>TorchRL is capable of handling dynamic specs, but the batched environments and collectors will need to be made
+aware of this feature. Note that, in practice, this is detected automatically.</p>
+<p>To indicate that a tensor will have a variable size along a dimension, one can set the size value as <code class="docutils literal notranslate"><span class="pre">-1</span></code> for the
+desired dimensions. Because the data cannot be stacked contiguously, calls to <code class="docutils literal notranslate"><span class="pre">env.rollout</span></code> need to be made with
+the <code class="docutils literal notranslate"><span class="pre">return_contiguous=False</span></code> argument.
+Here is a working example:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">EnvBase</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">Unbounded</span><span class="p">,</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">Bounded</span><span class="p">,</span> <span class="n">Binary</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">EnvWithDynamicSpec</span><span class="p">(</span><span class="n">EnvBase</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_count</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">())</span>
+<span class="gp">... </span>        <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+<span class="gp">... </span>            <span class="n">observation</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)),</span>
+<span class="gp">... </span>        <span class="p">)</span>
+<span class="gp">... </span>        <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span><span class="n">low</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,))</span>
+<span class="gp">... </span>        <span class="bp">self</span><span class="o">.</span><span class="n">full_done_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+<span class="gp">... </span>            <span class="n">done</span><span class="o">=</span><span class="n">Binary</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+<span class="gp">... </span>            <span class="n">terminated</span><span class="o">=</span><span class="n">Binary</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+<span class="gp">... </span>            <span class="n">truncated</span><span class="o">=</span><span class="n">Binary</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+<span class="gp">... </span>        <span class="p">)</span>
+<span class="gp">... </span>        <span class="bp">self</span><span class="o">.</span><span class="n">reward_spec</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">((</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="bp">self</span><span class="o">.</span><span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="gp">... </span>        <span class="bp">self</span><span class="o">.</span><span class="n">max_count</span> <span class="o">=</span> <span class="n">max_count</span>
+<span class="gp">...</span>
+<span class="gp">... </span>    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="bp">self</span><span class="o">.</span><span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="gp">... </span>        <span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>            <span class="p">{</span>
+<span class="gp">... </span>                <span class="s2">&quot;observation&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+<span class="gp">... </span>                    <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">count</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+<span class="gp">... </span>                    <span class="bp">self</span><span class="o">.</span><span class="n">count</span><span class="p">,</span>
+<span class="gp">... </span>                    <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+<span class="gp">... </span>                <span class="p">)</span>
+<span class="gp">... </span>            <span class="p">}</span>
+<span class="gp">... </span>        <span class="p">)</span>
+<span class="gp">... </span>        <span class="n">data</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">done_spec</span><span class="o">.</span><span class="n">zero</span><span class="p">())</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">data</span>
+<span class="gp">...</span>
+<span class="gp">... </span>    <span class="k">def</span> <span class="nf">_step</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="bp">self</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="bp">self</span><span class="o">.</span><span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+<span class="gp">... </span>        <span class="n">done</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">count</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_count</span>
+<span class="gp">... </span>        <span class="n">observation</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>            <span class="p">{</span>
+<span class="gp">... </span>                <span class="s2">&quot;observation&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+<span class="gp">... </span>                    <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">count</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+<span class="gp">... </span>                    <span class="bp">self</span><span class="o">.</span><span class="n">count</span><span class="p">,</span>
+<span class="gp">... </span>                    <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+<span class="gp">... </span>                <span class="p">)</span>
+<span class="gp">... </span>            <span class="p">}</span>
+<span class="gp">... </span>        <span class="p">)</span>
+<span class="gp">... </span>        <span class="n">done</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_done_spec</span><span class="o">.</span><span class="n">zero</span><span class="p">()</span> <span class="o">|</span> <span class="n">done</span>
+<span class="gp">... </span>        <span class="n">reward</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_reward_spec</span><span class="o">.</span><span class="n">zero</span><span class="p">()</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">observation</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">done</span><span class="p">)</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">reward</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="gp">... </span>    <span class="k">def</span> <span class="nf">_set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="bp">self</span><span class="o">.</span><span class="n">manual_seed</span> <span class="o">=</span> <span class="n">seed</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">seed</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">EnvWithDynamicSpec</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="n">return_contiguous</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
+<span class="go">LazyStackedTensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        action: Tensor(shape=torch.Size([5, 2]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        done: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="go">        next: LazyStackedTensorDict(</span>
+<span class="go">            fields={</span>
+<span class="go">                done: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="go">                observation: Tensor(shape=torch.Size([5, 3, -1, 2]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">                reward: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">                terminated: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="go">                truncated: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="go">            exclusive_fields={</span>
+<span class="go">            },</span>
+<span class="go">            batch_size=torch.Size([5]),</span>
+<span class="go">            device=None,</span>
+<span class="go">            is_shared=False,</span>
+<span class="go">            stack_dim=0),</span>
+<span class="go">        observation: Tensor(shape=torch.Size([5, 3, -1, 2]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        terminated: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="go">        truncated: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="go">    exclusive_fields={</span>
+<span class="go">    },</span>
+<span class="go">    batch_size=torch.Size([5]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False,</span>
+<span class="go">    stack_dim=0)</span>
+</pre></div>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>The absence of memory buffers in <a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> and in
+data collectors can impact performance of these classes dramatically. Any
+such usage should be carefully benchmarked against a plain execution on a
+single process, as serializing and deserializing large numbers of tensors
+can be very expensive.</p>
+</div>
+<p>Currently, <code class="xref py py-func docutils literal notranslate"><span class="pre">check_env_specs()</span></code> will pass for dynamic specs where a shape varies along some
+dimensions, but not when a key is present during a step and absent during others, or when the number of dimensions
+varies.</p>
+</section>
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="generated/torchrl.envs.BraxEnv.html" class="btn btn-neutral float-right" title="BraxEnv" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="generated/torchrl.envs.check_marl_grouping.html" class="btn btn-neutral" title="check_marl_grouping" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">Library Wrappers</a><ul>
+<li><a class="reference internal" href="#available-wrappers">Available wrappers</a></li>
+<li><a class="reference internal" href="#auto-resetting-environments">Auto-resetting Environments</a></li>
+<li><a class="reference internal" href="#dynamic-specs">Dynamic Specs</a></li>
+</ul>
+</li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../',
+            VERSION:'0.11',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../_static/doctools.js"></script>
+      <script type="text/javascript" src="../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../_static/design-tabs.js"></script>
+
+  
+
+  <script type="text/javascript" src="../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="#">Get Started</a>
+          </li>
+
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+    })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
+  </script>
+</body>
+</html>

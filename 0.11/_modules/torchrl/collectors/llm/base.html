@@ -1,0 +1,1039 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.collectors.llm.base &mdash; torchrl 0.11 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../../_static/pytorch.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+
+  
+  <script src="../../../../_static/js/modernizr.min.js"></script>
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+  <div>
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../../versions.html"><span style="font-size:110%">0.11 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.collectors.llm.base</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
+        </div>
+
+        <div class="pytorch-content-left">
+    
+    
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" class="pytorch-article">
+              
+  <h1>Source code for torchrl.collectors.llm.base</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">deque</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">lazy_stack</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+
+<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">as_remote</span><span class="p">,</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.collectors._single</span> <span class="kn">import</span> <span class="n">Collector</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors.llm.utils</span> <span class="kn">import</span> <span class="n">_QueueAsRB</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors.weight_update</span> <span class="kn">import</span> <span class="n">WeightUpdaterBase</span>
+<span class="kn">from</span> <span class="nn">torchrl.data.replay_buffers.replay_buffers</span> <span class="kn">import</span> <span class="n">ReplayBuffer</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">AsyncEnvPool</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">EnvBase</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.llm.transforms.policy_version</span> <span class="kn">import</span> <span class="n">PolicyVersion</span>
+
+
+<div class="viewcode-block" id="LLMCollector">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector">[docs]</a>
+<span class="k">class</span> <span class="nc">LLMCollector</span><span class="p">(</span><span class="n">Collector</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A simplified version of Collector for LLM inference.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        env (EnvBase or EnvBase constructor): the environment to be used for data collection.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        policy (Callable[[TensorDictBase], TensorDictBase]): the policy to be used for data collection.</span>
+<span class="sd">        policy_factory (Callable[[], Callable], optional): a callable that returns</span>
+<span class="sd">            a policy instance. This is exclusive with the `policy` argument.</span>
+
+<span class="sd">            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.</span>
+
+<span class="sd">        dialog_turns_per_batch (int, optional): A keyword-only argument representing the total</span>
+<span class="sd">            number of elements in a batch. It is always required except when `yield_completed_trajectories=True`.</span>
+<span class="sd">        total_dialog_turns (int): A keyword-only argument representing the total</span>
+<span class="sd">            number of steps returned by the collector during its lifespan. -1 is never ending (until shutdown).</span>
+<span class="sd">            Defaults to -1.</span>
+<span class="sd">        yield_completed_trajectories (bool, optional): whether to yield batches of rollouts with a given number of steps</span>
+<span class="sd">            (`yield_completed_trajectories=False`, default) or single, completed trajectories</span>
+<span class="sd">            (`yield_completed_trajectories=True`).</span>
+<span class="sd">            Defaults to `False` unless `yield_only_last_steps=True`, where it cannot be `False`.</span>
+
+<span class="sd">            .. warning:: If the `done` state of the environment is not properly set, this may lead to a collector</span>
+<span class="sd">                that never leads any data.</span>
+
+<span class="sd">        yield_only_last_steps (bool, optional): whether to yield every step of a trajectory, or only the</span>
+<span class="sd">            last (done) steps.</span>
+<span class="sd">            If `True`, a single trajectory is yielded (or written in the buffer) at a time.</span>
+
+<span class="sd">            .. warning:: If the `done` state of the environment is not properly set, this may lead to a collector</span>
+<span class="sd">                that never leads any data.</span>
+
+<span class="sd">        postproc (Callable, optional): A post-processing transform, such as</span>
+<span class="sd">            a :class:`~torchrl.envs.Transform` or a :class:`~torchrl.data.postprocs.MultiStep`</span>
+<span class="sd">            instance.</span>
+<span class="sd">            Defaults to ``None``.</span>
+<span class="sd">        async_envs (bool, optional): if ``True``, the environment will be run asynchronously. Defaults to `True` if the</span>
+<span class="sd">            environment is a :class:`~torchrl.envs.AsyncEnvPool` instance.</span>
+<span class="sd">        replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordicts</span>
+<span class="sd">            but populate the buffer instead. Defaults to ``None``.</span>
+<span class="sd">        reset_at_each_iter (bool, optional): if ``True``, the environment will be reset at each iteration.</span>
+<span class="sd">        flatten_data (bool, optional): if ``True``, the collector will flatten the collected data</span>
+<span class="sd">            before returning it. In practice, this means that if an environment of batch-size `(B,)` is used</span>
+<span class="sd">            and run for `T` steps, `flatten_data=True` will present data of shape `(B*T,)`, whereas</span>
+<span class="sd">            `flatten_data=False` will not present data of shape `(B, T)`.</span>
+<span class="sd">            Defaults to `True` when `replay_buffer` is provided, `False` otherwise.</span>
+<span class="sd">        weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`</span>
+<span class="sd">            or its subclass, responsible for updating the policy weights on remote inference workers.</span>
+<span class="sd">            This is typically not used in :class:`~torchrl.collectors.Collector` as it operates in a single-process environment.</span>
+<span class="sd">            Consider using a constructor if the updater needs to be serialized.</span>
+<span class="sd">        track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.</span>
+<span class="sd">            This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.</span>
+<span class="sd">            Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track</span>
+<span class="sd">            the policy version.</span>
+<span class="sd">            Defaults to `False`.</span>
+<span class="sd">        verbose (bool, optional): if ``True``, the collector will print progress information.</span>
+<span class="sd">            Defaults to `False`.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; import vllm</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules import vLLMWrapper</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.testing.mocking_classes import DummyStrDataLoader</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import LLMEnv</span>
+<span class="sd">        &gt;&gt;&gt; llm_model = vllm.LLM(&quot;gpt2&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; tokenizer = llm_model.get_tokenizer()</span>
+<span class="sd">        &gt;&gt;&gt; tokenizer.pad_token = tokenizer.eos_token</span>
+<span class="sd">        &gt;&gt;&gt; policy = vLLMWrapper(llm_model)</span>
+<span class="sd">        &gt;&gt;&gt; dataloader = DummyStrDataLoader(1)</span>
+<span class="sd">        &gt;&gt;&gt; env = LLMEnv.from_dataloader(</span>
+<span class="sd">        ...    dataloader=dataloader,</span>
+<span class="sd">        ...    tokenizer=tokenizer,</span>
+<span class="sd">        ...    from_text=True,</span>
+<span class="sd">        ...    batch_size=1,</span>
+<span class="sd">        ...    group_repeats=True,</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; collector = LLMCollector(</span>
+<span class="sd">        ...    env=env,</span>
+<span class="sd">        ...    policy_factory=lambda: policy,</span>
+<span class="sd">        ...    dialog_turns_per_batch=env.batch_size[0],</span>
+<span class="sd">        ...    total_dialog_turns=3,</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; for i, data in enumerate(collector):</span>
+<span class="sd">        ...     if i == 2:</span>
+<span class="sd">        ...         print(data)</span>
+<span class="sd">        ...         break</span>
+<span class="sd">        LazyStackedTensorDict(</span>
+<span class="sd">        fields={</span>
+<span class="sd">            attention_mask: Tensor(shape=torch.Size([1, 1, 22]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">            collector: LazyStackedTensorDict(</span>
+<span class="sd">                fields={</span>
+<span class="sd">                    traj_ids: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
+<span class="sd">                exclusive_fields={</span>
+<span class="sd">                },</span>
+<span class="sd">                batch_size=torch.Size([1, 1]),</span>
+<span class="sd">                device=None,</span>
+<span class="sd">                is_shared=False,</span>
+<span class="sd">                stack_dim=1),</span>
+<span class="sd">            done: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">            terminated: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">            text: NonTensorStack(</span>
+<span class="sd">                [[&#39;plsgqejeyd&#39;]],</span>
+<span class="sd">                batch_size=torch.Size([1, 1]),</span>
+<span class="sd">                device=None),</span>
+<span class="sd">            text_response: NonTensorStack(</span>
+<span class="sd">                [[&#39;ec.n.n.n.tjbjz3perwhz&#39;]],</span>
+<span class="sd">                batch_size=torch.Size([1, 1]),</span>
+<span class="sd">                device=None),</span>
+<span class="sd">            tokens: Tensor(shape=torch.Size([1, 1, 22]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">            tokens_response: Tensor(shape=torch.Size([1, 1, 16]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
+<span class="sd">        exclusive_fields={</span>
+<span class="sd">        },</span>
+<span class="sd">        batch_size=torch.Size([1, 1]),</span>
+<span class="sd">        device=None,</span>
+<span class="sd">        is_shared=False,</span>
+<span class="sd">        stack_dim=1)</span>
+<span class="sd">        &gt;&gt;&gt; del collector</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">env</span><span class="p">:</span> <span class="n">EnvBase</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">EnvBase</span><span class="p">],</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">policy</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">]]</span>
+        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">dialog_turns_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">yield_only_last_steps</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">yield_completed_trajectories</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">postproc</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">total_dialog_turns</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">async_envs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">replay_buffer</span><span class="p">:</span> <span class="n">ReplayBuffer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">reset_at_each_iter</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">flatten_data</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weight_updater</span><span class="p">:</span> <span class="n">WeightUpdaterBase</span>
+        <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">WeightUpdaterBase</span><span class="p">]</span>
+        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">queue</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">track_policy_version</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">PolicyVersion</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">queue</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Handling both a buffer and a queue is not possible at the moment.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">queue</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># disguise the queue as a replay buffer</span>
+            <span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">_QueueAsRB</span><span class="p">(</span><span class="n">queue</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">dialog_turns_per_batch</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">yield_completed_trajectories</span><span class="p">:</span>
+            <span class="n">dialog_turns_per_batch</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">create_env_fn</span><span class="o">=</span><span class="n">env</span><span class="p">,</span>
+            <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
+            <span class="n">policy_factory</span><span class="o">=</span><span class="n">policy_factory</span><span class="p">,</span>
+            <span class="n">frames_per_batch</span><span class="o">=</span><span class="n">dialog_turns_per_batch</span><span class="p">,</span>
+            <span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay_buffer</span><span class="p">,</span>
+            <span class="n">total_frames</span><span class="o">=</span><span class="n">total_dialog_turns</span><span class="p">,</span>
+            <span class="n">weight_updater</span><span class="o">=</span><span class="n">weight_updater</span><span class="p">,</span>
+            <span class="n">reset_at_each_iter</span><span class="o">=</span><span class="n">reset_at_each_iter</span><span class="p">,</span>
+            <span class="n">trust_policy</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">use_buffers</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">no_cuda_sync</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">extend_buffer</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">postproc</span><span class="o">=</span><span class="n">postproc</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="s2">&quot;register_collector&quot;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">yield_only_last_steps</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">yield_only_last_steps</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="k">if</span> <span class="n">yield_completed_trajectories</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">yield_completed_trajectories</span> <span class="o">=</span> <span class="n">yield_only_last_steps</span>
+        <span class="k">elif</span> <span class="n">yield_only_last_steps</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">yield_completed_trajectories</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;yield_only_last_steps=True requires yield_completed_trajectories=True (or None)&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">yield_only_last_steps</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">flatten_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">&quot;`yield_only_last_steps` cannot be `True` when `flatten_data` is passed.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reset_at_each_iter</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">&quot;`yield_only_last_steps` cannot be `True` when `reset_at_each_iter=True`.&quot;</span>
+                <span class="p">)</span>
+        <span class="k">if</span> <span class="n">flatten_data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">flatten_data</span> <span class="o">=</span> <span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">flatten_data</span> <span class="o">=</span> <span class="n">flatten_data</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">yield_completed_trajectories</span> <span class="o">=</span> <span class="n">yield_completed_trajectories</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">yield_only_last_steps</span> <span class="o">=</span> <span class="n">yield_only_last_steps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Initialize shuttle for rollout</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">yield_completed_trajectories</span><span class="p">:</span>
+            <span class="c1"># For async envs, we route by env_id so we only care about batch_size[0].</span>
+            <span class="c1"># For non-async envs, we need exactly one batch dimension.</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">,</span> <span class="n">AsyncEnvPool</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;`yield_completed_trajectories` only works with envs that have a single batch dimension. Got &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;env.batch_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_yield_queues</span> <span class="o">=</span> <span class="p">[</span><span class="n">deque</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="p">[</span><span class="mi">0</span><span class="p">])]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span> <span class="o">=</span> <span class="n">deque</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">async_envs</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">async_envs</span><span class="p">)</span> <span class="o">|</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">,</span> <span class="n">AsyncEnvPool</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_envs</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">,</span> <span class="n">AsyncEnvPool</span><span class="p">):</span>
+            <span class="c1"># This basically means that `async_envs` is automatically set and passing is it useless as of today,</span>
+            <span class="c1">#  except for the following error.</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;async_envs requires the environment to be an AsyncEnvPool instance.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="o">=</span> <span class="n">track_policy_version</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">track_policy_version</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">and</span> <span class="n">track_policy_version</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">,</span> <span class="n">AsyncEnvPool</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;AsyncEnvPool is not supported for policy version tracking. Please add the PolicyVersion transform to the environment manually, &quot;</span>
+                    <span class="s2">&quot;and pass that transform to the collector.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="o">=</span> <span class="n">PolicyVersion</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">track_policy_version</span><span class="p">,</span> <span class="n">PolicyVersion</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="o">=</span> <span class="n">track_policy_version</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">set_postproc</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">postproc</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">]):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Postproc already set&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span> <span class="o">=</span> <span class="n">postproc</span>
+
+<div class="viewcode-block" id="LLMCollector.increment_version">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.increment_version">[docs]</a>
+    <span class="k">def</span> <span class="nf">increment_version</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Increment the policy version.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="p">,</span> <span class="n">PolicyVersion</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;Policy version tracker is not a PolicyVersion instance. Please pass a PolicyVersion instance to the collector.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="o">.</span><span class="n">increment_version</span><span class="p">()</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">policy_version</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The current policy version.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="p">,</span> <span class="n">PolicyVersion</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="o">.</span><span class="n">version</span>
+
+<div class="viewcode-block" id="LLMCollector.get_policy_version">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.get_policy_version">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_policy_version</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the current policy version.</span>
+
+<span class="sd">        This method exists to support remote calls in Ray actors, since properties</span>
+<span class="sd">        cannot be accessed directly through Ray&#39;s RPC mechanism.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The current version number (int) or UUID (str), or None if version tracking is disabled.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_version</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">total_dialog_turns</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">dialog_turns_per_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Alias to `frames_per_batch`.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">requested_frames_per_batch</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">rollout</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">TensorDictBase</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">yield_completed_trajectories</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_envs</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rollout_yield_trajs_async</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rollout_yield_trajs</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rollout_all</span>
+
+    <span class="k">def</span> <span class="nf">_rollout_all</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>  <span class="c1"># A simplified version of rollout</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reset_at_each_iter</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+
+        <span class="n">trajectory</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">collected_steps</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">policy_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span>
+        <span class="k">while</span> <span class="n">collected_steps</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">dialog_turns_per_batch</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;LLMCollector: Collected </span><span class="si">{</span><span class="n">collected_steps</span><span class="si">}</span><span class="s2"> steps over </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">dialog_turns_per_batch</span><span class="si">}</span><span class="s2"> requested.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">env_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">(</span><span class="n">policy_input</span><span class="p">)</span>
+            <span class="n">env_output</span><span class="p">,</span> <span class="n">env_next_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">step_and_maybe_reset</span><span class="p">(</span><span class="n">env_input</span><span class="p">)</span>
+
+            <span class="c1"># carry over collector data without messing up devices</span>
+            <span class="n">collector_data</span> <span class="o">=</span> <span class="n">env_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">collector_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">env_next_output</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="n">collector_data</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_update_traj_ids</span><span class="p">(</span><span class="n">env_output</span><span class="p">)</span>
+            <span class="n">trajectory</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">env_output</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+            <span class="n">collected_steps</span> <span class="o">+=</span> <span class="n">env_output</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+            <span class="n">policy_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span> <span class="o">=</span> <span class="n">env_next_output</span>
+        <span class="n">trajectory</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="n">trajectory</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">flatten_data</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">trajectory</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">trajectory</span>
+
+    <span class="n">_result_numel</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">def</span> <span class="nf">_rollout_yield_trajs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>  <span class="c1"># A simplified version of rollout</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="n">next_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span>
+
+        <span class="n">collected_steps</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">dones</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_result_numel</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dialog_turns_per_batch</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;LLMCollector: Collected </span><span class="si">{</span><span class="n">collected_steps</span><span class="si">}</span><span class="s2"> steps with </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_result_numel</span><span class="si">}</span><span class="s2"> elements in the resulting batch, over </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">dialog_turns_per_batch</span><span class="si">}</span><span class="s2"> requested.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">env_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">(</span><span class="n">next_output</span><span class="p">)</span>
+            <span class="n">cur_output</span><span class="p">,</span> <span class="n">next_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">step_and_maybe_reset</span><span class="p">(</span><span class="n">env_input</span><span class="p">)</span>
+            <span class="c1"># for i in range(cur_output.numel()):</span>
+            <span class="c1">#     print(len(cur_output[i][&quot;text&quot;]) &lt; len(cur_output[i][&quot;next&quot;, &quot;text&quot;]))</span>
+
+            <span class="c1"># carry over collector data without messing up devices</span>
+            <span class="n">collector_data</span> <span class="o">=</span> <span class="n">cur_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">collector_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_update_traj_ids</span><span class="p">(</span><span class="n">cur_output</span><span class="p">)</span>
+                <span class="n">next_output</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="n">collector_data</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+
+            <span class="c1"># if the loop is interrupted</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span> <span class="o">=</span> <span class="n">next_output</span>
+            <span class="n">collected_steps</span> <span class="o">+=</span> <span class="n">next_output</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">_data</span><span class="p">,</span> <span class="n">queue</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+                <span class="nb">zip</span><span class="p">(</span><span class="n">cur_output</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_yield_queues</span><span class="p">)</span>
+            <span class="p">):</span>
+                <span class="n">queue</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_data</span><span class="p">)</span>
+                <span class="n">dones</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">_data</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">dones</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">dones</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">as_tuple</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">yield_only_last_steps</span><span class="p">:</span>
+                        <span class="n">_result</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_yield_queues</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_result</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="c1"># FIXME: We need to increment the step count here because iterator() won&#39;t</span>
+                        <span class="c1">#  see the extra steps</span>
+                        <span class="c1"># We use lazy-stack because unsqueeze doesn&#39;t nest the strings in lists</span>
+                        <span class="n">_result</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">_yield_queues</span><span class="p">[</span><span class="n">idx</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]])</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_result</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_result_numel</span> <span class="o">+=</span> <span class="n">_result</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_yield_queues</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span><span class="o">.</span><span class="n">popleft</span><span class="p">()]</span>
+        <span class="n">elt</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_result_numel</span> <span class="o">-=</span> <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+        <span class="k">while</span> <span class="n">elt</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">dialog_turns_per_batch</span><span class="p">:</span>
+            <span class="n">result</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span><span class="o">.</span><span class="n">popleft</span><span class="p">())</span>
+            <span class="n">elt</span> <span class="o">+=</span> <span class="n">result</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_result_numel</span> <span class="o">-=</span> <span class="n">result</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;LLMCollector: Yielding completed trajectory with shape </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="n">started</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="nf">_rollout_yield_trajs_async</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>  <span class="c1"># A simplified version of rollout</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">started</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+            <span class="n">next_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span>
+            <span class="n">env_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">(</span><span class="n">next_output</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">async_step_and_maybe_reset_send</span><span class="p">(</span><span class="n">env_input</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">started</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="n">collected_steps</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="c1"># Use only the first dimension (num_envs) for done tracking, since we route by env_id</span>
+        <span class="n">dones</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span><span class="p">:</span>
+                <span class="k">break</span>
+
+            <span class="n">cur_output</span><span class="p">,</span> <span class="n">next_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">async_step_and_maybe_reset_recv</span><span class="p">()</span>
+
+            <span class="c1"># Get the env ids - flatten to handle multi-dimensional batch sizes</span>
+            <span class="c1"># (e.g., AsyncEnvPool with batch_size=[4, 1] gives [[0], [1], [2], [3]])</span>
+            <span class="n">env_ids_raw</span> <span class="o">=</span> <span class="n">cur_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">_env_idx_key</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+            <span class="c1"># Flatten nested lists to get scalar env indices</span>
+            <span class="n">env_ids</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">eid</span> <span class="ow">in</span> <span class="n">env_ids_raw</span><span class="p">:</span>
+                <span class="k">while</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">eid</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">eid</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">eid</span> <span class="o">=</span> <span class="n">eid</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="n">env_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">eid</span><span class="p">)</span>
+
+            <span class="c1"># carry over collector data without messing up devices</span>
+            <span class="n">collector_data</span> <span class="o">=</span> <span class="n">cur_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">collector_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_update_traj_ids</span><span class="p">(</span><span class="n">cur_output</span><span class="p">)</span>
+                <span class="n">next_output</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="n">collector_data</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+
+            <span class="n">collected_steps</span> <span class="o">+=</span> <span class="n">next_output</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+            <span class="n">dones</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">_data</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">env_ids</span><span class="p">,</span> <span class="n">cur_output</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)):</span>
+                <span class="n">queue</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_yield_queues</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+                <span class="n">queue</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_data</span><span class="p">)</span>
+                <span class="n">dones</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">_data</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">dones</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">dones</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">as_tuple</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">yield_only_last_steps</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                            <span class="n">lazy_stack</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_yield_queues</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                        <span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="c1"># FIXME: We need to increment the step count here because iterator() won&#39;t</span>
+                        <span class="c1">#  see the extra steps</span>
+                        <span class="c1"># We use lazy-stack because unsqueeze doesn&#39;t nest the strings in lists</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                            <span class="n">lazy_stack</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">_yield_queues</span><span class="p">[</span><span class="n">idx</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]])</span>
+                        <span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_yield_queues</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+
+            <span class="c1"># Launch the next batch:</span>
+            <span class="c1"># FIXME: Add a condition RE number of frames here</span>
+            <span class="k">if</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="n">env_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">(</span><span class="n">next_output</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">async_step_and_maybe_reset_send</span><span class="p">(</span><span class="n">env_input</span><span class="p">)</span>
+
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+        <span class="c1"># Flatten the result - AsyncEnvPool child envs with batch_size=(1,) produce</span>
+        <span class="c1"># trajectories with shape [1, T] but we want [T] for consistency</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;LLMCollector: Yielding completed trajectory with shape </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="n">as_remote</span> <span class="o">=</span> <span class="n">as_remote</span>
+
+<div class="viewcode-block" id="LLMCollector.get_policy_model">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.get_policy_model">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_policy_model</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the policy model.</span>
+
+<span class="sd">        This method is used by RayLLMCollector to get the remote LLM instance</span>
+<span class="sd">        for weight updates.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The policy model instance</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">model</span></div>
+
+
+<div class="viewcode-block" id="LLMCollector.is_initialized">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.is_initialized">[docs]</a>
+    <span class="k">def</span> <span class="nf">is_initialized</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if the collector is initialized and ready.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            bool: True if the collector is initialized and ready to collect data.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># The collector is initialized if it has a valid environment and policy</span>
+        <span class="k">return</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_env&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_policy&quot;</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="nf">set_weight_updater</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weight_updater</span><span class="p">:</span> <span class="n">WeightUpdaterBase</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span> <span class="o">=</span> <span class="n">weight_updater</span>
+        <span class="k">return</span> <span class="kc">True</span></div>
+
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../../../',
+            VERSION:'0.11',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../../../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+      <script type="text/javascript" src="../../../../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../../../../_static/design-tabs.js"></script>
+
+  
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="#">Get Started</a>
+          </li>
+
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+    })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
+  </script>
+</body>
+</html>

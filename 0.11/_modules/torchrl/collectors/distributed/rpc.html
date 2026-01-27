@@ -1,0 +1,1560 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.collectors.distributed.rpc &mdash; torchrl 0.11 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../../_static/pytorch.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+
+  
+  <script src="../../../../_static/js/modernizr.min.js"></script>
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+  <div>
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../../versions.html"><span style="font-size:110%">0.11 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.collectors.distributed.rpc</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
+        </div>
+
+        <div class="pytorch-content-left">
+    
+    
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" class="pytorch-article">
+              
+  <h1>Source code for torchrl.collectors.distributed.rpc</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+
+<span class="sa">r</span><span class="sd">&quot;&quot;&quot;Generic distributed data-collector using torch.distributed.rpc backend.&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">collections</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">socket</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">copy</span><span class="p">,</span> <span class="n">deepcopy</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span> <span class="nn">torch.cuda</span>
+
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
+
+<span class="kn">from</span> <span class="nn">torch.distributed</span> <span class="kn">import</span> <span class="n">rpc</span>
+<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">_ProcessNoWarn</span><span class="p">,</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span> <span class="n">VERBOSE</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors._base</span> <span class="kn">import</span> <span class="n">_LegacyCollectorMeta</span><span class="p">,</span> <span class="n">BaseCollector</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.collectors._constants</span> <span class="kn">import</span> <span class="n">DEFAULT_EXPLORATION_TYPE</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors._multi_async</span> <span class="kn">import</span> <span class="n">MultiAsyncCollector</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors._multi_sync</span> <span class="kn">import</span> <span class="n">MultiSyncCollector</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors._single</span> <span class="kn">import</span> <span class="n">Collector</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors.distributed.default_configs</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DEFAULT_SLURM_CONF</span><span class="p">,</span>
+    <span class="n">DEFAULT_TENSORPIPE_OPTIONS</span><span class="p">,</span>
+    <span class="n">IDLE_TIMEOUT</span><span class="p">,</span>
+    <span class="n">TCP_PORT</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors.utils</span> <span class="kn">import</span> <span class="n">_NON_NN_POLICY_WEIGHTS</span><span class="p">,</span> <span class="n">split_trajectories</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors.weight_update</span> <span class="kn">import</span> <span class="n">WeightUpdaterBase</span>
+<span class="kn">from</span> <span class="nn">torchrl.data.utils</span> <span class="kn">import</span> <span class="n">CloudpickleWrapper</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">EnvBase</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.env_creator</span> <span class="kn">import</span> <span class="n">EnvCreator</span>
+<span class="kn">from</span> <span class="nn">torchrl.weight_update.weight_sync_schemes</span> <span class="kn">import</span> <span class="n">WeightSyncScheme</span>
+
+<span class="n">SUBMITIT_ERR</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">import</span> <span class="nn">submitit</span>
+
+    <span class="n">_has_submitit</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="k">except</span> <span class="ne">ModuleNotFoundError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+    <span class="n">_has_submitit</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">SUBMITIT_ERR</span> <span class="o">=</span> <span class="n">err</span>
+
+
+<span class="k">def</span> <span class="nf">_rpc_init_collection_node</span><span class="p">(</span>
+    <span class="n">rank</span><span class="p">,</span>
+    <span class="n">rank0_ip</span><span class="p">,</span>
+    <span class="n">tcp_port</span><span class="p">,</span>
+    <span class="n">world_size</span><span class="p">,</span>
+    <span class="n">visible_device</span><span class="p">,</span>
+    <span class="n">tensorpipe_options</span><span class="p">,</span>
+    <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;gloo&quot;</span><span class="p">,</span>
+    <span class="n">verbose</span><span class="o">=</span><span class="n">VERBOSE</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;MASTER_ADDR&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">rank0_ip</span><span class="p">)</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;MASTER_PORT&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">tcp_port</span><span class="p">)</span>
+
+    <span class="c1"># Initialize torch.distributed process group for efficient weight transfer</span>
+    <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;init distributed with rank=</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">, world_size=</span><span class="si">{</span><span class="n">world_size</span><span class="si">}</span><span class="s2">, backend=</span><span class="si">{</span><span class="n">backend</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span>
+        <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span>
+        <span class="n">rank</span><span class="o">=</span><span class="n">rank</span><span class="p">,</span>
+        <span class="n">world_size</span><span class="o">=</span><span class="n">world_size</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">visible_device</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="k">pass</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">visible_device</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">)):</span>
+        <span class="n">visible_device</span> <span class="o">=</span> <span class="p">[</span><span class="n">visible_device</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">visible_device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">pass</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;unrecognised dtype </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">visible_device</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">options</span> <span class="o">=</span> <span class="n">rpc</span><span class="o">.</span><span class="n">TensorPipeRpcBackendOptions</span><span class="p">(</span>
+        <span class="n">devices</span><span class="o">=</span><span class="n">visible_device</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">tensorpipe_options</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;init rpc with master addr: </span><span class="si">{</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;MASTER_ADDR&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;MASTER_PORT&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="n">rpc</span><span class="o">.</span><span class="n">init_rpc</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;COLLECTOR_NODE_</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+        <span class="n">rank</span><span class="o">=</span><span class="n">rank</span><span class="p">,</span>
+        <span class="n">backend</span><span class="o">=</span><span class="n">rpc</span><span class="o">.</span><span class="n">BackendType</span><span class="o">.</span><span class="n">TENSORPIPE</span><span class="p">,</span>
+        <span class="n">rpc_backend_options</span><span class="o">=</span><span class="n">options</span><span class="p">,</span>
+        <span class="n">world_size</span><span class="o">=</span><span class="n">world_size</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">rpc</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">destroy_process_group</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="RPCCollector">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RPCCollector.html#torchrl.collectors.distributed.RPCCollector">[docs]</a>
+<span class="k">class</span> <span class="nc">RPCCollector</span><span class="p">(</span><span class="n">BaseCollector</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;An RPC-based distributed data collector.</span>
+
+<span class="sd">    Supports sync and async data collection.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        create_env_fn (Callable or List[Callabled]): list of Callables, each returning an</span>
+<span class="sd">            instance of :class:`~torchrl.envs.EnvBase`.</span>
+<span class="sd">        policy (Callable): Policy to be executed in the environment.</span>
+<span class="sd">            Must accept :class:`tensordict.tensordict.TensorDictBase` object as input.</span>
+<span class="sd">            If ``None`` is provided, the policy used will be a</span>
+<span class="sd">            :class:`~torchrl.collectors.RandomPolicy` instance with the environment</span>
+<span class="sd">            ``action_spec``.</span>
+<span class="sd">            Accepted policies are usually subclasses of :class:`~tensordict.nn.TensorDictModuleBase`.</span>
+<span class="sd">            This is the recommended usage of the collector.</span>
+<span class="sd">            Other callables are accepted too:</span>
+<span class="sd">            If the policy is not a ``TensorDictModuleBase`` (e.g., a regular :class:`~torch.nn.Module`</span>
+<span class="sd">            instances) it will be wrapped in a `nn.Module` first.</span>
+<span class="sd">            Then, the collector will try to assess if these</span>
+<span class="sd">            modules require wrapping in a :class:`~tensordict.nn.TensorDictModule` or not.</span>
+
+<span class="sd">            - If the policy forward signature matches any of ``forward(self, tensordict)``,</span>
+<span class="sd">              ``forward(self, td)`` or ``forward(self, &lt;anything&gt;: TensorDictBase)`` (or</span>
+<span class="sd">              any typing with a single argument typed as a subclass of ``TensorDictBase``)</span>
+<span class="sd">              then the policy won&#39;t be wrapped in a :class:`~tensordict.nn.TensorDictModule`.</span>
+
+<span class="sd">            - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.</span>
+
+<span class="sd">            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn&#39;t be serialized /</span>
+<span class="sd">                pickled directly), the ``policy_factory`` should be used instead.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable</span>
+<span class="sd">            (or list of callables) that returns a policy instance. This is exclusive with the `policy` argument.</span>
+
+<span class="sd">            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.</span>
+
+<span class="sd">        frames_per_batch (int): A keyword-only argument representing the total</span>
+<span class="sd">            number of elements in a batch.</span>
+<span class="sd">        total_frames (int): A keyword-only argument representing the total</span>
+<span class="sd">            number of frames returned by the collector</span>
+<span class="sd">            during its lifespan. If the ``total_frames`` is not divisible by</span>
+<span class="sd">            ``frames_per_batch``, an exception is raised.</span>
+<span class="sd">            Endless collectors can be created by passing ``total_frames=-1``.</span>
+<span class="sd">            Defaults to ``-1`` (endless collector).</span>
+<span class="sd">        device (int, str or torch.device, optional): The generic device of the</span>
+<span class="sd">            collector. The ``device`` args fills any non-specified device: if</span>
+<span class="sd">            ``device`` is not ``None`` and any of ``storing_device``, ``policy_device`` or</span>
+<span class="sd">            ``env_device`` is not specified, its value will be set to ``device``.</span>
+<span class="sd">            Defaults to ``None`` (No default device).</span>
+<span class="sd">            Lists of devices are supported.</span>
+<span class="sd">        storing_device (int, str or torch.device, optional): The *remote* device on which</span>
+<span class="sd">            the output :class:`~tensordict.TensorDict` will be stored.</span>
+<span class="sd">            If ``device`` is passed and ``storing_device`` is ``None``, it will</span>
+<span class="sd">            default to the value indicated by ``device``.</span>
+<span class="sd">            For long trajectories, it may be necessary to store the data on a different</span>
+<span class="sd">            device than the one where the policy and env are executed.</span>
+<span class="sd">            Defaults to ``None`` (the output tensordict isn&#39;t on a specific device,</span>
+<span class="sd">            leaf tensors sit on the device where they were created).</span>
+<span class="sd">            Lists of devices are supported.</span>
+<span class="sd">        env_device (int, str or torch.device, optional): The *remote* device on which</span>
+<span class="sd">            the environment should be cast (or executed if that functionality is</span>
+<span class="sd">            supported). If not specified and the env has a non-``None`` device,</span>
+<span class="sd">            ``env_device`` will default to that value. If ``device`` is passed</span>
+<span class="sd">            and ``env_device=None``, it will default to ``device``. If the value</span>
+<span class="sd">            as such specified of ``env_device`` differs from ``policy_device``</span>
+<span class="sd">            and one of them is not ``None``, the data will be cast to ``env_device``</span>
+<span class="sd">            before being passed to the env (i.e., passing different devices to</span>
+<span class="sd">            policy and env is supported). Defaults to ``None``.</span>
+<span class="sd">            Lists of devices are supported.</span>
+<span class="sd">        policy_device (int, str or torch.device, optional): The *remote* device on which</span>
+<span class="sd">            the policy should be cast.</span>
+<span class="sd">            If ``device`` is passed and ``policy_device=None``, it will default</span>
+<span class="sd">            to ``device``. If the value as such specified of ``policy_device``</span>
+<span class="sd">            differs from ``env_device`` and one of them is not ``None``,</span>
+<span class="sd">            the data will be cast to ``policy_device`` before being passed to</span>
+<span class="sd">            the policy (i.e., passing different devices to policy and env is</span>
+<span class="sd">            supported). Defaults to ``None``.</span>
+<span class="sd">            Lists of devices are supported.</span>
+<span class="sd">        max_frames_per_traj (int, optional): Maximum steps per trajectory.</span>
+<span class="sd">            Note that a trajectory can span across multiple batches (unless</span>
+<span class="sd">            ``reset_at_each_iter`` is set to ``True``, see below).</span>
+<span class="sd">            Once a trajectory reaches ``n_steps``, the environment is reset.</span>
+<span class="sd">            If the environment wraps multiple environments together, the number</span>
+<span class="sd">            of steps is tracked for each environment independently. Negative</span>
+<span class="sd">            values are allowed, in which case this argument is ignored.</span>
+<span class="sd">            Defaults to ``None`` (i.e., no maximum number of steps).</span>
+<span class="sd">        init_random_frames (int, optional): Number of frames for which the</span>
+<span class="sd">            policy is ignored before it is called. This feature is mainly</span>
+<span class="sd">            intended to be used in offline/model-based settings, where a</span>
+<span class="sd">            batch of random trajectories can be used to initialize training.</span>
+<span class="sd">            If provided, it will be rounded up to the closest multiple of frames_per_batch.</span>
+<span class="sd">            Defaults to ``None`` (i.e. no random frames).</span>
+<span class="sd">        reset_at_each_iter (bool, optional): Whether environments should be reset</span>
+<span class="sd">            at the beginning of a batch collection.</span>
+<span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        postproc (Callable, optional): A post-processing transform, such as</span>
+<span class="sd">            a :class:`~torchrl.envs.Transform` or a :class:`~torchrl.data.postprocs.MultiStep`</span>
+<span class="sd">            instance.</span>
+<span class="sd">            Defaults to ``None``.</span>
+<span class="sd">        split_trajs (bool, optional): Boolean indicating whether the resulting</span>
+<span class="sd">            TensorDict should be split according to the trajectories.</span>
+<span class="sd">            See :func:`~torchrl.collectors.utils.split_trajectories` for more</span>
+<span class="sd">            information.</span>
+<span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        exploration_type (ExplorationType, optional): interaction mode to be used when</span>
+<span class="sd">            collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.DETERMINISTIC``,</span>
+<span class="sd">            ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``</span>
+<span class="sd">            or ``torchrl.envs.utils.ExplorationType.MEAN``.</span>
+<span class="sd">            Defaults to ``torchrl.envs.utils.ExplorationType.RANDOM``.</span>
+<span class="sd">        collector_class (Type or str, optional): a collector class for the remote node. Can be</span>
+<span class="sd">            :class:`~torchrl.collectors.Collector`,</span>
+<span class="sd">            :class:`~torchrl.collectors.MultiSyncCollector`,</span>
+<span class="sd">            :class:`~torchrl.collectors.MultiAsyncCollector`</span>
+<span class="sd">            or a derived class of these. The strings &quot;single&quot;, &quot;sync&quot; and</span>
+<span class="sd">            &quot;async&quot; correspond to respective class.</span>
+<span class="sd">            Defaults to :class:`~torchrl.collectors.Collector`.</span>
+
+<span class="sd">            .. note::</span>
+
+<span class="sd">              Support for :class:`MultiSyncCollector` and :class:`MultiAsyncCollector`</span>
+<span class="sd">              is experimental, and :class:`~torchrl.collectors.Collector`</span>
+<span class="sd">              should always be preferred. If multiple simultaneous environment</span>
+<span class="sd">              need to be executed on a single node, consider using a</span>
+<span class="sd">              :class:`~torchrl.envs.ParallelEnv` instance.</span>
+<span class="sd">        collector_kwargs (dict or list, optional): a dictionary of parameters to be passed to the</span>
+<span class="sd">            remote data-collector. If a list is provided, each element will</span>
+<span class="sd">            correspond to an individual set of keyword arguments for the</span>
+<span class="sd">            dedicated collector.</span>
+<span class="sd">        num_workers_per_collector (int, optional): the number of copies of the</span>
+<span class="sd">            env constructor that is to be used on the remote nodes.</span>
+<span class="sd">            Defaults to 1 (a single env per collector).</span>
+<span class="sd">            On a single worker node all the sub-workers will be</span>
+<span class="sd">            executing the same environment. If different environments need to</span>
+<span class="sd">            be executed, they should be dispatched across worker nodes, not</span>
+<span class="sd">            subnodes.</span>
+<span class="sd">        sync (bool, optional): if ``True``, the resulting tensordict is a stack of all the</span>
+<span class="sd">            tensordicts collected on each node. If ``False`` (default), each</span>
+<span class="sd">            tensordict results from a separate node in a &quot;first-ready,</span>
+<span class="sd">            first-served&quot; fashion.</span>
+<span class="sd">        slurm_kwargs (dict): a dictionary of parameters to be passed to the</span>
+<span class="sd">            submitit executor.</span>
+<span class="sd">        update_after_each_batch (bool, optional): if ``True``, the weights will</span>
+<span class="sd">            be updated after each collection. For ``sync=True``, this means that</span>
+<span class="sd">            all workers will see their weights updated. For ``sync=False``,</span>
+<span class="sd">            only the worker from which the data has been gathered will be</span>
+<span class="sd">            updated.</span>
+<span class="sd">            Defaults to ``False``, ie. updates have to be executed manually</span>
+<span class="sd">            through</span>
+<span class="sd">            :meth:`~torchrl.collectors.distributed.DistributedDataCollector.update_policy_weights_`.</span>
+<span class="sd">        max_weight_update_interval (int, optional): the maximum number of</span>
+<span class="sd">            batches that can be collected before the policy weights of a worker</span>
+<span class="sd">            is updated.</span>
+<span class="sd">            For sync collections, this parameter is overwritten by ``update_after_each_batch``.</span>
+<span class="sd">            For async collections, it may be that one worker has not seen its</span>
+<span class="sd">            parameters being updated for a certain time even if ``update_after_each_batch``</span>
+<span class="sd">            is turned on.</span>
+<span class="sd">            Defaults to -1 (no forced update).</span>
+<span class="sd">        launcher (str, optional): how jobs should be launched.</span>
+<span class="sd">            Can be one of &quot;submitit&quot; or &quot;mp&quot; for multiprocessing. The former</span>
+<span class="sd">            can launch jobs across multiple nodes, whilst the latter will only</span>
+<span class="sd">            launch jobs on a single machine. &quot;submitit&quot; requires the homonymous</span>
+<span class="sd">            library to be installed.</span>
+<span class="sd">            To find more about submitit, visit</span>
+<span class="sd">            https://github.com/facebookincubator/submitit</span>
+<span class="sd">            Defaults to &quot;submitit&quot;.</span>
+<span class="sd">        tcp_port (int, optional): the TCP port to be used. Defaults to 10003.</span>
+<span class="sd">        backend (str, optional): the torch.distributed backend to use for weight synchronization.</span>
+<span class="sd">            Must be one of ``&quot;gloo&quot;``, ``&quot;mpi&quot;``, ``&quot;nccl&quot;`` or ``&quot;ucc&quot;``. See the torch.distributed</span>
+<span class="sd">            documentation for more information. Defaults to ``&quot;gloo&quot;``.</span>
+<span class="sd">        visible_devices (list of Union[int, torch.device, str], optional): a</span>
+<span class="sd">            list of the same length as the number of nodes containing the</span>
+<span class="sd">            device used to pass data to main.</span>
+<span class="sd">        tensorpipe_options (dict, optional): a dictionary of keyword argument</span>
+<span class="sd">            to pass to :class:`torch.distributed.rpc.TensorPipeRpcBackendOption`.</span>
+<span class="sd">        weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`</span>
+<span class="sd">            or its subclass, responsible for updating the policy weights on remote inference workers using RPC.</span>
+<span class="sd">            If not provided, an :class:`~torchrl.collectors.distributed.RPCWeightUpdater` will be used by default, which</span>
+<span class="sd">            handles weight synchronization via RPC.</span>
+<span class="sd">            Consider using a constructor if the updater needs to be serialized.</span>
+<span class="sd">        weight_sync_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for</span>
+<span class="sd">            SENDING weights to remote collector workers. Keys are model identifiers (e.g., &quot;policy&quot;)</span>
+<span class="sd">            and values are WeightSyncScheme instances configured to send weights via RPC.</span>
+<span class="sd">            If not provided, an :class:`~torchrl.weight_update.RPCWeightSyncScheme` will be used by default.</span>
+<span class="sd">            This is for propagating weights from the main process to remote collectors.</span>
+<span class="sd">        weight_recv_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for</span>
+<span class="sd">            RECEIVING weights from a parent process or training loop. Keys are model identifiers (e.g., &quot;policy&quot;)</span>
+<span class="sd">            and values are WeightSyncScheme instances configured to receive weights.</span>
+<span class="sd">            This is typically used when RPCDataCollector is itself a worker in a larger distributed setup.</span>
+<span class="sd">            Defaults to ``None``.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_VERBOSE</span> <span class="o">=</span> <span class="n">VERBOSE</span>  <span class="c1"># for debugging</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">create_env_fn</span><span class="p">,</span>
+        <span class="n">policy</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Callable</span><span class="p">]</span>
+        <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[]],</span> <span class="n">Callable</span><span class="p">]</span>
+        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">storing_device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">env_device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">policy_device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">max_frames_per_traj</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">init_random_frames</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">reset_at_each_iter</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">postproc</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">split_trajs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">exploration_type</span><span class="p">:</span> <span class="n">ExporationType</span> <span class="o">=</span> <span class="n">DEFAULT_EXPLORATION_TYPE</span><span class="p">,</span>  <span class="c1"># noqa</span>
+        <span class="n">collector_class</span><span class="p">:</span> <span class="nb">type</span> <span class="o">=</span> <span class="n">Collector</span><span class="p">,</span>
+        <span class="n">collector_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_workers_per_collector</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">sync</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">slurm_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">update_after_each_batch</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">max_weight_update_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">launcher</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;submitit&quot;</span><span class="p">,</span>
+        <span class="n">tcp_port</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">backend</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;gloo&quot;</span><span class="p">,</span>
+        <span class="n">visible_devices</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tensorpipe_options</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weight_updater</span><span class="p">:</span> <span class="n">WeightUpdaterBase</span>
+        <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">WeightUpdaterBase</span><span class="p">]</span>
+        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weight_sync_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightSyncScheme</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weight_recv_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightSyncScheme</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_VERBOSE</span><span class="p">:</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="s2">&quot;DEBUG&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">collector_class</span> <span class="o">==</span> <span class="s2">&quot;async&quot;</span><span class="p">:</span>
+            <span class="n">collector_class</span> <span class="o">=</span> <span class="n">MultiAsyncCollector</span>
+        <span class="k">elif</span> <span class="n">collector_class</span> <span class="o">==</span> <span class="s2">&quot;sync&quot;</span><span class="p">:</span>
+            <span class="n">collector_class</span> <span class="o">=</span> <span class="n">MultiSyncCollector</span>
+        <span class="k">elif</span> <span class="n">collector_class</span> <span class="o">==</span> <span class="s2">&quot;single&quot;</span><span class="p">:</span>
+            <span class="n">collector_class</span> <span class="o">=</span> <span class="n">Collector</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">collector_class</span> <span class="o">=</span> <span class="n">collector_class</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">env_constructors</span> <span class="o">=</span> <span class="n">create_env_fn</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy</span> <span class="o">=</span> <span class="n">policy</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+            <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
+            <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">lock_</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">weight_updater</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span>
+                <span class="n">policy_factory</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="ow">or</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">))</span>
+            <span class="p">):</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">_NON_NN_POLICY_WEIGHTS</span><span class="p">)</span>
+            <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">lock</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">):</span>
+            <span class="n">policy_factory</span> <span class="o">=</span> <span class="p">[</span><span class="n">policy_factory</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy_factory</span> <span class="o">=</span> <span class="n">policy_factory</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span> <span class="o">=</span> <span class="n">frames_per_batch</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">requested_frames_per_batch</span> <span class="o">=</span> <span class="n">frames_per_batch</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span> <span class="o">=</span> <span class="n">storing_device</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">env_device</span> <span class="o">=</span> <span class="n">env_device</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span> <span class="o">=</span> <span class="n">policy_device</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span> <span class="o">=</span> <span class="n">storing_device</span>
+        <span class="c1"># make private to avoid changes from users during collection</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span> <span class="o">=</span> <span class="n">sync</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">update_after_each_batch</span> <span class="o">=</span> <span class="n">update_after_each_batch</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span> <span class="o">=</span> <span class="n">max_weight_update_interval</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_after_each_batch</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span> <span class="o">&gt;</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Got conflicting update instructions: `update_after_each_batch` &quot;</span>
+                <span class="s2">&quot;`max_weight_update_interval` are incompatible.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">launcher</span> <span class="o">=</span> <span class="n">launcher</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">)]</span>
+        <span class="k">if</span> <span class="n">tcp_port</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tcp_port</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;TCP_PORT&quot;</span><span class="p">,</span> <span class="n">TCP_PORT</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tcp_port</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">tcp_port</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">visible_devices</span> <span class="o">=</span> <span class="n">visible_devices</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Cannot dispatch </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span><span class="si">}</span><span class="s2"> frames across </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="si">}</span><span class="s2">. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Consider using a number of frames per batch that is divisible by the number of workers.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_frames_per_batch_corrected</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_frames_per_batch_corrected</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_workers_per_collector</span> <span class="o">=</span> <span class="n">num_workers_per_collector</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span> <span class="o">=</span> <span class="n">total_frames</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">slurm_kwargs</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">DEFAULT_SLURM_CONF</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">slurm_kwargs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">slurm_kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">slurm_kwargs</span><span class="p">)</span>
+
+        <span class="n">collector_kwargs</span> <span class="o">=</span> <span class="n">collector_kwargs</span> <span class="k">if</span> <span class="n">collector_kwargs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">collector_kwargs</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">deepcopy</span><span class="p">(</span><span class="n">collector_kwargs</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">collector_kwargs</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span>
+            <span class="k">else</span> <span class="p">[</span><span class="n">copy</span><span class="p">(</span><span class="n">collector_kwargs</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">)]</span>
+        <span class="p">)</span>
+
+        <span class="c1"># update collector kwargs</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">collector_kwarg</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">collector_kwargs</span><span class="p">):</span>
+            <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;max_frames_per_traj&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">max_frames_per_traj</span>
+            <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;init_random_frames&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">init_random_frames</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span> <span class="ow">and</span> <span class="n">init_random_frames</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="s2">&quot;async distributed data collection with init_random_frames &gt; 0 &quot;</span>
+                    <span class="s2">&quot;may have unforeseen consequences as we do not control that once &quot;</span>
+                    <span class="s2">&quot;non-random data is being collected all nodes are returning non-random data. &quot;</span>
+                    <span class="s2">&quot;If this is a feature that you feel should be fixed, please raise an issue on &quot;</span>
+                    <span class="s2">&quot;torchrl&#39;s repo.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;reset_at_each_iter&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">reset_at_each_iter</span>
+            <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;exploration_type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">exploration_type</span>
+            <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;device&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;storing_device&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;env_device&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env_device</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;policy_device&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span> <span class="o">=</span> <span class="n">postproc</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">split_trajs</span> <span class="o">=</span> <span class="n">split_trajs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">backend</span> <span class="o">=</span> <span class="n">backend</span>
+
+        <span class="k">if</span> <span class="n">tensorpipe_options</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tensorpipe_options</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">DEFAULT_TENSORPIPE_OPTIONS</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tensorpipe_options</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">DEFAULT_TENSORPIPE_OPTIONS</span><span class="p">)</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                <span class="n">tensorpipe_options</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Set up weight synchronization - prefer new schemes over legacy updater</span>
+        <span class="k">if</span> <span class="n">weight_updater</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">weight_sync_schemes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Default to RPC weight sync scheme for RPC collectors</span>
+            <span class="kn">from</span> <span class="nn">torchrl.weight_update</span> <span class="kn">import</span> <span class="n">RPCWeightSyncScheme</span>
+
+            <span class="n">weight_sync_schemes</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;policy&quot;</span><span class="p">:</span> <span class="n">RPCWeightSyncScheme</span><span class="p">()}</span>
+
+        <span class="k">if</span> <span class="n">weight_sync_schemes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Use new weight synchronization system</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span> <span class="o">=</span> <span class="n">weight_sync_schemes</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Fall back to legacy weight updater system</span>
+            <span class="k">if</span> <span class="n">weight_updater</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">weight_updater</span> <span class="o">=</span> <span class="n">RPCWeightUpdater</span><span class="p">(</span>
+                    <span class="n">collector_infos</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">collector_infos</span><span class="p">,</span>
+                    <span class="n">collector_class</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">collector_class</span><span class="p">,</span>
+                    <span class="n">collector_rrefs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">collector_rrefs</span><span class="p">,</span>
+                    <span class="n">policy_weights</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span><span class="p">,</span>
+                    <span class="n">num_workers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span> <span class="o">=</span> <span class="n">weight_updater</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">weight_sync_schemes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Set up weight senders now that remote collectors exist</span>
+            <span class="k">for</span> <span class="n">model_id</span><span class="p">,</span> <span class="n">scheme</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">scheme</span><span class="o">.</span><span class="n">init_on_sender</span><span class="p">(</span>
+                    <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span>
+                    <span class="n">num_workers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">,</span>
+                    <span class="n">context</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">scheme</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>
+
+        <span class="c1"># Set up weight receivers if provided</span>
+        <span class="k">if</span> <span class="n">weight_recv_schemes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_scheme_receiver</span><span class="p">(</span><span class="n">weight_recv_schemes</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">device</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">storing_device</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storing_device</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">env_device</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env_device</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">policy_device</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_policy_device</span>
+
+    <span class="nd">@device</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">device</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">list</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;The number of devices passed to the collector must match the number of workers.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="o">=</span> <span class="p">[</span><span class="n">value</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span>
+
+    <span class="nd">@storing_device</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">storing_device</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">list</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;The number of devices passed to the collector must match the number of workers.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_storing_device</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_storing_device</span> <span class="o">=</span> <span class="p">[</span><span class="n">value</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span>
+
+    <span class="nd">@env_device</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">env_device</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">list</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;The number of devices passed to the collector must match the number of workers.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_env_device</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_env_device</span> <span class="o">=</span> <span class="p">[</span><span class="n">value</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span>
+
+    <span class="nd">@policy_device</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">policy_device</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">list</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;The number of devices passed to the collector must match the number of workers.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_policy_device</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_policy_device</span> <span class="o">=</span> <span class="p">[</span><span class="n">value</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span>
+
+    <span class="k">def</span> <span class="nf">_init_master_rpc</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">world_size</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Init torch.distributed and RPC on main node.&quot;&quot;&quot;</span>
+        <span class="c1"># Initialize torch.distributed process group for efficient weight transfer</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;init distributed with rank=0, world_size=</span><span class="si">{</span><span class="n">world_size</span><span class="si">}</span><span class="s2">, backend=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">backend</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span>
+            <span class="n">backend</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">backend</span><span class="p">,</span>
+            <span class="n">rank</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">world_size</span><span class="o">=</span><span class="n">world_size</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Initialize RPC for control/signaling</span>
+        <span class="n">options</span> <span class="o">=</span> <span class="n">rpc</span><span class="o">.</span><span class="n">TensorPipeRpcBackendOptions</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">tensorpipe_options</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">visible_devices</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
+                    <span class="n">rank</span> <span class="o">=</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span>
+                    <span class="n">options</span><span class="o">.</span><span class="n">set_device_map</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;COLLECTOR_NODE_</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">visible_devices</span><span class="p">[</span><span class="n">i</span><span class="p">]}</span>
+                    <span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;init rpc&quot;</span><span class="p">)</span>
+        <span class="n">rpc</span><span class="o">.</span><span class="n">init_rpc</span><span class="p">(</span>
+            <span class="s2">&quot;TRAINER_NODE&quot;</span><span class="p">,</span>
+            <span class="n">rank</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">backend</span><span class="o">=</span><span class="n">rpc</span><span class="o">.</span><span class="n">BackendType</span><span class="o">.</span><span class="n">TENSORPIPE</span><span class="p">,</span>
+            <span class="n">rpc_backend_options</span><span class="o">=</span><span class="n">options</span><span class="p">,</span>
+            <span class="n">world_size</span><span class="o">=</span><span class="n">world_size</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_start_workers</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">world_size</span><span class="p">,</span>
+        <span class="n">env_constructors</span><span class="p">,</span>
+        <span class="n">collector_class</span><span class="p">,</span>
+        <span class="n">num_workers_per_collector</span><span class="p">,</span>
+        <span class="n">policy</span><span class="p">,</span>
+        <span class="n">policy_factory</span><span class="p">,</span>
+        <span class="n">frames_per_batch</span><span class="p">,</span>
+        <span class="n">total_frames</span><span class="p">,</span>
+        <span class="n">collector_kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Instantiate remote collectors.&quot;&quot;&quot;</span>
+        <span class="n">num_workers</span> <span class="o">=</span> <span class="n">world_size</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="n">time_interval</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="n">collector_infos</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_workers</span><span class="p">):</span>
+            <span class="n">counter</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="n">counter</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">time_interval</span><span class="p">)</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;trying to connect to collector node </span><span class="si">{</span><span class="n">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="n">collector_info</span> <span class="o">=</span> <span class="n">rpc</span><span class="o">.</span><span class="n">get_worker_info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;COLLECTOR_NODE_</span><span class="si">{</span><span class="n">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="k">break</span>
+                <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">counter</span> <span class="o">*</span> <span class="n">time_interval</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensorpipe_options</span><span class="p">[</span><span class="s2">&quot;rpc_timeout&quot;</span><span class="p">]:</span>
+                        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Could not connect to remote node&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">err</span>
+                    <span class="k">continue</span>
+            <span class="n">collector_infos</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">collector_info</span><span class="p">)</span>
+
+        <span class="n">collector_rrefs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_workers</span><span class="p">):</span>
+            <span class="n">env_make</span> <span class="o">=</span> <span class="n">env_constructors</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env_make</span><span class="p">,</span> <span class="p">(</span><span class="n">EnvBase</span><span class="p">,</span> <span class="n">EnvCreator</span><span class="p">)):</span>
+                <span class="n">env_make</span> <span class="o">=</span> <span class="n">CloudpickleWrapper</span><span class="p">(</span><span class="n">env_make</span><span class="p">)</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Making collector in remote node&quot;</span><span class="p">)</span>
+            <span class="c1"># When using weight sync schemes together with a policy_factory, the</span>
+            <span class="c1"># main-node `policy` should be used only as a weight source on the</span>
+            <span class="c1"># trainer, and NOT sent to remote collectors (which will build their</span>
+            <span class="c1"># own policies from the factory). This mirrors the behaviour of</span>
+            <span class="c1"># `DistributedDataCollector` with multi-process collectors.</span>
+            <span class="n">policy_to_send</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="kc">None</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="n">policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                    <span class="ow">and</span> <span class="n">policy_factory</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                    <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_weight_sync_schemes&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="p">)</span>
+                <span class="k">else</span> <span class="n">policy</span>
+            <span class="p">)</span>
+
+            <span class="n">collector_rref</span> <span class="o">=</span> <span class="n">rpc</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+                <span class="n">collector_infos</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
+                <span class="n">collector_class</span><span class="p">,</span>
+                <span class="n">args</span><span class="o">=</span><span class="p">(</span>
+                    <span class="p">[</span><span class="n">env_make</span><span class="p">]</span> <span class="o">*</span> <span class="n">num_workers_per_collector</span>
+                    <span class="k">if</span> <span class="n">collector_class</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">Collector</span>
+                    <span class="k">else</span> <span class="n">env_make</span><span class="p">,</span>
+                    <span class="n">policy_to_send</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span>
+                    <span class="s2">&quot;policy_factory&quot;</span><span class="p">:</span> <span class="n">policy_factory</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
+                    <span class="s2">&quot;frames_per_batch&quot;</span><span class="p">:</span> <span class="n">frames_per_batch</span><span class="p">,</span>
+                    <span class="s2">&quot;total_frames&quot;</span><span class="p">:</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+                    <span class="s2">&quot;split_trajs&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                    <span class="s2">&quot;weight_recv_schemes&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="p">,</span>
+                    <span class="s2">&quot;worker_idx&quot;</span><span class="p">:</span> <span class="n">i</span><span class="p">,</span>
+                    <span class="o">**</span><span class="n">collector_kwargs</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
+                <span class="p">},</span>
+            <span class="p">)</span>
+            <span class="n">collector_rrefs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">collector_rref</span><span class="p">)</span>
+
+        <span class="c1"># Set up receiver schemes on remote collectors (if using new weight sync system)</span>
+        <span class="c1"># This enables cascading: RPC -&gt; MultiSync -&gt; Sync</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_weight_sync_schemes&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_workers</span><span class="p">):</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Setting up receiver schemes on remote collector </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+                <span class="c1"># Call register_scheme_receiver on the remote collector using rref.rpc_sync()</span>
+                <span class="c1"># This properly dereferences the rref and calls the instance method</span>
+                <span class="n">collector_rrefs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">rpc_sync</span><span class="p">()</span><span class="o">.</span><span class="n">register_scheme_receiver</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span>
+                <span class="p">)</span>
+
+        <span class="n">futures</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">deque</span><span class="p">(</span><span class="n">maxlen</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_workers</span><span class="p">):</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Asking for the first batch&quot;</span><span class="p">)</span>
+                <span class="c1"># Use rref.rpc_async() to properly call instance method</span>
+                <span class="n">future</span> <span class="o">=</span> <span class="n">collector_rrefs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">rpc_async</span><span class="p">()</span><span class="o">.</span><span class="n">next</span><span class="p">()</span>
+                <span class="n">futures</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">future</span><span class="p">,</span> <span class="n">i</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">futures</span> <span class="o">=</span> <span class="n">futures</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">collector_rrefs</span> <span class="o">=</span> <span class="n">collector_rrefs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">collector_infos</span> <span class="o">=</span> <span class="n">collector_infos</span>
+
+    <span class="k">def</span> <span class="nf">_init_worker_rpc</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">executor</span><span class="p">,</span> <span class="n">i</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Init RPC node if necessary.&quot;&quot;&quot;</span>
+        <span class="n">visible_device</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">visible_devices</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">visible_devices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">launcher</span> <span class="o">==</span> <span class="s2">&quot;submitit&quot;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_submitit</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="s2">&quot;submitit not found.&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">SUBMITIT_ERR</span>
+            <span class="n">job</span> <span class="o">=</span> <span class="n">executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span>
+                <span class="n">_rpc_init_collection_node</span><span class="p">,</span>
+                <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">IPAddr</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">tcp_port</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+                <span class="n">visible_device</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">tensorpipe_options</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">backend</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_VERBOSE</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;job id </span><span class="si">{</span><span class="n">job</span><span class="o">.</span><span class="n">job_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># ID of your job</span>
+            <span class="k">return</span> <span class="n">job</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">launcher</span> <span class="o">==</span> <span class="s2">&quot;mp&quot;</span><span class="p">:</span>
+            <span class="n">job</span> <span class="o">=</span> <span class="n">_ProcessNoWarn</span><span class="p">(</span>
+                <span class="n">target</span><span class="o">=</span><span class="n">_rpc_init_collection_node</span><span class="p">,</span>
+                <span class="n">args</span><span class="o">=</span><span class="p">(</span>
+                    <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">IPAddr</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">tcp_port</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+                    <span class="n">visible_device</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">tensorpipe_options</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">backend</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_VERBOSE</span><span class="p">,</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+            <span class="n">job</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">job</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">launcher</span> <span class="o">==</span> <span class="s2">&quot;submitit_delayed&quot;</span><span class="p">:</span>
+            <span class="c1"># job is already launched</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown launcher </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">launcher</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">launcher</span> <span class="o">==</span> <span class="s2">&quot;submitit&quot;</span><span class="p">:</span>
+            <span class="n">executor</span> <span class="o">=</span> <span class="n">submitit</span><span class="o">.</span><span class="n">AutoExecutor</span><span class="p">(</span><span class="n">folder</span><span class="o">=</span><span class="s2">&quot;log_test&quot;</span><span class="p">)</span>
+            <span class="n">executor</span><span class="o">.</span><span class="n">update_parameters</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">slurm_kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">executor</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="n">hostname</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">gethostname</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">launcher</span> <span class="o">!=</span> <span class="s2">&quot;mp&quot;</span><span class="p">:</span>
+            <span class="n">IPAddr</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">gethostbyname</span><span class="p">(</span><span class="n">hostname</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">IPAddr</span> <span class="o">=</span> <span class="s2">&quot;localhost&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">IPAddr</span> <span class="o">=</span> <span class="n">IPAddr</span>
+
+        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;MASTER_ADDR&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">IPAddr</span><span class="p">)</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;MASTER_PORT&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tcp_port</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">jobs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Submitting job </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">job</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_worker_rpc</span><span class="p">(</span>
+                <span class="n">executor</span><span class="p">,</span>
+                <span class="n">i</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">jobs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_init_master_rpc</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_start_workers</span><span class="p">(</span>
+            <span class="n">world_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+            <span class="n">env_constructors</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">env_constructors</span><span class="p">,</span>
+            <span class="n">collector_class</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">collector_class</span><span class="p">,</span>
+            <span class="n">num_workers_per_collector</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers_per_collector</span><span class="p">,</span>
+            <span class="n">policy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span>
+            <span class="n">policy_factory</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_factory</span><span class="p">,</span>
+            <span class="n">frames_per_batch</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_frames_per_batch_corrected</span><span class="p">,</span>
+            <span class="n">total_frames</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span><span class="p">,</span>
+            <span class="n">collector_kwargs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">collector_kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_collected_frames</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collected_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_sync_rpc</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_async_rpc</span><span class="p">()</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_trajs</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">split_trajectories</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="k">yield</span> <span class="n">data</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span> <span class="o">&gt;</span> <span class="o">-</span><span class="mi">1</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">j</span><span class="p">]</span>
+                        <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span>
+                    <span class="p">):</span>
+                        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;Updating policy of worker </span><span class="si">{</span><span class="n">j</span><span class="si">}</span><span class="s2"> with wait=False&quot;</span>
+                        <span class="p">)</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">worker_ids</span><span class="o">=</span><span class="p">[</span><span class="n">j</span><span class="p">],</span> <span class="n">wait</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span> <span class="o">&gt;</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                <span class="n">ranks</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="mi">1</span>
+                    <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">j</span><span class="p">]</span>
+                    <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span>
+                <span class="p">]</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Updating policy of workers </span><span class="si">{</span><span class="n">ranks</span><span class="si">}</span><span class="s2"> with wait=True&quot;</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">worker_ids</span><span class="o">=</span><span class="n">ranks</span><span class="p">,</span> <span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_next_async_rpc</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;next async&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">futures</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">StopIteration</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;The queue is empty, the collector has ran out of data after </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_collected_frames</span><span class="si">}</span><span class="s2"> collected frames.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">future</span><span class="p">,</span> <span class="n">i</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">future</span><span class="o">.</span><span class="n">done</span><span class="p">():</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_after_each_batch</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">worker_ids</span><span class="o">=</span><span class="p">(</span><span class="n">i</span><span class="p">,),</span> <span class="n">wait</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;future </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> is done&quot;</span><span class="p">)</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">future</span><span class="o">.</span><span class="n">value</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_collected_frames</span> <span class="o">+=</span> <span class="n">data</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collected_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span><span class="p">:</span>
+                    <span class="c1"># Use rref.rpc_async() to properly call instance method</span>
+                    <span class="n">future</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector_rrefs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">rpc_async</span><span class="p">()</span><span class="o">.</span><span class="n">next</span><span class="p">()</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">future</span><span class="p">,</span> <span class="n">i</span><span class="p">))</span>
+                <span class="k">return</span> <span class="n">data</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">future</span><span class="p">,</span> <span class="n">i</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">_next_sync_rpc</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;next sync: futures&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_after_each_batch</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
+            <span class="c1"># Use rref.rpc_async() to properly call instance method</span>
+            <span class="n">future</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector_rrefs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">rpc_async</span><span class="p">()</span><span class="o">.</span><span class="n">next</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">future</span><span class="p">,</span> <span class="n">i</span><span class="p">))</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">futures</span><span class="p">):</span>
+            <span class="n">future</span><span class="p">,</span> <span class="n">i</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+            <span class="c1"># the order is NOT guaranteed: should we change that?</span>
+            <span class="k">if</span> <span class="n">future</span><span class="o">.</span><span class="n">done</span><span class="p">():</span>
+                <span class="n">data</span> <span class="o">+=</span> <span class="p">[</span><span class="n">future</span><span class="o">.</span><span class="n">value</span><span class="p">()]</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;got data from </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> // data has len </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="si">}</span><span class="s2"> / </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">future</span><span class="p">,</span> <span class="n">i</span><span class="p">))</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">traj_ids</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">traj_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
+                <span class="n">traj_ids</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+=</span> <span class="n">traj_ids</span><span class="p">[</span><span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">set_</span><span class="p">((</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">),</span> <span class="n">traj_ids</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_collected_frames</span> <span class="o">+=</span> <span class="n">data</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">data</span>
+
+    <span class="k">def</span> <span class="nf">set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">static_seed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">worker</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector_infos</span><span class="p">:</span>
+            <span class="n">seed</span> <span class="o">=</span> <span class="n">rpc</span><span class="o">.</span><span class="n">rpc_sync</span><span class="p">(</span><span class="n">worker</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector_class</span><span class="o">.</span><span class="n">set_seed</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">seed</span><span class="p">,))</span>
+
+    <span class="k">def</span> <span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OrderedDict</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span> <span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">:</span> <span class="n">OrderedDict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span> <span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_shutdown&quot;</span><span class="p">):</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;shutdown has no effect has `_init` has not been called yet.&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;shutting down&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">future</span><span class="p">,</span> <span class="n">i</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">futures</span><span class="p">:</span>
+            <span class="c1"># clear the futures</span>
+            <span class="k">while</span> <span class="n">future</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">future</span><span class="o">.</span><span class="n">done</span><span class="p">():</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;waiting for proc </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> to clear&quot;</span><span class="p">)</span>
+                <span class="n">future</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;shutting down </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="c1"># Use rref.rpc_sync() to properly call instance method</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">collector_rrefs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">rpc_sync</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">IDLE_TIMEOUT</span><span class="p">))</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;rpc shutdown&quot;</span><span class="p">)</span>
+        <span class="n">rpc</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">IDLE_TIMEOUT</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">launcher</span> <span class="o">==</span> <span class="s2">&quot;mp&quot;</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">job</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">jobs</span><span class="p">:</span>
+                <span class="n">job</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">IDLE_TIMEOUT</span><span class="p">))</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">launcher</span> <span class="o">==</span> <span class="s2">&quot;submitit&quot;</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">job</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">jobs</span><span class="p">:</span>
+                <span class="n">_</span> <span class="o">=</span> <span class="n">job</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">launcher</span> <span class="o">==</span> <span class="s2">&quot;submitit_delayed&quot;</span><span class="p">:</span>
+            <span class="k">pass</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown launcher </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">launcher</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Clean up weight sync schemes AFTER workers have exited</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_weight_sync_schemes&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;shutting down weight sync schemes&quot;</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">scheme</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">scheme</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Error shutting down weight sync scheme: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># Destroy torch.distributed process group</span>
+        <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">destroy_process_group</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown</span> <span class="o">=</span> <span class="kc">True</span></div>
+
+
+
+<div class="viewcode-block" id="RPCWeightUpdater">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RPCWeightUpdater.html#torchrl.collectors.distributed.RPCWeightUpdater">[docs]</a>
+<span class="k">class</span> <span class="nc">RPCWeightUpdater</span><span class="p">(</span><span class="n">WeightUpdaterBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A remote weight updater for synchronizing policy weights across remote workers using RPC.</span>
+
+<span class="sd">    The `RPCWeightUpdater` class provides a mechanism for updating the weights of a policy</span>
+<span class="sd">    across remote inference workers using RPC. It is designed to work with the :class:`~torchrl.collectors.distributed.RPCDataCollector`</span>
+<span class="sd">    to ensure that each worker receives the latest policy weights.</span>
+<span class="sd">    This class is typically used in distributed data collection scenarios where remote workers</span>
+<span class="sd">    are managed via RPC and need to be kept in sync with the central policy weights.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        collector_infos: Information about the collectors, used for RPC communication.</span>
+<span class="sd">        collector_class: The class of the collectors being used.</span>
+<span class="sd">        collector_rrefs: Remote references to the collectors.</span>
+<span class="sd">        policy_weights (TensorDictBase): The current weights of the policy that need to be distributed</span>
+<span class="sd">            to the workers.</span>
+<span class="sd">        num_workers (int): The number of remote workers that will receive the updated policy weights.</span>
+
+<span class="sd">    Methods:</span>
+<span class="sd">        update_weights: Updates the weights on specified or all remote workers using RPC.</span>
+<span class="sd">        all_worker_ids: Returns a list of all worker identifiers (not implemented in this class).</span>
+<span class="sd">        _sync_weights_with_worker: Synchronizes the server weights with a specific worker (not implemented).</span>
+<span class="sd">        _get_server_weights: Retrieves the latest weights from the server (not implemented).</span>
+<span class="sd">        _maybe_map_weights: Optionally maps server weights before distribution (not implemented).</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        This class assumes that the server weights can be directly applied to the remote workers</span>
+<span class="sd">        without any additional processing. If your use case requires more complex weight mapping or</span>
+<span class="sd">        synchronization logic, consider extending `WeightUpdaterBase` with a custom implementation.</span>
+
+<span class="sd">    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and</span>
+<span class="sd">        :class:`~torchrl.collectors.distributed.RPCDataCollector`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_VERBOSE</span> <span class="o">=</span> <span class="n">VERBOSE</span>  <span class="c1"># for debugging</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">collector_infos</span><span class="p">,</span>
+        <span class="n">collector_class</span><span class="p">,</span>
+        <span class="n">collector_rrefs</span><span class="p">,</span>
+        <span class="n">policy_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="n">num_workers</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">collector_infos</span> <span class="o">=</span> <span class="n">collector_infos</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">collector_class</span> <span class="o">=</span> <span class="n">collector_class</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">collector_rrefs</span> <span class="o">=</span> <span class="n">collector_rrefs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">=</span> <span class="n">num_workers</span>
+
+<div class="viewcode-block" id="RPCWeightUpdater._sync_weights_with_worker">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RPCWeightUpdater.html#torchrl.collectors.distributed.RPCWeightUpdater._sync_weights_with_worker">[docs]</a>
+    <span class="k">def</span> <span class="nf">_sync_weights_with_worker</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+
+<div class="viewcode-block" id="RPCWeightUpdater._get_server_weights">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RPCWeightUpdater.html#torchrl.collectors.distributed.RPCWeightUpdater._get_server_weights">[docs]</a>
+    <span class="k">def</span> <span class="nf">_get_server_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+
+<div class="viewcode-block" id="RPCWeightUpdater._maybe_map_weights">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RPCWeightUpdater.html#torchrl.collectors.distributed.RPCWeightUpdater._maybe_map_weights">[docs]</a>
+    <span class="k">def</span> <span class="nf">_maybe_map_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+
+<div class="viewcode-block" id="RPCWeightUpdater.all_worker_ids">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RPCWeightUpdater.html#torchrl.collectors.distributed.RPCWeightUpdater.all_worker_ids">[docs]</a>
+    <span class="k">def</span> <span class="nf">all_worker_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+
+<div class="viewcode-block" id="RPCWeightUpdater.push_weights">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RPCWeightUpdater.html#torchrl.collectors.distributed.RPCWeightUpdater.push_weights">[docs]</a>
+    <span class="k">def</span> <span class="nf">push_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="n">workers</span> <span class="o">=</span> <span class="n">worker_ids</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">workers</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="n">workers</span> <span class="o">=</span> <span class="p">[</span><span class="n">workers</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">workers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">workers</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">workers</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">workers</span><span class="p">)</span>
+        <span class="n">futures</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span> <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">weights</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">workers</span><span class="p">:</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;calling update on worker </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="c1"># Use rref.rpc_async() to properly call instance method</span>
+            <span class="n">futures</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">collector_rrefs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">rpc_async</span><span class="p">()</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;wait&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">workers</span><span class="p">:</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;waiting for worker </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">futures</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;got it!&quot;</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="RPCDataCollector">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RPCDataCollector.html#torchrl.collectors.distributed.RPCDataCollector">[docs]</a>
+<span class="k">class</span> <span class="nc">RPCDataCollector</span><span class="p">(</span><span class="n">RPCCollector</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_LegacyCollectorMeta</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Deprecated version of :class:`~torchrl.collectors.distributed.RPCCollector`.&quot;&quot;&quot;</span>
+
+    <span class="o">...</span></div>
+
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../../../',
+            VERSION:'0.11',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../../../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+      <script type="text/javascript" src="../../../../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../../../../_static/design-tabs.js"></script>
+
+  
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="#">Get Started</a>
+          </li>
+
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+    })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
+  </script>
+</body>
+</html>

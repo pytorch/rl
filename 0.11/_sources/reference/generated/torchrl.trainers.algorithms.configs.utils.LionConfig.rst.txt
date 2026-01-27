@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.utils.LionConfig
+====================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.utils
+
+.. autoclass:: LionConfig
