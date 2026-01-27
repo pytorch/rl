@@ -286,7 +286,8 @@ run_distributed_tests() {
     echo "TORCHRL_TEST_SUITE=${TORCHRL_TEST_SUITE}: distributed tests require GPU (CU_VERSION != cpu)."
     return 1
   fi
-  python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_distributed.py \
+  # Run both test_distributed.py and test_rb_distributed.py (both use torch.distributed)
+  python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_distributed.py test/test_rb_distributed.py \
     --instafail --durations 200 -vv --capture no \
     --timeout=120 --mp_fork_if_no_cuda
 }
@@ -301,7 +302,7 @@ run_non_distributed_tests() {
   # - Shard 2: test_envs.py, test_collectors.py (multiprocessing-heavy)
   # - Shard 3: Everything else (can use pytest-xdist for parallelism)
   local shard="${TORCHRL_TEST_SHARD:-all}"
-  local common_ignores="--ignore test/test_rlhf.py --ignore test/test_distributed.py --ignore test/llm --ignore test/test_setup.py"
+  local common_ignores="--ignore test/test_rlhf.py --ignore test/test_distributed.py --ignore test/test_rb_distributed.py --ignore test/llm --ignore test/test_setup.py"
   local common_args="--instafail --durations 200 -vv --capture no --timeout=120 --mp_fork_if_no_cuda"
   
   # pytest-xdist parallelism: use -n auto for shard 3 (fewer multiprocessing tests)
