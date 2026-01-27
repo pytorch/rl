@@ -1406,6 +1406,7 @@ class TestTrainerConfigs:
 
 
 @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+@pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
 )
