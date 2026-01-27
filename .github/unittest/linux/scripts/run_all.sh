@@ -292,10 +292,12 @@ run_distributed_tests() {
 
 run_non_distributed_tests() {
   # Note: we always ignore distributed tests here (they can be run in a separate job).
+  # Also ignore test_setup.py as it's tested in the dedicated test-setup-minimal job.
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
     --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
     --ignore test/test_distributed.py \
     --ignore test/llm \
+    --ignore test/test_setup.py \
     --timeout=120 --mp_fork_if_no_cuda
 }
 

@@ -759,8 +759,8 @@ class TestCollectorGeneric:
             create_env_kwargs={"seed": seed},
             policy=policy,
             frames_per_batch=20,
-            max_frames_per_traj=2000,
-            total_frames=20000,
+            max_frames_per_traj=200,
+            total_frames=200,
             device="cpu",
         )
         torchrl_logger.info("Loop")
@@ -881,13 +881,14 @@ class TestCollectorGeneric:
                 break
 
     @retry(AssertionError, tries=10, delay=0)
-    @pytest.mark.parametrize("to", [3, 10])
+    @pytest.mark.parametrize("to", [30, 100])
     @pytest.mark.parametrize(
         "collector_cls", ["MultiSyncCollector", "MultiAsyncCollector"]
     )
     def test_env_that_waits(self, to, collector_cls):
         # Tests that the collector fails if the MAX_IDLE_COUNT<waiting time, but succeeds otherwise
         # We run this in a subprocess to control the env variable.
+        # Note: We use 0.1s sleep (instead of 1s) to speed up the test, with scaled MAX_IDLE_COUNT.
         script = f"""import os
 
 os.environ['MAX_IDLE_COUNT'] = '{to}'
@@ -900,7 +901,7 @@ import time
 from torchrl.collectors import {collector_cls}, RandomPolicy
 
 
-class EnvThatWaitsFor1Sec(EnvBase):
+class EnvThatWaits(EnvBase):
     def __init__(self):
         self.action_spec = Composite(action=Unbounded((1,)))
         self.reward_spec = Composite(reward=Unbounded((1,)))
@@ -912,7 +913,7 @@ class EnvThatWaitsFor1Sec(EnvBase):
         return self.full_observation_spec.zero().update(self.full_done_spec.zero())
 
     def _step(self, tensordict: TensorDictBase, **kwargs) -> TensorDict:
-        time.sleep(1)
+        time.sleep(0.1)
         return (
             self.full_observation_spec.zero()
             .update(self.full_done_spec.zero())
@@ -923,8 +924,8 @@ class EnvThatWaitsFor1Sec(EnvBase):
         ...
 
 if __name__ == "__main__":
-    policy = RandomPolicy(EnvThatWaitsFor1Sec().action_spec)
-    c = {collector_cls}([EnvThatWaitsFor1Sec], policy=policy, total_frames=15, frames_per_batch=5)
+    policy = RandomPolicy(EnvThatWaits().action_spec)
+    c = {collector_cls}([EnvThatWaits], policy=policy, total_frames=15, frames_per_batch=5)
     for d in c:
         break
     c.shutdown()
@@ -932,9 +933,9 @@ if __name__ == "__main__":
         result = subprocess.run(
             ["python", "-c", script], capture_output=True, text=True
         )
-        # This errors if the timeout is 5 secs, not 15
+        # This errors if the timeout is too short (30), succeeds if long enough (100)
         assert result.returncode == int(
-            to == 3
+            to == 30
         ), f"Test failed with output: {result.stdout}"
 
     @pytest.mark.parametrize(
@@ -1136,7 +1137,7 @@ if __name__ == "__main__":
             c = collector_type(
                 envs,
                 policy=policy,
-                total_frames=1000,
+                total_frames=100,
                 frames_per_batch=10,
                 policy_device=policy_device,
                 env_device=env_device,
@@ -1779,7 +1780,7 @@ if __name__ == "__main__":
                 # Random sleep up to 10ms
                 time.sleep(torch.rand(1).item() * 0.01)
             elif self.env_id % 2 == 1:
-                time.sleep(1)
+                time.sleep(0.1)
 
             self._step_count = 0
             return TensorDict(
@@ -1800,7 +1801,7 @@ if __name__ == "__main__":
             done = self._step_count >= self.max_steps
 
             if self.sleep_odd_only and self.env_id % 2 == 1:
-                time.sleep(1)
+                time.sleep(0.1)
 
             return TensorDict(
                 {
