@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 """Financial Trading Environment for TorchRL.
 
 A PyTorch-native financial trading environment with market regime detection
@@ -6,12 +11,12 @@ for reinforcement learning applications in quantitative finance.
 
 import math
 from enum import IntEnum
+from typing import Optional
 
 import torch
 from tensordict import TensorDict, TensorDictBase
 
-from torchrl.data.tensor_specs import (Binary, Categorical, Composite,
-                                       UnboundedContinuous)
+from torchrl.data.tensor_specs import Binary, Categorical, Composite, UnboundedContinuous
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import make_composite_from_td
 
@@ -29,16 +34,14 @@ class MarketRegime(IntEnum):
 
 
 class FinancialMarketDynamics:
-    """
-    PyTorch-native financial market dynamics for regime detection and risk management.
+    """PyTorch-native financial market dynamics for regime detection and risk management.
 
     This class provides tensor-based implementations of market regime detection,
     volatility calculations, and adaptive risk parameters for use in RL environments.
     """
 
-    def __init__(self, device: torch.device | None = None):
-        """
-        Initialize the FinancialMarketDynamics class.
+    def __init__(self, device: Optional[torch.device] = None):
+        """Initialize the FinancialMarketDynamics class.
 
         Args:
             device: PyTorch device to use for computations (default: CPU)
@@ -57,8 +60,7 @@ class FinancialMarketDynamics:
     def rolling_window(
         self, tensor: torch.Tensor, window_size: int, dim: int = -1
     ) -> torch.Tensor:
-        """
-        Create rolling windows from a tensor using torch.as_strided.
+        """Create rolling windows from a tensor using torch.as_strided.
 
         Args:
             tensor: Input tensor of shape [..., sequence_length]
@@ -91,8 +93,7 @@ class FinancialMarketDynamics:
         return windowed
 
     def calculate_returns(self, prices: torch.Tensor, periods: int = 1) -> torch.Tensor:
-        """
-        Calculate percentage returns from price series.
+        """Calculate percentage returns from price series.
 
         Args:
             prices: Price tensor of shape [..., sequence_length]
@@ -112,8 +113,7 @@ class FinancialMarketDynamics:
         return returns
 
     def rolling_mean(self, tensor: torch.Tensor, window_size: int) -> torch.Tensor:
-        """
-        Calculate rolling mean using convolution for efficiency.
+        """Calculate rolling mean using convolution for efficiency.
 
         Args:
             tensor: Input tensor of shape [..., sequence_length]
@@ -147,8 +147,7 @@ class FinancialMarketDynamics:
         return result
 
     def rolling_std(self, tensor: torch.Tensor, window_size: int) -> torch.Tensor:
-        """
-        Calculate rolling standard deviation.
+        """Calculate rolling standard deviation.
 
         Args:
             tensor: Input tensor of shape [..., sequence_length]
@@ -175,8 +174,7 @@ class FinancialMarketDynamics:
     def detect_market_regime(
         self, prices: torch.Tensor, lookback_days: int = 30
     ) -> torch.Tensor:
-        """
-        Detect market regime from price history.
+        """Detect market regime from price history.
 
         Args:
             prices: Price tensor of shape [..., sequence_length]
@@ -302,8 +300,7 @@ class FinancialMarketDynamics:
     def calculate_price_volatility(
         self, prices: torch.Tensor, lookback_days: int = 30
     ) -> torch.Tensor:
-        """
-        Calculate annualized price volatility.
+        """Calculate annualized price volatility.
 
         Args:
             prices: Price tensor of shape [..., sequence_length]
@@ -327,8 +324,7 @@ class FinancialMarketDynamics:
 
 
 class FinancialRegimeEnv(EnvBase):
-    """
-    A financial trading environment with market regime detection.
+    """A financial trading environment with market regime detection.
 
     This environment simulates financial market dynamics where an agent can take
     trading actions (Hold, Buy, Sell) based on price history and current holdings.
@@ -405,8 +401,7 @@ class FinancialRegimeEnv(EnvBase):
     rng = None
 
     def __init__(self, td_params=None, seed=None, device=None, window_size=None):
-        """
-        Initialize the FinancialRegimeEnv.
+        """Initialize the FinancialRegimeEnv.
 
         Args:
             td_params: TensorDict containing environment parameters
@@ -429,8 +424,7 @@ class FinancialRegimeEnv(EnvBase):
 
     @classmethod
     def _step(cls, tensordict):
-        """
-        Execute one step in the environment.
+        """Execute one step in the environment.
 
         Args:
             tensordict: Input TensorDict containing current state and action
@@ -522,8 +516,7 @@ class FinancialRegimeEnv(EnvBase):
         return out
 
     def _reset(self, tensordict):
-        """
-        Reset the environment to initial state.
+        """Reset the environment to initial state.
 
         Args:
             tensordict: Optional TensorDict containing reset parameters
@@ -548,8 +541,7 @@ class FinancialRegimeEnv(EnvBase):
         return out
 
     def _reset_random_data(self, shape, batch_size, params):
-        """
-        Generate random initial state data.
+        """Generate random initial state data.
 
         Args:
             shape: Shape of the state tensors
@@ -595,8 +587,7 @@ class FinancialRegimeEnv(EnvBase):
         return out
 
     def _make_spec(self, td_params):
-        """
-        Create the environment specifications.
+        """Create the environment specifications.
 
         Args:
             td_params: TensorDict containing environment parameters
@@ -657,8 +648,7 @@ class FinancialRegimeEnv(EnvBase):
         batch_size=None,
         device=None,
     ) -> TensorDictBase:
-        """
-        Generate environment parameters.
+        """Generate environment parameters.
 
         Args:
             window_size: Size of price history window
