@@ -718,7 +718,7 @@ argument that allows the user to quickly ask for image-based environments:
  .. code-block:: none
 
 
-    <matplotlib.image.AxesImage object at 0x7f75feab95d0>
+    <matplotlib.image.AxesImage object at 0x7fc12ddadcd0>
 
 
 
@@ -1524,7 +1524,7 @@ to access this attribute. Here's an example:
  .. code-block:: none
 
 
-    'bar_9a35b70a-fb85-11f0-84bb-0242ac110002'
+    'bar_2ef0322c-fba8-11f0-a1f9-0242ac110002'
 
 
 
@@ -1576,7 +1576,7 @@ to access this attribute. Here's an example:
  .. code-block:: none
 
 
-    <torchrl.envs.batched_envs._dispatch_caller_parallel object at 0x7f75fe379b50>
+    <torchrl.envs.batched_envs._dispatch_caller_parallel object at 0x7fc12f214390>
 
 
 
@@ -1596,7 +1596,7 @@ to access this attribute. Here's an example:
  .. code-block:: none
 
 
-    ['bar_9b83117a-fb85-11f0-984a-0242ac110002', 'bar_9b855f20-fb85-11f0-a354-0242ac110002', 'bar_9b876112-fb85-11f0-bcc9-0242ac110002']
+    ['bar_303dd58a-fba8-11f0-9887-0242ac110002', 'bar_30317baa-fba8-11f0-9959-0242ac110002', 'bar_303dd58a-fba8-11f0-8688-0242ac110002']
 
 
 
@@ -1815,8 +1815,8 @@ In regular setting, using VecNorm is quite easy:
 
  .. code-block:: none
 
-    mean: : tensor([-0.1361,  0.3739,  0.1722])
-    std: : tensor([1.0390, 1.0893, 1.1669])
+    mean: : tensor([-0.4461, -0.0200,  0.0964])
+    std: : tensor([1.2111, 1.3558, 1.4241])
 
 
 
@@ -1898,8 +1898,8 @@ once created:
         batch_size=torch.Size([3, 5]),
         device=None,
         is_shared=False)
-    mean: : tensor([-0.1094,  0.2025, -0.1579])
-    std: : tensor([1.1451, 1.2487, 1.2347])
+    mean: : tensor([-0.0566,  0.1362,  0.0722])
+    std: : tensor([1.2176, 1.1021, 1.2277])
 
 
 
@@ -1940,7 +1940,7 @@ This small difference will usually be absored throughout training.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 22.261 seconds)
+   **Total running time of the script:** (0 minutes 22.255 seconds)
 
 
 .. _sphx_glr_download_tutorials_torchrl_envs.py:
