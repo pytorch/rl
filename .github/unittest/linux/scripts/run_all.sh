@@ -305,16 +305,12 @@ run_non_distributed_tests() {
   local common_ignores="--ignore test/test_rlhf.py --ignore test/test_distributed.py --ignore test/test_rb_distributed.py --ignore test/llm --ignore test/test_setup.py"
   local common_args="--instafail --durations 200 -vv --capture no --timeout=120 --mp_fork_if_no_cuda"
   
-  # pytest-xdist parallelism:
-  # - On CPU (CU_VERSION=cpu): use xdist for all tests (no GPU conflicts)
-  # - On GPU: use xdist only for shard 3 (fewer multiprocessing tests)
+  # pytest-xdist parallelism: use -n auto for shard 3 (fewer multiprocessing tests)
   # Set TORCHRL_XDIST=0 to disable parallel execution
   local xdist_args=""
-  if [ "${TORCHRL_XDIST:-1}" = "1" ]; then
-    if [ "${CU_VERSION:-}" = "cpu" ] || [ "${shard}" = "3" ]; then
-      xdist_args="-n auto --dist loadgroup"
-      echo "Using pytest-xdist for parallel execution (CU_VERSION=${CU_VERSION:-unset}, shard=${shard})"
-    fi
+  if [ "${TORCHRL_XDIST:-1}" = "1" ] && [ "${shard}" = "3" ]; then
+    xdist_args="-n auto --dist loadgroup"
+    echo "Using pytest-xdist for parallel execution"
   fi
 
   case "${shard}" in
@@ -342,7 +338,6 @@ run_non_distributed_tests() {
       echo "Running all tests (no sharding)"
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
         ${common_ignores} \
-        ${xdist_args} \
         ${common_args}
       ;;
     *)
