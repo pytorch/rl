@@ -154,8 +154,8 @@ jobs:
   tests-olddeps:
     strategy:
       matrix:
-        python_version: ["3.9"]
-        cuda_arch_version: ["11.6"]
+        python_version: ["3.10"]
+        cuda_arch_version: ["11.8"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -167,11 +167,10 @@ jobs:
       timeout: 120
       script: |
         set -euo pipefail
-        export PYTHON_VERSION="3.9"
+        export PYTHON_VERSION="3.10"
         export CU_VERSION="cu118"
-        # Olddeps runs on Python 3.9: pin tensordict to a Python-3.9-compatible range.
-        # (Avoid installing tensordict from git main, which may drop older Python support.)
-        export TORCHRL_TENSORDICT_SPEC="tensordict>=0.10.0,<0.11.0"
+        # Olddeps tests with older torch/dependencies. Pin tensordict to stable range.
+        export TORCHRL_TENSORDICT_SPEC="tensordict>=0.11.0,<0.12.0"
         export TAR_OPTIONS="--no-same-owner"
         if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1

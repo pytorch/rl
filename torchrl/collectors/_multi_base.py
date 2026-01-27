@@ -1008,11 +1008,10 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         ctx = _get_mp_ctx()
         # Best-effort global init (only if unset) to keep other mp users consistent.
         _set_mp_start_method_if_unset(ctx.get_start_method())
-        if (
-            sys.platform == "linux"
-            and sys.version_info < (3, 10)
-            and ctx.get_start_method() == "spawn"
-        ):
+        if sys.platform == "linux" and ctx.get_start_method() == "spawn":
+            # On older PyTorch versions (< 2.8), pickling Process objects for "spawn"
+            # can pass file descriptors for shared storages, causing spawn-time failures.
+            # The strategy function returns "file_system" for old PyTorch, None otherwise.
             strategy = _mp_sharing_strategy_for_spawn()
             if strategy is not None:
                 mp.set_sharing_strategy(strategy)
