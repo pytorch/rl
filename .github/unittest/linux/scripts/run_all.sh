@@ -274,18 +274,20 @@ TORCHRL_TEST_SUITE="${TORCHRL_TEST_SUITE:-all}" # all|distributed|nondistributed
 # Tests are marked with @pytest.mark.gpu if they require CUDA.
 #
 # Set TORCHRL_GPU_FILTER=0 to disable this optimization and run all tests.
+#
+# We use an array to handle the marker expression properly (avoids quoting issues).
+GPU_MARKER_FILTER=()
 if [ "${TORCHRL_GPU_FILTER:-1}" = "1" ]; then
   if [ "${CU_VERSION:-}" == cpu ]; then
     # CPU job: run only tests that do NOT require GPU
-    GPU_MARKER_FILTER='-m "not gpu"'
+    GPU_MARKER_FILTER=(-m 'not gpu')
     echo "GPU filtering enabled: Running CPU-only tests (excluding @pytest.mark.gpu)"
   else
     # GPU job: run only tests that require GPU
-    GPU_MARKER_FILTER='-m gpu'
+    GPU_MARKER_FILTER=(-m gpu)
     echo "GPU filtering enabled: Running GPU-only tests (@pytest.mark.gpu)"
   fi
 else
-  GPU_MARKER_FILTER=""
   echo "GPU filtering disabled: Running all tests"
 fi
 
@@ -324,7 +326,7 @@ run_non_distributed_tests() {
   # - Shard 3: Everything else (can use pytest-xdist for parallelism)
   local shard="${TORCHRL_TEST_SHARD:-all}"
   local common_ignores="--ignore test/test_rlhf.py --ignore test/test_distributed.py --ignore test/test_rb_distributed.py --ignore test/llm --ignore test/test_setup.py"
-  local common_args="--instafail --durations 200 -vv --capture no --timeout=120 --mp_fork_if_no_cuda ${GPU_MARKER_FILTER}"
+  local common_args="--instafail --durations 200 -vv --capture no --timeout=120 --mp_fork_if_no_cuda"
   
   # pytest-xdist parallelism: use -n auto for shard 3 (fewer multiprocessing tests)
   # Set TORCHRL_XDIST=0 to disable parallel execution
@@ -338,12 +340,12 @@ run_non_distributed_tests() {
     1)
       echo "Running shard 1: test_transforms.py only"
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_transforms.py \
-        ${common_args}
+        "${GPU_MARKER_FILTER[@]}" ${common_args}
       ;;
     2)
       echo "Running shard 2: test_envs.py and test_collectors.py"
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_envs.py test/test_collectors.py \
-        ${common_args}
+        "${GPU_MARKER_FILTER[@]}" ${common_args}
       ;;
     3)
       echo "Running shard 3: All other tests"
@@ -353,13 +355,13 @@ run_non_distributed_tests() {
         --ignore test/test_envs.py \
         --ignore test/test_collectors.py \
         ${xdist_args} \
-        ${common_args}
+        "${GPU_MARKER_FILTER[@]}" ${common_args}
       ;;
     all|"")
       echo "Running all tests (no sharding)"
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
         ${common_ignores} \
-        ${common_args}
+        "${GPU_MARKER_FILTER[@]}" ${common_args}
       ;;
     *)
       echo "Unknown TORCHRL_TEST_SHARD='${shard}'. Expected: all|1|2|3."
