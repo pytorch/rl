@@ -3216,7 +3216,7 @@ class TestPreferTokens:
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
     def test_transformers_wrapper_prefer_tokens_with_chatenv(self):
-        """Test that TransformersWrapper uses tokens from ChatEnv.with_tokenizer."""
+        """Test that TransformersWrapper uses tokens from ChatEnv(with_tokenizer=True)."""
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
@@ -3230,10 +3230,11 @@ class TestPreferTokens:
             generate_kwargs={"max_new_tokens": 10},
         )
 
-        # Create env with token maintenance
-        env = ChatEnv.with_tokenizer(
+        # Create env with token maintenance using with_tokenizer=True
+        env = ChatEnv(
             tokenizer=tokenizer,
             batch_size=(1,),
+            with_tokenizer=True,
         )
 
         # Reset and verify tokens are created
