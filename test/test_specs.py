@@ -4406,6 +4406,7 @@ class TestCompositeNames:
         td = spec.rand()
         td.names = ["batch"]
 
+
 class TestIndexSelect:
     """Tests for torch.index_select support on TensorSpec."""
 
@@ -4417,12 +4418,13 @@ class TestIndexSelect:
             ((3,), 0, torch.tensor([0, 1]), (2,)),
         ],
     )
-
     def test_index_select_tensor_spec(self, shape, dim, index, expected_shape):
         """Test index_select on basic TensorSpec subclasses like Bounded."""
         spec = Bounded(low=0, high=10, shape=shape, dtype=torch.float32)
         new_spec = torch.index_select(spec, dim=dim, index=index)
-        assert new_spec.shape == expected_shape, f"Shape mismatch: {new_spec.shape} != {expected_shape}"
+        assert (
+            new_spec.shape == expected_shape
+        ), f"Shape mismatch: {new_spec.shape} != {expected_shape}"
         assert new_spec.dtype == spec.dtype
         assert new_spec.device == spec.device
         # Ensure sampling works on the new spec
@@ -4449,7 +4451,9 @@ class TestIndexSelect:
     def test_index_select_onehot_invalid(self):
         """Test that index_select raises error for invalid dims on OneHot."""
         spec = OneHot(n=3, shape=(5, 3))
-        with pytest.raises(ValueError, match="Cannot index_select along the last dimension"):
+        with pytest.raises(
+            ValueError, match="Cannot index_select along the last dimension"
+        ):
             torch.index_select(spec, dim=-1, index=torch.tensor([0, 1]))
 
     @pytest.mark.parametrize(
@@ -4460,7 +4464,6 @@ class TestIndexSelect:
             (Unbounded, {"shape": (5, 4)}),
         ],
     )
-
     def test_index_select_edge_cases(self, spec_cls, args):
         """Test edge cases like out-of-bounds and empty indices."""
         spec = spec_cls(**args)
@@ -4486,15 +4489,53 @@ class TestIndexSelect:
         assert new_spec.device == device
         assert new_spec.dtype == torch.float64
 
-    def test_index_select_stacked_composite(self):
-        """Test index_select on StackedComposite specs (if applicable)."""
-        # Assuming StackedComposite inherits the behavior
+    def test_index_select_stacked_identical_bounded(self):
+        """Test index_select on stacked identical Bounded specs.
+
+        When stacking identical specs, torch.stack returns an expanded Bounded
+        spec (not a Stacked spec), so this tests index_select on the result.
+        """
         spec1 = Bounded(low=0, high=1, shape=(5, 3), dtype=torch.float32)
         spec2 = Bounded(low=0, high=1, shape=(5, 3), dtype=torch.float32)
         stacked_spec = torch.stack([spec1, spec2], dim=0)
         index = torch.tensor([0])
         new_spec = torch.index_select(stacked_spec, dim=0, index=index)
         assert new_spec.shape == (1, 5, 3)
+
+    def test_index_select_binary_invalid(self):
+        """Test that index_select raises error for invalid dims on Binary."""
+        spec = Binary(n=4, shape=(5, 4))
+        with pytest.raises(
+            ValueError, match="Cannot index_select along the last dimension"
+        ):
+            torch.index_select(spec, dim=-1, index=torch.tensor([0, 1]))
+
+    def test_index_select_multionehot_invalid(self):
+        """Test that index_select raises error for invalid dims on MultiOneHot."""
+        spec = MultiOneHot(nvec=[2, 3, 4], shape=(5, 9))
+        with pytest.raises(
+            ValueError, match="Cannot index_select along the last dimension"
+        ):
+            torch.index_select(spec, dim=-1, index=torch.tensor([0, 1]))
+
+    def test_index_select_binary_valid(self):
+        """Test index_select on Binary spec along valid dimensions."""
+        spec = Binary(n=4, shape=(5, 4))
+        index = torch.tensor([0, 2, 4])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (3, 4)
+        sample = new_spec.rand()
+        assert sample.shape == (3, 4)
+
+    def test_index_select_multionehot_valid(self):
+        """Test index_select on MultiOneHot spec along valid dimensions."""
+        spec = MultiOneHot(nvec=[2, 3, 4], shape=(5, 9))
+        index = torch.tensor([0, 2, 4])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (3, 9)
+        sample = new_spec.rand()
+        assert sample.shape == (3, 9)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
