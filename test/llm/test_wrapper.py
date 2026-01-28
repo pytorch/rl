@@ -3218,7 +3218,7 @@ class TestPreferTokens:
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
     def test_transformers_wrapper_prefer_tokens_with_chatenv(self):
-        """Test that TransformersWrapper uses tokens from ChatEnv with maintain_tokens=True."""
+        """Test that TransformersWrapper uses tokens from ChatEnv.with_tokenizer."""
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         model = AutoModelForCausalLM.from_pretrained("gpt2")
@@ -3235,10 +3235,9 @@ class TestPreferTokens:
         )
 
         # Create env with token maintenance
-        env = ChatEnv(
-            batch_size=(1,),
+        env = ChatEnv.with_tokenizer(
             tokenizer=tokenizer,
-            maintain_tokens=True,
+            batch_size=(1,),
         )
 
         # Reset and verify tokens are created
@@ -3275,10 +3274,9 @@ class TestPreferTokens:
         assert wrapper.prefer_tokens is False
 
         # Create env with token maintenance
-        env = ChatEnv(
-            batch_size=(1,),
+        env = ChatEnv.with_tokenizer(
             tokenizer=tokenizer,
-            maintain_tokens=True,
+            batch_size=(1,),
         )
 
         # Reset
@@ -3336,10 +3334,9 @@ class TestPreferTokens:
             generate_kwargs={"max_new_tokens": 5},
         )
 
-        env = ChatEnv(
-            batch_size=(1,),
+        env = ChatEnv.with_tokenizer(
             tokenizer=tokenizer,
-            maintain_tokens=True,
+            batch_size=(1,),
         )
 
         # Turn 1
@@ -3368,10 +3365,9 @@ class TestPreferTokens:
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
 
-        env = ChatEnv(
-            batch_size=(1,),
+        env = ChatEnv.with_tokenizer(
             tokenizer=tokenizer,
-            maintain_tokens=True,
+            batch_size=(1,),
         )
 
         # Reset

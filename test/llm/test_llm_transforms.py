@@ -538,13 +538,12 @@ class TestIncrementalTokenizer:
         # New tokens should be longer (more messages)
         assert new_tokens[0].numel() > initial_tokens[0].numel()
 
-    def test_maintain_tokens_auto_wraps_chatenv(self, tokenizer):
-        """Test that ChatEnv with maintain_tokens=True auto-wraps with IncrementalTokenizer."""
-        env = ChatEnv(
+    def test_with_tokenizer_factory(self, tokenizer):
+        """Test that ChatEnv.with_tokenizer creates a TransformedEnv with IncrementalTokenizer."""
+        env = ChatEnv.with_tokenizer(
+            tokenizer=tokenizer,
             batch_size=(1,),
             system_prompt="You are a helpful assistant.",
-            tokenizer=tokenizer,
-            maintain_tokens=True,
         )
 
         # Should be a TransformedEnv
@@ -558,21 +557,21 @@ class TestIncrementalTokenizer:
         result = env.reset(td)
         assert ("tokens", "full") in result.keys(True, True)
 
-    def test_maintain_tokens_requires_tokenizer(self):
-        """Test that maintain_tokens=True requires a tokenizer."""
-        with pytest.raises(ValueError, match="tokenizer must be provided"):
-            ChatEnv(
-                batch_size=(1,),
-                maintain_tokens=True,
-                tokenizer=None,
-            )
+    def test_with_tokenizer_provides_tokens(self, tokenizer):
+        """Test that with_tokenizer factory creates env that provides tokens."""
+        env = ChatEnv.with_tokenizer(
+            tokenizer=tokenizer,
+            batch_size=(1,),
+        )
+        td = TensorDict({"query": "Test"}, batch_size=(1,))
+        result = env.reset(td)
+        assert ("tokens", "full") in result.keys(True, True)
 
     def test_tokens_consistency_across_multiple_steps(self, tokenizer):
         """Test that tokens remain consistent across multiple steps."""
-        env = ChatEnv(
-            batch_size=(1,),
+        env = ChatEnv.with_tokenizer(
             tokenizer=tokenizer,
-            maintain_tokens=True,
+            batch_size=(1,),
         )
 
         # Reset
