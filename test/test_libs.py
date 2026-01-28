@@ -2383,8 +2383,6 @@ class TestHabitat:
 
     def test_num_workers_returns_lazy_parallel_env(self, envname):
         """Ensure HabitatEnv with num_workers > 1 returns a lazy ParallelEnv."""
-        from torchrl.envs.batched_envs import ParallelEnv
-
         env = HabitatEnv(envname, num_workers=3)
         try:
             assert isinstance(env, ParallelEnv)
@@ -2435,8 +2433,6 @@ class TestHabitat:
     )
     def test_num_workers_multi_gpu(self, envname):
         """Test that num_workers with device list assigns envs to different GPUs."""
-        from torchrl.envs.batched_envs import ParallelEnv
-
         env = HabitatEnv(
             envname,
             num_workers=2,
