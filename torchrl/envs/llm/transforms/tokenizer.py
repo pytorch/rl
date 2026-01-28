@@ -459,92 +459,51 @@ class IncrementalTokenizer(Transform):
         # Tokenize full history
         tokens_list = self._tokenize_history(history)
 
-        # Store tokens in tensordict
-        tensordict_reset.set(self.tokens_key, tokens_list)
+        # Store tokens in tensordict - handle batched case
+        self._set_tokens(tensordict_reset, tokens_list)
 
         # Track history length for incremental tokenization
         self._prev_history_len = self._get_history_len(history)
-
-        # Track token counts per message for overlap strategy
-        # We approximate by storing total token count; precise per-message tracking
-        # would require tokenizing each message individually
-        self._prev_tokens_per_message = [len(t) for t in tokens_list]
 
         return tensordict_reset
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        """Incrementally tokenize new messages on step."""
+        """Tokenize history on step.
+
+        TODO: Add incremental tokenization using overlap strategy for efficiency.
+        Currently re-tokenizes the full history on each step for simplicity.
+        """
         history = next_tensordict.get(self.history_key, None)
         if history is None:
             return next_tensordict
 
-        existing_tokens = next_tensordict.get(self.tokens_key, None)
-        current_history_len = self._get_history_len(history)
-
-        # TODO: Add validation that tokens match history (hash or length check).
-        # For now, we trust that tokens are kept in sync. If tokens get out of sync
-        # (e.g., history was manually modified), this could cause subtle bugs.
-        # Future validation options:
-        # - Compare token count to expected count based on history length
-        # - Store hash of history content and compare
-        # - Re-tokenize if mismatch detected
-
-        if (
-            existing_tokens is not None
-            and self._prev_history_len is not None
-            and current_history_len > self._prev_history_len
-        ):
-            # Incremental case: new messages were added
-            # Use overlap strategy: re-tokenize from (last message - 1) to handle
-            # cross-message token boundaries correctly
-
-            # Calculate overlap start (at least 1 message back for overlap)
-            overlap_start = max(0, self._prev_history_len - 1)
-
-            # Get the history slice to tokenize (overlap + new messages)
-            new_history = history[..., overlap_start:]
-
-            # Tokenize the new portion
-            new_tokens_list = self._tokenize_history(new_history)
-
-            # Calculate where to cut existing tokens (before overlap region)
-            # We need to find how many tokens corresponded to messages before overlap_start
-            # Since we don't track per-message token counts precisely, we re-tokenize
-            # the prefix to get the exact cut point
-            if overlap_start > 0:
-                prefix_history = history[..., :overlap_start]
-                prefix_tokens_list = self._tokenize_history(
-                    prefix_history, add_generation_prompt=False
-                )
-                # Concatenate prefix + new tokens
-                combined_tokens = []
-                for prefix_tok, new_tok in zip(prefix_tokens_list, new_tokens_list):
-                    combined = torch.cat([prefix_tok, new_tok], dim=-1)
-                    combined_tokens.append(combined)
-            else:
-                # No prefix, just use new tokens
-                combined_tokens = new_tokens_list
-
-            # Store updated tokens
-            next_tensordict.set(self.tokens_key, combined_tokens)
-
-            # Update tracking
-            self._prev_history_len = current_history_len
-            self._prev_tokens_per_message = [len(t) for t in combined_tokens]
-        elif existing_tokens is None or self._prev_history_len is None:
-            # No existing tokens or tracking info - tokenize from scratch
-            tokens_list = self._tokenize_history(history)
-            next_tensordict.set(self.tokens_key, tokens_list)
-            self._prev_history_len = current_history_len
-            self._prev_tokens_per_message = [len(t) for t in tokens_list]
-        else:
-            # History length unchanged - just copy tokens forward
-            # (This happens when step doesn't add new messages)
-            pass
+        # For now, just re-tokenize the full history
+        # TODO: Implement incremental tokenization with overlap strategy
+        tokens_list = self._tokenize_history(history)
+        self._set_tokens(next_tensordict, tokens_list)
+        self._prev_history_len = self._get_history_len(history)
 
         return next_tensordict
+
+    def _set_tokens(self, tensordict: TensorDictBase, tokens_list: list) -> None:
+        """Set tokens in tensordict, handling batched case properly."""
+        # For LazyStackedTensorDict, set tokens element by element
+        try:
+            tds = tensordict.unbind(0)
+            for td, tok in zip(tds, tokens_list):
+                td.set(self.tokens_key, tok)
+        except (RuntimeError, AttributeError):
+            # Single element or non-lazy tensordict
+            if len(tokens_list) == 1:
+                tensordict.set(self.tokens_key, tokens_list[0])
+            else:
+                # Try to set as nested tensor
+                tensordict.set(
+                    self.tokens_key,
+                    torch.nested.as_nested_tensor(tokens_list),
+                )
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         """Add tokens spec to observation spec."""

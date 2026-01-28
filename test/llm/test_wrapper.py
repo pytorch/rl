@@ -3379,9 +3379,9 @@ class TestPreferTokens:
         result = env.reset(td)
         initial_tokens = result.get(("tokens", "full"), as_list=True)[0].clone()
 
-        # Simulate a response
+        # Simulate a response - need proper batch dimensions
         history_prompt = result.get(("history", "prompt"))
-        response = History(role="assistant", content="Hi!").unsqueeze(-1)
+        response = History(role="assistant", content="Hi!", batch_size=1).unsqueeze(0)
         history_full = history_prompt.extend(response, inplace=False, dim=-1)
 
         action_td = result.clone()
