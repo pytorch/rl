@@ -3199,10 +3199,8 @@ class TestPreferTokens:
         """Test that TransformersWrapper has prefer_tokens=True by default."""
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
-        model = AutoModelForCausalLM.from_pretrained("gpt2")
-        tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
+        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
 
         wrapper = TransformersWrapper(
             model,
@@ -3220,10 +3218,8 @@ class TestPreferTokens:
         """Test that TransformersWrapper uses tokens from ChatEnv.with_tokenizer."""
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
-        model = AutoModelForCausalLM.from_pretrained("gpt2")
-        tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
+        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
 
         wrapper = TransformersWrapper(
             model,
@@ -3256,10 +3252,8 @@ class TestPreferTokens:
         """Test that TransformersWrapper ignores tokens when prefer_tokens=False."""
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
-        model = AutoModelForCausalLM.from_pretrained("gpt2")
-        tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
+        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
 
         wrapper = TransformersWrapper(
             model,
@@ -3291,10 +3285,8 @@ class TestPreferTokens:
         """Test that get_new_version preserves the prefer_tokens setting."""
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
-        model = AutoModelForCausalLM.from_pretrained("gpt2")
-        tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
+        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
 
         # Create with prefer_tokens=False
         wrapper = TransformersWrapper(
@@ -3320,10 +3312,8 @@ class TestPreferTokens:
         """Test that tokens are maintained correctly across multiple turns."""
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
-        model = AutoModelForCausalLM.from_pretrained("gpt2")
-        tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
+        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
 
         wrapper = TransformersWrapper(
             model,
@@ -3360,9 +3350,7 @@ class TestPreferTokens:
         """Test that token prefix remains consistent across turns for KV cache."""
         from transformers import AutoTokenizer
 
-        tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
 
         env = ChatEnv.with_tokenizer(
             tokenizer=tokenizer,
