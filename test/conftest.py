@@ -31,7 +31,7 @@ def pytest_sessionfinish(session, exitstatus, maxprint=50):
 ================================================================================
 AGGREGATED TEST TIMES (by function, across all parametrizations)
 ================================================================================
-Total test time: {total_time:.1f}s ({total_time/60:.1f} min)
+Total test time: {total_time:.1f}s ({total_time / 60:.1f} min)
 Top {min(maxprint, len(keys))} slowest test functions:
 --------------------------------------------------------------------------------
 """
