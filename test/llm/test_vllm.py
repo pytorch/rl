@@ -39,6 +39,7 @@ def sampling_params():
 class TestAsyncVLLMIntegration:
     """Integration tests for AsyncVLLM with real models."""
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not _has_ray, reason="ray not available")
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
@@ -111,6 +112,7 @@ class TestAsyncVLLMIntegration:
         finally:
             service.shutdown()
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not _has_ray, reason="ray not available")
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")

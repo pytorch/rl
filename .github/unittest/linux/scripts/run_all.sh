@@ -269,6 +269,26 @@ fi
 
 TORCHRL_TEST_SUITE="${TORCHRL_TEST_SUITE:-all}" # all|distributed|nondistributed
 
+# GPU test filtering: Run GPU-only tests on GPU machines, CPU-only tests on CPU machines.
+# This avoids running ~2000+ tests on expensive GPU machines when only ~30 require GPU.
+# Tests are marked with @pytest.mark.gpu if they require CUDA.
+#
+# Set TORCHRL_GPU_FILTER=0 to disable this optimization and run all tests.
+if [ "${TORCHRL_GPU_FILTER:-1}" = "1" ]; then
+  if [ "${CU_VERSION:-}" == cpu ]; then
+    # CPU job: run only tests that do NOT require GPU
+    GPU_MARKER_FILTER='-m "not gpu"'
+    echo "GPU filtering enabled: Running CPU-only tests (excluding @pytest.mark.gpu)"
+  else
+    # GPU job: run only tests that require GPU
+    GPU_MARKER_FILTER='-m gpu'
+    echo "GPU filtering enabled: Running GPU-only tests (@pytest.mark.gpu)"
+  fi
+else
+  GPU_MARKER_FILTER=""
+  echo "GPU filtering disabled: Running all tests"
+fi
+
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
 
@@ -287,6 +307,7 @@ run_distributed_tests() {
     return 1
   fi
   # Run both test_distributed.py and test_rb_distributed.py (both use torch.distributed)
+  # Note: distributed tests always run on GPU, no need for GPU_MARKER_FILTER here
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_distributed.py test/test_rb_distributed.py \
     --instafail --durations 200 -vv --capture no \
     --timeout=120 --mp_fork_if_no_cuda
@@ -303,7 +324,7 @@ run_non_distributed_tests() {
   # - Shard 3: Everything else (can use pytest-xdist for parallelism)
   local shard="${TORCHRL_TEST_SHARD:-all}"
   local common_ignores="--ignore test/test_rlhf.py --ignore test/test_distributed.py --ignore test/test_rb_distributed.py --ignore test/llm --ignore test/test_setup.py"
-  local common_args="--instafail --durations 200 -vv --capture no --timeout=120 --mp_fork_if_no_cuda"
+  local common_args="--instafail --durations 200 -vv --capture no --timeout=120 --mp_fork_if_no_cuda ${GPU_MARKER_FILTER}"
   
   # pytest-xdist parallelism: use -n auto for shard 3 (fewer multiprocessing tests)
   # Set TORCHRL_XDIST=0 to disable parallel execution

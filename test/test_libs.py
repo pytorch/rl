@@ -2157,6 +2157,7 @@ class TestDMControl:
 
         assert isinstance(td, TensorDict)
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires cuda")
     def test_dmcontrol_kwargs_preserved_with_seed(self):
         """Test that kwargs like camera_id are preserved when seed is provided.
@@ -2182,6 +2183,7 @@ class TestDMControl:
         finally:
             env.close()
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires cuda")
     @pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
     @pytest.mark.parametrize("frame_skip", [1, 3])
@@ -2776,6 +2778,7 @@ class TestEnvPool:
         assert not env.is_closed
         env.close()
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda to test on")
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("frame_skip", [4])
@@ -2816,6 +2819,7 @@ class TestEnvPool:
         assert td_device.device == torch.device(device), env_multithread
         env_multithread.close()
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device detected")
     @pytest.mark.parametrize("frame_skip", [4])
@@ -3097,6 +3101,7 @@ class TestBrax:
             out_td, next_td = env.step_and_maybe_reset(next_td)
             assert env._step_count == i + 1
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires cuda")
     def test_brax_kwargs_preserved_with_seed(self, envname, device):
         """Test that kwargs like camera_id are preserved when seed is provided.
