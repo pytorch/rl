@@ -19,6 +19,7 @@ from tensordict import assert_close, lazy_stack, set_list_to_stack, TensorDict
 
 from tensordict.utils import _zip_strict
 from torchrl.data.llm import History
+from torchrl.envs.llm import ChatEnv
 from torchrl.envs.llm.transforms.kl import KLComputation, RetrieveKL, RetrieveLogProb
 from torchrl.modules.llm import AsyncVLLM
 from torchrl.modules.llm.policies.common import (
@@ -3188,6 +3189,205 @@ class TestActorSharing:
                 ray.shutdown()
             except Exception:
                 pass
+
+
+class TestPreferTokens:
+    """Tests for the token-first LLM wrapper API (prefer_tokens feature)."""
+
+    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
+    def test_transformers_wrapper_prefer_tokens_explicit(self):
+        """Test that TransformersWrapper can be set with prefer_tokens=True."""
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+
+        wrapper = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=True,
+            generate_kwargs={"max_new_tokens": 10},
+            prefer_tokens=True,
+        )
+
+        # Verify prefer_tokens is True when explicitly set
+        assert wrapper.prefer_tokens is True
+
+    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
+    def test_transformers_wrapper_prefer_tokens_with_chatenv(self):
+        """Test that TransformersWrapper uses tokens from ChatEnv(with_tokenizer=True)."""
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+
+        wrapper = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=True,
+            generate_kwargs={"max_new_tokens": 10},
+            prefer_tokens=True,
+        )
+
+        # Create env with token maintenance using with_tokenizer=True
+        env = ChatEnv(
+            tokenizer=tokenizer,
+            batch_size=(1,),
+            with_tokenizer=True,
+        )
+
+        # Reset and verify tokens are created
+        td = TensorDict({"query": "Hello, world!"}, batch_size=(1,))
+        result = env.reset(td)
+        assert ("tokens", "full") in result.keys(True, True)
+
+        # Run through wrapper - it should use the existing tokens
+        output = wrapper(result)
+
+        # Verify output has expected keys
+        assert ("text", "response") in output.keys(True, True)
+        assert ("tokens", "full") in output.keys(True, True)
+
+    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
+    def test_transformers_wrapper_prefer_tokens_false(self):
+        """Test that TransformersWrapper ignores tokens when prefer_tokens=False."""
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+
+        wrapper = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=True,
+            generate_kwargs={"max_new_tokens": 10},
+            prefer_tokens=False,
+        )
+
+        assert wrapper.prefer_tokens is False
+
+        # Create env with token maintenance
+        env = ChatEnv.with_tokenizer(
+            tokenizer=tokenizer,
+            batch_size=(1,),
+        )
+
+        # Reset
+        td = TensorDict({"query": "Hello!"}, batch_size=(1,))
+        result = env.reset(td)
+
+        # Run through wrapper - should still work
+        output = wrapper(result)
+        assert ("text", "response") in output.keys(True, True)
+
+    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
+    def test_get_new_version_preserves_prefer_tokens(self):
+        """Test that get_new_version preserves the prefer_tokens setting."""
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+
+        # Create with prefer_tokens=False
+        wrapper = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=True,
+            prefer_tokens=False,
+        )
+
+        # Get new version for log probs
+        new_wrapper = wrapper.get_new_version(generate=False)
+
+        # Should preserve prefer_tokens=False
+        assert new_wrapper.prefer_tokens is False
+
+        # Get new version with explicit prefer_tokens
+        new_wrapper2 = wrapper.get_new_version(prefer_tokens=True)
+        assert new_wrapper2.prefer_tokens is True
+
+    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
+    def test_multi_turn_conversation_with_tokens(self):
+        """Test that tokens are maintained correctly across multiple turns."""
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+
+        wrapper = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=True,
+            generate_kwargs={"max_new_tokens": 5},
+            prefer_tokens=True,
+        )
+
+        env = ChatEnv.with_tokenizer(
+            tokenizer=tokenizer,
+            batch_size=(1,),
+        )
+
+        # Turn 1
+        td = TensorDict({"query": "Hi"}, batch_size=(1,))
+        result = env.reset(td)
+        tokens_after_reset = result.get(("tokens", "full"), as_list=True)[0].clone()
+
+        output = wrapper(result)
+
+        # Get the full history for stepping
+        action_td = output.clone()
+        step_result = env.step(action_td)
+        next_td = step_result["next"]
+
+        tokens_after_step = next_td.get(("tokens", "full"), as_list=True)[0]
+
+        # Tokens should have grown (we added more messages)
+        assert tokens_after_step.numel() > tokens_after_reset.numel()
+
+    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
+    def test_token_prefix_stays_consistent(self):
+        """Test that token prefix remains consistent across turns for KV cache."""
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+
+        env = ChatEnv.with_tokenizer(
+            tokenizer=tokenizer,
+            batch_size=(1,),
+        )
+
+        # Reset
+        td = TensorDict({"query": "Hello"}, batch_size=(1,))
+        result = env.reset(td)
+        initial_tokens = result.get(("tokens", "full"), as_list=True)[0].clone()
+
+        # Simulate a response - need proper batch dimensions
+        history_prompt = result.get(("history", "prompt"))
+        response = History(role="assistant", content="Hi!", batch_size=1).unsqueeze(0)
+        history_full = history_prompt.extend(response, inplace=False, dim=-1)
+
+        action_td = result.clone()
+        action_td.set(("history", "full"), history_full)
+
+        step_result = env.step(action_td)
+        next_td = step_result["next"]
+        new_tokens = next_td.get(("tokens", "full"), as_list=True)[0]
+
+        # The prefix should be preserved
+        prefix_length = initial_tokens.numel()
+        assert new_tokens.numel() >= prefix_length
+
+        # Verify the content is preserved by decoding
+        initial_decoded = tokenizer.decode(initial_tokens, skip_special_tokens=False)
+        new_decoded = tokenizer.decode(new_tokens, skip_special_tokens=False)
+        assert initial_decoded in new_decoded or new_decoded.startswith(
+            initial_decoded.strip()
+        )
 
 
 if __name__ == "__main__":
