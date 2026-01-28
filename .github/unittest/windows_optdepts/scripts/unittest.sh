@@ -35,7 +35,7 @@ echo $(python --version)
 echo $(conda info -e)
 
 echo "=== Installing test dependencies ==="
-python -m pip install hypothesis future cloudpickle pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-isolate expecttest pyyaml scipy coverage
+python -m pip install hypothesis future cloudpickle pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures expecttest pyyaml scipy coverage
 
 # =================================== Install =================================================
 

@@ -54,7 +54,7 @@ fi
 #   support for older Python versions at any time, which can lead to "tensordict
 #   not installed" failures in downstream smoke tests.
 # - Use the same (pinned) range as TorchRL itself to keep this job stable.
-python -m pip install "${TORCHRL_TENSORDICT_SPEC:-tensordict>=0.10.0,<0.11.0}"
+python -m pip install "${TORCHRL_TENSORDICT_SPEC:-tensordict>=0.11.0,<0.12.0}"
 
 # smoke test
 python -c "import tensordict; print(f'tensordict: {tensordict.__version__}')"

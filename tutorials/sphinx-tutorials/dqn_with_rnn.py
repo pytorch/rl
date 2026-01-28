@@ -332,7 +332,7 @@ policy = Seq(feature, lstm, mlp, qval)
 # (see training loop below).
 #
 exploration_module = EGreedyModule(
-    annealing_num_steps=1_000_000, spec=env.action_spec, eps_init=0.2
+    annealing_num_steps=1_000_000, spec=env.action_spec, eps_init=0.2, device=device
 )
 stoch_policy = TensorDictSequential(
     policy,
