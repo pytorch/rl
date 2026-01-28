@@ -11,8 +11,8 @@ from .trading import FinancialRegimeEnv
 
 __all__ = [
     "ChessEnv",
+    "FinancialRegimeEnv",
     "LLMHashingEnv",
     "PendulumEnv",
     "TicTacToeEnv",
-    "FinancialRegimeEnv",
 ]

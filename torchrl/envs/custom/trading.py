@@ -11,13 +11,15 @@ for reinforcement learning applications in quantitative finance.
 
 import math
 from enum import IntEnum
-from typing import Optional
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-
-from torchrl.data.tensor_specs import (Binary, Categorical, Composite,
-                                       UnboundedContinuous)
+from torchrl.data.tensor_specs import (
+    Binary,
+    Categorical,
+    Composite,
+    UnboundedContinuous,
+)
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import make_composite_from_td
 
@@ -41,7 +43,7 @@ class FinancialMarketDynamics:
     volatility calculations, and adaptive risk parameters for use in RL environments.
     """
 
-    def __init__(self, device: Optional[torch.device] = None):
+    def __init__(self, device: torch.device | None = None):
         """Initialize the FinancialMarketDynamics class.
 
         Args:
