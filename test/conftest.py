@@ -6,11 +6,12 @@ from __future__ import annotations
 
 import functools
 import os
+import random
 import sys
 import time
 import warnings
 from collections import defaultdict
-import random
+
 import numpy as np
 
 import pytest
@@ -196,6 +197,7 @@ def mock_tokenizer():
     from transformers import AutoTokenizer
 
     return AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+
 
 @pytest.fixture(autouse=True)
 def prevent_leaking_rng():
