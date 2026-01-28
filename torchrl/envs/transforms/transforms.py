@@ -362,7 +362,7 @@ class Transform(nn.Module):
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
         """Resets a transform if it is stateful."""
-        return tensordict_reset
+        return self._call(tensordict_reset)
 
     def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Inverts the input to :meth:`TransformedEnv._reset`, if needed."""
