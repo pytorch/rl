@@ -6,7 +6,13 @@
 from .async_envs import AsyncEnvPool, ProcessorAsyncEnvPool, ThreadingAsyncEnvPool
 from .batched_envs import ParallelEnv, SerialEnv
 from .common import EnvBase, EnvMetaData, make_tensordict
-from .custom import ChessEnv, LLMHashingEnv, PendulumEnv, TicTacToeEnv
+from .custom import (
+    ChessEnv,
+    FinancialRegimeEnv,
+    LLMHashingEnv,
+    PendulumEnv,
+    TicTacToeEnv,
+)
 from .env_creator import env_creator, EnvCreator, get_env_metadata
 from .gym_like import default_info_dict_reader, GymLikeEnv
 from .libs import (
@@ -167,6 +173,7 @@ __all__ = [
     "EnvMetaData",
     "ExcludeTransform",
     "ExplorationType",
+    "FinancialRegimeEnv",
     "FiniteTensorDictCheck",
     "FlattenObservation",
     "FrameSkipTransform",
