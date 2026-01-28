@@ -4536,6 +4536,105 @@ class TestIndexSelect:
         sample = new_spec.rand()
         assert sample.shape == (3, 9)
 
+    def test_index_select_onehot_with_mask(self):
+        """Test index_select preserves and correctly selects mask for OneHot."""
+        # Create a OneHot spec with a mask that varies across batch dimension
+        mask = torch.tensor(
+            [
+                [True, True, False, False],
+                [True, False, True, False],
+                [False, True, True, False],
+                [True, True, True, True],
+                [False, False, True, True],
+            ]
+        )
+        spec = OneHot(n=4, shape=(5, 4), mask=mask)
+        index = torch.tensor([0, 2, 4])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (3, 4)
+        assert new_spec.mask is not None
+        expected_mask = torch.index_select(mask, dim=0, index=index)
+        assert torch.equal(new_spec.mask, expected_mask)
+
+    def test_index_select_categorical_with_mask(self):
+        """Test index_select preserves and correctly selects mask for Categorical."""
+        # Categorical mask has shape (*shape, n)
+        mask = torch.tensor(
+            [
+                [True, True, False],
+                [True, False, True],
+                [False, True, True],
+                [True, True, True],
+                [False, False, True],
+            ]
+        )
+        spec = Categorical(n=3, shape=(5,), mask=mask)
+        index = torch.tensor([1, 3])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (2,)
+        assert new_spec.mask is not None
+        expected_mask = torch.index_select(mask, dim=0, index=index)
+        assert torch.equal(new_spec.mask, expected_mask)
+
+    def test_index_select_multionehot_with_mask(self):
+        """Test index_select preserves and correctly selects mask for MultiOneHot."""
+        # MultiOneHot mask has shape (*shape,) where shape[-1] is sum(nvec)
+        mask = torch.tensor(
+            [
+                [True, True, False, True, True],
+                [True, False, True, False, True],
+                [False, True, True, True, False],
+            ]
+        )
+        spec = MultiOneHot(nvec=[2, 3], shape=(3, 5), mask=mask)
+        index = torch.tensor([0, 2])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (2, 5)
+        assert new_spec.mask is not None
+        expected_mask = torch.index_select(mask, dim=0, index=index)
+        assert torch.equal(new_spec.mask, expected_mask)
+
+    def test_index_select_multicategorical_with_mask(self):
+        """Test index_select preserves and correctly selects mask for MultiCategorical."""
+        # MultiCategorical: nvec defines the cardinality of each category
+        # shape's last dim must match nvec.shape[-1]
+        # mask has shape (*shape[:-1], sum(nvec)) - see update_mask docstring
+        nvec = torch.tensor([3, 2])  # 2 categories with cardinalities 3 and 2
+        # shape = (4, 2) where 4 is batch dim and 2 is nvec.shape[-1]
+        # mask shape = (4, 5) where 5 = sum(nvec) = 3 + 2
+        mask = torch.ones(4, 5, dtype=torch.bool)
+        mask[0, 0] = False  # mask first outcome for first batch element
+        mask[2, 4] = False  # mask last outcome for third batch element
+        spec = MultiCategorical(nvec=nvec, shape=(4, 2), mask=mask)
+        index = torch.tensor([0, 2])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (2, 2)
+        assert new_spec.mask is not None
+        expected_mask = torch.index_select(mask, dim=0, index=index)
+        assert torch.equal(new_spec.mask, expected_mask)
+
+    def test_index_select_no_mask_preserved(self):
+        """Test index_select works correctly when spec has no mask."""
+        spec = OneHot(n=4, shape=(5, 4))
+        assert spec.mask is None
+        index = torch.tensor([0, 2, 4])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (3, 4)
+        assert new_spec.mask is None
+
+    def test_index_select_stacked_not_supported(self):
+        """Test that index_select raises NotImplementedError for heterogeneous Stacked specs."""
+        # Create non-identical specs to get a true Stacked spec
+        spec1 = Bounded(low=0, high=1, shape=(5, 3), dtype=torch.float32)
+        spec2 = Bounded(
+            low=0, high=2, shape=(5, 3), dtype=torch.float32
+        )  # Different high
+        stacked_spec = torch.stack([spec1, spec2], dim=0)
+        # Verify it's actually a Stacked spec
+        assert type(stacked_spec).__name__ == "Stacked"
+        with pytest.raises(NotImplementedError, match="index_select is not supported"):
+            torch.index_select(stacked_spec, dim=0, index=torch.tensor([0]))
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

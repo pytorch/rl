@@ -6823,12 +6823,34 @@ def _stack_specs(list_of_spec, dim=0, out=None):
 @TensorSpec.implements_for_spec(torch.index_select)
 @Composite.implements_for_spec(torch.index_select)
 def _index_select_spec(input: TensorSpec, dim: int, index: torch.Tensor) -> TensorSpec:
+    """Select indices along a dimension of a TensorSpec.
+
+    Args:
+        input: The TensorSpec to index.
+        dim: The dimension along which to index.
+        index: A 1-D tensor containing the indices to select.
+
+    Returns:
+        A new TensorSpec with the indexed shape.
+
+    Raises:
+        IndexError: If any index is out of bounds.
+        ValueError: If attempting to index the last dimension of OneHot,
+            MultiOneHot, or Binary specs (which represents the domain).
+
+    """
     dim = dim % len(input.shape) if dim < 0 else dim
 
     # Validate index bounds
     if torch.any(index < 0) or torch.any(index >= input.shape[dim]):
         raise IndexError(
             f"index {index} is out of bounds for dimension {dim} with size {input.shape[dim]}"
+        )
+
+    if isinstance(input, Stacked):
+        raise NotImplementedError(
+            f"index_select is not supported for {type(input).__name__} specs. "
+            "Consider converting to a regular spec first using spec.clone() if the specs are identical."
         )
 
     if isinstance(input, Composite):
@@ -6860,6 +6882,68 @@ def _index_select_spec(input: TensorSpec, dim: int, index: torch.Tensor) -> Tens
                 shape=torch.Size(new_shape),
                 device=input.device,
                 dtype=input.dtype,
+            )
+        elif isinstance(input, MultiOneHot):
+            # MultiOneHot mask has shape (*shape,) where shape[-1] is sum(nvec)
+            # Note: MultiOneHot is a subclass of OneHot, so check it first
+            mask = input.mask
+            if mask is not None:
+                mask = torch.index_select(mask, dim, index)
+            nvec = [space.n for space in input.space]
+            return input.__class__(
+                nvec=nvec,
+                shape=torch.Size(new_shape),
+                device=input.device,
+                dtype=input.dtype,
+                mask=mask,
+            )
+        elif isinstance(input, OneHot):
+            # OneHot mask has shape (*shape,) where shape[-1] is n
+            mask = input.mask
+            if mask is not None:
+                mask = torch.index_select(mask, dim, index)
+            return input.__class__(
+                n=input.space.n,
+                shape=torch.Size(new_shape),
+                device=input.device,
+                dtype=input.dtype,
+                mask=mask,
+            )
+        elif isinstance(input, MultiCategorical):
+            # MultiCategorical inherits from Categorical, so check first
+            # MultiCategorical mask has shape (*shape[:-1], sum(nvec))
+            # nvec is expanded to match the shape, so we need to index_select it too
+            mask = input.mask
+            if mask is not None:
+                mask = torch.index_select(mask, dim, index)
+            nvec = torch.index_select(input.nvec, dim, index)
+            return input.__class__(
+                nvec=nvec,
+                shape=torch.Size(new_shape),
+                device=input.device,
+                dtype=input.dtype,
+                mask=mask,
+            )
+        elif isinstance(input, Binary):
+            # Binary inherits from Categorical but has different constructor semantics
+            # Binary doesn't support masks, so we just need to handle the shape
+            return input.__class__(
+                n=new_shape[-1] if len(new_shape) > 0 else None,
+                shape=torch.Size(new_shape),
+                device=input.device,
+                dtype=input.dtype,
+            )
+        elif isinstance(input, Categorical):
+            # Categorical mask has shape (*shape, n)
+            mask = input.mask
+            if mask is not None:
+                mask = torch.index_select(mask, dim, index)
+            return input.__class__(
+                n=input.space.n,
+                shape=torch.Size(new_shape),
+                device=input.device,
+                dtype=input.dtype,
+                mask=mask,
             )
         else:
             return input._reshape(torch.Size(new_shape))
