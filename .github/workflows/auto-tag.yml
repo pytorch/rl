@@ -1,23 +1,23 @@
 # Automatically add a label to PRs based on the [Label] prefix in the title
 #
 # Usage:
-#  - PR title must start with a [Label] prefix in brackets
+#  - PR title must start with an EXACT [Label] prefix (case-sensitive)
 #  - Example: "[BugFix] Fix memory leak" will add the "BugFix" label
 #  - Fails if no valid prefix is found
-#  - Labels are ONLY ADDED, never removed (preserves manual labels)
+#  - When title is edited, old auto-label is replaced with the new one
 #
-# Supported prefixes (supports common variations):
-#  - [BugFix], [Bugfix] → BugFix
-#  - [Feature], [Features] → Feature
-#  - [Doc], [Docs], [Documentation] → Documentation
-#  - [Refactor], [Refactoring] → Refactoring
+# Supported prefixes (CASE-SENSITIVE - must match exactly):
+#  - [BugFix] → BugFix
+#  - [Feature] → Feature
+#  - [Doc] → Documentation
+#  - [Refactor] → Refactoring
 #  - [CI] → CI
-#  - [Test], [Tests] → Tests
-#  - [Environment], [Environments] → Environments
+#  - [Tests] → Tests
+#  - [Environments] → Environments
 #  - [Data] → Data
-#  - [Performance], [Perf] → Performance
-#  - [BC-Breaking], [BCBreaking] → bc breaking
-#  - [Deprecation], [Deprecated] → Deprecation
+#  - [Performance] → Performance
+#  - [BC-Breaking] → bc breaking
+#  - [Deprecation] → Deprecation
 #------------------------------------------------------------
 
 name: PR Label
@@ -40,6 +40,8 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
+          # Known auto-labels that this workflow manages (actual GitHub label names)
+          AUTO_LABELS: "BugFix Feature Documentation Refactoring CI Tests Environments Data Performance bc breaking Deprecation"
         run: |
           set -euo pipefail
 
@@ -61,17 +63,17 @@ jobs:
           |--------|---------------|---------|
           | `[BugFix]` | BugFix | `[BugFix] Fix memory leak in collector` |
           | `[Feature]` | Feature | `[Feature] Add new optimizer` |
-          | `[Doc]` or `[Docs]` | Documentation | `[Doc] Update installation guide` |
+          | `[Doc]` | Documentation | `[Doc] Update installation guide` |
           | `[Refactor]` | Refactoring | `[Refactor] Clean up module imports` |
           | `[CI]` | CI | `[CI] Fix workflow permissions` |
-          | `[Test]` or `[Tests]` | Tests | `[Tests] Add unit tests for buffer` |
-          | `[Environment]` or `[Environments]` | Environments | `[Environments] Add Gymnasium support` |
+          | `[Tests]` | Tests | `[Tests] Add unit tests for buffer` |
+          | `[Environments]` | Environments | `[Environments] Add Gymnasium support` |
           | `[Data]` | Data | `[Data] Fix replay buffer sampling` |
-          | `[Performance]` or `[Perf]` | Performance | `[Performance] Optimize tensor ops` |
+          | `[Performance]` | Performance | `[Performance] Optimize tensor ops` |
           | `[BC-Breaking]` | bc breaking | `[BC-Breaking] Remove deprecated API` |
           | `[Deprecation]` | Deprecation | `[Deprecation] Mark old function` |
 
-          **Note:** Common variations like singular/plural are supported (e.g., `[Doc]` or `[Docs]`).
+          **Note:** Prefixes are case-sensitive. Use `[BugFix]` not `[bugfix]` or `[Bugfix]`.
           COMMENT_EOF
             # Strip leading spaces from heredoc (YAML indentation artifact)
             sed -i 's/^          //' /tmp/pr_comment.md
@@ -94,51 +96,62 @@ jobs:
 
           echo "Extracted prefix: $PREFIX"
 
-          # Map prefixes to GitHub label names (supports common variations)
+          # Map EXACT prefixes to GitHub label names (case-sensitive)
           case "$PREFIX" in
-            BugFix|Bugfix|bugfix)
+            BugFix)
               LABEL="BugFix"
               ;;
-            Feature|Features|feature|features)
+            Feature)
               LABEL="Feature"
               ;;
-            Doc|Docs|Documentation|doc|docs)
+            Doc)
               LABEL="Documentation"
               ;;
-            Refactor|Refactoring|refactor|refactoring)
+            Refactor)
               LABEL="Refactoring"
               ;;
-            CI|ci)
+            CI)
               LABEL="CI"
               ;;
-            Test|Tests|test|tests)
+            Tests)
               LABEL="Tests"
               ;;
-            Environment|Environments|environment|environments)
+            Environments)
               LABEL="Environments"
               ;;
-            Data|data)
+            Data)
               LABEL="Data"
               ;;
-            Performance|Perf|performance|perf)
+            Performance)
               LABEL="Performance"
               ;;
-            BC-Breaking|BCBreaking|bc-breaking)
+            BC-Breaking)
               LABEL="bc breaking"
               ;;
-            Deprecation|Deprecated|deprecation|deprecated)
+            Deprecation)
               LABEL="Deprecation"
               ;;
             *)
-              echo "::error::Unknown or invalid prefix '[$PREFIX]'."
-              post_help_comment "Unknown or invalid prefix \`[$PREFIX]\`." "$PR_TITLE"
+              echo "::error::Unknown or invalid prefix '[$PREFIX]'. Prefixes are case-sensitive."
+              post_help_comment "Unknown or invalid prefix \`[$PREFIX]\`. Prefixes are case-sensitive." "$PR_TITLE"
               exit 1
               ;;
           esac
 
           echo "Mapped to label: $LABEL"
 
-          # Add the label to the PR (never remove existing labels)
+          # Get current labels on the PR
+          CURRENT_LABELS=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels --jq '.labels[].name' 2>/dev/null || echo "")
+
+          # Remove any existing auto-labels that don't match the new one
+          for existing in $CURRENT_LABELS; do
+            if [[ "$existing" != "$LABEL" && " $AUTO_LABELS " == *" $existing "* ]]; then
+              echo "Removing old auto-label: $existing"
+              gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "$existing" 2>/dev/null || true
+            fi
+          done
+
+          # Add the label to the PR
           gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "$LABEL"
 
           echo "Successfully added label '$LABEL' to PR #$PR_NUMBER"
