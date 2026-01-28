@@ -250,7 +250,7 @@
 <h1>HabitatEnv<a class="headerlink" href="#habitatenv" title="Link to this heading">¶</a></h1>
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrl.envs.HabitatEnv">
-<span class="sig-prename descclassname"><span class="pre">torchrl.envs.</span></span><span class="sig-name descname"><span class="pre">HabitatEnv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/libs/habitat.html#HabitatEnv"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.HabitatEnv" title="Link to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">torchrl.envs.</span></span><span class="sig-name descname"><span class="pre">HabitatEnv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/libs/habitat.html#HabitatEnv"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.HabitatEnv" title="Link to this definition">¶</a></dt>
 <dd><p>A wrapper for habitat envs.</p>
 <p>This class currently serves as placeholder and compatibility security.
 It behaves exactly like the GymEnv wrapper.</p>
@@ -284,8 +284,10 @@ whenever <code class="docutils literal notranslate"><span class="pre">from_pixel
 same action is to be repeated. The observation returned will be the
 last observation of the sequence, whereas the reward will be the sum
 of rewards across steps.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.10)"><em>torch.device</em></a><em>, </em><em>optional</em>) – if provided, the device on which the simulation
-will occur. Defaults to <code class="docutils literal notranslate"><span class="pre">torch.device(&quot;cuda:0&quot;)</span></code>.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.10)"><em>torch.device</em></a><em> or </em><em>list</em><em> of </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.10)"><em>torch.device</em></a><em>, </em><em>optional</em>) – if provided, the device
+on which the simulation will occur. When <code class="docutils literal notranslate"><span class="pre">num_workers</span> <span class="pre">&gt;</span> <span class="pre">1</span></code>, this can be a
+list of devices (one per worker) to distribute environments across multiple
+GPUs. Defaults to <code class="docutils literal notranslate"><span class="pre">torch.device(&quot;cuda:0&quot;)</span></code>.</p></li>
 <li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.10)"><em>torch.Size</em></a><em>, </em><em>optional</em>) – the batch size of the environment.
 Should match the leading dimensions of all observations, done states,
 rewards, actions and infos.
@@ -293,6 +295,9 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">torch.S
 <li><p><strong>allow_done_after_reset</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, it is tolerated
 for envs to be <code class="docutils literal notranslate"><span class="pre">done</span></code> just after <a class="reference internal" href="torchrl.envs.ModelBasedEnvBase.html#torchrl.envs.reset" title="torchrl.envs.reset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reset()</span></code></a> is called.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>num_workers</strong> (<em>int</em><em>, </em><em>optional</em>) – if provided and greater than 1, a
+<a class="reference internal" href="torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.envs.ParallelEnv</span></code></a> will be instantiated with
+<code class="docutils literal notranslate"><span class="pre">num_workers</span></code> copies of <code class="docutils literal notranslate"><span class="pre">HabitatEnv</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-odd">Variables<span class="colon">:</span></dt>

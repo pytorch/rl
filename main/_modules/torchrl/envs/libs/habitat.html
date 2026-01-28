@@ -249,7 +249,7 @@
 <span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">_make_ordinal_device</span>
 <span class="kn">from</span> <span class="nn">torchrl.data.utils</span> <span class="kn">import</span> <span class="n">DEVICE_TYPING</span>
 <span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">EnvBase</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs.libs.gym</span> <span class="kn">import</span> <span class="n">GymEnv</span><span class="p">,</span> <span class="n">set_gym_backend</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.libs.gym</span> <span class="kn">import</span> <span class="n">_GymAsyncMeta</span><span class="p">,</span> <span class="n">GymEnv</span><span class="p">,</span> <span class="n">set_gym_backend</span>
 <span class="kn">from</span> <span class="nn">torchrl.envs.utils</span> <span class="kn">import</span> <span class="n">_classproperty</span>
 
 <span class="n">_has_habitat</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;habitat&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
@@ -277,9 +277,52 @@
             <span class="k">yield</span> <span class="n">env</span>
 
 
+<span class="k">class</span> <span class="nc">_HabitatMeta</span><span class="p">(</span><span class="n">_GymAsyncMeta</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Metaclass for HabitatEnv that returns a lazy ParallelEnv when num_workers &gt; 1.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">num_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="c1"># Extract num_workers from explicit kwarg or kwargs dict</span>
+        <span class="k">if</span> <span class="n">num_workers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">num_workers</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;num_workers&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;num_workers&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="n">num_workers</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">num_workers</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="s2">&quot;__name__&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;HabitatEnv&quot;</span> <span class="ow">and</span> <span class="n">num_workers</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">ParallelEnv</span>
+
+            <span class="n">env_name</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;env_name&quot;</span><span class="p">)</span>
+            <span class="n">env_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="s2">&quot;env_name&quot;</span><span class="p">}</span>
+
+            <span class="c1"># Extract device - can be a single device or a list of devices</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="n">env_kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+            <span class="c1"># Handle device as list for per-worker GPU assignment</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">device</span><span class="p">)</span> <span class="o">!=</span> <span class="n">num_workers</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Length of device list (</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">device</span><span class="p">)</span><span class="si">}</span><span class="s2">) must match &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;num_workers (</span><span class="si">{</span><span class="n">num_workers</span><span class="si">}</span><span class="s2">)&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">devices</span> <span class="o">=</span> <span class="n">device</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">devices</span> <span class="o">=</span> <span class="p">[</span><span class="n">device</span><span class="p">]</span> <span class="o">*</span> <span class="n">num_workers</span>
+
+            <span class="c1"># We intentionally don&#39;t use EnvCreator here to avoid instantiating</span>
+            <span class="c1"># a HabitatEnv in the local process, which can be expensive.</span>
+            <span class="c1"># Create per-worker partials with different devices.</span>
+            <span class="n">make_envs</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">env_name</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">d</span><span class="p">,</span> <span class="o">**</span><span class="n">env_kwargs</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">devices</span>
+            <span class="p">]</span>
+            <span class="k">return</span> <span class="n">ParallelEnv</span><span class="p">(</span><span class="n">num_workers</span><span class="p">,</span> <span class="n">make_envs</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
 <div class="viewcode-block" id="HabitatEnv">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.HabitatEnv.html#torchrl.envs.HabitatEnv">[docs]</a>
-<span class="k">class</span> <span class="nc">HabitatEnv</span><span class="p">(</span><span class="n">GymEnv</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">HabitatEnv</span><span class="p">(</span><span class="n">GymEnv</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_HabitatMeta</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A wrapper for habitat envs.</span>
 
 <span class="sd">    This class currently serves as placeholder and compatibility security.</span>
@@ -315,8 +358,10 @@
 <span class="sd">            same action is to be repeated. The observation returned will be the</span>
 <span class="sd">            last observation of the sequence, whereas the reward will be the sum</span>
 <span class="sd">            of rewards across steps.</span>
-<span class="sd">        device (torch.device, optional): if provided, the device on which the simulation</span>
-<span class="sd">            will occur. Defaults to ``torch.device(&quot;cuda:0&quot;)``.</span>
+<span class="sd">        device (torch.device or list of torch.device, optional): if provided, the device</span>
+<span class="sd">            on which the simulation will occur. When ``num_workers &gt; 1``, this can be a</span>
+<span class="sd">            list of devices (one per worker) to distribute environments across multiple</span>
+<span class="sd">            GPUs. Defaults to ``torch.device(&quot;cuda:0&quot;)``.</span>
 <span class="sd">        batch_size (torch.Size, optional): the batch size of the environment.</span>
 <span class="sd">            Should match the leading dimensions of all observations, done states,</span>
 <span class="sd">            rewards, actions and infos.</span>
@@ -324,6 +369,9 @@
 <span class="sd">        allow_done_after_reset (bool, optional): if ``True``, it is tolerated</span>
 <span class="sd">            for envs to be ``done`` just after :meth:`reset` is called.</span>
 <span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        num_workers (int, optional): if provided and greater than 1, a</span>
+<span class="sd">            :class:`torchrl.envs.ParallelEnv` will be instantiated with</span>
+<span class="sd">            ``num_workers`` copies of ``HabitatEnv``. Defaults to ``1``.</span>
 
 <span class="sd">    Attributes:</span>
 <span class="sd">        available_envs (List[str]): a list of environments to build.</span>

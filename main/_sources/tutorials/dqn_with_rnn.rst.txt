@@ -593,7 +593,7 @@ This decay is achieved via a call to :meth:`~torchrl.modules.EGreedyModule.step`
 .. code-block:: Python
 
     exploration_module = EGreedyModule(
-        annealing_num_steps=1_000_000, spec=env.action_spec, eps_init=0.2
+        annealing_num_steps=1_000_000, spec=env.action_spec, eps_init=0.2, device=device
     )
     stoch_policy = TensorDictSequential(
         policy,
@@ -834,7 +834,7 @@ every 50 data collection iterations, and plot the results after training.
 
  .. code-block:: none
 
-      0%|          | 0/200 [00:00<?, ?it/s]     25%|██▌       | 50/200 [00:00<00:01, 124.42it/s]     50%|█████     | 100/200 [00:00<00:00, 127.40it/s]     75%|███████▌  | 150/200 [00:01<00:00, 128.50it/s]    100%|██████████| 200/200 [00:01<00:00, 129.23it/s]
+      0%|          | 0/200 [00:00<?, ?it/s]     25%|██▌       | 50/200 [00:00<00:01, 127.27it/s]     50%|█████     | 100/200 [00:00<00:00, 127.15it/s]     75%|███████▌  | 150/200 [00:01<00:00, 128.59it/s]    100%|██████████| 200/200 [00:01<00:00, 129.14it/s]
 
 
 
@@ -885,7 +885,7 @@ Further Reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.767 seconds)
+   **Total running time of the script:** (0 minutes 5.589 seconds)
 
 
 .. _sphx_glr_download_tutorials_dqn_with_rnn.py:
