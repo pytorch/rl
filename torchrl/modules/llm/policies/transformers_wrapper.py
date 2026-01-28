@@ -155,8 +155,8 @@ class TransformersWrapper(LLMWrapperBase):
         batching_timeout (float, optional): The timeout for batching. See `Batching`_ below for more details.
         prefer_tokens (bool, optional): If ``True`` and ``tokens.full`` exists in the input tensordict,
             use those tokens directly instead of re-tokenizing from history. This enables KV cache
-            consistency when used with :class:`~torchrl.envs.llm.ChatEnv` with ``maintain_tokens=True``
-            or :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer`. Defaults to ``True``.
+            consistency when used with :class:`~torchrl.envs.llm.ChatEnv` with ``with_tokenizer=True``
+            or :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer`. Defaults to ``False``.
 
     .. _Batching:
 
@@ -275,7 +275,7 @@ class TransformersWrapper(LLMWrapperBase):
         min_batch_size: int | None = None,
         max_batch_size: int | None = None,
         batching_timeout: float = 10.0,
-        prefer_tokens: bool = True,
+        prefer_tokens: bool = False,
     ):
         super().__init__()
         self.prefer_tokens = prefer_tokens
