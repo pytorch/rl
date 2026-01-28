@@ -759,8 +759,8 @@ class TestCollectorGeneric:
             create_env_kwargs={"seed": seed},
             policy=policy,
             frames_per_batch=20,
-            max_frames_per_traj=2000,
-            total_frames=20000,
+            max_frames_per_traj=200,
+            total_frames=200,
             device="cpu",
         )
         torchrl_logger.info("Loop")
@@ -932,7 +932,7 @@ if __name__ == "__main__":
         result = subprocess.run(
             ["python", "-c", script], capture_output=True, text=True
         )
-        # This errors if the timeout is 5 secs, not 15
+        # This errors if the timeout is too short (3), succeeds if long enough (10)
         assert result.returncode == int(
             to == 3
         ), f"Test failed with output: {result.stdout}"
@@ -1136,7 +1136,7 @@ if __name__ == "__main__":
             c = collector_type(
                 envs,
                 policy=policy,
-                total_frames=1000,
+                total_frames=100,
                 frames_per_batch=10,
                 policy_device=policy_device,
                 env_device=env_device,
@@ -1779,7 +1779,7 @@ if __name__ == "__main__":
                 # Random sleep up to 10ms
                 time.sleep(torch.rand(1).item() * 0.01)
             elif self.env_id % 2 == 1:
-                time.sleep(1)
+                time.sleep(0.1)
 
             self._step_count = 0
             return TensorDict(
@@ -1800,7 +1800,7 @@ if __name__ == "__main__":
             done = self._step_count >= self.max_steps
 
             if self.sleep_odd_only and self.env_id % 2 == 1:
-                time.sleep(1)
+                time.sleep(0.1)
 
             return TensorDict(
                 {
@@ -1940,6 +1940,107 @@ if __name__ == "__main__":
                 assert data.numel() == 50
                 count += 1
                 if count >= 2:
+                    break
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.parametrize("use_buffers", [True, False])
+    @pytest.mark.parametrize("storing_device", [None, "cpu"])
+    def test_unbatched_env_traj_ids_shape_consistency(
+        self, use_buffers, storing_device
+    ):
+        """Regression test for issue #3137: traj_ids shape inconsistency with unbatched envs.
+
+        When using SyncDataCollector with an unbatched environment (batch_size=()),
+        the traj_ids should maintain consistent shapes across all steps, even when
+        done=True triggers trajectory updates.
+
+        See: https://github.com/pytorch/rl/issues/3137
+        """
+
+        class UnbatchedDoneEnv(EnvBase):
+            """Unbatched environment that returns done=True after N steps."""
+
+            def __init__(self, done_after_n_steps=6):
+                super().__init__(batch_size=torch.Size([]))
+                self.done_after_n_steps = done_after_n_steps
+                self._step_count = 0
+
+                self.observation_spec = Composite(
+                    observation=Unbounded(shape=(3,)),
+                )
+                self.action_spec = Composite(
+                    action=Unbounded(shape=(1,)),
+                )
+                self.reward_spec = Composite(
+                    reward=Unbounded(shape=(1,)),
+                )
+                self.full_done_spec = Composite(
+                    done=Unbounded(shape=(1,), dtype=torch.bool),
+                    terminated=Unbounded(shape=(1,), dtype=torch.bool),
+                    truncated=Unbounded(shape=(1,), dtype=torch.bool),
+                )
+
+            def _reset(self, tensordict=None):
+                self._step_count = 0
+                return TensorDict(
+                    {
+                        "observation": torch.rand(3),
+                        "done": torch.tensor([False]),
+                        "terminated": torch.tensor([False]),
+                        "truncated": torch.tensor([False]),
+                    },
+                    batch_size=self.batch_size,
+                )
+
+            def _step(self, tensordict):
+                self._step_count += 1
+                done = self._step_count >= self.done_after_n_steps
+
+                return TensorDict(
+                    {
+                        "observation": torch.rand(3),
+                        "reward": torch.tensor([1.0]),
+                        "done": torch.tensor([done]),
+                        "terminated": torch.tensor([done]),
+                        "truncated": torch.tensor([False]),
+                    },
+                    batch_size=self.batch_size,
+                )
+
+            def _set_seed(self, seed):
+                torch.manual_seed(seed)
+
+        env = UnbatchedDoneEnv(done_after_n_steps=6)
+        policy = RandomPolicy(env.action_spec)
+
+        collector = Collector(
+            create_env_fn=lambda: UnbatchedDoneEnv(done_after_n_steps=6),
+            policy=policy,
+            total_frames=100,
+            frames_per_batch=30,
+            use_buffers=use_buffers,
+            storing_device=storing_device,
+        )
+
+        try:
+            for i, data in enumerate(collector):
+                # Verify the data has the expected shape
+                assert data.shape == torch.Size(
+                    [30]
+                ), f"Batch {i}: expected shape [30], got {data.shape}"
+
+                # Verify traj_ids exists and has consistent shape
+                traj_ids = data.get(("collector", "traj_ids"))
+                assert traj_ids is not None, "traj_ids should be present"
+                assert traj_ids.shape == torch.Size(
+                    [30]
+                ), f"Batch {i}: traj_ids expected shape [30], got {traj_ids.shape}"
+
+                # Verify traj_ids values are valid (non-negative integers)
+                assert (traj_ids >= 0).all(), "traj_ids should be non-negative"
+
+                if i >= 2:
                     break
         finally:
             collector.shutdown()

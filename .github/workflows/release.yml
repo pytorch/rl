@@ -258,6 +258,7 @@ jobs:
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
+      channel: release
     secrets: inherit
 
   build-windows:
@@ -269,6 +270,7 @@ jobs:
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
+      channel: release
     secrets: inherit
 
   build-macos:
@@ -280,6 +282,7 @@ jobs:
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
+      channel: release
     secrets: inherit
 
   build-aarch64:
@@ -291,6 +294,7 @@ jobs:
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
+      channel: release
     secrets: inherit
 
   # =============================================================================
@@ -330,8 +334,8 @@ jobs:
           # - cpu: Only CPU builds (recommended - avoids duplicate wheel conflicts)
           # - gpu: Only CUDA builds
           # - all: All variants (requires deduplication)
-          # pytorch/test-infra uploads artifacts named like: pytorch_torchrl__3.11_cpu_x86_64
-          pattern: ${{ inputs.wheel_variants == 'gpu' && 'pytorch_torchrl__*_cu*' || inputs.wheel_variants == 'all' && 'pytorch_torchrl*' || 'pytorch_torchrl__*_cpu_*' }}
+          # pytorch/test-infra uploads artifacts named like: pytorch_rl__3.11_cpu_x86_64
+          pattern: ${{ inputs.wheel_variants == 'gpu' && 'pytorch_rl__*_cu*' || inputs.wheel_variants == 'all' && 'pytorch_rl*' || 'pytorch_rl__*_cpu_*' }}
           merge-multiple: true
 
       - name: Deduplicate and verify wheels

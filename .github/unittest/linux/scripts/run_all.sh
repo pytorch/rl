@@ -115,6 +115,7 @@ uv_pip_install \
   pytest-forked \
   pytest-asyncio \
   pytest-isolate \
+  pytest-xdist \
   expecttest \
   "pybind11[global]>=2.13" \
   pyyaml \
@@ -285,18 +286,65 @@ run_distributed_tests() {
     echo "TORCHRL_TEST_SUITE=${TORCHRL_TEST_SUITE}: distributed tests require GPU (CU_VERSION != cpu)."
     return 1
   fi
-  python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_distributed.py \
+  # Run both test_distributed.py and test_rb_distributed.py (both use torch.distributed)
+  python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_distributed.py test/test_rb_distributed.py \
     --instafail --durations 200 -vv --capture no \
     --timeout=120 --mp_fork_if_no_cuda
 }
 
 run_non_distributed_tests() {
   # Note: we always ignore distributed tests here (they can be run in a separate job).
-  python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
-    --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
-    --ignore test/test_distributed.py \
-    --ignore test/llm \
-    --timeout=120 --mp_fork_if_no_cuda
+  # Also ignore test_setup.py as it's tested in the dedicated test-setup-minimal job.
+  #
+  # Test sharding: Split tests into groups for parallel execution.
+  # TORCHRL_TEST_SHARD can be: "all" (default), "1", "2", or "3"
+  # - Shard 1: test_transforms.py (heaviest file, 571 parametrize decorators)
+  # - Shard 2: test_envs.py, test_collectors.py (multiprocessing-heavy)
+  # - Shard 3: Everything else (can use pytest-xdist for parallelism)
+  local shard="${TORCHRL_TEST_SHARD:-all}"
+  local common_ignores="--ignore test/test_rlhf.py --ignore test/test_distributed.py --ignore test/test_rb_distributed.py --ignore test/llm --ignore test/test_setup.py"
+  local common_args="--instafail --durations 200 -vv --capture no --timeout=120 --mp_fork_if_no_cuda"
+  
+  # pytest-xdist parallelism: use -n auto for shard 3 (fewer multiprocessing tests)
+  # Set TORCHRL_XDIST=0 to disable parallel execution
+  local xdist_args=""
+  if [ "${TORCHRL_XDIST:-1}" = "1" ] && [ "${shard}" = "3" ]; then
+    xdist_args="-n auto --dist loadgroup"
+    echo "Using pytest-xdist for parallel execution"
+  fi
+
+  case "${shard}" in
+    1)
+      echo "Running shard 1: test_transforms.py only"
+      python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_transforms.py \
+        ${common_args}
+      ;;
+    2)
+      echo "Running shard 2: test_envs.py and test_collectors.py"
+      python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_envs.py test/test_collectors.py \
+        ${common_args}
+      ;;
+    3)
+      echo "Running shard 3: All other tests"
+      python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
+        ${common_ignores} \
+        --ignore test/test_transforms.py \
+        --ignore test/test_envs.py \
+        --ignore test/test_collectors.py \
+        ${xdist_args} \
+        ${common_args}
+      ;;
+    all|"")
+      echo "Running all tests (no sharding)"
+      python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
+        ${common_ignores} \
+        ${common_args}
+      ;;
+    *)
+      echo "Unknown TORCHRL_TEST_SHARD='${shard}'. Expected: all|1|2|3."
+      exit 2
+      ;;
+  esac
 }
 
 case "${TORCHRL_TEST_SUITE}" in
