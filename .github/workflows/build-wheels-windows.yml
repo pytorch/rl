@@ -24,6 +24,11 @@ on:
         required: false
         type: string
         default: 'auto'
+      channel:
+        description: 'Build channel: nightly, test, release, or empty for auto-detection'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   id-token: write
@@ -43,6 +48,8 @@ jobs:
       os: windows
       test-infra-repository: pytorch/test-infra
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
+      channel: ${{ inputs.channel || '' }}
+      use-only-dl-pytorch-org: ${{ inputs.channel == 'release' && 'true' || 'false' }}
   build:
     needs: generate-matrix
     strategy:
