@@ -2040,14 +2040,14 @@ class TestStepCounter(TransformBase):
         check_env_specs(transformed_env)
         transformed_env.close()
 
-    def test_stepcounter_ignore(self):
-        # checks that step_count_keys respect the convention that nested dones should
-        # be ignored if there is a done in a root td
+    def test_stepcounter_nested(self):
+        # checks that step_count_keys are created for each done key (both root and nested)
         env = TransformedEnv(
             NestedCountingEnv(has_root_done=True, nest_done=True), StepCounter()
         )
-        assert len(env.transform.step_count_keys) == 1
+        assert len(env.transform.step_count_keys) == 2
         assert env.transform.step_count_keys[0] == "step_count"
+        assert env.transform.step_count_keys[1] == ("data", "step_count")
         env = TransformedEnv(
             NestedCountingEnv(has_root_done=False, nest_done=True), StepCounter()
         )

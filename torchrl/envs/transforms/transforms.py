@@ -7664,7 +7664,7 @@ class StepCounter(Transform):
         if truncated_keys is None:
             # make the default truncated keys
             truncated_keys = []
-            for reset_key in self.parent._filtered_reset_keys:
+            for reset_key in self.parent.reset_keys:
                 if isinstance(reset_key, str):
                     key = self.truncated_key
                 else:
@@ -7679,7 +7679,7 @@ class StepCounter(Transform):
         if done_keys is None:
             # make the default done keys
             done_keys = []
-            for reset_key in self.parent._filtered_reset_keys:
+            for reset_key in self.parent.reset_keys:
                 if isinstance(reset_key, str):
                     key = "done"
                 else:
@@ -7694,7 +7694,7 @@ class StepCounter(Transform):
         if terminated_keys is None:
             # make the default terminated keys
             terminated_keys = []
-            for reset_key in self.parent._filtered_reset_keys:
+            for reset_key in self.parent.reset_keys:
                 if isinstance(reset_key, str):
                     key = "terminated"
                 else:
@@ -7709,7 +7709,7 @@ class StepCounter(Transform):
         if step_count_keys is None:
             # make the default step_count keys
             step_count_keys = []
-            for reset_key in self.parent._filtered_reset_keys:
+            for reset_key in self.parent.reset_keys:
                 if isinstance(reset_key, str):
                     key = self.step_count_key
                 else:
@@ -7721,7 +7721,7 @@ class StepCounter(Transform):
     @property
     def reset_keys(self) -> list[NestedKey]:
         if self.parent is not None:
-            return self.parent._filtered_reset_keys
+            return self.parent.reset_keys
         # fallback on default "_reset"
         return ["_reset"]
 
