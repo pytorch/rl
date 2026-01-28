@@ -42,6 +42,31 @@ Get commits from the last release:
 git log v0.11.0..HEAD --oneline --no-merges
 ```
 
+### Critical: Don't Miss ghstack Commits
+
+**The biggest pitfall in release notes is only looking at commits with PR numbers.** Many of the most significant features are merged via ghstack and have NO PR number in the commit message. Always analyze both:
+
+1. **PR commits**: `git log v0.10.0..v0.11.0 --oneline | grep "(#"`
+2. **ghstack commits**: `git log v0.10.0..v0.11.0 --oneline | grep -v "(#"`
+
+ghstack commits often represent major feature work (e.g., Dreamer overhaul, weight sync schemes, new algorithms like DAPO/CISPO).
+
+### Handling ghstack Commits
+
+Many commits are merged via ghstack and do NOT have PR numbers in the commit message. These often contain major features:
+
+```bash
+# Find ghstack commits (no PR number)
+git log v0.10.0..v0.11.0 --oneline | grep -v "(#"
+
+# Search for specific features by keyword
+git log v0.10.0..v0.11.0 --oneline | grep -i dreamer
+git log v0.10.0..v0.11.0 --oneline | grep -i "weight.*sync\|sync.*scheme"
+git log v0.10.0..v0.11.0 --oneline | grep -i collector
+```
+
+Include these in release notes using their short SHA (e.g., `cc917bae`) instead of a PR number. Group related ghstack commits by feature area.
+
 ### Categorize Commits
 
 Review each commit and categorize into:
@@ -118,6 +143,26 @@ Present the following template to the user for review:
 Thanks to all contributors:
 <!-- List first-time contributors especially -->
 ```
+
+### Release Notes Format Requirements
+
+- **Author handles**: Every entry must include the lead author's GitHub handle (e.g., `@vmoens`)
+- **Explanations**: For PRs/commits with >10 lines changed, add 1-3 lines of explanation
+- **Metadata**: Use `gh pr view <PR> --json author,additions,deletions` to get PR details
+- **ghstack commits**: Use `git show --stat <sha>` to check lines changed
+- **File storage**: Save release notes to `RELEASE_NOTES_v0.X.Y.md` in the repo root to preserve context
+
+### Release Notes Best Practices
+
+1. **Create the file early** - Save to `RELEASE_NOTES_v0.X.Y.md` as you work. This preserves context and allows iterative refinement.
+
+2. **Group by feature, not by commit** - Multiple ghstack commits often belong to the same feature. Group them under a single feature heading (e.g., "Dreamer World Model Improvements").
+
+3. **Prioritize by impact** - Use `git show --stat <sha>` to see lines changed. Features with 100+ lines deserve their own section in highlights.
+
+4. **Check the sota-implementations/** - Major algorithm updates often land here. Check for new or significantly updated implementations.
+
+5. **Verify docs build before updating stable** - The docs workflow must complete and upload the version folder to gh-pages before you can update the stable symlink.
 
 **Important:** Wait for user approval before proceeding.
 
@@ -347,6 +392,15 @@ git push origin :refs/tags/v<VERSION>
 git push origin --delete release/<VERSION>
 ```
 
+### gh-pages Push Rejected
+
+If `git push` to gh-pages is rejected due to remote updates (common when CI updates gh-pages in parallel):
+```bash
+git fetch origin gh-pages
+git rebase origin/gh-pages
+git push origin HEAD:gh-pages
+```
+
 ---
 
 ## Environment Setup for PyPI Trusted Publishing
@@ -462,3 +516,63 @@ The release workflow automatically updates gh-pages:
 - `versions.html` is updated to mark the new version as "(stable release)"
 
 If the docs for the new version folder don't exist yet, they will be built and deployed by the `docs.yml` workflow when the tag is pushed.
+
+### Manual gh-pages Updates
+
+If you need to manually update gh-pages (e.g., update stable symlink, fix versions.html):
+
+```bash
+# Create worktree for gh-pages (avoids switching branches)
+git worktree add .worktrees/gh-pages gh-pages
+
+# Make changes in the worktree
+cd .worktrees/gh-pages
+
+# Update stable symlink to new version
+rm -f stable && ln -sf 0.11 stable
+
+# Update versions.html - remove old stable marker, add new one
+sed -i 's/ (stable release)//g' versions.html
+sed -i 's|href="0.11/">v0.11|href="0.11/">v0.11 (stable release)|g' versions.html
+
+# Add new version entry if needed (insert after "main (unstable)" line)
+# Check versions.html to see the format
+
+# Commit and push
+git add -A && git commit -m "Update stable to 0.11"
+git push origin HEAD:gh-pages
+
+# Cleanup worktree
+cd ../..
+git worktree remove .worktrees/gh-pages
+```
+
+**Note:** If `rsync` fails with "read-only variable" error when copying docs, use `cp -R` instead.
+
+---
+
+## Common Pitfalls
+
+### Release Notes
+
+1. **Only looking at PR commits** - The biggest mistake. ghstack commits have no PR numbers but often contain the most significant features. Always run both `grep "(#"` and `grep -v "(#"` on the commit log.
+
+2. **Missing related commits** - A feature like "Dreamer improvements" may span 10+ commits. Search by keyword (`grep -i dreamer`) to find all related work.
+
+3. **Not checking lines changed** - A commit titled "[BugFix] Minor fix" might actually be 300 lines of important refactoring. Use `git show --stat` to verify.
+
+4. **Forgetting author attribution** - Every entry needs `@username`. For ghstack commits, check `git log --format='%an %ae' <sha>` to find the author.
+
+### Documentation Updates
+
+1. **Updating stable before docs exist** - The docs workflow must complete first. Check that the version folder exists on gh-pages before updating the stable symlink.
+
+2. **Not adding version to versions.html** - When manually updating gh-pages, remember to add a new `<li>` entry for the version in `versions.html`, not just update the stable symlink.
+
+### General Process
+
+1. **Working directly on gh-pages branch** - Use `git worktree` instead. It's cleaner and avoids accidentally committing to the wrong branch.
+
+2. **Not verifying the release branch exists** - Before tagging, ensure the release branch (e.g., `release/0.11.0`) is pushed and has all necessary commits.
+
+3. **Assuming CI passed** - Always monitor the docs/release workflows. Check the actual logs if something seems off.

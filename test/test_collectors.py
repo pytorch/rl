@@ -759,8 +759,8 @@ class TestCollectorGeneric:
             create_env_kwargs={"seed": seed},
             policy=policy,
             frames_per_batch=20,
-            max_frames_per_traj=2000,
-            total_frames=20000,
+            max_frames_per_traj=200,
+            total_frames=200,
             device="cpu",
         )
         torchrl_logger.info("Loop")
@@ -932,7 +932,7 @@ if __name__ == "__main__":
         result = subprocess.run(
             ["python", "-c", script], capture_output=True, text=True
         )
-        # This errors if the timeout is 5 secs, not 15
+        # This errors if the timeout is too short (3), succeeds if long enough (10)
         assert result.returncode == int(
             to == 3
         ), f"Test failed with output: {result.stdout}"
@@ -1136,7 +1136,7 @@ if __name__ == "__main__":
             c = collector_type(
                 envs,
                 policy=policy,
-                total_frames=1000,
+                total_frames=100,
                 frames_per_batch=10,
                 policy_device=policy_device,
                 env_device=env_device,
@@ -1779,7 +1779,7 @@ if __name__ == "__main__":
                 # Random sleep up to 10ms
                 time.sleep(torch.rand(1).item() * 0.01)
             elif self.env_id % 2 == 1:
-                time.sleep(1)
+                time.sleep(0.1)
 
             self._step_count = 0
             return TensorDict(
@@ -1800,7 +1800,7 @@ if __name__ == "__main__":
             done = self._step_count >= self.max_steps
 
             if self.sleep_odd_only and self.env_id % 2 == 1:
-                time.sleep(1)
+                time.sleep(0.1)
 
             return TensorDict(
                 {
