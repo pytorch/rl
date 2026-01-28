@@ -1227,7 +1227,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
         if func not in cls.SPEC_HANDLED_FUNCTIONS or not all(
             issubclass(t, (TensorSpec,)) for t in types
         ):
-            return NotImplemented(
+            return NotImplementedError(
                 f"func {func} for spec {cls} with handles {cls.SPEC_HANDLED_FUNCTIONS}"
             )
         return cls.SPEC_HANDLED_FUNCTIONS[func](*args, **kwargs)
@@ -6819,6 +6819,36 @@ def _stack_specs(list_of_spec, dim=0, out=None):
     else:
         raise NotImplementedError
 
+@TensorSpec.implements_for_spec(torch.index_select)
+@Composite.implements_for_spec(torch.index_select)
+def _index_select_spec(input: TensorSpec, dim: int, index: torch.Tensor) -> TensorSpec:
+    dim = dim % len(input.shape) if dim < 0 else dim
+    
+    # Validate index bounds
+    if torch.any(index < 0) or torch.any(index >= input.shape[dim]):
+        raise IndexError(f"index {index} is out of bounds for dimension {dim} with size {input.shape[dim]}")
+    
+    if isinstance(input, Composite):
+        new_shape = list(input.shape)
+        new_shape[dim] = index.numel()
+        new_specs = {}
+        for key, spec in input.items():
+            if spec is not None:
+                new_specs[key] = torch.index_select(spec, dim, index)
+            else:
+                new_specs[key] = None
+        return Composite(new_specs, shape=torch.Size(new_shape), device=input.device)
+    else:
+        new_shape = list(input.shape)
+        new_shape[dim] = index.numel()
+        if isinstance(input, (OneHot, MultiOneHot, Binary)) and dim == len(input.shape) - 1:
+            raise ValueError(f"Cannot index_select along the last dimension of {type(input).__name__} spec, as it represents the domain.")
+        if isinstance(input, Bounded):
+            new_low = torch.index_select(input.space.low, dim, index)
+            new_high = torch.index_select(input.space.high, dim, index)
+            return input.__class__(low=new_low, high=new_high, shape=torch.Size(new_shape), device=input.device, dtype=input.dtype)
+        else:
+            return input._reshape(torch.Size(new_shape))
 
 @Composite.implements_for_spec(torch.stack)
 def _stack_composite_specs(list_of_spec, dim=0, out=None):
