@@ -3196,8 +3196,8 @@ class TestPreferTokens:
     """Tests for the token-first LLM wrapper API (prefer_tokens feature)."""
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
-    def test_transformers_wrapper_prefer_tokens_default(self):
-        """Test that TransformersWrapper has prefer_tokens=True by default."""
+    def test_transformers_wrapper_prefer_tokens_explicit(self):
+        """Test that TransformersWrapper can be set with prefer_tokens=True."""
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
@@ -3209,9 +3209,10 @@ class TestPreferTokens:
             input_mode="history",
             generate=True,
             generate_kwargs={"max_new_tokens": 10},
+            prefer_tokens=True,
         )
 
-        # Verify prefer_tokens is True by default
+        # Verify prefer_tokens is True when explicitly set
         assert wrapper.prefer_tokens is True
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
@@ -3228,6 +3229,7 @@ class TestPreferTokens:
             input_mode="history",
             generate=True,
             generate_kwargs={"max_new_tokens": 10},
+            prefer_tokens=True,
         )
 
         # Create env with token maintenance using with_tokenizer=True
@@ -3323,6 +3325,7 @@ class TestPreferTokens:
             input_mode="history",
             generate=True,
             generate_kwargs={"max_new_tokens": 5},
+            prefer_tokens=True,
         )
 
         env = ChatEnv.with_tokenizer(
