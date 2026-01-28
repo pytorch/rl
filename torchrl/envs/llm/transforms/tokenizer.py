@@ -502,18 +502,12 @@ class IncrementalTokenizer(Transform):
     def _set_tokens(self, tensordict: TensorDictBase, tokens_list: list) -> None:
         """Set tokens in tensordict, handling variable-length tokens properly.
 
-        Uses NonTensorData/NonTensorStack to store tokens without stacking issues.
-        This ensures variable-length token sequences can be stored and retrieved
-        properly with as_list=True.
+        Uses nested tensors for storing variable-length token sequences,
+        which is compatible with as_list=True retrieval.
         """
-        if len(tokens_list) == 1:
-            # Single element - wrap in NonTensorData to handle variable length
-            tensordict.set(self.tokens_key, NonTensorData(tokens_list[0]))
-        else:
-            # Multiple elements with potentially different lengths
-            # Use NonTensorStack to store as list without stacking
-            tokens_stack = NonTensorStack(*[NonTensorData(t) for t in tokens_list])
-            tensordict.set(self.tokens_key, tokens_stack)
+        # Store as nested tensor which handles variable-length sequences
+        tokens_nested = torch.nested.as_nested_tensor(tokens_list)
+        tensordict.set(self.tokens_key, tokens_nested)
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         """Add tokens spec to observation spec."""
