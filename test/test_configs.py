@@ -34,6 +34,7 @@ except ImportError:
 _has_gym = (importlib.util.find_spec("gym") is not None) or (
     importlib.util.find_spec("gymnasium") is not None
 )
+_has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 _has_hydra = importlib.util.find_spec("hydra") is not None
 _python_version_compatible = sys.version_info >= (3, 10)
 
@@ -50,7 +51,7 @@ pytestmark = [
     not _configs_available, reason="Config system requires hydra-core and omegaconf"
 )
 class TestEnvConfigs:
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_gym_env_config(self):
         from hydra.utils import instantiate
@@ -63,7 +64,7 @@ class TestEnvConfigs:
         instantiate(cfg)
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     @pytest.mark.parametrize("cls", [ParallelEnv, SerialEnv, AsyncEnvPool])
     def test_batched_env_config(self, cls):
         from hydra.utils import instantiate
@@ -1051,7 +1052,7 @@ class TestModuleConfigs:
 class TestCollectorsConfig:
     @pytest.mark.parametrize("factory", [True, False])
     @pytest.mark.parametrize("collector", ["async", "multi_sync", "multi_async"])
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_collector_config(self, factory, collector):
         from hydra.utils import instantiate
@@ -1133,7 +1134,7 @@ class TestCollectorsConfig:
 
     @pytest.mark.parametrize("factory", [True, False])
     @pytest.mark.parametrize("collector", ["async", "multi_sync", "multi_async"])
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_collector_auto_configures_exploration_modules(self, factory, collector):
         """Test that collector instantiation auto-configures exploration modules.
@@ -1231,7 +1232,7 @@ class TestCollectorsConfig:
 @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
 class TestLossConfigs:
     @pytest.mark.parametrize("loss_type", ["clip", "kl", "ppo"])
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_ppo_loss_config(self, loss_type):
         from hydra.utils import instantiate
         from torchrl.objectives.ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
@@ -1297,7 +1298,7 @@ class TestOptimizerConfigs:
     not _configs_available, reason="Config system requires hydra-core and omegaconf"
 )
 class TestTrainerConfigs:
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_ppo_trainer_config(self):
         from torchrl.trainers.algorithms.configs.trainers import PPOTrainerConfig
 
@@ -1327,7 +1328,7 @@ class TestTrainerConfigs:
         assert cfg.total_frames == 100
         assert cfg.frame_skip == 1
 
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_ppo_trainer_config_optional_fields(self):
         """Test that optional fields can be omitted from PPO trainer config."""
         from torchrl.trainers.algorithms.configs.collectors import CollectorConfig
@@ -1405,6 +1406,7 @@ class TestTrainerConfigs:
 
 
 @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+@pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
 )
@@ -1515,7 +1517,7 @@ if __name__ == "__main__":
         except Exception:
             raise
 
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_simple_env_config(self, tmpdir):
         """Test simple environment configuration without any transforms or batching."""
         yaml_config = """
@@ -1535,7 +1537,7 @@ env:
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_batched_env_config(self, tmpdir):
         """Test batched environment configuration without transforms."""
         yaml_config = """
@@ -1559,7 +1561,7 @@ training_env:
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_batched_env_with_one_transform(self, tmpdir):
         """Test batched environment with one transform."""
         yaml_config = """
@@ -1588,7 +1590,7 @@ training_env:
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_batched_env_with_two_transforms(self, tmpdir):
         """Test batched environment with two transforms using Compose."""
         yaml_config = """
@@ -1629,7 +1631,7 @@ training_env:
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_simple_config_instantiation(self, tmpdir):
         """Test that simple configs can be instantiated using registered names."""
         yaml_config = """
@@ -1659,7 +1661,7 @@ network:
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_env_parsing(self, tmpdir):
         """Test environment parsing with overrides."""
         yaml_config = """
@@ -1679,7 +1681,7 @@ env:
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_env_parsing_with_file(self, tmpdir):
         """Test environment parsing with file config."""
         yaml_config = """
@@ -1699,6 +1701,7 @@ env:
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_collector_parsing_with_file(self, tmpdir):
         """Test collector parsing with file config."""
         yaml_config = """
@@ -1740,6 +1743,7 @@ collector:
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_trainer_parsing_with_file(self, tmpdir):
         """Test trainer parsing with file config."""
         import os
@@ -1847,7 +1851,7 @@ trainer:
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_transformed_env_parsing_with_file(self, tmpdir):
         """Test transformed environment configuration using the same pattern as the working PPO trainer."""
         yaml_config = """

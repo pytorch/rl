@@ -18,25 +18,35 @@ CALL_TIMES = defaultdict(float)
 IS_OSX = sys.platform == "darwin"
 
 
-def pytest_sessionfinish(maxprint=50):
-    out_str = """
-Call times:
-===========
-"""
+def pytest_sessionfinish(session, exitstatus, maxprint=50):
+    """Print aggregated test times per function (across all parametrizations)."""
     keys = list(CALL_TIMES.keys())
-    if len(keys) > 1:
-        maxchar = max(*[len(key) for key in keys])
-    elif len(keys) == 1:
-        maxchar = len(keys[0])
-    else:
+    if not keys:
         return
+
+    # Calculate total time
+    total_time = sum(CALL_TIMES.values())
+
+    out_str = f"""
+================================================================================
+AGGREGATED TEST TIMES (by function, across all parametrizations)
+================================================================================
+Total test time: {total_time:.1f}s ({total_time / 60:.1f} min)
+Top {min(maxprint, len(keys))} slowest test functions:
+--------------------------------------------------------------------------------
+"""
+    maxchar = max(len(key) for key in keys)
     for i, (key, item) in enumerate(
         sorted(CALL_TIMES.items(), key=lambda x: x[1], reverse=True)
     ):
-        spaces = "  " + " " * (maxchar - len(key))
-        out_str += f"\t{key}{spaces}{item: 4.4f}s\n"
+        spaces = " " * (maxchar - len(key) + 2)
+        pct = (item / total_time) * 100 if total_time > 0 else 0
+        out_str += f"  {key}{spaces}{item:7.2f}s  ({pct:5.1f}%)\n"
         if i == maxprint - 1:
             break
+
+    out_str += "================================================================================\n"
+    sys.stdout.write(out_str)
 
 
 @pytest.fixture(autouse=True)
