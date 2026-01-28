@@ -293,6 +293,62 @@
 </tr>
 </tbody>
 </table>
+<section id="supported-pytorch-operations">
+<h2>Supported PyTorch Operations<a class="headerlink" href="#supported-pytorch-operations" title="Link to this heading">¶</a></h2>
+<p>TensorSpec classes support various PyTorch-like operations for manipulating their shape and structure.
+These operations return new spec instances with the modified shape while preserving dtype, device, and domain information.</p>
+<p><strong>PyTorch function overloads</strong> (via <code class="docutils literal notranslate"><span class="pre">__torch_function__</span></code>):</p>
+<p>These can be called using the standard PyTorch functional API:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">Bounded</span><span class="p">,</span> <span class="n">Composite</span>
+
+<span class="c1"># torch.stack - stack multiple specs along a new dimension</span>
+<span class="n">spec1</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span><span class="n">low</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="n">spec2</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span><span class="n">low</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="n">stacked</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">spec1</span><span class="p">,</span> <span class="n">spec2</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># shape: (2, 3, 4)</span>
+
+<span class="c1"># torch.squeeze / torch.unsqueeze - remove or add singleton dimensions</span>
+<span class="n">spec</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span><span class="n">low</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="n">squeezed</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># shape: (3, 4)</span>
+<span class="n">unsqueezed</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="n">squeezed</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># shape: (1, 3, 4)</span>
+
+<span class="c1"># torch.index_select - select indices along a dimension</span>
+<span class="n">spec</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span><span class="n">low</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="n">selected</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">]))</span>  <span class="c1"># shape: (3, 4)</span>
+</pre></div>
+</div>
+<p><strong>Instance methods</strong>:</p>
+<p>TensorSpec also provides instance methods that mirror common tensor operations:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="generated/torchrl.data.TensorSpec.html#torchrl.data.TensorSpec.expand" title="torchrl.data.TensorSpec.expand"><code class="xref py py-meth docutils literal notranslate"><span class="pre">expand()</span></code></a> - broadcast the spec to a larger shape</p></li>
+<li><p><a class="reference internal" href="generated/torchrl.data.TensorSpec.html#torchrl.data.TensorSpec.squeeze" title="torchrl.data.TensorSpec.squeeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">squeeze()</span></code></a> - remove singleton dimensions</p></li>
+<li><p><a class="reference internal" href="generated/torchrl.data.TensorSpec.html#torchrl.data.TensorSpec.unsqueeze" title="torchrl.data.TensorSpec.unsqueeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unsqueeze()</span></code></a> - add a singleton dimension</p></li>
+<li><p><a class="reference internal" href="generated/torchrl.data.TensorSpec.html#torchrl.data.TensorSpec.reshape" title="torchrl.data.TensorSpec.reshape"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reshape()</span></code></a> - reshape the spec to a new shape</p></li>
+<li><p><a class="reference internal" href="generated/torchrl.data.TensorSpec.html#torchrl.data.TensorSpec.flatten" title="torchrl.data.TensorSpec.flatten"><code class="xref py py-meth docutils literal notranslate"><span class="pre">flatten()</span></code></a> - flatten dimensions</p></li>
+<li><p><a class="reference internal" href="generated/torchrl.data.TensorSpec.html#torchrl.data.TensorSpec.unflatten" title="torchrl.data.TensorSpec.unflatten"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unflatten()</span></code></a> - unflatten a dimension into multiple dimensions</p></li>
+<li><p><code class="xref py py-meth docutils literal notranslate"><span class="pre">unbind()</span></code> - split the spec along a dimension</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">Bounded</span>
+
+<span class="n">spec</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span><span class="n">low</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+
+<span class="c1"># Reshape operations</span>
+<span class="n">reshaped</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>  <span class="c1"># shape: (6, 4)</span>
+<span class="n">flattened</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>  <span class="c1"># shape: (6, 4)</span>
+<span class="n">expanded</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>  <span class="c1"># shape: (5, 2, 3, 4)</span>
+
+<span class="c1"># Split operations</span>
+<span class="n">unbound</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># tuple of 2 specs, each with shape (3, 4)</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Some operations have restrictions for discrete specs like <a class="reference internal" href="generated/torchrl.data.OneHot.html#torchrl.data.OneHot" title="torchrl.data.OneHot"><code class="xref py py-class docutils literal notranslate"><span class="pre">OneHot</span></code></a>, <a class="reference internal" href="generated/torchrl.data.MultiOneHot.html#torchrl.data.MultiOneHot" title="torchrl.data.MultiOneHot"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiOneHot</span></code></a>,
+and <a class="reference internal" href="generated/torchrl.data.Binary.html#torchrl.data.Binary" title="torchrl.data.Binary"><code class="xref py py-class docutils literal notranslate"><span class="pre">Binary</span></code></a>, where the last dimension represents the domain and cannot be modified.
+For example, <code class="docutils literal notranslate"><span class="pre">torch.index_select</span></code> along the last dimension of a <a class="reference internal" href="generated/torchrl.data.OneHot.html#torchrl.data.OneHot" title="torchrl.data.OneHot"><code class="xref py py-class docutils literal notranslate"><span class="pre">OneHot</span></code></a> spec will raise
+a <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>.</p>
+</div>
+</section>
 </section>
 
 
@@ -332,7 +388,10 @@
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">TensorSpec System</a></li>
+<li><a class="reference internal" href="#">TensorSpec System</a><ul>
+<li><a class="reference internal" href="#supported-pytorch-operations">Supported PyTorch Operations</a></li>
+</ul>
+</li>
 </ul>
 
             </div>

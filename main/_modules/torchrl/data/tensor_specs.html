@@ -1563,7 +1563,7 @@
         <span class="k">if</span> <span class="n">func</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="n">SPEC_HANDLED_FUNCTIONS</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span>
             <span class="nb">issubclass</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="p">(</span><span class="n">TensorSpec</span><span class="p">,))</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">types</span>
         <span class="p">):</span>
-            <span class="k">return</span> <span class="bp">NotImplemented</span><span class="p">(</span>
+            <span class="k">return</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;func </span><span class="si">{</span><span class="n">func</span><span class="si">}</span><span class="s2"> for spec </span><span class="si">{</span><span class="bp">cls</span><span class="si">}</span><span class="s2"> with handles </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="n">SPEC_HANDLED_FUNCTIONS</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">SPEC_HANDLED_FUNCTIONS</span><span class="p">[</span><span class="n">func</span><span class="p">](</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
@@ -7662,6 +7662,135 @@
         <span class="k">return</span> <span class="n">Stacked</span><span class="p">(</span><span class="o">*</span><span class="n">list_of_spec</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="n">dim</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+
+<span class="nd">@TensorSpec</span><span class="o">.</span><span class="n">implements_for_spec</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">index_select</span><span class="p">)</span>
+<span class="nd">@Composite</span><span class="o">.</span><span class="n">implements_for_spec</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">index_select</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">_index_select_spec</span><span class="p">(</span><span class="nb">input</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Select indices along a dimension of a TensorSpec.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        input: The TensorSpec to index.</span>
+<span class="sd">        dim: The dimension along which to index.</span>
+<span class="sd">        index: A 1-D tensor containing the indices to select.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A new TensorSpec with the indexed shape.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        IndexError: If any index is out of bounds.</span>
+<span class="sd">        ValueError: If attempting to index the last dimension of OneHot,</span>
+<span class="sd">            MultiOneHot, or Binary specs (which represents the domain).</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">dim</span> <span class="o">=</span> <span class="n">dim</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><span class="nb">input</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="k">if</span> <span class="n">dim</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">dim</span>
+
+    <span class="c1"># Validate index bounds</span>
+    <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">index</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="n">torch</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">index</span> <span class="o">&gt;=</span> <span class="nb">input</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">dim</span><span class="p">]):</span>
+        <span class="k">raise</span> <span class="ne">IndexError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;index </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> is out of bounds for dimension </span><span class="si">{</span><span class="n">dim</span><span class="si">}</span><span class="s2"> with size </span><span class="si">{</span><span class="nb">input</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">dim</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">Stacked</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;index_select is not supported for </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> specs. &quot;</span>
+            <span class="s2">&quot;Consider converting to a regular spec first using spec.clone() if the specs are identical.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">Composite</span><span class="p">):</span>
+        <span class="n">new_shape</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">input</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        <span class="n">new_shape</span><span class="p">[</span><span class="n">dim</span><span class="p">]</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+        <span class="n">new_specs</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">spec</span> <span class="ow">in</span> <span class="nb">input</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">spec</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">new_specs</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">new_specs</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">Composite</span><span class="p">(</span><span class="n">new_specs</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">new_shape</span><span class="p">),</span> <span class="n">device</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">new_shape</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">input</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        <span class="n">new_shape</span><span class="p">[</span><span class="n">dim</span><span class="p">]</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="p">(</span><span class="n">OneHot</span><span class="p">,</span> <span class="n">MultiOneHot</span><span class="p">,</span> <span class="n">Binary</span><span class="p">))</span>
+            <span class="ow">and</span> <span class="n">dim</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="nb">input</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Cannot index_select along the last dimension of </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> spec, as it represents the domain.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">Bounded</span><span class="p">):</span>
+            <span class="n">new_low</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="nb">input</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">low</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+            <span class="n">new_high</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="nb">input</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">high</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+            <span class="k">return</span> <span class="nb">input</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span>
+                <span class="n">low</span><span class="o">=</span><span class="n">new_low</span><span class="p">,</span>
+                <span class="n">high</span><span class="o">=</span><span class="n">new_high</span><span class="p">,</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">new_shape</span><span class="p">),</span>
+                <span class="n">device</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">MultiOneHot</span><span class="p">):</span>
+            <span class="c1"># MultiOneHot mask has shape (*shape,) where shape[-1] is sum(nvec)</span>
+            <span class="c1"># Note: MultiOneHot is a subclass of OneHot, so check it first</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="nb">input</span><span class="o">.</span><span class="n">mask</span>
+            <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+            <span class="n">nvec</span> <span class="o">=</span> <span class="p">[</span><span class="n">space</span><span class="o">.</span><span class="n">n</span> <span class="k">for</span> <span class="n">space</span> <span class="ow">in</span> <span class="nb">input</span><span class="o">.</span><span class="n">space</span><span class="p">]</span>
+            <span class="k">return</span> <span class="nb">input</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span>
+                <span class="n">nvec</span><span class="o">=</span><span class="n">nvec</span><span class="p">,</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">new_shape</span><span class="p">),</span>
+                <span class="n">device</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">OneHot</span><span class="p">):</span>
+            <span class="c1"># OneHot mask has shape (*shape,) where shape[-1] is n</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="nb">input</span><span class="o">.</span><span class="n">mask</span>
+            <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+            <span class="k">return</span> <span class="nb">input</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span>
+                <span class="n">n</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">n</span><span class="p">,</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">new_shape</span><span class="p">),</span>
+                <span class="n">device</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">MultiCategorical</span><span class="p">):</span>
+            <span class="c1"># MultiCategorical inherits from Categorical, so check first</span>
+            <span class="c1"># MultiCategorical mask has shape (*shape[:-1], sum(nvec))</span>
+            <span class="c1"># nvec is expanded to match the shape, so we need to index_select it too</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="nb">input</span><span class="o">.</span><span class="n">mask</span>
+            <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+            <span class="n">nvec</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="nb">input</span><span class="o">.</span><span class="n">nvec</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+            <span class="k">return</span> <span class="nb">input</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span>
+                <span class="n">nvec</span><span class="o">=</span><span class="n">nvec</span><span class="p">,</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">new_shape</span><span class="p">),</span>
+                <span class="n">device</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">Binary</span><span class="p">):</span>
+            <span class="c1"># Binary inherits from Categorical but has different constructor semantics</span>
+            <span class="c1"># Binary doesn&#39;t support masks, so we just need to handle the shape</span>
+            <span class="k">return</span> <span class="nb">input</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span>
+                <span class="n">n</span><span class="o">=</span><span class="n">new_shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">new_shape</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">new_shape</span><span class="p">),</span>
+                <span class="n">device</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">Categorical</span><span class="p">):</span>
+            <span class="c1"># Categorical mask has shape (*shape, n)</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="nb">input</span><span class="o">.</span><span class="n">mask</span>
+            <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+            <span class="k">return</span> <span class="nb">input</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span>
+                <span class="n">n</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">n</span><span class="p">,</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">new_shape</span><span class="p">),</span>
+                <span class="n">device</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">input</span><span class="o">.</span><span class="n">_reshape</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">new_shape</span><span class="p">))</span>
 
 
 <span class="nd">@Composite</span><span class="o">.</span><span class="n">implements_for_spec</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">)</span>
