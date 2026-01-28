@@ -72,6 +72,7 @@ if _has_vllm and _has_transformers:
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not _has_transformers, reason="missing transformers dependencies")
 @pytest.mark.skipif(not _has_vllm, reason="missing vllm dependencies")
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
@@ -415,6 +416,7 @@ class TestVLLMUpdaterV2WithLocalLLM(BaseVLLMUpdaterTest):
     "See LLM_TEST_ISSUES.md for details.",
     strict=False,
 )
+@pytest.mark.gpu
 @pytest.mark.skipif(not _has_ray, reason="missing ray dependencies")
 @pytest.mark.skipif(not _has_vllm, reason="missing vllm dependencies")
 @pytest.mark.skipif(not _has_transformers, reason="missing transformers dependencies")
@@ -611,6 +613,7 @@ class TestWeightSyncVLLMNCCL:
                 ray.shutdown()
 
 
+@pytest.mark.gpu
 @pytest.mark.xfail(
     reason="AsyncVLLM tests fail due to Ray placement group timeout. "
     "See LLM_TEST_ISSUES.md for details.",
