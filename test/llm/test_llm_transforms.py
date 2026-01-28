@@ -511,11 +511,16 @@ class TestIncrementalTokenizer:
         initial_tokens = result.get(("tokens", "full"), as_list=True)
 
         # Simulate LLM response - create a full history with response
+        # Need to match batch_dims: history_prompt has batch_dims=1, so response needs batch_dims=1 too
         history_prompt = result.get(("history", "prompt"))
+        # Create response with batch_size=1 (message dimension), then add batch dimension
         history_response = History(
             role="assistant",
             content="Hi there! How can I help you?",
-        ).unsqueeze(-1)
+            batch_size=1,
+        ).unsqueeze(
+            0
+        )  # Add batch dimension to match history_prompt
         history_full = history_prompt.extend(history_response, inplace=False, dim=-1)
 
         # Create action tensordict with the full history
@@ -575,8 +580,10 @@ class TestIncrementalTokenizer:
         result = env.reset(td)
         history = result.get(("history", "prompt"))
 
-        # First response
-        response1 = History(role="assistant", content="The answer is 4.").unsqueeze(-1)
+        # First response - create with batch_size=1 (message dim), then add batch dimension
+        response1 = History(
+            role="assistant", content="The answer is 4.", batch_size=1
+        ).unsqueeze(0)
         history_full1 = history.extend(response1, inplace=False, dim=-1)
         action_td = result.clone()
         action_td.set(("history", "full"), history_full1)
@@ -584,11 +591,15 @@ class TestIncrementalTokenizer:
         next1 = step1["next"]
         tokens1 = next1.get(("tokens", "full"), as_list=True)[0]
 
-        # Second message
+        # Second message - need proper batch dimensions
         history2 = next1.get(("history", "prompt"))
-        user2 = History(role="user", content="And what is 3+3?").unsqueeze(-1)
+        user2 = History(
+            role="user", content="And what is 3+3?", batch_size=1
+        ).unsqueeze(0)
         history_with_user2 = history2.extend(user2, inplace=False, dim=-1)
-        response2 = History(role="assistant", content="That would be 6.").unsqueeze(-1)
+        response2 = History(
+            role="assistant", content="That would be 6.", batch_size=1
+        ).unsqueeze(0)
         history_full2 = history_with_user2.extend(response2, inplace=False, dim=-1)
 
         # We need to manually update history.prompt to include user2
