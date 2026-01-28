@@ -447,11 +447,23 @@ class IncrementalTokenizer(Transform):
         """Get the number of messages in history."""
         return history.shape[-1]
 
+    def _get_history(self, tensordict: TensorDictBase) -> Any | None:
+        """Get history from tensordict, handling both nested keys and tensorclass access."""
+        history_key = self.history_key
+        if isinstance(history_key, tuple) and len(history_key) == 2:
+            # Try to access via tensorclass attribute pattern (e.g., tensordict["history"].prompt)
+            container_key, attr_key = history_key
+            container = tensordict.get(container_key, None)
+            if container is not None and hasattr(container, attr_key):
+                return getattr(container, attr_key)
+        # Fall back to regular nested key access
+        return tensordict.get(history_key, None)
+
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
         """Tokenize full history on reset."""
-        history = tensordict_reset.get(self.history_key, None)
+        history = self._get_history(tensordict_reset)
         if history is None:
             # No history to tokenize
             return tensordict_reset
@@ -475,7 +487,7 @@ class IncrementalTokenizer(Transform):
         TODO: Add incremental tokenization using overlap strategy for efficiency.
         Currently re-tokenizes the full history on each step for simplicity.
         """
-        history = next_tensordict.get(self.history_key, None)
+        history = self._get_history(next_tensordict)
         if history is None:
             return next_tensordict
 
