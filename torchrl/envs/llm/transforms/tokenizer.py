@@ -502,11 +502,13 @@ class IncrementalTokenizer(Transform):
     def _set_tokens(self, tensordict: TensorDictBase, tokens_list: list) -> None:
         """Set tokens in tensordict, handling variable-length tokens properly.
 
-        Uses NonTensorStack for batched variable-length tokens to avoid stacking issues.
+        Uses NonTensorData/NonTensorStack to store tokens without stacking issues.
+        This ensures variable-length token sequences can be stored and retrieved
+        properly with as_list=True.
         """
         if len(tokens_list) == 1:
-            # Single element - can set directly
-            tensordict.set(self.tokens_key, tokens_list[0])
+            # Single element - wrap in NonTensorData to handle variable length
+            tensordict.set(self.tokens_key, NonTensorData(tokens_list[0]))
         else:
             # Multiple elements with potentially different lengths
             # Use NonTensorStack to store as list without stacking
