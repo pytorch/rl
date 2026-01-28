@@ -538,12 +538,13 @@ class TestIncrementalTokenizer:
         # New tokens should be longer (more messages)
         assert new_tokens[0].numel() > initial_tokens[0].numel()
 
-    def test_with_tokenizer_factory(self, tokenizer):
-        """Test that ChatEnv.with_tokenizer creates a TransformedEnv with IncrementalTokenizer."""
-        env = ChatEnv.with_tokenizer(
+    def test_with_tokenizer_constructor_arg(self, tokenizer):
+        """Test that ChatEnv(with_tokenizer=True) creates a TransformedEnv with IncrementalTokenizer."""
+        env = ChatEnv(
             tokenizer=tokenizer,
             batch_size=(1,),
             system_prompt="You are a helpful assistant.",
+            with_tokenizer=True,
         )
 
         # Should be a TransformedEnv

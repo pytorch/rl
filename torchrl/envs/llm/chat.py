@@ -17,6 +17,7 @@ from torch.utils.data import DataLoader
 from torchrl.data import Composite, NonTensor
 from torchrl.data.llm.history import History
 from torchrl.envs import EnvBase, TransformedEnv
+from torchrl.envs.common import _EnvPostInit
 
 from torchrl.envs.llm.transforms.dataloading import (
     DataLoadingPrimer,
@@ -26,6 +27,25 @@ from torchrl.modules.llm.policies.common import ChatHistory, Text, Tokens
 
 if TYPE_CHECKING:
     import transformers
+
+
+class _ChatEnvMeta(_EnvPostInit):
+    """Metaclass for ChatEnv that handles with_tokenizer wrapping."""
+
+    def __call__(cls, *args, with_tokenizer: bool = False, **kwargs):
+        # Create the instance using parent metaclass logic
+        instance = super().__call__(*args, **kwargs)
+
+        # Wrap with IncrementalTokenizer if requested
+        if with_tokenizer:
+            tokenizer = kwargs.get("tokenizer")
+            if tokenizer is None:
+                raise ValueError("tokenizer must be provided when with_tokenizer=True")
+            from torchrl.envs.llm.transforms import IncrementalTokenizer
+
+            return TransformedEnv(instance, IncrementalTokenizer(tokenizer))
+
+        return instance
 
 
 def _default_collate_fn(batch):
@@ -40,7 +60,7 @@ def _default_collate_fn(batch):
     return batch
 
 
-class ChatEnv(EnvBase):
+class ChatEnv(EnvBase, metaclass=_ChatEnvMeta):
     r"""A chat-based environment for LLMs, designed as a blank canvas for conversation and RL.
 
     This environment is designed to work seamlessly with both :class:`~torchrl.modules.llm.policies.TransformersWrapper` and
@@ -100,6 +120,11 @@ class ChatEnv(EnvBase):
         policy_role (str, optional): The role of the policy/assistant. Defaults to `"assistant"`.
         data_key (str, optional): The key of the data input to the env at reset time (from dataloader). Defaults to `"query"`.
         device (torch.device, optional): The device to use for computations. Defaults to `None`.
+        with_tokenizer (bool, optional): If ``True``, the environment is automatically wrapped with
+            :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer` to maintain ``tokens.full`` synchronized
+            with ``history.prompt``. This enables token-first inference in LLM wrappers with ``prefer_tokens=True``,
+            ensuring KV cache consistency across multi-turn conversations. Requires ``tokenizer`` to be provided.
+            Defaults to ``False``.
 
     Methods:
         reset (TensorDict): Resets the state of the environment. A tensordict or equivalent with a `"query"` entry
@@ -140,9 +165,10 @@ class ChatEnv(EnvBase):
         >>> # Create environment with token maintenance for KV cache consistency
         >>> from transformers import AutoTokenizer
         >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
-        >>> env = ChatEnv.with_tokenizer(
+        >>> env = ChatEnv(
         ...     tokenizer=tokenizer,
         ...     system_prompt="You are a helpful assistant.",
+        ...     with_tokenizer=True,  # Automatically wraps with IncrementalTokenizer
         ... )
         >>> # Now tokens.full will be available and synchronized with history.prompt
 
@@ -163,9 +189,7 @@ class ChatEnv(EnvBase):
     ) -> TransformedEnv:
         """Create a ChatEnv wrapped with IncrementalTokenizer for token maintenance.
 
-        This factory method creates a ChatEnv and wraps it with an IncrementalTokenizer
-        transform that keeps tokens.full in sync with history.prompt. This is useful
-        for ensuring KV cache prefix consistency across multi-turn conversations.
+        This is a convenience method equivalent to ``ChatEnv(..., with_tokenizer=True)``.
 
         Args:
             tokenizer: The tokenizer to use for tokenization.
@@ -184,10 +208,7 @@ class ChatEnv(EnvBase):
             ... )
             >>> # Now tokens.full will be maintained automatically
         """
-        from torchrl.envs.llm.transforms import IncrementalTokenizer
-
-        base_env = cls(tokenizer=tokenizer, **kwargs)
-        return TransformedEnv(base_env, IncrementalTokenizer(tokenizer))
+        return cls(tokenizer=tokenizer, with_tokenizer=True, **kwargs)
 
     def __init__(
         self,
