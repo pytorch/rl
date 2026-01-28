@@ -132,8 +132,20 @@
   description: "Triggers chess environment tests only"
   color: "0E8A16"
 
+- name: Environments/dm_control
+  description: "Triggers dm_control environment tests"
+  color: "0E8A16"
+
 - name: Environments/envpool
   description: "Triggers envpool environment tests only"
+  color: "0E8A16"
+
+- name: Environments/gym
+  description: "Triggers gym environment tests only"
+  color: "0E8A16"
+
+- name: Environments/habitat
+  description: "Triggers habitat environment tests"
   color: "0E8A16"
 
 - name: Environments/isaaclab
@@ -162,6 +174,10 @@
 
 - name: Environments/robohive
   description: "Triggers robohive environment tests only"
+  color: "0E8A16"
+
+- name: Environments/sklearn
+  description: "Triggers sklearn tests only"
   color: "0E8A16"
 
 - name: Environments/smacv2
@@ -230,3 +246,49 @@
 - name: benchmarks/upload
   description: "Upload results of the PR to benchmarks"
   color: "5319E7"
+
+# =============================================================================
+# TorchRL Module Component Labels
+# =============================================================================
+- name: Objectives
+  description: "Changes to torchrl/objectives/"
+  color: "1D76DB"
+
+- name: Modules
+  description: "Changes to torchrl/modules/"
+  color: "1D76DB"
+
+- name: Transforms
+  description: "Changes to torchrl/envs/transforms/"
+  color: "1D76DB"
+
+- name: Record
+  description: "Changes to torchrl/record/"
+  color: "1D76DB"
+
+- name: Trainers
+  description: "Changes to torchrl/trainers/"
+  color: "1D76DB"
+
+- name: WeightUpdate
+  description: "Changes to torchrl/weight_update/"
+  color: "1D76DB"
+
+- name: Services
+  description: "Changes to torchrl/services/"
+  color: "1D76DB"
+
+- name: ReplayBuffers
+  description: "Changes to torchrl/data/replay_buffers/"
+  color: "1D76DB"
+
+# =============================================================================
+# Other Useful Labels
+# =============================================================================
+- name: sota-implementations/
+  description: "Changes to sota-implementations/"
+  color: "5319E7"
+
+- name: tutorials/
+  description: "Changes to tutorials/"
+  color: "0075ca"
