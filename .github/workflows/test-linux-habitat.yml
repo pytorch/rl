@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   tests:
-    if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && contains(join(github.event.pull_request.labels.*.name, ', '), 'Environments/habitat')) }}
+    if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && (contains(join(github.event.pull_request.labels.*.name, ', '), 'Environments/habitat') || contains(format(', {0}, ', join(github.event.pull_request.labels.*.name, ', ')), ', Environments, '))) }}
     strategy:
       matrix:
         python_version: ["3.10"]
