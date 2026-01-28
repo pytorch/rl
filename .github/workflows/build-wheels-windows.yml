@@ -19,10 +19,26 @@ on:
         required: false
         type: string
         default: 'main'
+      tensordict-source:
+        description: 'TensorDict source: stable (PyPI), git, or auto (branch-based detection)'
+        required: false
+        type: string
+        default: 'auto'
+      channel:
+        description: 'Build channel: nightly, test, release, or empty for auto-detection'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   id-token: write
   contents: read
+
+env:
+  # TensorDict source passed to build scripts
+  # Note: This may not propagate to pytorch/test-infra called workflows;
+  # scripts also use GITHUB_REF_NAME for branch-based detection as fallback.
+  TENSORDICT_SOURCE: ${{ inputs.tensordict-source || 'auto' }}
 
 jobs:
   generate-matrix:
@@ -32,6 +48,8 @@ jobs:
       os: windows
       test-infra-repository: pytorch/test-infra
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
+      channel: ${{ inputs.channel || '' }}
+      use-only-dl-pytorch-org: ${{ inputs.channel == 'release' && 'true' || 'false' }}
   build:
     needs: generate-matrix
     strategy:
