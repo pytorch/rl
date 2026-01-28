@@ -500,22 +500,18 @@ class IncrementalTokenizer(Transform):
         return next_tensordict
 
     def _set_tokens(self, tensordict: TensorDictBase, tokens_list: list) -> None:
-        """Set tokens in tensordict, handling batched case properly."""
-        # For LazyStackedTensorDict, set tokens element by element
-        try:
-            tds = tensordict.unbind(0)
-            for td, tok in zip(tds, tokens_list):
-                td.set(self.tokens_key, tok)
-        except (RuntimeError, AttributeError):
-            # Single element or non-lazy tensordict
-            if len(tokens_list) == 1:
-                tensordict.set(self.tokens_key, tokens_list[0])
-            else:
-                # Try to set as nested tensor
-                tensordict.set(
-                    self.tokens_key,
-                    torch.nested.as_nested_tensor(tokens_list),
-                )
+        """Set tokens in tensordict, handling variable-length tokens properly.
+
+        Uses NonTensorStack for batched variable-length tokens to avoid stacking issues.
+        """
+        if len(tokens_list) == 1:
+            # Single element - can set directly
+            tensordict.set(self.tokens_key, tokens_list[0])
+        else:
+            # Multiple elements with potentially different lengths
+            # Use NonTensorStack to store as list without stacking
+            tokens_stack = NonTensorStack(*[NonTensorData(t) for t in tokens_list])
+            tensordict.set(self.tokens_key, tokens_stack)
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         """Add tokens spec to observation spec."""
