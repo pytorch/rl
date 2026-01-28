@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any, TYPE_CHECKING
 
 import torch
 from tensordict import NonTensorData, NonTensorStack, TensorDictBase
@@ -16,6 +17,9 @@ from torchrl._utils import _replace_last
 from torchrl.data.tensor_specs import Bounded, Composite, TensorSpec
 from torchrl.envs import Transform, UnaryTransform
 from torchrl.envs.transforms.utils import _set_missing_tolerance
+
+if TYPE_CHECKING:
+    import transformers
 
 
 class Tokenizer(UnaryTransform):
@@ -318,4 +322,238 @@ class Tokenizer(UnaryTransform):
                     device=device,
                     dtype=attention_dtype,
                 )
+        return observation_spec
+
+
+class IncrementalTokenizer(Transform):
+    """Maintains tokens synchronized with history for token-first LLM inference.
+
+    This transform keeps ``tokens.full`` in sync with ``history.prompt``, enabling
+    LLM wrappers to use existing tokens directly instead of re-tokenizing. This
+    ensures KV cache consistency across multi-turn conversations.
+
+    The transform uses an "overlap" strategy for incremental tokenization: when new
+    messages are added to history, it re-tokenizes the last message plus new messages
+    to correctly handle cross-message token boundaries.
+
+    Args:
+        tokenizer (transformers.PreTrainedTokenizer): The tokenizer to use for encoding.
+
+    Keyword Args:
+        history_key (NestedKey): Key for the history in the tensordict.
+            Defaults to ``("history", "prompt")``.
+        tokens_key (NestedKey): Key for storing tokens in the tensordict.
+            Defaults to ``("tokens", "full")``.
+        chat_template_name (str, optional): Name of the chat template to use.
+            Defaults to ``None`` (uses tokenizer's default).
+        chat_template (str, optional): Custom chat template string.
+            Defaults to ``None``.
+        add_generation_prompt (bool): Whether to add generation prompt when tokenizing.
+            Defaults to ``True``.
+
+    Example:
+        >>> from torchrl.envs.llm import ChatEnv
+        >>> from torchrl.envs.llm.transforms import IncrementalTokenizer
+        >>> from torchrl.envs import TransformedEnv
+        >>> from transformers import AutoTokenizer
+        >>>
+        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+        >>> env = ChatEnv(batch_size=(1,), tokenizer=tokenizer)
+        >>> env = TransformedEnv(env, IncrementalTokenizer(tokenizer))
+        >>>
+        >>> # After reset and step, tokens.full will be maintained
+        >>> td = env.reset(TensorDict({"query": "Hello"}, batch_size=(1,)))
+        >>> assert ("tokens", "full") in td.keys(True, True)
+
+    .. note::
+        This transform is automatically added by :class:`~torchrl.envs.llm.ChatEnv`
+        when ``maintain_tokens=True`` is passed to the constructor.
+
+    .. warning::
+        **TODO**: Add validation that tokens match history (hash or length check).
+        For now, we trust that tokens are kept in sync. If you manually modify the
+        history, clear the tokens field to trigger re-tokenization.
+
+    See Also:
+        :class:`~torchrl.modules.llm.policies.vLLMWrapper`: Uses ``prefer_tokens=True``
+            to leverage tokens maintained by this transform.
+        :class:`~torchrl.modules.llm.policies.TransformersWrapper`: Uses ``prefer_tokens=True``
+            to leverage tokens maintained by this transform.
+    """
+
+    def __init__(
+        self,
+        tokenizer: transformers.PreTrainedTokenizer,  # noqa: F821
+        *,
+        history_key: NestedKey = ("history", "prompt"),
+        tokens_key: NestedKey = ("tokens", "full"),
+        chat_template_name: str | None = None,
+        chat_template: str | None = None,
+        add_generation_prompt: bool = True,
+    ):
+        super().__init__()
+        self.tokenizer = tokenizer
+        self.history_key = history_key
+        self.tokens_key = tokens_key
+        self.chat_template_name = chat_template_name
+        self.chat_template = chat_template
+        self.add_generation_prompt = add_generation_prompt
+
+        # Track the previous history length per batch element for incremental tokenization
+        # This is reset on each env.reset()
+        self._prev_history_len: int | None = None
+
+        # Track token counts for each history message to enable overlap strategy
+        self._prev_tokens_per_message: list[int] | None = None
+
+    def _tokenize_history(
+        self,
+        history: Any,  # History object
+        add_generation_prompt: bool | None = None,
+    ) -> list[Tensor]:
+        """Tokenize a history object and return list of token tensors.
+
+        Args:
+            history: The History object to tokenize.
+            add_generation_prompt: Whether to add generation prompt. If None, uses
+                the instance's default.
+
+        Returns:
+            List of token tensors (one per batch element).
+        """
+        if add_generation_prompt is None:
+            add_generation_prompt = self.add_generation_prompt
+
+        tokenizer_kwargs = {
+            "tokenize": True,
+            "padding": False,
+            "return_dict": True,
+            "add_generation_prompt": add_generation_prompt,
+        }
+        if self.chat_template_name is not None:
+            tokenizer_kwargs["chat_template_name"] = self.chat_template_name
+        if self.chat_template is not None:
+            tokenizer_kwargs["chat_template"] = self.chat_template
+
+        result = history.apply_chat_template(
+            tokenizer=self.tokenizer,
+            **tokenizer_kwargs,
+        )
+        # Get input_ids as list of tensors
+        tokens_list = result.get("input_ids", as_list=True)
+        return tokens_list
+
+    def _get_history_len(self, history: Any) -> int:
+        """Get the number of messages in history."""
+        return history.shape[-1]
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        """Tokenize full history on reset."""
+        history = tensordict_reset.get(self.history_key, None)
+        if history is None:
+            # No history to tokenize
+            return tensordict_reset
+
+        # Tokenize full history
+        tokens_list = self._tokenize_history(history)
+
+        # Store tokens in tensordict
+        tensordict_reset.set(self.tokens_key, tokens_list)
+
+        # Track history length for incremental tokenization
+        self._prev_history_len = self._get_history_len(history)
+
+        # Track token counts per message for overlap strategy
+        # We approximate by storing total token count; precise per-message tracking
+        # would require tokenizing each message individually
+        self._prev_tokens_per_message = [len(t) for t in tokens_list]
+
+        return tensordict_reset
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        """Incrementally tokenize new messages on step."""
+        history = next_tensordict.get(self.history_key, None)
+        if history is None:
+            return next_tensordict
+
+        existing_tokens = next_tensordict.get(self.tokens_key, None)
+        current_history_len = self._get_history_len(history)
+
+        # TODO: Add validation that tokens match history (hash or length check).
+        # For now, we trust that tokens are kept in sync. If tokens get out of sync
+        # (e.g., history was manually modified), this could cause subtle bugs.
+        # Future validation options:
+        # - Compare token count to expected count based on history length
+        # - Store hash of history content and compare
+        # - Re-tokenize if mismatch detected
+
+        if (
+            existing_tokens is not None
+            and self._prev_history_len is not None
+            and current_history_len > self._prev_history_len
+        ):
+            # Incremental case: new messages were added
+            # Use overlap strategy: re-tokenize from (last message - 1) to handle
+            # cross-message token boundaries correctly
+
+            # Calculate overlap start (at least 1 message back for overlap)
+            overlap_start = max(0, self._prev_history_len - 1)
+
+            # Get the history slice to tokenize (overlap + new messages)
+            new_history = history[..., overlap_start:]
+
+            # Tokenize the new portion
+            new_tokens_list = self._tokenize_history(new_history)
+
+            # Calculate where to cut existing tokens (before overlap region)
+            # We need to find how many tokens corresponded to messages before overlap_start
+            # Since we don't track per-message token counts precisely, we re-tokenize
+            # the prefix to get the exact cut point
+            if overlap_start > 0:
+                prefix_history = history[..., :overlap_start]
+                prefix_tokens_list = self._tokenize_history(
+                    prefix_history, add_generation_prompt=False
+                )
+                # Concatenate prefix + new tokens
+                combined_tokens = []
+                for prefix_tok, new_tok in zip(prefix_tokens_list, new_tokens_list):
+                    combined = torch.cat([prefix_tok, new_tok], dim=-1)
+                    combined_tokens.append(combined)
+            else:
+                # No prefix, just use new tokens
+                combined_tokens = new_tokens_list
+
+            # Store updated tokens
+            next_tensordict.set(self.tokens_key, combined_tokens)
+
+            # Update tracking
+            self._prev_history_len = current_history_len
+            self._prev_tokens_per_message = [len(t) for t in combined_tokens]
+        elif existing_tokens is None or self._prev_history_len is None:
+            # No existing tokens or tracking info - tokenize from scratch
+            tokens_list = self._tokenize_history(history)
+            next_tensordict.set(self.tokens_key, tokens_list)
+            self._prev_history_len = current_history_len
+            self._prev_tokens_per_message = [len(t) for t in tokens_list]
+        else:
+            # History length unchanged - just copy tokens forward
+            # (This happens when step doesn't add new messages)
+            pass
+
+        return next_tensordict
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        """Add tokens spec to observation spec."""
+        new_shape = observation_spec.shape + torch.Size((-1,))
+        observation_spec[self.tokens_key] = Bounded(
+            0,
+            self.tokenizer.vocab_size,
+            shape=new_shape,
+            device=observation_spec.device,
+            dtype=torch.int64,
+        )
         return observation_spec
