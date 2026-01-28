@@ -11,7 +11,7 @@ import torch
 from torchrl._utils import _make_ordinal_device
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
-from torchrl.envs.libs.gym import GymEnv, set_gym_backend, _GymAsyncMeta
+from torchrl.envs.libs.gym import _GymAsyncMeta, GymEnv, set_gym_backend
 from torchrl.envs.utils import _classproperty
 
 _has_habitat = importlib.util.find_spec("habitat") is not None
@@ -62,6 +62,7 @@ class _HabitatMeta(_GymAsyncMeta):
             return ParallelEnv(num_workers, make_env)
 
         return super().__call__(*args, **kwargs)
+
 
 class HabitatEnv(GymEnv, metaclass=_HabitatMeta):
     """A wrapper for habitat envs.

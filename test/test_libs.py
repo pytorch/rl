@@ -2411,7 +2411,7 @@ class TestHabitat:
         td = env.reset()
         assert isinstance(td, TensorDict)
         env.close()
-    
+
     def test_habitat_kwargs_preserved_with_seed(self, envname):
         """Test that kwargs like camera_id are preserved when seed is provided."""
         env = HabitatEnv(
@@ -2428,6 +2428,7 @@ class TestHabitat:
                 assert env.render_kwargs is None or isinstance(env.render_kwargs, dict)
         finally:
             env.close()
+
 
 def _jumanji_envs():
     if not _has_jumanji:
