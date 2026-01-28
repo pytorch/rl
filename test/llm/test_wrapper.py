@@ -2104,6 +2104,7 @@ class TestLogProbsComparison:
         "See LLM_TEST_ISSUES.md for details.",
         strict=False,
     )
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_sync_async_vllm_strict_equivalence(

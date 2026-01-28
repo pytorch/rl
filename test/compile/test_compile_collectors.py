@@ -77,6 +77,7 @@ class TestCompile:
             collector.shutdown()
             del collector
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
     @pytest.mark.parametrize(
         "collector_cls",
