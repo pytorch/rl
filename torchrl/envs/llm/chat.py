@@ -82,6 +82,7 @@ class ChatEnv(EnvBase):
             - **Tool execution**: :class:`~torchrl.envs.llm.transforms.PythonInterpreter` for Python code execution
             - **Data loading**: :class:`~torchrl.envs.llm.transforms.DataLoadingPrimer` for loading prompts from datasets
             - **Thinking prompts**: :class:`~torchrl.envs.llm.transforms.AddThinkingPrompt` for chain-of-thought reasoning
+            - **Token maintenance**: :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer` for token-first inference
 
     Keyword Args:
         input_mode (Literal["history", "text", "tokens"]): The mode of input to the environment.
@@ -99,6 +100,11 @@ class ChatEnv(EnvBase):
         policy_role (str, optional): The role of the policy/assistant. Defaults to `"assistant"`.
         data_key (str, optional): The key of the data input to the env at reset time (from dataloader). Defaults to `"query"`.
         device (torch.device, optional): The device to use for computations. Defaults to `None`.
+        maintain_tokens (bool, optional): If ``True``, the environment is automatically wrapped with
+            :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer` to maintain ``tokens.full`` synchronized
+            with ``history.prompt``. This enables token-first inference in LLM wrappers with ``prefer_tokens=True``,
+            ensuring KV cache consistency across multi-turn conversations. Requires ``tokenizer`` to be provided.
+            Defaults to ``False``.
 
     Methods:
         reset (TensorDict): Resets the state of the environment. A tensordict or equivalent with a `"query"` entry
@@ -135,6 +141,17 @@ class ChatEnv(EnvBase):
         ... }, batch_size=(1,))
         >>> next_obs = env.step(response_data)
         >>> print(next_obs["history"].prompt)  # Full conversation history
+        >>>
+        >>> # Create environment with token maintenance for KV cache consistency
+        >>> from transformers import AutoTokenizer
+        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+        >>> env = ChatEnv(
+        ...     system_prompt="You are a helpful assistant.",
+        ...     input_mode="history",
+        ...     tokenizer=tokenizer,
+        ...     maintain_tokens=True,  # Automatically maintains tokens.full
+        ... )
+        >>> # Now tokens.full will be available and synchronized with history.prompt
 
     """
 
@@ -144,6 +161,31 @@ class ChatEnv(EnvBase):
     response_key = ("text", "response")
     # Nested key corresponding to the data input to the env at reset time (from dataloader)
     data_key = "query"
+
+    def __new__(
+        cls,
+        *,
+        maintain_tokens: bool = False,
+        tokenizer: transformers.AutoTokenizer | None = None,  # noqa: F821
+        **kwargs,
+    ):
+        """Create a ChatEnv, optionally wrapped with IncrementalTokenizer.
+
+        When ``maintain_tokens=True``, returns a TransformedEnv with the
+        IncrementalTokenizer transform applied to maintain tokens in sync
+        with history.
+        """
+        if maintain_tokens:
+            if tokenizer is None:
+                raise ValueError("tokenizer must be provided when maintain_tokens=True")
+            # Create the base environment
+            instance = super().__new__(cls)
+            instance.__init__(tokenizer=tokenizer, **kwargs)
+            # Wrap with IncrementalTokenizer
+            from torchrl.envs.llm.transforms import IncrementalTokenizer
+
+            return TransformedEnv(instance, IncrementalTokenizer(tokenizer))
+        return super().__new__(cls)
 
     def __init__(
         self,
@@ -158,6 +200,7 @@ class ChatEnv(EnvBase):
         policy_role: str | None = "assistant",
         data_key: str | None = None,
         device: torch.device | None = None,
+        maintain_tokens: bool = False,
     ):
         self.input_mode = input_mode
         if batch_size is None:
