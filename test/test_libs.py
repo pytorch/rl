@@ -2429,6 +2429,35 @@ class TestHabitat:
         finally:
             env.close()
 
+    @pytest.mark.skipif(
+        torch.cuda.device_count() < 2,
+        reason="Test requires at least 2 GPUs",
+    )
+    def test_num_workers_multi_gpu(self, envname):
+        """Test that num_workers with device list assigns envs to different GPUs."""
+        from torchrl.envs.batched_envs import ParallelEnv
+
+        env = HabitatEnv(
+            envname,
+            num_workers=2,
+            device=["cuda:0", "cuda:1"],
+        )
+        try:
+            assert isinstance(env, ParallelEnv)
+            assert env.num_workers == 2
+
+            # Verify each sub-env factory has the correct device in its kwargs
+            for idx, create_fn in enumerate(env.create_env_fn):
+                expected_device = f"cuda:{idx}"
+                assert create_fn.keywords["device"] == expected_device
+
+            # After reset, env should work correctly
+            env.reset()
+            assert not env.is_closed
+            assert env.batch_size == torch.Size([2])
+        finally:
+            env.close()
+
 
 def _jumanji_envs():
     if not _has_jumanji:

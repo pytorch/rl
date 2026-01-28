@@ -42,24 +42,42 @@ def _get_available_envs():
 class _HabitatMeta(_GymAsyncMeta):
     """Metaclass for HabitatEnv that returns a lazy ParallelEnv when num_workers > 1."""
 
-    def __call__(self, *args, num_workers: int | None = None, **kwargs):
+    def __call__(cls, *args, num_workers: int | None = None, **kwargs):
         # Extract num_workers from explicit kwarg or kwargs dict
         if num_workers is None:
             num_workers = kwargs.pop("num_workers", 1)
         else:
             kwargs.pop("num_workers", None)
 
-        num_workers = int(num_workers) if num_workers is not None else 1
-        if getattr(self, "__name__", None) == "HabitatEnv" and num_workers > 1:
+        num_workers = int(num_workers)
+        if getattr(cls, "__name__", None) == "HabitatEnv" and num_workers > 1:
             from torchrl.envs import ParallelEnv
 
             env_name = args[0] if len(args) >= 1 else kwargs.get("env_name")
             env_kwargs = {k: v for k, v in kwargs.items() if k != "env_name"}
 
-            def make_env(_env_name=env_name, _kwargs=env_kwargs):
-                return self(_env_name, num_workers=1, **_kwargs)
+            # Extract device - can be a single device or a list of devices
+            device = env_kwargs.pop("device", 0)
 
-            return ParallelEnv(num_workers, make_env)
+            # Handle device as list for per-worker GPU assignment
+            if isinstance(device, (list, tuple)):
+                if len(device) != num_workers:
+                    raise ValueError(
+                        f"Length of device list ({len(device)}) must match "
+                        f"num_workers ({num_workers})"
+                    )
+                devices = device
+            else:
+                devices = [device] * num_workers
+
+            # We intentionally don't use EnvCreator here to avoid instantiating
+            # a HabitatEnv in the local process, which can be expensive.
+            # Create per-worker partials with different devices.
+            make_envs = [
+                functools.partial(cls, env_name, num_workers=1, device=d, **env_kwargs)
+                for d in devices
+            ]
+            return ParallelEnv(num_workers, make_envs)
 
         return super().__call__(*args, **kwargs)
 
@@ -100,8 +118,10 @@ class HabitatEnv(GymEnv, metaclass=_HabitatMeta):
             same action is to be repeated. The observation returned will be the
             last observation of the sequence, whereas the reward will be the sum
             of rewards across steps.
-        device (torch.device, optional): if provided, the device on which the simulation
-            will occur. Defaults to ``torch.device("cuda:0")``.
+        device (torch.device or list of torch.device, optional): if provided, the device
+            on which the simulation will occur. When ``num_workers > 1``, this can be a
+            list of devices (one per worker) to distribute environments across multiple
+            GPUs. Defaults to ``torch.device("cuda:0")``.
         batch_size (torch.Size, optional): the batch size of the environment.
             Should match the leading dimensions of all observations, done states,
             rewards, actions and infos.
@@ -111,7 +131,7 @@ class HabitatEnv(GymEnv, metaclass=_HabitatMeta):
             Defaults to ``False``.
         num_workers (int, optional): if provided and greater than 1, a
             :class:`torchrl.envs.ParallelEnv` will be instantiated with
-            ``num_workers`` copies of ``HabitatEnv``. Defaults to ``None``.
+            ``num_workers`` copies of ``HabitatEnv``. Defaults to ``1``.
 
     Attributes:
         available_envs (List[str]): a list of environments to build.
