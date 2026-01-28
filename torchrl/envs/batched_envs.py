@@ -98,11 +98,12 @@ class _dispatch_caller_parallel:
 
     def __getattr__(self, name):
         """Support chained attribute access: env_parallel.a.b -> sends ('a','b') to workers."""
-        if isinstance(self.attr, (tuple, list)):
-            new_attr = tuple([*self.attr, name])
+        if isinstance(self.attr, tuple):
+            new_attr = self.attr + (name,)
         else:
             new_attr = (self.attr, name)
         return _dispatch_caller_parallel(new_attr, self.parallel_env)
+
 
 class _dispatch_caller_serial:
     def __init__(self, list_callable: list[Callable, Any]):
@@ -2834,6 +2835,7 @@ def _run_worker_pipe_shared_mem(
         else:
             err_msg = f"{cmd} from env"
             try:
+
                 def _resolve_nested_attr(obj, attr):
                     if isinstance(attr, (tuple, list)):
                         cur = obj
@@ -2841,7 +2843,7 @@ def _run_worker_pipe_shared_mem(
                             cur = getattr(cur, _a)
                         return cur
                     return getattr(obj, attr)
-                
+
                 attr = _resolve_nested_attr(env, cmd)
                 if callable(attr):
                     args, kwargs = data
@@ -2858,11 +2860,12 @@ def _run_worker_pipe_shared_mem(
                 raise AttributeError(
                     f"querying {err_msg} resulted in an error."
                 ) from err
-            if cmd not in ("to"):
-                child_pipe.send(("_".join([cmd, "done"]), result))
+            cmd_str = "_".join(cmd) if isinstance(cmd, (tuple, list)) else cmd
+            if cmd != "to":
+                child_pipe.send((f"{cmd_str}_done", result))
             else:
                 # don't send env through pipe
-                child_pipe.send(("_".join([cmd, "done"]), None))
+                child_pipe.send((f"{cmd_str}_done", None))
 
 
 def _run_worker_pipe_direct(
@@ -3070,11 +3073,11 @@ def _run_worker_pipe_direct(
                 raise AttributeError(
                     f"querying {err_msg} resulted in an error."
                 ) from err
-            if cmd not in ("to"):
-                child_pipe.send(("_".join([cmd, "done"]), result))
+            if cmd != "to":
+                child_pipe.send((f"{cmd}_done", result))
             else:
                 # don't send env through pipe
-                child_pipe.send(("_".join([cmd, "done"]), None))
+                child_pipe.send((f"{cmd}_done", None))
 
 
 def _filter_empty(tensordict):
