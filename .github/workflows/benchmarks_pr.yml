@@ -1,6 +1,12 @@
+# Continuous benchmarking for PRs
+#
+# Only runs when Performance or benchmarks/upload label is present.
+# This is expensive (GPU, runs twice for CPU/GPU comparison).
+# Add the label manually or use [Performance] prefix in PR title.
 name: Continuous Benchmark (PR)
 on:
   pull_request:
+    types: [opened, synchronize, labeled]
 
 permissions: write-all
 
@@ -13,6 +19,11 @@ concurrency:
 jobs:
 
   benchmark:
+    # Only run benchmarks when Performance or benchmarks/upload label is present
+    if: |
+      contains(github.event.pull_request.labels.*.name, 'Performance') ||
+      contains(github.event.pull_request.labels.*.name, 'performance') ||
+      contains(github.event.pull_request.labels.*.name, 'benchmarks/upload')
     name: ${{ matrix.device }} Pytest benchmark
     runs-on: linux.g5.4xlarge.nvidia.gpu
     strategy:
