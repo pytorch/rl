@@ -6324,7 +6324,7 @@
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">out</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">_new_unsafe</span><span class="p">({},</span> <span class="n">_size</span><span class="p">([]))</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">_new_unsafe</span><span class="p">({},</span> <span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">vals</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">item</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -6367,7 +6367,7 @@
         <span class="k">else</span><span class="p">:</span>
 
             <span class="k">def</span> <span class="nf">empty</span><span class="p">(</span><span class="n">vals</span><span class="p">):</span>
-                <span class="n">out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">_new_unsafe</span><span class="p">({},</span> <span class="n">_size</span><span class="p">([]))</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">_new_unsafe</span><span class="p">({},</span> <span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
                 <span class="k">return</span> <span class="n">vals</span><span class="p">,</span> <span class="n">out</span>
 
         <span class="n">funcs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">empty</span><span class="p">)</span>
