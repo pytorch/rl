@@ -1198,7 +1198,7 @@ class TestNoisyLinear:
         # If no noise is present, the test should still pass
         if not changed:
             # Check that we're in eval mode or noise is very small
-            assert network.training == False or all(
+            assert not network.training or all(
                 hasattr(m, "weight_sigma") and m.weight_sigma.max() < 1e-3
                 for m in network.modules()
                 if hasattr(m, "weight_sigma")
