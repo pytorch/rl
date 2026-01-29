@@ -6,6 +6,9 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
+import tempfile
+import warnings
 
 import pytest
 import torch
@@ -20,14 +23,19 @@ from torchrl.collectors import Collector
 from torchrl.data import Bounded, Categorical, Composite, OneHot
 from torchrl.envs import SerialEnv
 from torchrl.envs.transforms.transforms import gSDENoise, InitTracker, TransformedEnv
-from torchrl.envs.utils import set_exploration_type
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import SafeModule, SafeSequential
 from torchrl.modules.distributions import (
     IndependentNormal,
     NormalParamExtractor,
     TanhNormal,
 )
-from torchrl.modules.models.exploration import ConsistentDropoutModule, LazygSDEModule
+from torchrl.modules.models.exploration import (
+    ConsistentDropoutModule,
+    LazygSDEModule,
+    NoisyLinear,
+    reset_noise,
+)
 from torchrl.modules.tensordict_module.actors import (
     Actor,
     ProbabilisticActor,
@@ -976,8 +984,6 @@ class TestNoisyLinear:
 
     def test_noisy_linear_initialization(self, device):
         """Test that NoisyLinear initializes with correct parameters."""
-        from torchrl.modules.models.exploration import NoisyLinear
-
         in_features, out_features = 10, 5
         layer = NoisyLinear(
             in_features, out_features, device=device, use_exploration_type=True
@@ -1008,9 +1014,6 @@ class TestNoisyLinear:
 
     def test_noisy_linear_exploration_modes(self, device):
         """Test that NoisyLinear behaves differently based on exploration mode."""
-        from torchrl.envs.utils import ExplorationType, set_exploration_type
-        from torchrl.modules.models.exploration import NoisyLinear
-
         torch.manual_seed(0)
         # Use use_exploration_type=True to enable exploration_type-based control
         layer = NoisyLinear(10, 5, device=device, use_exploration_type=True)
@@ -1039,9 +1042,6 @@ class TestNoisyLinear:
 
     def test_noise_consistency_within_episode(self, device):
         """Test that noise remains consistent within an episode (no reset)."""
-        from torchrl.envs.utils import ExplorationType, set_exploration_type
-        from torchrl.modules.models.exploration import NoisyLinear
-
         torch.manual_seed(0)
         layer = NoisyLinear(10, 5, device=device, use_exploration_type=True)
         x = torch.randn(3, 10, device=device)
@@ -1062,9 +1062,6 @@ class TestNoisyLinear:
 
     def test_noise_change_after_reset(self, device):
         """Test that noise changes after reset_noise() is called."""
-        from torchrl.envs.utils import ExplorationType, set_exploration_type
-        from torchrl.modules.models.exploration import NoisyLinear
-
         torch.manual_seed(0)
         layer = NoisyLinear(10, 5, device=device, use_exploration_type=True)
         x = torch.randn(3, 10, device=device)
@@ -1088,9 +1085,6 @@ class TestNoisyLinear:
 
     def test_factorized_gaussian_noise(self, device):
         """Test that the noise follows factorized Gaussian distribution."""
-        from torchrl.envs.utils import ExplorationType, set_exploration_type
-        from torchrl.modules.models.exploration import NoisyLinear
-
         torch.manual_seed(0)
         layer = NoisyLinear(10, 5, device=device, use_exploration_type=True)
 
@@ -1115,9 +1109,6 @@ class TestNoisyLinear:
 
     def test_weight_property_behavior(self, device):
         """Test that weight property returns correct values based on exploration mode."""
-        from torchrl.envs.utils import ExplorationType, set_exploration_type
-        from torchrl.modules.models.exploration import NoisyLinear
-
         torch.manual_seed(0)
         layer = NoisyLinear(10, 5, device=device, use_exploration_type=True)
 
@@ -1142,9 +1133,6 @@ class TestNoisyLinear:
 
     def test_noisy_linear_in_network(self, device):
         """Test NoisyLinear in a complete network setup."""
-        from torchrl.envs.utils import ExplorationType, set_exploration_type
-        from torchrl.modules.models.exploration import NoisyLinear
-
         torch.manual_seed(0)
 
         # Create a simple network with NoisyLinear using new behavior
@@ -1175,9 +1163,6 @@ class TestNoisyLinear:
 
     def test_noise_reset_function(self, device):
         """Test the reset_noise utility function."""
-        from torchrl.envs.utils import ExplorationType, set_exploration_type
-        from torchrl.modules.models.exploration import NoisyLinear, reset_noise
-
         torch.manual_seed(0)
 
         # Create network with multiple NoisyLinear layers using new behavior
@@ -1211,9 +1196,6 @@ class TestNoisyLinear:
 
     def test_noisy_linear_gradients(self, device):
         """Test that gradients flow through NoisyLinear parameters."""
-        from torchrl.envs.utils import ExplorationType, set_exploration_type
-        from torchrl.modules.models.exploration import NoisyLinear
-
         torch.manual_seed(0)
         layer = NoisyLinear(10, 5, device=device, use_exploration_type=True)
 
@@ -1243,9 +1225,6 @@ class TestNoisyLinear:
 
     def test_noisy_linear_parameter_learning(self, device):
         """Test that sigma parameters actually learn during training."""
-        from torchrl.envs.utils import ExplorationType, set_exploration_type
-        from torchrl.modules.models.exploration import NoisyLinear
-
         torch.manual_seed(0)
         layer = NoisyLinear(10, 5, device=device, use_exploration_type=True)
 
@@ -1273,9 +1252,6 @@ class TestNoisyLinear:
 
     def test_noisy_linear_std_init_effect(self, device):
         """Test that different std_init values affect noise magnitude."""
-        from torchrl.envs.utils import ExplorationType, set_exploration_type
-        from torchrl.modules.models.exploration import NoisyLinear
-
         torch.manual_seed(0)
 
         # Create layers with different std_init values using new behavior
@@ -1313,11 +1289,6 @@ class TestNoisyLinear:
 
     def test_noisy_linear_serialization(self, device):
         """Test that NoisyLinear can be saved and loaded correctly."""
-        import os
-        import tempfile
-
-        from torchrl.modules.models.exploration import NoisyLinear
-
         torch.manual_seed(0)
         layer = NoisyLinear(10, 5, device=device, use_exploration_type=True)
 
@@ -1340,8 +1311,6 @@ class TestNoisyLinear:
 
     def test_noisy_linear_legacy_behavior(self, device):
         """Test that legacy behavior (using self.training) works with use_exploration_type=False."""
-        from torchrl.modules.models.exploration import NoisyLinear
-
         torch.manual_seed(0)
         # Silence the warning by explicitly opting out
         layer = NoisyLinear(10, 5, device=device, use_exploration_type=False)
@@ -1367,10 +1336,6 @@ class TestNoisyLinear:
 
     def test_noisy_linear_deprecation_warning(self, device):
         """Test that FutureWarning is raised when use_exploration_type is None."""
-        import warnings
-
-        from torchrl.modules.models.exploration import NoisyLinear
-
         # Should emit FutureWarning when use_exploration_type is not specified
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")

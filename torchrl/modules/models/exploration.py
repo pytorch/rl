@@ -62,7 +62,7 @@ class NoisyLinear(nn.Linear):
             :func:`~torchrl.envs.utils.exploration_type`. If ``False``, noise is controlled
             by ``self.training`` (legacy behavior). If ``None`` (default), uses the legacy
             behavior but emits a ``FutureWarning`` that the default will change to ``True``
-            in v0.14. Pass ``True`` to opt into the new behavior, or ``False`` to silence
+            in v0.13. Pass ``True`` to opt into the new behavior, or ``False`` to silence
             the warning and keep the legacy behavior.
 
     """
@@ -86,7 +86,7 @@ class NoisyLinear(nn.Linear):
         if use_exploration_type is None:
             warnings.warn(
                 "NoisyLinear currently uses `self.training` to control noise. "
-                "In v0.14, this will change to use `exploration_type()` from "
+                "In v0.13, this will change to use `exploration_type()` from "
                 "torchrl.envs.utils for consistency with other exploration modules. "
                 "To opt into the new behavior now, pass `use_exploration_type=True`. "
                 "To silence this warning and keep the legacy behavior, pass "
@@ -231,7 +231,7 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
         if use_exploration_type is None:
             warnings.warn(
                 "NoisyLazyLinear currently uses `self.training` to control noise. "
-                "In v0.14, this will change to use `exploration_type()` from "
+                "In v0.13, this will change to use `exploration_type()` from "
                 "torchrl.envs.utils for consistency with other exploration modules. "
                 "To opt into the new behavior now, pass `use_exploration_type=True`. "
                 "To silence this warning and keep the legacy behavior, pass "
