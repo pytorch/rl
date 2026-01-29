@@ -801,7 +801,9 @@ class TransformersWrapper(LLMWrapperBase):
             # - regular tensor: padded tensor
             if isinstance(existing_tokens, list):
                 tokens_list = existing_tokens
-            elif isinstance(existing_tokens, torch.Tensor) and existing_tokens.is_nested:
+            elif (
+                isinstance(existing_tokens, torch.Tensor) and existing_tokens.is_nested
+            ):
                 # Unbind nested tensor to get list of tensors
                 tokens_list = list(existing_tokens.unbind(0))
             else:

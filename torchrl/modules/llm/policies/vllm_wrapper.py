@@ -996,9 +996,7 @@ class vLLMWrapper(LLMWrapperBase):
             existing_tokens = tensordict_input.get((self.tokens_key, "prompt"), None)
             if existing_tokens is None:
                 # Fallback: tokens.full (for backward compatibility)
-                existing_tokens = tensordict_input.get(
-                    (self.tokens_key, "full"), None
-                )
+                existing_tokens = tensordict_input.get((self.tokens_key, "full"), None)
 
         tokens_prompt_padded = None
         tokens_prompt_unpadded = None
@@ -1011,14 +1009,15 @@ class vLLMWrapper(LLMWrapperBase):
             # - regular tensor: padded tensor
             if isinstance(existing_tokens, list):
                 tokens_list = existing_tokens
-            elif isinstance(existing_tokens, torch.Tensor) and existing_tokens.is_nested:
+            elif (
+                isinstance(existing_tokens, torch.Tensor) and existing_tokens.is_nested
+            ):
                 # Unbind nested tensor to get list of tensors
                 tokens_list = list(existing_tokens.unbind(0))
             else:
                 # Already a padded tensor - extract non-padded sequences
                 tokens_list = [
-                    tokens[tokens != self.padding_value]
-                    for tokens in existing_tokens
+                    tokens[tokens != self.padding_value] for tokens in existing_tokens
                 ]
 
             if self.pad_output:

@@ -485,7 +485,11 @@ class IncrementalTokenizer(Transform):
         """
         # Try to reuse tokens.full from the action tensordict
         # Since next.history.prompt = history.full, tokens.full is already the correct tokenization
-        tokens_full_key = (self.tokens_key[0], "full") if isinstance(self.tokens_key, tuple) else "tokens_full"
+        tokens_full_key = (
+            (self.tokens_key[0], "full")
+            if isinstance(self.tokens_key, tuple)
+            else "tokens_full"
+        )
         existing_tokens_full = tensordict.get(tokens_full_key, None)
 
         if existing_tokens_full is not None:
