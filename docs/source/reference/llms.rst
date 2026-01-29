@@ -198,7 +198,7 @@ log-probabilities across turns, which is more robust than repeatedly detokenizin
         model=model,
         tokenizer=tokenizer,
         input_mode="history",
-        prefer_tokens=True,  # Use tokens.full when available
+        prefer_tokens=True,  # Use tokens.prompt when available
     )
 
     # The environment maintains tokens.prompt in sync with history.prompt
