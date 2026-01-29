@@ -270,6 +270,28 @@ fi
 
 TORCHRL_TEST_SUITE="${TORCHRL_TEST_SUITE:-all}" # all|distributed|nondistributed
 
+# GPU test filtering: Run GPU-only tests on GPU machines, CPU-only tests on CPU machines.
+# This avoids running ~2000+ tests on expensive GPU machines when only ~30 require GPU.
+# Tests are marked with @pytest.mark.gpu if they require CUDA.
+#
+# Set TORCHRL_GPU_FILTER=0 to disable this optimization and run all tests.
+#
+# We use an array to handle the marker expression properly (avoids quoting issues).
+GPU_MARKER_FILTER=()
+if [ "${TORCHRL_GPU_FILTER:-1}" = "1" ]; then
+  if [ "${CU_VERSION:-}" == cpu ]; then
+    # CPU job: run only tests that do NOT require GPU
+    GPU_MARKER_FILTER=(-m 'not gpu')
+    echo "GPU filtering enabled: Running CPU-only tests (excluding @pytest.mark.gpu)"
+  else
+    # GPU job: run only tests that require GPU
+    GPU_MARKER_FILTER=(-m gpu)
+    echo "GPU filtering enabled: Running GPU-only tests (@pytest.mark.gpu)"
+  fi
+else
+  echo "GPU filtering disabled: Running all tests"
+fi
+
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
 
@@ -292,6 +314,7 @@ run_distributed_tests() {
   local json_report_args="--json-report --json-report-file=${json_report_dir}/test-results-distributed.json --json-report-indent=2"
   
   # Run both test_distributed.py and test_rb_distributed.py (both use torch.distributed)
+  # Note: distributed tests always run on GPU, no need for GPU_MARKER_FILTER here
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_distributed.py test/test_rb_distributed.py \
     ${json_report_args} \
     --instafail --durations 200 -vv --capture no \
@@ -327,12 +350,14 @@ run_non_distributed_tests() {
     1)
       echo "Running shard 1: test_transforms.py only"
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_transforms.py \
+        "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
         ${common_args}
       ;;
     2)
       echo "Running shard 2: test_envs.py and test_collectors.py"
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_envs.py test/test_collectors.py \
+        "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
         ${common_args}
       ;;
@@ -344,6 +369,7 @@ run_non_distributed_tests() {
         --ignore test/test_envs.py \
         --ignore test/test_collectors.py \
         ${xdist_args} \
+        "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
         ${common_args}
       ;;
@@ -351,6 +377,7 @@ run_non_distributed_tests() {
       echo "Running all tests (no sharding)"
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
         ${common_ignores} \
+        "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
         ${common_args}
       ;;

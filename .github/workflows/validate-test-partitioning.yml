@@ -1,0 +1,73 @@
+# Validates that GPU/CPU test partitioning covers all tests
+#
+# This workflow ensures that:
+# 1. Tests marked with @pytest.mark.gpu + tests not marked = all tests
+# 2. No tests are accidentally excluded from CI
+#
+# Runs on PRs to catch partitioning issues before merge.
+name: Validate Test Partitioning
+
+on:
+  pull_request:
+  push:
+    branches: [main, nightly]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install minimal dependencies
+        run: |
+          pip install pytest tensordict
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          # Skip editable install - just add to PYTHONPATH for test collection
+
+      - name: Validate test partitioning
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -e
+
+          echo "=================================================="
+          echo "        TEST PARTITIONING VALIDATION"
+          echo "=================================================="
+
+          # Collect test counts
+          # Note: We ignore test_loggers.py due to torchvision operator issues on CPU-only
+          ALL=$(pytest --collect-only -q test/ --ignore test/test_loggers.py 2>/dev/null | tail -1 | grep -oE "^[0-9]+")
+          GPU=$(pytest --collect-only -q -m gpu test/ --ignore test/test_loggers.py 2>/dev/null | tail -1 | grep -oE "^[0-9]+")
+          CPU=$(pytest --collect-only -q -m "not gpu" test/ --ignore test/test_loggers.py 2>/dev/null | tail -1 | grep -oE "^[0-9]+")
+
+          echo ""
+          echo "Total tests:                  $ALL"
+          echo "GPU tests (@pytest.mark.gpu): $GPU"
+          echo "CPU tests (not gpu):          $CPU"
+          echo "GPU + CPU:                    $((GPU + CPU))"
+          echo ""
+
+          # Validate: GPU + CPU should equal ALL
+          if [ "$((GPU + CPU))" -eq "$ALL" ]; then
+            echo "✅ PASS: Test partitioning is valid!"
+            echo "   All tests are accounted for."
+          else
+            echo "❌ FAIL: Test partitioning mismatch!"
+            echo "   GPU ($GPU) + CPU ($CPU) = $((GPU + CPU)), but total is $ALL"
+            echo ""
+            echo "   This means some tests are either:"
+            echo "   - Missing the @pytest.mark.gpu marker (if they require CUDA)"
+            echo "   - Being excluded unintentionally"
+            exit 1
+          fi

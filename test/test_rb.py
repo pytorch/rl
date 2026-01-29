@@ -753,6 +753,7 @@ class TestStorages:
             storage2.get(range(10))
         )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(
         not torch.cuda.device_count(),
         reason="not cuda device found to test rb storage.",

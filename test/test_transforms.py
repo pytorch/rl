@@ -1292,6 +1292,7 @@ class TestCatFrames(TransformBase):
         assert (cat_td.get("cat_first_key") == padding_value).sum() == N - 4
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="Testing R3M on cuda only")
 @pytest.mark.parametrize("device", [torch.device("cuda:0")])
@@ -8788,6 +8789,7 @@ class TestgSDE(TransformBase):
         assert (env.reset()["_eps_gSDE"] != 0.0).all()
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="Testing VIP on cuda only")
 @pytest.mark.parametrize("device", [torch.device("cuda:0")])
@@ -9259,6 +9261,7 @@ class TestVIP(TransformBase):
         assert set(expected_keys) == set(transformed_env.rollout(3).keys(True))
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not _has_vc, reason="vc_models not installed")
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="VC1 should run on cuda")
 @pytest.mark.parametrize("device", [torch.device("cuda:0")])
@@ -10952,6 +10955,7 @@ class TestTransforms:
         with pytest.raises(ValueError, match="Encountered a non-finite tensor"):
             ftd(td)
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device found")
     @pytest.mark.parametrize("device", get_default_devices())
     def test_pin_mem(self, device):
