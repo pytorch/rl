@@ -31,8 +31,8 @@ jobs:
 
       - name: Install minimal dependencies
         run: |
-          pip install pytest torch --index-url https://download.pytorch.org/whl/cpu
-          pip install tensordict
+          pip install pytest tensordict
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -e . --no-build-isolation --no-deps
 
       - name: Validate test partitioning
