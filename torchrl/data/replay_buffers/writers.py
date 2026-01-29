@@ -93,7 +93,8 @@ class Writer(ABC):
         )
         mesh = torch.stack(
             torch.meshgrid(
-                *(torch.arange(dim, device=device) for dim in self._storage.shape[1:])
+                *(torch.arange(dim, device=device) for dim in self._storage.shape[1:]),
+                indexing="ij",
             ),
             -1,
         ).flatten(0, -2)
