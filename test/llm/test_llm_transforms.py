@@ -459,14 +459,17 @@ class TestIncrementalTokenizer:
 
     def test_reset_tokenizes_history(self, tokenizer):
         """Test that reset produces correct tokens from history."""
+        system_prompt = "You are a helpful assistant."
+        user_query = "Hello, how are you?"
+
         env = ChatEnv(
             batch_size=(1,),
-            system_prompt="You are a helpful assistant.",
+            system_prompt=system_prompt,
             tokenizer=tokenizer,
         )
         env = TransformedEnv(env, IncrementalTokenizer(tokenizer))
 
-        td = TensorDict({"query": "Hello, how are you?"}, batch_size=(1,))
+        td = TensorDict({"query": user_query}, batch_size=(1,))
         result = env.reset(td)
 
         # Check that tokens.prompt exists
@@ -478,16 +481,30 @@ class TestIncrementalTokenizer:
         assert tokens[0].ndim == 1
         assert tokens[0].numel() > 0
 
+        # Verify semantic correctness: decoded tokens should contain the expected content
+        decoded_text = tokenizer.decode(tokens[0], skip_special_tokens=False)
+        assert system_prompt in decoded_text, (
+            f"System prompt not found in decoded tokens. "
+            f"Expected '{system_prompt}' in '{decoded_text}'"
+        )
+        assert user_query in decoded_text, (
+            f"User query not found in decoded tokens. "
+            f"Expected '{user_query}' in '{decoded_text}'"
+        )
+
     def test_reset_tokenizes_batched_history(self, tokenizer):
         """Test that reset works with batched inputs."""
+        system_prompt = "You are a helpful assistant."
+        queries = ["Hello!", "What is the weather?"]
+
         env = ChatEnv(
             batch_size=(2,),
-            system_prompt="You are a helpful assistant.",
+            system_prompt=system_prompt,
             tokenizer=tokenizer,
         )
         env = TransformedEnv(env, IncrementalTokenizer(tokenizer))
 
-        td = TensorDict({"query": ["Hello!", "What is the weather?"]}, batch_size=(2,))
+        td = TensorDict({"query": queries}, batch_size=(2,))
         result = env.reset(td)
 
         # Check that tokens.prompt exists
@@ -497,8 +514,21 @@ class TestIncrementalTokenizer:
         tokens = result.get(("tokens", "prompt"), as_list=True)
         assert len(tokens) == 2
 
+        # Verify semantic correctness: each batch element's tokens decode to correct content
+        for i, query in enumerate(queries):
+            decoded_text = tokenizer.decode(tokens[i], skip_special_tokens=False)
+            assert (
+                system_prompt in decoded_text
+            ), f"Batch {i}: System prompt not found in decoded tokens"
+            assert (
+                query in decoded_text
+            ), f"Batch {i}: Query '{query}' not found in decoded tokens. Got: '{decoded_text}'"
+
     def test_step_incremental_tokenization(self, tokenizer):
-        """Test that step incrementally appends tokens."""
+        """Test that step incrementally appends tokens and they decode correctly."""
+        user_query = "Hello"
+        assistant_response = "Hi there! How can I help you?"
+
         env = ChatEnv(
             batch_size=(1,),
             tokenizer=tokenizer,
@@ -506,9 +536,15 @@ class TestIncrementalTokenizer:
         env = TransformedEnv(env, IncrementalTokenizer(tokenizer))
 
         # Reset with initial query
-        td = TensorDict({"query": "Hello"}, batch_size=(1,))
+        td = TensorDict({"query": user_query}, batch_size=(1,))
         result = env.reset(td)
         initial_tokens = result.get(("tokens", "prompt"), as_list=True)
+
+        # Verify initial tokens decode to contain the user query
+        initial_decoded = tokenizer.decode(initial_tokens[0], skip_special_tokens=False)
+        assert (
+            user_query in initial_decoded
+        ), f"User query '{user_query}' not found in initial tokens. Got: '{initial_decoded}'"
 
         # Simulate LLM response - create a full history with response
         # Need to match batch_dims: history_prompt has batch_dims=1, so response needs batch_dims=1 too
@@ -516,7 +552,7 @@ class TestIncrementalTokenizer:
         # Create response with batch_size=1 (message dimension), then add batch dimension
         history_response = History(
             role="assistant",
-            content="Hi there! How can I help you?",
+            content=assistant_response,
             batch_size=1,
         ).unsqueeze(
             0
@@ -537,6 +573,18 @@ class TestIncrementalTokenizer:
 
         # New tokens should be longer (more messages in the new prompt)
         assert new_tokens[0].numel() > initial_tokens[0].numel()
+
+        # Verify semantic correctness: new tokens should decode to contain both
+        # the original user query AND the assistant response
+        new_decoded = tokenizer.decode(new_tokens[0], skip_special_tokens=False)
+        assert user_query in new_decoded, (
+            f"User query '{user_query}' not found in new tokens after step. "
+            f"Got: '{new_decoded}'"
+        )
+        assert assistant_response in new_decoded, (
+            f"Assistant response '{assistant_response}' not found in new tokens after step. "
+            f"Got: '{new_decoded}'"
+        )
 
     def test_with_tokenizer_constructor_arg(self, tokenizer):
         """Test that ChatEnv(with_tokenizer=True) creates a TransformedEnv with IncrementalTokenizer."""
