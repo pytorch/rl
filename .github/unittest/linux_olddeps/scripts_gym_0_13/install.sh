@@ -39,7 +39,7 @@ printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
     conda install pytorch==2.1 torchvision==0.16 cpuonly -c pytorch -y
 else
-    pip install torch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 --index-url https://download.pytorch.org/whl/cu118
+    python -m pip install torch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 --index-url https://download.pytorch.org/whl/cu118
 #    conda install pytorch==2.1 torchvision==0.16 pytorch-cuda=11.8 "numpy<2.0" -c pytorch -c nvidia -y
 fi
 
@@ -47,17 +47,18 @@ fi
 #pip install -U charset-normalizer
 
 # install tensordict
-if [[ "$RELEASE" == 0 ]]; then
-  conda install anaconda::cmake -y
-  python3 -m pip install "pybind11[global]"
-  python3 -m pip install git+https://github.com/pytorch/tensordict.git
-else
-  python3 -m pip install tensordict
-fi
+#
+# NOTE:
+# - The olddeps CI job runs on older Python/torch stacks.
+# - Installing from tensordict `main` (git+https) is brittle as `main` may drop
+#   support for older Python versions at any time, which can lead to "tensordict
+#   not installed" failures in downstream smoke tests.
+# - Use the same (pinned) range as TorchRL itself to keep this job stable.
+python -m pip install "${TORCHRL_TENSORDICT_SPEC:-tensordict>=0.11.0,<0.12.0}"
 
 # smoke test
-python3 -c "import tensordict"
+python -c "import tensordict; print(f'tensordict: {tensordict.__version__}')"
 
 printf "* Installing torchrl\n"
-python3 setup.py develop
-python3 -c "import torchrl"
+python -m pip install -e . --no-build-isolation
+python -c "import torchrl"

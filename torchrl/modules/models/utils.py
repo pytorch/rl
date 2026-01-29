@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import inspect
 import warnings
-from typing import Callable, Sequence
+from collections.abc import Callable, Sequence
 
 import torch
 from torch import nn
@@ -161,6 +161,7 @@ def _reset_parameters_recursive(module, warn_if_no_op: bool = True) -> bool:
         )
     return any_reset
 
+
 def primers_from_module(module: nn.Module, target_cls: T) -> list[TensorDictPrimer]:
     """Get primers from a module.
 
@@ -175,5 +176,5 @@ def primers_from_module(module: nn.Module, target_cls: T) -> list[TensorDictPrim
     Returns:
         list[TensorDictPrimer]: the primers from the module.
     """
-    # 
+    #
     ...

@@ -7,7 +7,8 @@ from __future__ import annotations
 import copy
 
 import warnings
-from typing import Any, Callable, Iterator
+from collections.abc import Callable, Iterator
+from typing import Any
 
 import torch
 from tensordict import TensorDictBase
@@ -57,6 +58,8 @@ class RayLLMCollector(LLMCollector):
             or its subclass, responsible for updating the policy weights on remote inference workers.
         ray_init_config (dict[str, Any], optional): keyword arguments to pass to ray.init().
         remote_config (dict[str, Any], optional): keyword arguments to pass to cls.as_remote().
+        num_cpus (int, optional): Number of CPUs of the actor. Defaults to `None` (taken from remote_config).
+        num_gpus (int, optional): Number of GPUs of the actor. Defaults to `None` (taken from remote_config).
         sync_iter (bool, optional): if `True`, items yeilded by the collector will be synced to the local process.
             If `False`, the collector will collect the next batch of data in between yielding.
             This has no effect when data is collected through the :meth:`start` method.
@@ -69,7 +72,7 @@ class RayLLMCollector(LLMCollector):
                >>> for data in collector:  # non-blocking
                ...     # expensive operation - collector is collecting data
 
-            This is somehwat equivalent to using :class:`~torchrl.collectors.MultiSyncDataCollector` (`sync_iter=True`) or
+            This is somehwat equivalent to using :class:`~torchrl.collectors.MultiSyncCollector` (`sync_iter=True`) or
             :class:`~torchrl.collectors.MultiAsyncDataCollector` (`sync_iter=False`).
             Defaults to `True`.
         verbose (bool, optional): if ``True``, the collector will print progress information.
@@ -100,6 +103,8 @@ class RayLLMCollector(LLMCollector):
         track_policy_version: bool | PolicyVersion = False,
         sync_iter: bool = True,
         verbose: bool = False,
+        num_cpus: int | None = None,
+        num_gpus: int | None = None,
     ) -> None:
         if not _has_ray:
             raise RuntimeError(
@@ -114,6 +119,10 @@ class RayLLMCollector(LLMCollector):
         if not sync_iter:
             remote_config = copy.copy(remote_config)
             remote_config.setdefault("max_concurrency", 2)
+        if num_cpus is not None:
+            remote_config.setdefault("num_cpus", num_cpus)
+        if num_gpus is not None:
+            remote_config.setdefault("num_gpus", num_gpus)
         remote_cls = LLMCollector.as_remote(remote_config).remote
         self.sync_iter = sync_iter
         self._collector = remote_cls(

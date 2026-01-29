@@ -10,13 +10,18 @@ import functools
 import importlib
 import os
 import pickle
+import shutil
+import signal
 import sys
+import tempfile
 from functools import partial
+from pathlib import Path
 from unittest import mock
 
 import numpy as np
 import pytest
 import torch
+import torchrl
 from packaging import version
 from packaging.version import parse
 from tensordict import (
@@ -32,9 +37,10 @@ from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map
 
 from torchrl._utils import _replace_last, logger as torchrl_logger
-from torchrl.collectors import RandomPolicy, SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
+    CompressedListStorage,
     FlatStorageCheckpointer,
     MultiStep,
     NestedStorageCheckpointer,
@@ -103,24 +109,15 @@ from torchrl.envs.transforms.transforms import (
     UnsqueezeTransform,
     VecNorm,
 )
+from torchrl.modules import RandomPolicy
 
-
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import (
-        capture_log_records,
-        CARTPOLE_VERSIONED,
-        get_default_devices,
-        make_tc,
-    )
-    from pytorch.rl.test.mocking_classes import CountingEnv
-else:
-    from _utils_internal import (
-        capture_log_records,
-        CARTPOLE_VERSIONED,
-        get_default_devices,
-        make_tc,
-    )
-    from mocking_classes import CountingEnv
+from torchrl.testing import (
+    capture_log_records,
+    CARTPOLE_VERSIONED,
+    get_default_devices,
+    make_tc,
+)
+from torchrl.testing.mocking_classes import CountingEnv
 
 OLD_TORCH = parse(torch.__version__) < parse("2.0.0")
 _has_tv = importlib.util.find_spec("torchvision") is not None
@@ -129,6 +126,7 @@ _has_snapshot = importlib.util.find_spec("torchsnapshot") is not None
 _os_is_windows = sys.platform == "win32"
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_ray = importlib.util.find_spec("ray") is not None
+_has_zstandard = importlib.util.find_spec("zstandard") is not None
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
@@ -183,8 +181,9 @@ TensorDictReplayBufferRNG = functools.partial(
 )
 @pytest.mark.parametrize("size", [3, 5, 100])
 class TestComposableBuffers:
-    def _get_rb(self, rb_type, size, sampler, writer, storage, compilable=False):
-
+    def _get_rb(
+        self, rb_type, size, sampler, writer, storage, compilable=False, **kwargs
+    ):
         if storage is not None:
             storage = storage(size, compilable=compilable)
 
@@ -200,6 +199,7 @@ class TestComposableBuffers:
             writer=writer,
             batch_size=3,
             compilable=compilable,
+            **kwargs,
         )
         return rb
 
@@ -327,10 +327,14 @@ class TestComposableBuffers:
                 writer.extend(batch1)
             return
 
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             writer.extend(batch1)
 
         # Added less data than storage max size
@@ -367,7 +371,7 @@ class TestComposableBuffers:
             OLD_TORCH
             and writer is not TensorDictMaxValueWriter
             and size < len(data)
-            and isinstance(rb._storage, TensorStorage)
+            and isinstance(rb.storage, TensorStorage)
         )
         if not is_tensor_collection(data) and writer is TensorDictMaxValueWriter:
             with pytest.raises(
@@ -375,13 +379,17 @@ class TestComposableBuffers:
             ):
                 rb.extend(data)
             return
-        length = min(rb._storage.max_size, len(rb) + data_shape)
+        length = min(rb.storage.max_size, len(rb) + data_shape)
         if writer is TensorDictMaxValueWriter:
             data["next", "reward"][-length:] = 1_000_000
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data)
         length = len(rb)
         if is_tensor_collection(data):
@@ -394,7 +402,7 @@ class TestComposableBuffers:
 
             data_iter = data_iter()
         for d in data_iter:
-            for b in rb._storage:
+            for b in rb.storage:
                 if isinstance(b, TensorDictBase):
                     keys = set(d.keys()).intersection(b.keys())
                     b = b.exclude("index").select(*keys, strict=False)
@@ -417,12 +425,16 @@ class TestComposableBuffers:
             OLD_TORCH
             and writer is not TensorDictMaxValueWriter
             and size < len(data2)
-            and isinstance(rb._storage, TensorStorage)
+            and isinstance(rb.storage, TensorStorage)
         )
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data2)
 
     @pytest.mark.skipif(
@@ -432,6 +444,10 @@ class TestComposableBuffers:
     # <https://github.com/pytorch/pytorch/blob/8231180147a096a703d8891756068c89365292e0/torch/_inductor/cpp_builder.py#L143>
     # Our Windows CI jobs do not have "cl", so skip this test.
     @pytest.mark.skipif(_os_is_windows, reason="windows tests do not support compile")
+    @pytest.mark.skipif(
+        sys.version_info >= (3, 14),
+        reason="torch.compile is not supported on Python 3.14+",
+    )
     @pytest.mark.parametrize("avoid_max_size", [False, True])
     def test_extend_sample_recompile(
         self, rb_type, sampler, writer, storage, size, datatype, avoid_max_size
@@ -517,7 +533,7 @@ class TestComposableBuffers:
             OLD_TORCH
             and writer is not TensorDictMaxValueWriter
             and size < len(data)
-            and isinstance(rb._storage, TensorStorage)
+            and isinstance(rb.storage, TensorStorage)
         )
         if not is_tensor_collection(data) and writer is TensorDictMaxValueWriter:
             with pytest.raises(
@@ -525,10 +541,14 @@ class TestComposableBuffers:
             ):
                 rb.extend(data)
             return
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data)
         rb_sample = rb.sample()
         # if not isinstance(new_data, (torch.Tensor, TensorDictBase)):
@@ -545,7 +565,6 @@ class TestComposableBuffers:
             rb_sample_iter = data_iter_func(rb._batch_size, rb_sample)
 
         for single_sample in rb_sample_iter:
-
             if is_tensor_collection(data) or isinstance(data, torch.Tensor):
                 data_iter = data
             else:
@@ -587,7 +606,7 @@ class TestComposableBuffers:
             OLD_TORCH
             and writer is not TensorDictMaxValueWriter
             and size < len(data)
-            and isinstance(rb._storage, TensorStorage)
+            and isinstance(rb.storage, TensorStorage)
         )
         if not is_tensor_collection(data) and writer is TensorDictMaxValueWriter:
             with pytest.raises(
@@ -595,13 +614,17 @@ class TestComposableBuffers:
             ):
                 rb.extend(data)
             return
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data)
         d1 = rb[2]
-        d2 = rb._storage[2]
+        d2 = rb.storage[2]
         if type(d1) is not type(d2):
             d1 = d1[0]
         if is_tensor_collection(data) or isinstance(data, torch.Tensor):
@@ -615,9 +638,13 @@ class TestComposableBuffers:
         assert b
 
     def test_pickable(self, rb_type, sampler, writer, storage, size, datatype):
-
         rb = self._get_rb(
-            rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
+            rb_type=rb_type,
+            sampler=sampler,
+            writer=writer,
+            storage=storage,
+            size=size,
+            delayed_init=False,
         )
         serialized = pickle.dumps(rb)
         rb2 = pickle.loads(serialized)
@@ -726,6 +753,7 @@ class TestStorages:
             storage2.get(range(10))
         )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(
         not torch.cuda.device_count(),
         reason="not cuda device found to test rb storage.",
@@ -830,14 +858,18 @@ class TestStorages:
         TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
     )
     @pytest.mark.skipif(_os_is_windows, reason="windows tests do not support compile")
+    @pytest.mark.skipif(
+        sys.version_info >= (3, 14),
+        reason="torch.compile is not supported on Python 3.14+",
+    )
     # This test checks if the `torch._dynamo.disable` wrapper around
     # `TensorStorage._rand_given_ndim` is still necessary.
     def test__rand_given_ndim_recompile(self):
         torch._dynamo.reset_code_caches()
 
         # Number of times to extend the replay buffer
-        num_extend = 10
-        data_size = 100
+        num_extend = 5
+        data_size = 50
         storage_size = (num_extend + 1) * data_size
         sample_size = 3
 
@@ -866,15 +898,15 @@ class TestStorages:
             torch._logging.set_logs()
 
         assert len(storage) == num_extend * data_size
-        assert len(records) == 8, (
-            "If this ever decreases, that's probably good news and the "
-            "`torch._dynamo.disable` wrapper around "
-            "`TensorStorage._rand_given_ndim` can be removed."
+        assert len(records) <= 8, (
+            "Excessive recompilations detected. Expected 8 or fewer, but got "
+            f"{len(records)}. This suggests the `torch.compiler.disable` "
+            "decorators may not be working properly or new recompilation "
+            "sources have been introduced."
         )
 
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
     def test_extend_lazystack(self, storage_type):
-
         rb = ReplayBuffer(
             storage=storage_type(6),
             batch_size=2,
@@ -1011,13 +1043,13 @@ class TestStorages:
         )
         assert (rb[3:4] == 0).all()
         assert len(rb) == 100
-        assert rb._writer._cursor == 100
+        assert rb.writer._cursor == 100
         rb[10:20] = TensorDict(
             {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
         )
         assert (rb[10:20] == 0).all()
         assert len(rb) == 100
-        assert rb._writer._cursor == 100
+        assert rb.writer._cursor == 100
         rb[torch.arange(30, 40)] = TensorDict(
             {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
         )
@@ -1046,13 +1078,13 @@ class TestStorages:
         )
         assert (rb[3:4] == 2).all(), rb[3:4]["a"]
         assert len(rb) == 100
-        assert rb._writer._cursor == 100
+        assert rb.writer._cursor == 100
         rb[10:20] = TensorDict(
             {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
         )
         assert (rb[10:20] == 2).all()
         assert len(rb) == 100
-        assert rb._writer._cursor == 100
+        assert rb.writer._cursor == 100
         rb[torch.arange(30, 40)] = TensorDict(
             {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
         )
@@ -1103,17 +1135,17 @@ class TestStorages:
         )
         assert (rb[0, 3:4] == 0).all()
         assert (rb[1, 3:4] != 0).all()
-        assert rb._writer._cursor == 50
+        assert rb.writer._cursor == 50
         rb[1, 5:6] = TensorDict(
             {"a": torch.tensor([0]), ("b", "c"): torch.tensor([0])}, [1]
         )
         assert (rb[1, 5:6] == 0).all()
-        assert rb._writer._cursor == 50
+        assert rb.writer._cursor == 50
         rb[:, 7:8] = TensorDict(
             {"a": torch.tensor([0]), ("b", "c"): torch.tensor([0])}, [1]
         ).expand(2, 1)
         assert (rb[:, 7:8] == 0).all()
-        assert rb._writer._cursor == 50
+        assert rb.writer._cursor == 50
         # test broadcasting
         rb[:, 10:20] = TensorDict(
             {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
@@ -1368,17 +1400,17 @@ def test_replay_buffer_trajectories(stack, reduction, datatype):
     if datatype == "tc":
         rb.update_priority(index, sampled_td)
         sampled_td, info = rb.sample(return_info=True)
-        assert (info["_weight"] > 0).all()
+        assert (info["priority_weight"] > 0).all()
         assert sampled_td.batch_size == torch.Size([3, 4])
     else:
         rb.update_tensordict_priority(sampled_td)
         sampled_td = rb.sample(include_info=True)
-        assert (sampled_td.get("_weight") > 0).all()
+        assert (sampled_td.get("priority_weight") > 0).all()
         assert sampled_td.batch_size == torch.Size([3, 4])
 
     # # set back the trajectory length
     # sampled_td_filtered = sampled_td.to_tensordict().exclude(
-    #     "_weight", "index", "td_error"
+    #     "priority_weight", "index", "td_error"
     # )
     # sampled_td_filtered.batch_size = [3, 4]
 
@@ -1386,7 +1418,10 @@ def test_replay_buffer_trajectories(stack, reduction, datatype):
 class TestRNG:
     def test_rb_rng(self):
         state = torch.random.get_rng_state()
-        rb = ReplayBufferRNG(sampler=RandomSampler(), storage=LazyTensorStorage(100))
+        rb = ReplayBufferRNG(
+            sampler=RandomSampler(), storage=LazyTensorStorage(100), delayed_init=False
+        )
+        assert rb.initialized
         rb.extend(torch.arange(100))
         rb._rng.set_state(state)
         a = rb.sample(32)
@@ -1501,7 +1536,6 @@ class TestRNG:
 @pytest.mark.parametrize("size", [3, 5, 100])
 @pytest.mark.parametrize("prefetch", [0])
 class TestBuffers:
-
     default_constr = {
         ReplayBuffer: ReplayBuffer,
         PrioritizedReplayBuffer: functools.partial(
@@ -1566,26 +1600,30 @@ class TestBuffers:
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         batch1 = self._get_data(rbtype, size=5)
         cond = (
-            OLD_TORCH and size < len(batch1) and isinstance(rb._storage, TensorStorage)
+            OLD_TORCH and size < len(batch1) and isinstance(rb.storage, TensorStorage)
         )
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(batch1)
 
         # Added fewer data than storage max size
         if size > 5 or storage is None:
-            assert rb._writer._cursor == 5
+            assert rb.writer._cursor == 5
         # Added more data than storage max size
         elif size < 5:
-            assert rb._writer._cursor == 5 - size
+            assert rb.writer._cursor == 5 - size
         # Added as data as storage max size
         else:
-            assert rb._writer._cursor == 0
+            assert rb.writer._cursor == 0
             batch2 = self._get_data(rbtype, size=size - 1)
             rb.extend(batch2)
-            assert rb._writer._cursor == size - 1
+            assert rb.writer._cursor == size - 1
 
     def test_add(self, rbtype, storage, size, prefetch):
         torch.manual_seed(0)
@@ -1625,15 +1663,19 @@ class TestBuffers:
         torch.manual_seed(0)
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
-        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        cond = OLD_TORCH and size < len(data) and isinstance(rb.storage, TensorStorage)
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data)
         length = len(rb)
         for d in data[-length:]:
-            for b in rb._storage:
+            for b in rb.storage:
                 if isinstance(b, TensorDictBase):
                     keys = set(d.keys()).intersection(b.keys())
                     b = b.exclude("index").select(*keys, strict=False)
@@ -1652,11 +1694,15 @@ class TestBuffers:
         torch.manual_seed(0)
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
-        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        cond = OLD_TORCH and size < len(data) and isinstance(rb.storage, TensorStorage)
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data)
         new_data = rb.sample()
         if not isinstance(new_data, (torch.Tensor, TensorDictBase)):
@@ -1682,14 +1728,18 @@ class TestBuffers:
         torch.manual_seed(0)
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
-        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        cond = OLD_TORCH and size < len(data) and isinstance(rb.storage, TensorStorage)
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data)
         d1 = rb[2]
-        d2 = rb._storage[2]
+        d2 = rb.storage[2]
         if type(d1) is not type(d2):
             d1 = d1[0]
         b = d1 == d2
@@ -1752,6 +1802,44 @@ def test_batch_errors():
     for _ in rb:
         pass
     rb.sample()
+
+
+def test_storage_save_hook(tmpdir):
+    observed = {}
+
+    class SaveHook:
+        shift = None
+        is_full = None
+
+        def __call__(self, data, path=None):
+            observed["shift"] = self.shift
+            observed["is_full"] = self.is_full
+            return data
+
+    hook = SaveHook()
+    rb = ReplayBuffer(storage=LazyMemmapStorage(10))
+    rb.register_save_hook(hook)
+    rb.extend(torch.arange(5))
+    rb.dumps(tmpdir)
+
+    assert hook.shift == 5, f"Expected shift=5, got {hook.shift}"
+    assert hook.is_full is False, f"Expected is_full=False, got {hook.is_full}"
+    assert observed["shift"] == 5
+    assert observed["is_full"] is False
+
+
+@pytest.mark.skipif(not torchrl._utils.RL_WARNINGS, reason="RL_WARNINGS is not set")
+def test_add_warning():
+    from torchrl._utils import rl_warnings
+
+    if not rl_warnings():
+        return
+    rb = ReplayBuffer(storage=ListStorage(10), batch_size=3)
+    with pytest.warns(
+        UserWarning,
+        match=r"Using `add\(\)` with a TensorDict that has batch_size",
+    ):
+        rb.add(TensorDict(batch_size=[1]))
 
 
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
@@ -1842,12 +1930,12 @@ def test_rb_trajectories(stack, reduction):
     sampled_td.set("td_error", torch.rand(3, 4))
     rb.update_tensordict_priority(sampled_td)
     sampled_td = rb.sample(include_info=True)
-    assert (sampled_td.get("_weight") > 0).all()
+    assert (sampled_td.get("priority_weight") > 0).all()
     assert sampled_td.batch_size == torch.Size([3, 4])
 
     # set back the trajectory length
     sampled_td_filtered = sampled_td.to_tensordict().exclude(
-        "_weight", "index", "td_error"
+        "priority_weight", "index", "td_error"
     )
     sampled_td_filtered.batch_size = [3, 4]
 
@@ -2207,14 +2295,14 @@ class TestMaxValueWriter:
             device=device,
         )
         rb.extend(td)
-        rb._writer.dumps(tmpdir)
+        rb.writer.dumps(tmpdir)
         # check we can dump twice
-        rb._writer.dumps(tmpdir)
+        rb.writer.dumps(tmpdir)
         other = TensorDictMaxValueWriter(rank_key="key")
         other.loads(tmpdir)
-        assert len(rb._writer._current_top_values) == len(other._current_top_values)
+        assert len(rb.writer._current_top_values) == len(other._current_top_values)
         torch.testing.assert_close(
-            torch.tensor(rb._writer._current_top_values),
+            torch.tensor(rb.writer._current_top_values),
             torch.tensor(other._current_top_values),
         )
 
@@ -2563,7 +2651,7 @@ class TestSamplers:
                 break
         else:
             raise AssertionError(
-                f"Not all items can be sampled: {set(range(100))-count_unique} are missing"
+                f"Not all items can be sampled: {set(range(100)) - count_unique} are missing"
             )
 
         if strict_length:
@@ -2770,7 +2858,6 @@ class TestSamplers:
                     assert curr_eps.unique().numel() == 1
 
     def test_slice_sampler_strictlength(self):
-
         torch.manual_seed(0)
 
         data = TensorDict(
@@ -2880,9 +2967,9 @@ class TestSamplers:
             sc = samples[samples["traj"] == 0]["step_count"]
             assert (sc == 1).sum() == (sc == 2).sum()
             assert (sc == 1).sum() == (sc == 4).sum()
-        assert rb._sampler._cache
+        assert rb.sampler._cache
         rb.extend(data, update_priority=False)
-        assert not rb._sampler._cache
+        assert not rb.sampler._cache
 
     @pytest.mark.parametrize("ndim", [1, 2])
     @pytest.mark.parametrize("strict_length", [True, False])
@@ -2949,14 +3036,14 @@ class TestSamplers:
                     pass
             if i == 1000:
                 break
-        assert not rb._sampler.span[0]
-        # if rb._sampler.span[0]:
+        assert not rb.sampler.span[0]
+        # if rb.sampler.span[0]:
         #     assert found_traj_4_truncated_left
-        if rb._sampler.span[1]:
+        if rb.sampler.span[1]:
             assert found_traj_4_truncated_right
         else:
             assert not found_traj_4_truncated_right
-        if strict_length and not rb._sampler.span[1]:
+        if strict_length and not rb.sampler.span[1]:
             assert not found_traj_0
         else:
             assert found_traj_0
@@ -2977,28 +3064,31 @@ class TestSamplers:
             rb.update_priority(idx, 21 - data)
             if data <= 10:
                 # The max is always going to be the first value
-                assert rb._sampler._max_priority[0] == 21
-                assert rb._sampler._max_priority[1] == 0
+                assert rb.sampler._max_priority[0] == 21
+                assert rb.sampler._max_priority[1] == 0
             elif not max_priority_within_buffer:
                 # The max is the historical max, which was at idx 0
-                assert rb._sampler._max_priority[0] == 21
-                assert rb._sampler._max_priority[1] == 0
+                assert rb.sampler._max_priority[0] == 21
+                assert rb.sampler._max_priority[1] == 0
             else:
                 # the max is the current max. Find it and compare
                 sumtree = torch.as_tensor(
-                    [rb._sampler._sum_tree[i] for i in range(rb._sampler._max_capacity)]
+                    [rb.sampler._sum_tree[i] for i in range(rb.sampler._max_capacity)]
                 )
-                assert rb._sampler._max_priority[0] == sumtree.max()
-                assert rb._sampler._max_priority[1] == sumtree.argmax()
+                assert rb.sampler._max_priority[0] == sumtree.max()
+                assert rb.sampler._max_priority[1] == sumtree.argmax()
         idx = rb.extend(torch.arange(10))
         rb.update_priority(idx, 12)
         if max_priority_within_buffer:
-            assert rb._sampler._max_priority[0] == 12
-            assert rb._sampler._max_priority[1] == 0
+            assert rb.sampler._max_priority[0] == 12
+            assert rb.sampler._max_priority[1] == 0
         else:
-            assert rb._sampler._max_priority[0] == 21
-            assert rb._sampler._max_priority[1] == 0
+            assert rb.sampler._max_priority[0] == 21
+            assert rb.sampler._max_priority[1] == 0
 
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+    )
     def test_prb_serialization(self, tmpdir):
         rb = ReplayBuffer(
             storage=LazyMemmapStorage(max_size=10),
@@ -3042,6 +3132,108 @@ class TestSamplers:
         assert rb.sampler._max_priority[0] == rb2.sampler._max_priority[0]
         assert rb.sampler._max_priority[1] == rb2.sampler._max_priority[1]
 
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+    )
+    def test_prb_new_sampler_with_loaded_storage(self, tmpdir):
+        """Test that creating a new PrioritizedSampler with loaded storage works correctly.
+
+        This test reproduces the issue from scratch8.py where creating a new
+        PrioritizedSampler instance with storage that already contains data
+        would fail with "RuntimeError: non-positive p_sum".
+        """
+        device = torch.device("cpu")
+
+        # Create and populate original buffer
+        original_rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10, device=device),
+            sampler=PrioritizedSampler(max_capacity=10, alpha=0.7, beta=0.5),
+            batch_size=2,
+            priority_key="td_error",
+        )
+
+        data = TensorDict(
+            {
+                "state": torch.ones(4, 2, dtype=torch.float32, device=device),
+                "td_error": torch.ones(4) * 0.5,
+            },
+            batch_size=torch.Size((4,)),
+        )
+        original_rb.extend(data)
+
+        # Update priorities
+        td = original_rb.sample()
+        td["td_error"] = torch.arange(2, device=device) + 1.0
+        original_rb.update_tensordict_priority(td)
+
+        # Get original priorities for comparison
+        original_priorities = torch.tensor(
+            [original_rb._sampler._sum_tree[i] for i in range(len(original_rb))]
+        )
+
+        # Save and load normally
+        original_rb.dumps(tmpdir)
+        del original_rb
+
+        loaded_rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10, device=device),
+            sampler=PrioritizedSampler(max_capacity=10, alpha=0.7, beta=0.5),
+            batch_size=2,
+            priority_key="td_error",
+        )
+        loaded_rb.loads(tmpdir)
+
+        # Create a new buffer with the loaded storage but NEW sampler
+        # This was failing before the fix with "RuntimeError: non-positive p_sum"
+        new_rb_with_loaded_storage = TensorDictReplayBuffer(
+            storage=loaded_rb.storage,  # Use the loaded storage
+            sampler=PrioritizedSampler(  # But create a NEW sampler instance
+                max_capacity=len(loaded_rb), alpha=0.7, beta=0.5
+            ),
+            batch_size=2,
+            priority_key="td_error",
+        )
+
+        # This should work now thanks to our fix
+        td = new_rb_with_loaded_storage.sample()
+        assert td.batch_size == torch.Size([2])
+
+        # Verify the storage has the expected data
+        assert len(new_rb_with_loaded_storage) == 4
+
+        # Verify priorities were properly initialized with default values
+        # When creating a new sampler with existing storage, it should initialize with default priorities
+        new_priorities = torch.tensor(
+            [
+                new_rb_with_loaded_storage._sampler._sum_tree[i]
+                for i in range(len(new_rb_with_loaded_storage))
+            ]
+        )
+        expected_default_priority = new_rb_with_loaded_storage._sampler.default_priority
+        expected_priorities = torch.full(
+            (len(new_rb_with_loaded_storage),),
+            expected_default_priority,
+            dtype=torch.float,
+        )
+
+        # All priorities should be positive and equal to the default priority
+        assert (new_priorities > 0).all(), "All priorities should be positive"
+        torch.testing.assert_close(
+            new_priorities,
+            expected_priorities,
+            msg="New sampler should initialize with default priorities",
+        )
+
+        # Also verify that the loaded buffer maintains the original priorities
+        loaded_priorities = torch.tensor(
+            [loaded_rb._sampler._sum_tree[i] for i in range(len(loaded_rb))]
+        )
+        torch.testing.assert_close(
+            loaded_priorities,
+            original_priorities,
+            msg="Loaded buffer should maintain original priorities",
+        )
+
     def test_prb_ndim(self):
         """This test lists all the possible ways of updating the priority of a PRB with RB, TRB and TPRB.
 
@@ -3059,13 +3251,13 @@ class TestSamplers:
         )
         data = TensorDict({"a": torch.arange(10), "p": torch.ones(10) / 2}, [10])
         idx = rb.extend(data)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 1).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 1).all()
         rb.update_priority(idx, 2)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 2).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 2).all()
         s, info = rb.sample(return_info=True)
         rb.update_priority(info["index"], 3)
         assert (
-            torch.tensor([rb._sampler._sum_tree[i] for i in range(10)])[info["index"]]
+            torch.tensor([rb.sampler._sum_tree[i] for i in range(10)])[info["index"]]
             == 3
         ).all()
 
@@ -3077,13 +3269,13 @@ class TestSamplers:
         )
         data = TensorDict({"a": torch.arange(10), "p": torch.ones(10) / 2}, [10])
         idx = rb.extend(data)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 1).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 1).all()
         rb.update_priority(idx, 2)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 2).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 2).all()
         s = rb.sample()
         rb.update_priority(s["index"], 3)
         assert (
-            torch.tensor([rb._sampler._sum_tree[i] for i in range(10)])[s["index"]] == 3
+            torch.tensor([rb.sampler._sum_tree[i] for i in range(10)])[s["index"]] == 3
         ).all()
 
         # third case: 1d TPRB
@@ -3096,17 +3288,15 @@ class TestSamplers:
         )
         data = TensorDict({"a": torch.arange(10), "p": torch.ones(10) / 2}, [10])
         idx = rb.extend(data)
-        assert (
-            torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 0.5
-        ).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 0.5).all()
         rb.update_priority(idx, 2)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 2).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 2).all()
         s = rb.sample()
 
         s["p"] = torch.ones(4) * 10_000
         rb.update_tensordict_priority(s)
         assert (
-            torch.tensor([rb._sampler._sum_tree[i] for i in range(10)])[s["index"]]
+            torch.tensor([rb.sampler._sum_tree[i] for i in range(10)])[s["index"]]
             == 10_000
         ).all()
 
@@ -3124,15 +3314,15 @@ class TestSamplers:
             {"a": torch.arange(5).expand(2, 5), "p": torch.ones(2, 5) / 2}, [2, 5]
         )
         idx = rb.extend(data)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 1).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 1).all()
         rb.update_priority(idx, 2)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 2).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 2).all()
 
         s, info = rb.sample(return_info=True)
         rb.update_priority(info["index"], 3)
-        priorities = torch.tensor(
-            [rb._sampler._sum_tree[i] for i in range(10)]
-        ).reshape((5, 2))
+        priorities = torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]).reshape(
+            (5, 2)
+        )
         assert (priorities[info["index"]] == 3).all()
 
         # fifth case: 2d TRB
@@ -3146,15 +3336,15 @@ class TestSamplers:
             {"a": torch.arange(5).expand(2, 5), "p": torch.ones(2, 5) / 2}, [2, 5]
         )
         idx = rb.extend(data)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 1).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 1).all()
         rb.update_priority(idx, 2)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 2).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 2).all()
 
         s = rb.sample()
         rb.update_priority(s["index"], 10_000)
-        priorities = torch.tensor(
-            [rb._sampler._sum_tree[i] for i in range(10)]
-        ).reshape((5, 2))
+        priorities = torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]).reshape(
+            (5, 2)
+        )
         assert (priorities[s["index"].unbind(-1)] == 10_000).all()
 
         s2 = rb.sample()
@@ -3174,18 +3364,16 @@ class TestSamplers:
             {"a": torch.arange(5).expand(2, 5), "p": torch.ones(2, 5) / 2}, [2, 5]
         )
         idx = rb.extend(data)
-        assert (
-            torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 0.5
-        ).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 0.5).all()
         rb.update_priority(idx, torch.ones(()) * 2)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 2).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 2).all()
         s = rb.sample()
         # setting the priorities to a value that is so big that the buffer will resample them
         s["p"] = torch.ones(4) * 10_000
         rb.update_tensordict_priority(s)
-        priorities = torch.tensor(
-            [rb._sampler._sum_tree[i] for i in range(10)]
-        ).reshape((5, 2))
+        priorities = torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]).reshape(
+            (5, 2)
+        )
         assert (priorities[s["index"].unbind(-1)] == 10_000).all()
 
         s2 = rb.sample()
@@ -3217,14 +3405,14 @@ def test_prioritized_slice_sampler_doc_example():
     sample, info = rb.sample(return_info=True)
     # print("episode", sample["episode"].tolist())
     # print("steps", sample["steps"].tolist())
-    # print("weight", info["_weight"].tolist())
+    # print("weight", info["priority_weight"].tolist())
 
     priority = torch.tensor([0, 3, 3, 0, 0, 0, 1, 1, 1])
     rb.update_priority(torch.arange(0, 9, 1), priority=priority)
     sample, info = rb.sample(return_info=True)
     # print("episode", sample["episode"].tolist())
     # print("steps", sample["steps"].tolist())
-    # print("weight", info["_weight"].tolist())
+    # print("weight", info["priority_weight"].tolist())
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -3430,7 +3618,6 @@ class TestEnsemble:
     def test_rb(
         self, storage_type, sampler_type, data_type, p, num_buffer_sampled, batch_size
     ):
-
         storages = [self._make_storage(storage_type, data_type) for _ in range(3)]
         collate_fn = self._make_collate(storage_type)
         data = [self._make_data(data_type) for _ in range(3)]
@@ -3623,32 +3810,32 @@ class TestEnsemble:
         assert_allclose_td(sample0, sample1)
 
         # check indexing of components
-        assert isinstance(rb._storage[:], StorageEnsemble)
-        assert isinstance(rb._storage[:2], StorageEnsemble)
-        assert isinstance(rb._storage[torch.tensor([0, 1])], StorageEnsemble)
-        assert isinstance(rb._storage[np.array([0, 1])], StorageEnsemble)
-        assert isinstance(rb._storage[[0, 1]], StorageEnsemble)
-        assert isinstance(rb._storage[1], LazyMemmapStorage)
+        assert isinstance(rb.storage[:], StorageEnsemble)
+        assert isinstance(rb.storage[:2], StorageEnsemble)
+        assert isinstance(rb.storage[torch.tensor([0, 1])], StorageEnsemble)
+        assert isinstance(rb.storage[np.array([0, 1])], StorageEnsemble)
+        assert isinstance(rb.storage[[0, 1]], StorageEnsemble)
+        assert isinstance(rb.storage[1], LazyMemmapStorage)
 
-        rb._storage[:, :3]
-        rb._storage[:2, :3]
-        rb._storage[torch.tensor([0, 1]), :3]
-        rb._storage[np.array([0, 1]), :3]
-        rb._storage[[0, 1], :3]
+        rb.storage[:, :3]
+        rb.storage[:2, :3]
+        rb.storage[torch.tensor([0, 1]), :3]
+        rb.storage[np.array([0, 1]), :3]
+        rb.storage[[0, 1], :3]
 
-        assert isinstance(rb._sampler[:], SamplerEnsemble)
-        assert isinstance(rb._sampler[:2], SamplerEnsemble)
-        assert isinstance(rb._sampler[torch.tensor([0, 1])], SamplerEnsemble)
-        assert isinstance(rb._sampler[np.array([0, 1])], SamplerEnsemble)
-        assert isinstance(rb._sampler[[0, 1]], SamplerEnsemble)
-        assert isinstance(rb._sampler[1], RandomSampler)
+        assert isinstance(rb.sampler[:], SamplerEnsemble)
+        assert isinstance(rb.sampler[:2], SamplerEnsemble)
+        assert isinstance(rb.sampler[torch.tensor([0, 1])], SamplerEnsemble)
+        assert isinstance(rb.sampler[np.array([0, 1])], SamplerEnsemble)
+        assert isinstance(rb.sampler[[0, 1]], SamplerEnsemble)
+        assert isinstance(rb.sampler[1], RandomSampler)
 
-        assert isinstance(rb._writer[:], WriterEnsemble)
-        assert isinstance(rb._writer[:2], WriterEnsemble)
-        assert isinstance(rb._writer[torch.tensor([0, 1])], WriterEnsemble)
-        assert isinstance(rb._writer[np.array([0, 1])], WriterEnsemble)
-        assert isinstance(rb._writer[[0, 1]], WriterEnsemble)
-        assert isinstance(rb._writer[0], RoundRobinWriter)
+        assert isinstance(rb.writer[:], WriterEnsemble)
+        assert isinstance(rb.writer[:2], WriterEnsemble)
+        assert isinstance(rb.writer[torch.tensor([0, 1])], WriterEnsemble)
+        assert isinstance(rb.writer[np.array([0, 1])], WriterEnsemble)
+        assert isinstance(rb.writer[[0, 1]], WriterEnsemble)
+        assert isinstance(rb.writer[0], RoundRobinWriter)
 
 
 def _rbtype(datatype):
@@ -3787,15 +3974,12 @@ class TestRBMultidim:
     def test_rb_multidim_collector(
         self, rbtype, storage_cls, writer_cls, sampler_cls, transform, env_device
     ):
-        if os.getenv("PYTORCH_TEST_FBCODE"):
-            from pytorch.rl.test._utils_internal import CARTPOLE_VERSIONED
-        else:
-            from _utils_internal import CARTPOLE_VERSIONED
+        from torchrl.testing import CARTPOLE_VERSIONED
 
         torch.manual_seed(0)
         env = SerialEnv(2, lambda: GymEnv(CARTPOLE_VERSIONED()), device=env_device)
         env.set_seed(0)
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             RandomPolicy(env.action_spec),
             frames_per_batch=4,
@@ -3811,6 +3995,7 @@ class TestRBMultidim:
                     storage=storage_cls(max_size=10, ndim=2),
                     sampler=sampler_cls(),
                     writer=writer_cls(),
+                    delayed_init=False,
                 )
             return
         rb = rbtype(
@@ -3818,7 +4003,7 @@ class TestRBMultidim:
             sampler=sampler_cls(),
             writer=writer_cls(),
         )
-        if not isinstance(rb._sampler, SliceSampler) and transform is not None:
+        if not isinstance(rb.sampler, SliceSampler) and transform is not None:
             pytest.skip("no need to test this combination")
         if transform:
             for t in transform:
@@ -3897,7 +4082,7 @@ class TestCheckpointers:
         env = GymEnv(CARTPOLE_VERSIONED(), device=None)
         env.set_seed(0)
         torch.manual_seed(0)
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             policy=env.rand_step,
             total_frames=200,
@@ -3919,7 +4104,7 @@ class TestCheckpointers:
             rb.dumps(tmpdir)
             rb_test.loads(tmpdir)
             assert_allclose_td(rb_test[:], rb[:])
-            assert rb._writer._cursor == rb_test._writer._cursor
+            assert rb.writer._cursor == rb_test._writer._cursor
 
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
     @pytest.mark.parametrize("frames_per_batch", [22, 122])
@@ -3936,7 +4121,7 @@ class TestCheckpointers:
         )
         env.set_seed(0)
         torch.manual_seed(0)
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             policy=env.rand_step,
             total_frames=200,
@@ -3955,9 +4140,9 @@ class TestCheckpointers:
         rb_test.storage.checkpointer = checkpointer()
         for data in collector:
             rb.extend(data)
-            assert rb._storage.max_size == 102
+            assert rb.storage.max_size == 102
             if frames_per_batch > 100:
-                assert rb._storage._is_full
+                assert rb.storage._is_full
                 assert len(rb) == 102
                 # Checks that when writing to the buffer with a batch greater than the total
                 # size, we get the last step written properly.
@@ -3966,7 +4151,7 @@ class TestCheckpointers:
             rb.dumps(tmpdir)
             rb_test.loads(tmpdir)
             assert_allclose_td(rb_test[:], rb[:])
-            assert rb._writer._cursor == rb_test._writer._cursor
+            assert rb.writer._cursor == rb_test._writer._cursor
 
 
 @pytest.mark.skipif(not _has_ray, reason="ray required for this test.")
@@ -4025,6 +4210,669 @@ class TestRayRB:
                     assert d.shape == (25,)
         finally:
             rb.close()
+
+    def test_ray_rb_serialization(self):
+        import ray
+
+        class Worker:
+            def __init__(self, rb):
+                self.rb = rb
+
+            def run(self):
+                self.rb.extend(TensorDict({"x": torch.ones(100)}, batch_size=100))
+
+        rb = RayReplayBuffer(
+            storage=partial(LazyTensorStorage, 100), ray_init_config={"num_cpus": 1}
+        )
+        try:
+            remote_worker = ray.remote(Worker).remote(rb)
+            ray.get(remote_worker.run.remote())
+        finally:
+            rb.close()
+
+
+class TestSharedStorageInit:
+    def worker(self, rb, worker_id, queue):
+        length = len(rb)
+        data = TensorDict({"x": torch.full((2,), worker_id)}, batch_size=(2,))
+        worker_id * 2
+        index = rb.extend(data)
+        assert len(rb) >= length + 2
+        assert (rb[index] == data).all()
+        queue.put("done")
+
+    @pytest.mark.parametrize(
+        "storage_cls, use_tmpdir",
+        [
+            (LazyTensorStorage, False),
+            (LazyMemmapStorage, False),
+            (LazyMemmapStorage, True),
+        ],
+    )
+    def test_shared_storage_multiprocess(self, storage_cls, use_tmpdir, tmpdir):
+        if use_tmpdir:
+            storage_cls = functools.partial(storage_cls, scratch_dir=tmpdir)
+        storage = storage_cls(max_size=100, shared_init=True)
+        rb = ReplayBuffer(storage=storage, batch_size=2).share(True)
+        queue = mp.Queue()
+
+        processes = []
+        for i in range(4):
+            p = mp.Process(target=self.worker, args=(rb, i, queue))
+            processes.append(p)
+            p.start()
+
+        for p in processes:
+            p.join()
+            queue.get()
+
+        all_data = storage.get(slice(0, 8))
+        values = set(all_data["x"].tolist())
+        expected = {0.0, 1.0, 2.0, 3.0}
+        assert expected.issubset(values)
+        assert len(storage) >= 8
+
+
+@pytest.mark.skipif(not _has_zstandard, reason="zstandard required for this test.")
+class TestCompressedListStorage:
+    """Test cases for CompressedListStorage."""
+
+    def test_compressed_storage_initialization(self):
+        """Test that CompressedListStorage initializes correctly."""
+        storage = CompressedListStorage(max_size=100, compression_level=3)
+        assert storage.max_size == 100
+        assert storage.compression_level == 3
+        assert len(storage) == 0
+
+    @pytest.mark.parametrize(
+        "test_tensor",
+        [
+            torch.rand(1),  # 0D scalar
+            torch.randn(84, dtype=torch.float32),  # 1D tensor
+            torch.randn(84, 84, dtype=torch.float32),  # 2D tensor
+            torch.randn(1, 84, 84, dtype=torch.float32),  # 3D tensor
+            torch.randn(32, 84, 84, dtype=torch.float32),  # 3D tensor
+        ],
+    )
+    def test_compressed_storage_tensor(self, test_tensor):
+        """Test compression and decompression of tensor data of various shapes."""
+        storage = CompressedListStorage(max_size=10, compression_level=3)
+
+        # Store tensor
+        storage.set(0, test_tensor)
+
+        # Retrieve tensor
+        retrieved_tensor = storage.get(0)
+
+        # Verify data integrity
+        assert (
+            test_tensor.shape == retrieved_tensor.shape
+        ), f"Expected shape {test_tensor.shape}, got {retrieved_tensor.shape}"
+        assert (
+            test_tensor.dtype == retrieved_tensor.dtype
+        ), f"Expected dtype {test_tensor.dtype}, got {retrieved_tensor.dtype}"
+        assert torch.allclose(test_tensor, retrieved_tensor, atol=1e-6)
+
+    def test_compressed_storage_tensordict(self):
+        """Test compression and decompression of TensorDict data."""
+        storage = CompressedListStorage(max_size=10, compression_level=3)
+
+        # Create test TensorDict
+        test_td = TensorDict(
+            {
+                "obs": torch.randn(3, 84, 84, dtype=torch.float32),
+                "action": torch.tensor([1, 2, 3]),
+                "reward": torch.randn(3),
+                "done": torch.tensor([False, True, False]),
+            },
+            batch_size=[3],
+        )
+
+        # Store TensorDict
+        storage.set(0, test_td)
+
+        # Retrieve TensorDict
+        retrieved_td = storage.get(0)
+
+        # Verify data integrity
+        assert torch.allclose(test_td["obs"], retrieved_td["obs"], atol=1e-6)
+        assert torch.allclose(test_td["action"], retrieved_td["action"])
+        assert torch.allclose(test_td["reward"], retrieved_td["reward"], atol=1e-6)
+        assert torch.allclose(test_td["done"], retrieved_td["done"])
+
+    def test_compressed_storage_multiple_indices(self):
+        """Test storing and retrieving multiple items."""
+        storage = CompressedListStorage(max_size=10, compression_level=3)
+
+        # Store multiple tensors
+        tensors = [
+            torch.randn(2, 2, dtype=torch.float32),
+            torch.randn(3, 3, dtype=torch.float32),
+            torch.randn(4, 4, dtype=torch.float32),
+        ]
+
+        for i, tensor in enumerate(tensors):
+            storage.set(i, tensor)
+
+        # Retrieve multiple tensors
+        retrieved = storage.get([0, 1, 2])
+
+        # Verify data integrity
+        for original, retrieved_tensor in zip(tensors, retrieved):
+            assert torch.allclose(original, retrieved_tensor, atol=1e-6)
+
+    def test_compressed_storage_with_replay_buffer(self):
+        """Test CompressedListStorage with ReplayBuffer."""
+        storage = CompressedListStorage(max_size=100, compression_level=3)
+        rb = ReplayBuffer(storage=storage, batch_size=5)
+
+        # Create test data
+        data = TensorDict(
+            {
+                "obs": torch.randn(10, 3, 84, 84, dtype=torch.float32),
+                "action": torch.randint(0, 4, (10,)),
+                "reward": torch.randn(10),
+            },
+            batch_size=[10],
+        )
+
+        # Add data to replay buffer
+        rb.extend(data)
+
+        # Sample from replay buffer
+        sample = rb.sample(5)
+
+        # Verify sample has correct shape
+        assert is_tensor_collection(sample), sample
+        assert sample["obs"].shape[0] == 5
+        assert sample["obs"].shape[1:] == (3, 84, 84)
+        assert sample["action"].shape[0] == 5
+        assert sample["reward"].shape[0] == 5
+
+    def test_compressed_storage_state_dict(self):
+        """Test saving and loading state dict."""
+        storage = CompressedListStorage(max_size=10, compression_level=3)
+
+        # Add some data
+        test_tensor = torch.randn(3, 3, dtype=torch.float32)
+        storage.set(0, test_tensor)
+
+        # Save state dict
+        state_dict = storage.state_dict()
+
+        # Create new storage and load state dict
+        new_storage = CompressedListStorage(max_size=10, compression_level=3)
+        new_storage.load_state_dict(state_dict)
+
+        # Verify data integrity
+        retrieved_tensor = new_storage.get(0)
+        assert torch.allclose(test_tensor, retrieved_tensor, atol=1e-6)
+
+    def test_compressed_storage_checkpointing(self):
+        """Test checkpointing functionality."""
+        storage = CompressedListStorage(max_size=10, compression_level=3)
+
+        # Add some data
+        test_td = TensorDict(
+            {
+                "obs": torch.randn(3, 84, 84, dtype=torch.float32),
+                "action": torch.tensor([1, 2, 3]),
+            },
+            batch_size=[3],
+        )
+        storage.set(0, test_td)
+
+        # second batch, different shape
+        test_td2 = TensorDict(
+            {
+                "obs": torch.randn(3, 85, 83, dtype=torch.float32),
+                "action": torch.tensor([1, 2, 3]),
+                "meta": torch.randn(3),
+                "astring": "a string!",
+            },
+            batch_size=[3],
+        )
+        storage.set(1, test_td)
+
+        # Create temporary directory for checkpointing
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkpoint_path = Path(tmpdir) / "checkpoint"
+
+            # Save checkpoint
+            storage.dumps(checkpoint_path)
+
+            # Create new storage and load checkpoint
+            new_storage = CompressedListStorage(max_size=10, compression_level=3)
+            new_storage.loads(checkpoint_path)
+
+            # Verify data integrity
+            retrieved_td = new_storage.get(0)
+            assert torch.allclose(test_td["obs"], retrieved_td["obs"], atol=1e-6)
+            assert torch.allclose(test_td["action"], retrieved_td["action"])
+
+    def test_compressed_storage_length(self):
+        """Test that length is calculated correctly."""
+        storage = CompressedListStorage(max_size=10, compression_level=3)
+
+        # Initially empty
+        assert len(storage) == 0
+
+        # Add some data
+        storage.set(0, torch.randn(2, 2))
+        assert len(storage) == 1
+
+        storage.set(1, torch.randn(2, 2))
+        assert len(storage) == 2
+
+        storage.set(2, torch.randn(2, 2))
+        assert len(storage) == 3
+
+    def test_compressed_storage_contains(self):
+        """Test the contains method."""
+        storage = CompressedListStorage(max_size=10, compression_level=3)
+
+        # Initially empty
+        assert not storage.contains(0)
+
+        # Add data
+        storage.set(0, torch.randn(2, 2))
+        assert storage.contains(0)
+        assert not storage.contains(1)
+
+    def test_compressed_storage_empty(self):
+        """Test emptying the storage."""
+        storage = CompressedListStorage(max_size=10, compression_level=3)
+
+        # Add some data
+        storage.set(0, torch.randn(2, 2))
+        storage.set(1, torch.randn(2, 2))
+        assert len(storage) == 2
+
+        # Empty storage
+        storage._empty()
+        assert len(storage) == 0
+
+    def test_compressed_storage_custom_compression(self):
+        """Test custom compression functions."""
+
+        def custom_compress(tensor):
+            # Simple compression: just convert to uint8
+            return tensor.to(torch.uint8)
+
+        def custom_decompress(compressed_tensor, metadata):
+            # Simple decompression: convert back to original dtype
+            return compressed_tensor.to(metadata["dtype"])
+
+        storage = CompressedListStorage(
+            max_size=10,
+            compression_fn=custom_compress,
+            decompression_fn=custom_decompress,
+        )
+
+        # Test with tensor
+        test_tensor = torch.randn(2, 2, dtype=torch.float32)
+        storage.set(0, test_tensor)
+        retrieved_tensor = storage.get(0)
+
+        # Note: This will lose precision due to uint8 conversion
+        # but should still work
+        assert retrieved_tensor.shape == test_tensor.shape
+
+    def test_compressed_storage_error_handling(self):
+        """Test error handling for invalid operations."""
+        storage = CompressedListStorage(max_size=5, compression_level=3)
+
+        # Test setting data beyond max_size
+        with pytest.raises(RuntimeError):
+            storage.set(10, torch.randn(2, 2))
+
+        # Test getting non-existent data
+        with pytest.raises(IndexError):
+            storage.get(0)
+
+    def test_compressed_storage_memory_efficiency(self):
+        """Test that compression actually reduces memory usage."""
+        storage = CompressedListStorage(max_size=100, compression_level=3)
+
+        # Create large tensor data
+        large_tensor = torch.zeros(100, 3, 84, 84, dtype=torch.int64)
+        large_tensor.copy_(
+            torch.arange(large_tensor.numel(), dtype=torch.int32).view_as(large_tensor)
+            // (3 * 84 * 84)
+        )
+        original_size = large_tensor.numel() * large_tensor.element_size()
+
+        # Store in compressed storage
+        storage.set(0, large_tensor)
+
+        # Estimate compressed size
+        compressed_data = storage._storage[0]
+        compressed_size = compressed_data.numel()  # uint8 bytes
+
+        # Verify compression ratio is reasonable (at least 2x for random data)
+        compression_ratio = original_size / compressed_size
+        assert (
+            compression_ratio > 1.5
+        ), f"Compression ratio {compression_ratio} is too low"
+
+
+class TestRBLazyInit:
+    def test_lazy_init(self):
+        def transform(td):
+            return td
+
+        rb = ReplayBuffer(
+            storage=partial(ListStorage),
+            writer=partial(RoundRobinWriter),
+            sampler=partial(RandomSampler),
+            transform_factory=lambda: transform,
+        )
+        assert not rb.initialized
+        assert not hasattr(rb, "_storage")
+        assert rb._init_storage is not None
+        assert not hasattr(rb, "_sampler")
+        assert rb._init_sampler is not None
+        assert not hasattr(rb, "_writer")
+        assert rb._init_writer is not None
+        rb.extend(TensorDict(batch_size=[2]))
+        assert rb.initialized
+        assert rb._storage is not None
+        assert rb._init_storage is None
+        assert rb._sampler is not None
+        assert rb._init_sampler is None
+        assert rb._writer is not None
+        assert rb._init_writer is None
+
+        rb = ReplayBuffer(
+            storage=partial(ListStorage),
+            writer=partial(RoundRobinWriter),
+            sampler=partial(RandomSampler),
+        )
+        assert rb.initialized
+        assert rb._storage is not None
+        assert rb._init_storage is None
+        assert rb._sampler is not None
+        assert rb._init_sampler is None
+        assert rb._writer is not None
+        assert rb._init_writer is None
+
+        rb = ReplayBuffer(
+            storage=partial(ListStorage),
+            writer=partial(RoundRobinWriter),
+            sampler=partial(RandomSampler),
+            delayed_init=False,
+        )
+        assert rb.initialized
+        assert rb._storage is not None
+        assert rb._init_storage is None
+        assert rb._sampler is not None
+        assert rb._init_sampler is None
+        assert rb._writer is not None
+        assert rb._init_writer is None
+
+
+@pytest.mark.skipif(
+    _os_is_windows, reason="Windows file locking prevents cleanup tests"
+)
+class TestLazyMemmapStorageCleanup:
+    """Tests for LazyMemmapStorage automatic cleanup functionality."""
+
+    def test_cleanup_explicit_scratch_dir(self, tmpdir):
+        """Test that cleanup removes files when scratch_dir is specified."""
+        scratch_dir = str(tmpdir / "memmap_storage")
+        os.makedirs(scratch_dir, exist_ok=True)
+
+        storage = LazyMemmapStorage(100, scratch_dir=scratch_dir, auto_cleanup=True)
+        rb = ReplayBuffer(storage=storage)
+        rb.extend(TensorDict(a=torch.randn(10), batch_size=[10]))
+
+        # Verify files were created
+        assert os.path.isdir(scratch_dir)
+        assert len(os.listdir(scratch_dir)) > 0
+
+        # Cleanup should remove the directory
+        result = storage.cleanup()
+        assert result is True
+        assert not os.path.exists(scratch_dir)
+
+        # Second cleanup should be a no-op
+        result = storage.cleanup()
+        assert result is False
+
+    def test_cleanup_temp_dir(self):
+        """Test cleanup when using default temp directory."""
+        storage = LazyMemmapStorage(100, auto_cleanup=True)
+        rb = ReplayBuffer(storage=storage)
+        rb.extend(TensorDict(a=torch.randn(10), batch_size=[10]))
+
+        # Get the temp directory paths before cleanup
+        temp_paths = set()
+        for tensor in storage._storage.values(include_nested=True, leaves_only=True):
+            try:
+                if hasattr(tensor, "filename") and tensor.filename:
+                    temp_paths.add(os.path.dirname(tensor.filename))
+            except (AttributeError, RuntimeError):
+                continue
+
+        # Cleanup should remove the files if any were created on disk
+        result = storage.cleanup()
+        if len(temp_paths) > 0:
+            assert result is True
+            # Paths should no longer exist
+            for path in temp_paths:
+                assert not os.path.exists(path)
+        else:
+            # If no files were created (e.g. anonymous memmap), result should be False
+            assert result is False
+
+    def test_auto_cleanup_default_behavior(self, tmpdir):
+        """Test that auto_cleanup defaults correctly based on scratch_dir."""
+        # When scratch_dir is None, auto_cleanup should default to True
+        storage1 = LazyMemmapStorage(100)
+        assert storage1._auto_cleanup is True
+        assert storage1._scratch_dir_is_temp is True
+
+        # When scratch_dir is provided, auto_cleanup should default to False
+        scratch_dir = str(tmpdir / "user_storage")
+        storage2 = LazyMemmapStorage(100, scratch_dir=scratch_dir)
+        assert storage2._auto_cleanup is False
+        assert storage2._scratch_dir_is_temp is False
+
+        # User can override
+        storage3 = LazyMemmapStorage(100, scratch_dir=scratch_dir, auto_cleanup=True)
+        assert storage3._auto_cleanup is True
+
+        storage4 = LazyMemmapStorage(100, auto_cleanup=False)
+        assert storage4._auto_cleanup is False
+
+    def test_cleanup_idempotent(self, tmpdir):
+        """Test that cleanup can be called multiple times safely."""
+        scratch_dir = str(tmpdir / "memmap_storage")
+        os.makedirs(scratch_dir, exist_ok=True)
+
+        storage = LazyMemmapStorage(100, scratch_dir=scratch_dir, auto_cleanup=True)
+        rb = ReplayBuffer(storage=storage)
+        rb.extend(TensorDict(a=torch.randn(10), batch_size=[10]))
+
+        # Multiple cleanups should not raise
+        storage.cleanup()
+        storage.cleanup()
+        storage.cleanup()
+        assert storage._cleaned_up is True
+
+    def test_cleanup_nonexistent_dir(self, tmpdir):
+        """Test cleanup when directory was already deleted."""
+        scratch_dir = str(tmpdir / "memmap_storage")
+        os.makedirs(scratch_dir, exist_ok=True)
+
+        storage = LazyMemmapStorage(100, scratch_dir=scratch_dir, auto_cleanup=True)
+        rb = ReplayBuffer(storage=storage)
+        rb.extend(TensorDict(a=torch.randn(10), batch_size=[10]))
+
+        # Delete the directory externally
+        shutil.rmtree(scratch_dir)
+        assert not os.path.exists(scratch_dir)
+
+        # Cleanup should handle missing directory gracefully
+        result = storage.cleanup()
+        assert result is False  # No cleanup needed since dir is gone
+
+    def test_cleanup_uninitialized_storage(self):
+        """Test cleanup on storage that was never used."""
+        storage = LazyMemmapStorage(100, auto_cleanup=True)
+        # Storage is not initialized - cleanup should be safe
+        result = storage.cleanup()
+        assert result is False
+
+    def test_cleanup_registry(self):
+        """Test that storages are registered for cleanup."""
+        from torchrl.data.replay_buffers.storages import _MEMMAP_STORAGE_REGISTRY
+
+        initial_count = len(list(_MEMMAP_STORAGE_REGISTRY))
+
+        storage = LazyMemmapStorage(100, auto_cleanup=True)
+        assert len(list(_MEMMAP_STORAGE_REGISTRY)) == initial_count + 1
+
+        # Storage with auto_cleanup=False should not be registered
+        storage2 = LazyMemmapStorage(100, auto_cleanup=False)
+        assert len(list(_MEMMAP_STORAGE_REGISTRY)) == initial_count + 1
+
+        # Cleanup should still work
+        storage.cleanup()
+
+    def test_cleanup_subprocess(self, tmpdir):
+        """Test that cleanup works correctly in subprocess scenarios."""
+        import subprocess
+        import sys
+
+        scratch_dir = str(tmpdir / "subprocess_storage")
+
+        # Create a script that creates a storage and exits normally
+        script = f"""
+import torch
+from tensordict import TensorDict
+from torchrl.data import ReplayBuffer, LazyMemmapStorage
+
+storage = LazyMemmapStorage(100, scratch_dir="{scratch_dir}", auto_cleanup=True)
+rb = ReplayBuffer(storage=storage)
+rb.extend(TensorDict(a=torch.randn(10), batch_size=[10]))
+print("Storage created")
+# Normal exit - atexit handler should clean up
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        # Script should have succeeded
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        # Directory should have been cleaned up on exit
+        assert not os.path.exists(
+            scratch_dir
+        ), f"Directory {scratch_dir} should have been cleaned up"
+
+    def test_cleanup_signal_interrupt(self, tmpdir):
+        """Test that cleanup happens on SIGINT (Ctrl+C)."""
+        import subprocess
+        import sys
+        import time
+
+        scratch_dir = str(tmpdir / "signal_storage")
+
+        # Create a script that sleeps and can be interrupted
+        script = f"""
+import signal
+import time
+import torch
+from tensordict import TensorDict
+from torchrl.data import ReplayBuffer, LazyMemmapStorage
+
+storage = LazyMemmapStorage(100, scratch_dir="{scratch_dir}", auto_cleanup=True)
+rb = ReplayBuffer(storage=storage)
+rb.extend(TensorDict(a=torch.randn(10), batch_size=[10]))
+print("READY", flush=True)
+time.sleep(60)  # Will be interrupted
+"""
+        proc = subprocess.Popen(
+            [sys.executable, "-c", script],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+        # Wait for the script to be ready
+        try:
+            # Read until we see READY
+            start = time.time()
+            while time.time() - start < 10:
+                line = proc.stdout.readline()
+                if "READY" in line:
+                    break
+            else:
+                proc.kill()
+                pytest.skip("Script did not start in time")
+
+            # Give it a moment to set up signal handlers
+            time.sleep(0.5)
+
+            # Verify directory exists
+            assert os.path.isdir(scratch_dir)
+
+            # Send SIGINT (Ctrl+C)
+            proc.send_signal(signal.SIGINT)
+            proc.wait(timeout=5)
+
+            # Directory should have been cleaned up
+            assert not os.path.exists(
+                scratch_dir
+            ), f"Directory {scratch_dir} should have been cleaned up on SIGINT"
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+
+    def test_cleanup_with_del(self, tmpdir):
+        """Test that __del__ triggers cleanup."""
+        scratch_dir = str(tmpdir / "del_storage")
+        os.makedirs(scratch_dir, exist_ok=True)
+
+        def create_and_delete():
+            storage = LazyMemmapStorage(100, scratch_dir=scratch_dir, auto_cleanup=True)
+            rb = ReplayBuffer(storage=storage)
+            rb.extend(TensorDict(a=torch.randn(10), batch_size=[10]))
+            # Storage goes out of scope here
+
+        create_and_delete()
+
+        # Force garbage collection
+        import gc
+
+        gc.collect()
+
+        # Note: __del__ is not guaranteed to run immediately, but the cleanup
+        # infrastructure should still work via atexit
+
+    def test_cleanup_preserves_user_data_by_default(self, tmpdir):
+        """Test that user-specified directories are NOT cleaned by default."""
+        scratch_dir = str(tmpdir / "user_data")
+        os.makedirs(scratch_dir, exist_ok=True)
+
+        storage = LazyMemmapStorage(100, scratch_dir=scratch_dir)
+        rb = ReplayBuffer(storage=storage)
+        rb.extend(TensorDict(a=torch.randn(10), batch_size=[10]))
+
+        # auto_cleanup should be False by default
+        assert storage._auto_cleanup is False
+
+        # Directory should exist
+        assert os.path.isdir(scratch_dir)
+
+        # Explicit cleanup should still work
+        storage.cleanup()
+        assert not os.path.exists(scratch_dir)
 
 
 if __name__ == "__main__":

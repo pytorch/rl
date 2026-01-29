@@ -9,13 +9,12 @@ from dataclasses import dataclass
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import dispatch, TensorDictModule
+from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import Tensor
 
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import _find_action_space
-from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
@@ -26,7 +25,12 @@ from torchrl.objectives.utils import (
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+from torchrl.objectives.value import (
+    TD0Estimator,
+    TD1Estimator,
+    TDLambdaEstimator,
+    ValueEstimatorBase,
+)
 
 
 class IQLLoss(LossModule):
@@ -35,14 +39,14 @@ class IQLLoss(LossModule):
     Presented in "Offline Reinforcement Learning with Implicit Q-Learning" https://arxiv.org/abs/2110.06169
 
     Args:
-        actor_network (ProbabilisticActor): stochastic actor
+        actor_network (ProbabilisticTensorDictSequential): stochastic actor
         qvalue_network (TensorDictModule): Q(s, a) parametric model
             If a single instance of `qvalue_network` is provided, it will be duplicated ``num_qvalue_nets``
             times. If a list of modules is passed, their
             parameters will be stacked unless they share the same identity (in which case
             the original parameter will be expanded).
 
-            .. warning:: When a list of parameters if passed, it will __not__ be compared against the policy parameters
+            .. warning:: When a list of parameters if passed, it will **not** be compared against the policy parameters
               and all the parameters will be considered as untied.
 
         value_network (TensorDictModule, optional): V(s) parametric model.
@@ -257,7 +261,7 @@ class IQLLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: ProbabilisticActor,
+        actor_network: ProbabilisticTensorDictSequential,
         qvalue_network: TensorDictModule | list[TensorDictModule],
         value_network: TensorDictModule | None,
         *,
@@ -266,9 +270,9 @@ class IQLLoss(LossModule):
         temperature: float = 1.0,
         expectile: float = 0.5,
         gamma: float | None = None,
-        priority_key: str = None,
+        priority_key: str | None = None,
         separate_losses: bool = False,
-        reduction: str = None,
+        reduction: str | None = None,
         deactivate_vmap: bool = False,
     ) -> None:
         self._in_keys = None
@@ -524,6 +528,13 @@ class IQLLoss(LossModule):
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
+
+        # Handle ValueEstimatorBase instance or class
+        if isinstance(value_type, ValueEstimatorBase) or (
+            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
+        ):
+            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+
         self.value_type = value_type
         value_net = self.value_network
 
@@ -569,7 +580,7 @@ class DiscreteIQLLoss(IQLLoss):
     Presented in "Offline Reinforcement Learning with Implicit Q-Learning" https://arxiv.org/abs/2110.06169
 
     Args:
-        actor_network (ProbabilisticActor): stochastic actor
+        actor_network (ProbabilisticTensorDictSequential): stochastic actor
         qvalue_network (TensorDictModule): Q(s, a) parametric model.
         value_network (TensorDictModule, optional): V(s) parametric model.
 
@@ -775,7 +786,7 @@ class DiscreteIQLLoss(IQLLoss):
 
     def __init__(
         self,
-        actor_network: ProbabilisticActor,
+        actor_network: ProbabilisticTensorDictSequential,
         qvalue_network: TensorDictModule,
         value_network: TensorDictModule | None,
         *,
@@ -785,9 +796,9 @@ class DiscreteIQLLoss(IQLLoss):
         temperature: float = 1.0,
         expectile: float = 0.5,
         gamma: float | None = None,
-        priority_key: str = None,
+        priority_key: str | None = None,
         separate_losses: bool = False,
-        reduction: str = None,
+        reduction: str | None = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None

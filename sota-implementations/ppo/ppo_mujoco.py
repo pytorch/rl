@@ -12,7 +12,7 @@ from __future__ import annotations
 import warnings
 
 import hydra
-from torchrl._utils import compile_with_warmup
+from torchrl._utils import compile_with_warmup, get_available_device
 
 
 @hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
@@ -37,13 +37,9 @@ def main(cfg: DictConfig):  # noqa: F821
 
     torch.set_float32_matmul_precision("high")
 
-    device = cfg.optim.device
-    if device in ("", None):
-        if torch.cuda.is_available():
-            device = "cuda:0"
-        else:
-            device = "cpu"
-    device = torch.device(device)
+    device = (
+        torch.device(cfg.optim.device) if cfg.optim.device else get_available_device()
+    )
 
     num_mini_batches = cfg.collector.frames_per_batch // cfg.loss.mini_batch_size
     total_network_updates = (
@@ -104,8 +100,8 @@ def main(cfg: DictConfig):  # noqa: F821
         critic_network=critic,
         clip_epsilon=cfg.loss.clip_epsilon,
         loss_critic_type=cfg.loss.loss_critic_type,
-        entropy_coef=cfg.loss.entropy_coef,
-        critic_coef=cfg.loss.critic_coef,
+        entropy_coeff=cfg.loss.entropy_coeff,
+        critic_coeff=cfg.loss.critic_coeff,
         normalize_advantage=True,
     )
 

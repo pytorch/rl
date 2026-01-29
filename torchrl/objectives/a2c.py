@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import contextlib
-import warnings
 from copy import deepcopy
 from dataclasses import dataclass
 
@@ -44,6 +43,7 @@ from torchrl.objectives.value import (
     TD0Estimator,
     TD1Estimator,
     TDLambdaEstimator,
+    ValueEstimatorBase,
     VTrace,
 )
 
@@ -282,40 +282,30 @@ class A2CLoss(LossModule):
         loss_critic_type: str = "smooth_l1",
         gamma: float | None = None,
         separate_losses: bool = False,
-        advantage_key: str = None,
-        value_target_key: str = None,
+        advantage_key: str | None = None,
+        value_target_key: str | None = None,
         functional: bool = True,
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
-        reduction: str = None,
+        reduction: str | None = None,
         clip_value: float | None = None,
         **kwargs,
     ):
-        # Handle deprecated entropy_coef argument
+        # entropy_coef has been removed in v0.11
         if "entropy_coef" in kwargs:
-            if entropy_coeff is not None:  # Check if entropy_coeff was explicitly set
-                raise ValueError(
-                    "Cannot specify both 'entropy_coef' and 'entropy_coeff'"
-                )
-            warnings.warn(
-                "'entropy_coef' is deprecated and will be removed in torchrl v0.11. Please use 'entropy_coeff' instead.",
-                DeprecationWarning,
+            raise TypeError(
+                "'entropy_coef' has been removed in torchrl v0.11. Please use 'entropy_coeff' instead."
             )
-            entropy_coeff = kwargs.pop("entropy_coef")
 
         # Set default value if None
         if entropy_coeff is None:
             entropy_coeff = 0.01
 
-        # Handle deprecated critic_coef argument
+        # critic_coef has been removed in v0.11
         if "critic_coef" in kwargs:
-            if critic_coeff != 1.0:  # Check if critic_coeff was explicitly set
-                raise ValueError("Cannot specify both 'critic_coef' and 'critic_coeff'")
-            warnings.warn(
-                "'critic_coef' is deprecated and will be removed in torchrl v0.11. Please use 'critic_coeff' instead.",
-                DeprecationWarning,
+            raise TypeError(
+                "'critic_coef' has been removed in torchrl v0.11. Please use 'critic_coeff' instead."
             )
-            critic_coeff = kwargs.pop("critic_coef")
 
         if actor is not None:
             actor_network = actor
@@ -472,9 +462,11 @@ class A2CLoss(LossModule):
         tensordict_clone = tensordict.select(
             *self.actor_network.in_keys, strict=False
         ).copy()
-        with self.actor_network_params.to_module(
-            self.actor_network
-        ) if self.functional else contextlib.nullcontext():
+        with (
+            self.actor_network_params.to_module(self.actor_network)
+            if self.functional
+            else contextlib.nullcontext()
+        ):
             dist = self.actor_network.get_dist(tensordict_clone)
         if isinstance(dist, CompositeDistribution):
             action_keys = self.tensor_keys.action
@@ -530,9 +522,11 @@ class A2CLoss(LossModule):
         tensordict_select = tensordict.select(
             *self.critic_network.in_keys, strict=False
         )
-        with self.critic_network_params.to_module(
-            self.critic_network
-        ) if self.functional else contextlib.nullcontext():
+        with (
+            self.critic_network_params.to_module(self.critic_network)
+            if self.functional
+            else contextlib.nullcontext()
+        ):
             state_value = self.critic_network(
                 tensordict_select,
             ).get(self.tensor_keys.value)
@@ -610,6 +604,13 @@ class A2CLoss(LossModule):
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
+
+        # Handle ValueEstimatorBase instance or class
+        if isinstance(value_type, ValueEstimatorBase) or (
+            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
+        ):
+            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+
         self.value_type = value_type
         hp = dict(default_value_kwargs(value_type))
         hp.update(hyperparams)

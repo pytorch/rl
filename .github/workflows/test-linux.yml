@@ -23,17 +23,36 @@ permissions:
   contents: read
 
 jobs:
+  test-setup-minimal:
+    strategy:
+      matrix:
+        python_version: ["3.10", "3.14"]
+      fail-fast: false
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    with:
+      runner: linux.4xlarge
+      repository: pytorch/rl
+      docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
+      timeout: 90
+      script: |
+        set -euo pipefail
+        export PYTHON_VERSION=${{ matrix.python_version }}
+        export CU_VERSION="cpu"
+        echo "PYTHON_VERSION: $PYTHON_VERSION"
+        echo "CU_VERSION: $CU_VERSION"
+        bash .github/unittest/linux/scripts/run_setup_test.sh
+
   tests-cpu:
     strategy:
       matrix:
-        python_version: ["3.9", "3.10", "3.11", "3.12"]
+        python_version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.12xlarge
       repository: pytorch/rl
-      docker-image: "nvidia/cuda:12.2.0-devel-ubuntu22.04"
-      timeout: 90
+      docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
+      timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
@@ -56,17 +75,22 @@ jobs:
   tests-gpu:
     strategy:
       matrix:
-        python_version: ["3.11"]
-        cuda_arch_version: ["12.8"]
+        python_version: ["3.12"]
+        cuda_arch_version: ["13.0"]
+        # Test sharding: split tests into 3 parallel jobs for faster execution
+        # Shard 1: test_transforms.py (heaviest)
+        # Shard 2: test_envs.py + test_collectors.py (multiprocessing-heavy)
+        # Shard 3: all other tests
+        shard: ["1", "2", "3"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
-      timeout: 90
+      timeout: 120
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
@@ -82,8 +106,51 @@ jobs:
         fi
         export TD_GET_DEFAULTS_TO_NONE=1
 
+        # Run everything except distributed tests; those run in parallel in tests-gpu-distributed.
+        export TORCHRL_TEST_SUITE=nondistributed
+        export TORCHRL_TEST_SHARD=${{ matrix.shard }}
+
         # Remove the following line when the GPU tests are working inside docker, and uncomment the above lines
         #export CU_VERSION="cpu"
+
+        echo "PYTHON_VERSION: $PYTHON_VERSION"
+        echo "CU_VERSION: $CU_VERSION"
+        echo "TORCHRL_TEST_SHARD: $TORCHRL_TEST_SHARD"
+
+        ## setup_env.sh
+        bash .github/unittest/linux/scripts/run_all.sh
+
+  tests-gpu-distributed:
+    strategy:
+      matrix:
+        python_version: ["3.12"]
+        cuda_arch_version: ["13.0"]
+      fail-fast: false
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    with:
+      runner: linux.g5.4xlarge.nvidia.gpu
+      repository: pytorch/rl
+      docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
+      gpu-arch-type: cuda
+      gpu-arch-version: ${{ matrix.cuda_arch_version }}
+      timeout: 120
+      script: |
+        # Set env vars from matrix
+        export PYTHON_VERSION=${{ matrix.python_version }}
+        # Commenting these out for now because the GPU test are not working inside docker
+        export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
+        export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+        export TD_GET_DEFAULTS_TO_NONE=1
+
+        # Only distributed tests (runs in parallel with tests-gpu).
+        export TORCHRL_TEST_SUITE=distributed
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
@@ -94,21 +161,23 @@ jobs:
   tests-olddeps:
     strategy:
       matrix:
-        python_version: ["3.9"]
-        cuda_arch_version: ["11.6"]
+        python_version: ["3.10"]
+        cuda_arch_version: ["11.8"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
-      docker-image: "nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04"
+      docker-image: "nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
-      timeout: 90
+      timeout: 120
       script: |
         set -euo pipefail
-        export PYTHON_VERSION="3.9"
+        export PYTHON_VERSION="3.10"
         export CU_VERSION="cu118"
+        # Olddeps tests with older torch/dependencies. Pin tensordict to stable range.
+        export TORCHRL_TENSORDICT_SPEC="tensordict>=0.11.0,<0.12.0"
         export TAR_OPTIONS="--no-same-owner"
         if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
@@ -128,17 +197,17 @@ jobs:
   tests-optdeps:
     strategy:
       matrix:
-        python_version: ["3.11"]
-        cuda_arch_version: ["12.8"]
+        python_version: ["3.12"]
+        cuda_arch_version: ["13.0"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
-      timeout: 90
+      timeout: 120
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
@@ -163,17 +232,19 @@ jobs:
   tests-stable-gpu:
     strategy:
       matrix:
-        python_version: ["3.10"] # "3.9", "3.10", "3.11"
-        cuda_arch_version: ["11.8"] # "11.6", "11.7"
+        python_version: ["3.12"] # "3.9", "3.10", "3.11"
+        cuda_arch_version: ["13.0"] # "11.6", "11.7"
+        # Test sharding: split tests into 3 parallel jobs for faster execution
+        shard: ["1", "2", "3"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
-      timeout: 90
+      timeout: 120
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
@@ -195,6 +266,50 @@ jobs:
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
         export TD_GET_DEFAULTS_TO_NONE=1
+
+        # Run everything except distributed tests; those run in parallel in tests-stable-gpu-distributed.
+        export TORCHRL_TEST_SUITE=nondistributed
+        export TORCHRL_TEST_SHARD=${{ matrix.shard }}
+
+        echo "TORCHRL_TEST_SHARD: $TORCHRL_TEST_SHARD"
+
+        ## setup_env.sh
+        bash .github/unittest/linux/scripts/run_all.sh
+
+  tests-stable-gpu-distributed:
+    strategy:
+      matrix:
+        python_version: ["3.12"] # "3.9", "3.10", "3.11"
+        cuda_arch_version: ["13.0"] # "11.6", "11.7"
+      fail-fast: false
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    with:
+      runner: linux.g5.4xlarge.nvidia.gpu
+      repository: pytorch/rl
+      docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
+      gpu-arch-type: cuda
+      gpu-arch-version: ${{ matrix.cuda_arch_version }}
+      timeout: 120
+      script: |
+        # Set env vars from matrix
+        export PYTHON_VERSION=${{ matrix.python_version }}
+        # Commenting these out for now because the GPU test are not working inside docker
+        export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
+        export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
+
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        export TD_GET_DEFAULTS_TO_NONE=1
+        export TORCHRL_TEST_SUITE=distributed
+
+        echo "PYTHON_VERSION: $PYTHON_VERSION"
+        echo "CU_VERSION: $CU_VERSION"
 
         ## setup_env.sh
         bash .github/unittest/linux/scripts/run_all.sh

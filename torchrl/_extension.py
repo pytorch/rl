@@ -9,10 +9,21 @@ import warnings
 
 from packaging.version import parse
 
+__version__ = None  # type: ignore
 try:
-    from .version import __version__
+    try:
+        from importlib.metadata import version as _dist_version
+    except ImportError:  # pragma: no cover
+        from importlib_metadata import version as _dist_version  # type: ignore
+
+    __version__ = _dist_version("torchrl")
+except Exception:
+    __version__ = None  # type: ignore
+
+try:
+    from .version import pytorch_version
 except ImportError:
-    __version__ = None
+    pytorch_version = "unknown"
 
 
 def is_module_available(*modules: str) -> bool:
@@ -47,13 +58,17 @@ if _is_nightly(__version__):
         " - make sure ninja and cmake were installed\n"
         " - make sure you ran `python setup.py clean && python setup.py develop` and that no error was raised\n"
         " - make sure the version of PyTorch you are using matches the one that was present in your virtual env during "
-        "setup."
+        f"setup. This package was built with PyTorch {pytorch_version}. You can deactivate this warning by setting the environment variable `RL_WARNINGS=0`."
     )
 
 else:
     EXTENSION_WARNING = (
         "Failed to import torchrl C++ binaries. Some modules (eg, prioritized replay buffers) may not work with your installation. "
-        "This is likely due to a discrepancy between your package version and the PyTorch version. Make sure both are compatible. "
-        "Usually, torchrl majors follow the pytorch majors within a few days around the release. "
-        "For instance, TorchRL 0.5 requires PyTorch 2.4.0, and TorchRL 0.6 requires PyTorch 2.5.0."
+        "This is likely due to a discrepancy between your package version and the PyTorch version. "
+        "TorchRL does not tightly pin PyTorch versions to give users freedom, but the trade-off is that C++ extensions like "
+        "prioritized replay buffers can only be used with the PyTorch version they were built against. "
+        f"This package was built with PyTorch {pytorch_version}. "
+        "Workarounds include: (1) upgrading/downgrading PyTorch or TorchRL to compatible versions, "
+        "or (2) making a local install using `pip install git+https://github.com/pytorch/rl.git@<version>`. "
+        "You can deactivate this warning by setting the environment variable `RL_WARNINGS=0`."
     )

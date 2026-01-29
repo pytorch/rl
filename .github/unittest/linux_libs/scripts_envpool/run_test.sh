@@ -29,5 +29,5 @@ export MKL_THREADING_LAYER=GNU
 python -c "import envpool"
 
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestEnvPool --error-for-skips
-coverage combine
+coverage combine -q
 coverage xml -i

@@ -5,8 +5,11 @@
 from __future__ import annotations
 
 import collections
+
+import importlib.util
+import threading
 import warnings
-from typing import Any, Literal
+from typing import Any, Literal, TYPE_CHECKING
 
 import torch
 from tensordict import (
@@ -25,6 +28,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 from torchrl.envs.utils import _classproperty
 from torchrl.modules.llm.policies.common import (
+    _batching,
     _extract_responses_from_full_histories,
     ChatHistory,
     LLMWrapperBase,
@@ -35,17 +39,52 @@ from torchrl.modules.llm.policies.common import (
 )
 from torchrl.modules.utils.utils import _unpad_tensors
 
-# Type imports
-try:
-    import transformers
-    import vllm
+
+_HAS_VLLM = importlib.util.find_spec("vllm") is not None
+_HAS_TRANSFORMERS = importlib.util.find_spec("transformers") is not None
+
+if TYPE_CHECKING:
+    from vllm.inputs import TokensPrompt  # type: ignore[import-not-found]
+    from vllm.outputs import RequestOutput  # type: ignore[import-not-found]
+    from vllm.sampling_params import SamplingParams  # type: ignore[import-not-found]
+elif _HAS_VLLM:
     from vllm.outputs import RequestOutput
     from vllm.sampling_params import SamplingParams
-except ImportError:
-    vllm = None
-    transformers = None
-    SamplingParams = Any  # type: ignore
-    RequestOutput = Any  # type: ignore
+
+    try:
+        from vllm.inputs import TokensPrompt
+    except ImportError:
+        # Fallback for older vLLM versions
+        TokensPrompt = None
+else:
+    SamplingParams = None  # Will error at usage if vLLM not available
+    RequestOutput = None
+    TokensPrompt = None
+
+
+def _require_transformers() -> None:
+    if not _HAS_TRANSFORMERS:
+        raise ImportError(
+            "transformers is required for vLLMWrapper. Please install it with `pip install transformers`."
+        )
+
+
+def _require_vllm():
+    """Import vLLM lazily.
+
+    We intentionally avoid importing vLLM at module import time because importing vLLM can
+    load native extensions that may hard-crash the interpreter on some platforms.
+    """
+    if not _HAS_VLLM:
+        raise ImportError(
+            "vllm is required for vLLMWrapper. Please install it with `pip install vllm`."
+        )
+    import vllm as _vllm  # local import is intentional / required
+
+    return _vllm
+
+
+# Import async vLLM engines
 
 
 class vLLMWrapper(LLMWrapperBase):
@@ -54,8 +93,33 @@ class vLLMWrapper(LLMWrapperBase):
     This class is a subclass of :class:`~torchrl.modules.llm.policies.LLMWrapperBase` and provides a unified API for handling different input
     modalities (history, text, tokens) with consistent output structure using :class:`~tensordict.TensorClass` objects.
 
+    The wrapper supports both synchronous (vllm.LLM) and asynchronous (:class:`~torchrl.modules.llm.backends.AsyncVLLM`) vLLM engines.
+
+    .. note::
+        **Recommended: Use AsyncVLLM for better performance**
+
+        For distributed inference and better resource utilization, we recommend using
+        :class:`~torchrl.modules.llm.backends.AsyncVLLM` instead of the synchronous vllm.LLM:
+
+        >>> from torchrl.modules.llm.backends import AsyncVLLM
+        >>> from torchrl.modules.llm import vLLMWrapper
+        >>>
+        >>> # Recommended approach
+        >>> async_engine = AsyncVLLM.from_pretrained("Qwen/Qwen2.5-3B", num_replicas=2)
+        >>> wrapper = vLLMWrapper(async_engine, input_mode="history", generate=True)
+
+        AsyncVLLM provides:
+        - Better GPU utilization through Ray-based distribution
+        - Multiple replicas for higher throughput
+        - Native vLLM batching for optimal performance
+        - Automatic resource management and cleanup
+
     Args:
-        model (vllm.LLM | str): The vLLM model to wrap. If a string, it will be passed to `vllm.LLM`.
+        model (vllm.LLM | AsyncVLLM | Ray Actor | str): The vLLM model to wrap.
+            - If a string, it will be converted to an AsyncVLLM instance (recommended)
+            - If a vllm.LLM instance, uses synchronous generation via `model.generate()`
+            - If an AsyncVLLM instance, uses async generation via `model.generate()`
+            - If a Ray actor with generate method, uses remote calls via `ray.get(model.generate.remote())`
 
     Keyword Args:
         tokenizer (transformers.tokenization_utils.PreTrainedTokenizer | str | None, optional): The tokenizer to use for encoding and decoding text.
@@ -68,14 +132,65 @@ class vLLMWrapper(LLMWrapperBase):
             - `("tokens", "prompt")` for `"tokens"` when `generate=True`, `("tokens", "full")` for `"tokens"` when `generate=False`
         attention_mask_key (str, optional): The key for attention masks (used in `"tokens"` mode). Defaults to `"attention_mask"`.
 
-                    .. warning:: This argument is under development and may change in the future.
+            .. warning:: This argument is under development and may change in the future.
 
         generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on the input.
             If `False`, only log probabilities will be computed. Defaults to `True`.
         return_log_probs (bool, optional): Whether to return log probabilities. Defaults to `True`.
         generate_kwargs (dict | None, optional): Additional arguments to pass to the model's generate method. Defaults to `None`.
+
+            **Standardized Parameters (cross-backend compatible):**
+
+            * **max_new_tokens** (int): Maximum number of new tokens to generate (maps to vLLM's max_tokens)
+            * **num_return_sequences** (int): Number of sequences to return (maps to vLLM's n)
+            * **temperature** (float): Sampling temperature (0.0 = deterministic, higher = more random)
+            * **top_p** (float): Nucleus sampling parameter (0.0-1.0)
+            * **top_k** (int): Top-k sampling parameter
+            * **repetition_penalty** (float): Penalty for repeating tokens
+            * **do_sample** (bool): Whether to use sampling vs greedy decoding
+            * **num_beams** (int): Number of beams for beam search
+            * **length_penalty** (float): Penalty for sequence length
+            * **early_stopping** (bool): Whether to stop early in beam search
+            * **stop_sequences** (list): Sequences that stop generation (maps to vLLM's stop)
+            * **skip_special_tokens** (bool): Whether to skip special tokens in output
+            * **logprobs** (bool): Whether to return log probabilities
+
+                .. warning:: Usage of this parameter is discouraged as it may conflict with the `generate` parameter
+                    of the class.
+
+            **vLLM-Specific Parameters:**
+
+            * **presence_penalty** (float): Penalty for token presence
+            * **frequency_penalty** (float): Penalty for token frequency
+            * **ignore_eos** (bool): Whether to ignore EOS token
+            * **prompt_logprobs** (bool): Whether to return prompt log probabilities
+            * **detokenize** (bool): Whether to detokenize output
+            * **include_stop_str_in_output** (bool): Whether to include stop strings in output
+            * **spaces_between_special_tokens** (bool): Whether to add spaces between special tokens
+            * **sampling_type** (str): Type of sampling to use
+            * **temperature_last** (bool): Whether to apply temperature only to last token
+            * **top_p_last** (bool): Whether to apply top_p only to last token
+            * **top_k_last** (bool): Whether to apply top_k only to last token
+
+            **Legacy Parameter Support:**
+
+            * **max_tokens** (int): Automatically converted to max_new_tokens
+            * **n** (int): Automatically converted to num_return_sequences
+
+            **Parameter Conflict Resolution:**
+
+            When both legacy (vLLM-specific) and standardized parameter names are provided,
+            a :exc:`ValueError` is raised to prevent confusion. For example:
+
+            * If both ``max_tokens`` and ``max_new_tokens`` are passed, an error is raised
+            * If both ``n`` and ``num_return_sequences`` are passed, an error is raised
+
+            This ensures clear parameter usage and prevents unexpected behavior.
+
         tokenizer_kwargs (dict | None, optional): Additional arguments to pass to the tokenizer. Defaults to `None`.
         pad_output (bool, optional): Whether to pad the output sequences to a uniform length. Defaults to `False`.
+        pad_model_input (bool, optional): Whether to pad the model input sequences to a uniform length.
+            This is not supported by vLLM.
         inplace (Literal[True, False, "empty"] | None, optional): Determines how the module should handle in-place operations. Defaults to `True`.
         device (torch.device | None, optional): The device to use for computation. Defaults to `None`.
         layout (torch.layout | None, optional): The layout to use for the output tensors when `pad_output=False`. Defaults to `torch.strided`.
@@ -90,9 +205,33 @@ class vLLMWrapper(LLMWrapperBase):
         tokens_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Tokens` object. Defaults to `"tokens"`.
         masks_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Masks` object. Defaults to `"masks"`.
         history_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.ChatHistory` object. Defaults to `"history"`.
+        batching (bool, optional): Whether to enable batching. Defaults to `False`. See `Batching`_ below for more details.
+        min_batch_size (int | None, optional): The minimum batch size to use for batching. See `Batching`_ below for more details.
+        max_batch_size (int | None, optional): The maximum batch size to use for batching. See `Batching`_ below for more details.
+        batching_timeout (float, optional): The timeout for batching. See `Batching`_ below for more details.
+
+    .. _Batching:
+
+    **Batching**
+
+    Batching is a feature that allows the module to process multiple inputs in a single call.
+        It is designed to work in a multi-threaded environment.
+        To enable batching, it suffices to set `batching=True` which will set `min_batch_size` to 1 if not provided.
+        If you want to set a different value for `min_batch_size` or `max_batch_size` for a fine-grained control,
+        you can to set `batching=True` and then set `min_batch_size` or `max_batch_size` to a value greater or equal to 1.
+        The way batching works is as follows:
+        - If `min_batch_size` is not provided but `max_batch_size` is, `min_batch_size` is set to 1.
+        - If `max_batch_size` is not provided but `min_batch_size` is, `max_batch_size` is set to the number of inputs in the queue.
+        - When the model is called, a check is performed to see if the number of inputs in the queue is greater or equal to `min_batch_size`.
+          If it is, the batch is processed immediately, while waiting for the previous batch to be processed if the model is busy.
+          Otherwise, the input is added to the queue and the function waits for the batch to be completed.
+          While waiting for the batch to be completed, a timeout is set to `batching_timeout` seconds such that if the batch is not
+          completed after `batching_timeout` seconds, the remaining items to process are processed as is and the function returns after
+          at most `batching_timeout` seconds (plus the time to finish processing the previous and current batch).
 
     Input Keys:
         The input key depends on both `input_mode` and `generate`:
+
         - If `input_mode="history"` and `generate=True`: `input_key` (defaults to `("history", "prompt")`)
         - If `input_mode="history"` and `generate=False`: `input_key` (defaults to `("history", "full")`)
         - If `input_mode="text"` and `generate=True`: `input_key` (defaults to `("text", "prompt")`)
@@ -108,16 +247,15 @@ class vLLMWrapper(LLMWrapperBase):
         - **Masks**: Always returned (`masks_key`, defaults to `"masks"`)
         - **Log Probs**: Returned when `return_log_probs=True` (`log_probs_key`, defaults to `"log_probs"`)
 
-        Example output structure for `input_mode="history"`:
-        ```
-        TensorDict(
-            text=Text(prompt=..., response=..., full=...),
-            masks=Masks(all_attention_mask=..., all_assistant_mask=...),
-            tokens=Tokens(prompt=..., response=..., full=...),
-            log_probs=LogProbs(prompt=..., response=..., full=...),
-            history=ChatHistory(prompt=..., response=..., full=...)
-        )
-        ```
+        Example output structure for `input_mode="history"`::
+
+            TensorDict(
+                text=Text(prompt=..., response=..., full=...),
+                masks=Masks(all_attention_mask=..., all_assistant_mask=...),
+                tokens=Tokens(prompt=..., response=..., full=...),
+                log_probs=LogProbs(prompt=..., response=..., full=...),
+                history=ChatHistory(prompt=..., response=..., full=...)
+            )
 
     Example:
         >>> from vllm import LLM
@@ -134,7 +272,13 @@ class vLLMWrapper(LLMWrapperBase):
         ...     tokenizer=tokenizer,
         ...     input_mode="history",
         ...     generate=True,
-        ...     return_log_probs=True
+        ...     return_log_probs=True,
+        ...     generate_kwargs={
+        ...         "max_new_tokens": 50,  # Standardized parameter
+        ...         "temperature": 0.7,
+        ...         "top_p": 0.9,
+        ...         "do_sample": True,
+        ...     }
         ... )
         >>>
         >>> history = History.from_chats([[
@@ -151,13 +295,13 @@ class vLLMWrapper(LLMWrapperBase):
         collector: The collector associated with the module, if it exists.
 
     .. seealso::
-        - :class:`~torchrl.modules.llm.policies.LLMWrapperBase` (see :ref:`ref_categorical_sequential`)
-        - :class:`~torchrl.modules.llm.policies.TransformersWrapper` (see :ref:`ref_transformers_wrapper`)
+        - :class:`~torchrl.modules.llm.policies.LLMWrapperBase`
+        - :class:`~torchrl.modules.llm.policies.TransformersWrapper`
     """
 
     def __init__(
         self,
-        model: vllm.LLM | str,
+        model: Any,  # vllm.LLM | AsyncVLLMEngineService | AsyncLLMEngineExtended | str
         *,
         tokenizer: callable | str | None = None,  # type: ignore
         input_mode: str = "history",
@@ -167,6 +311,7 @@ class vLLMWrapper(LLMWrapperBase):
         generate_kwargs: dict | None = None,
         tokenizer_kwargs: dict | None = None,
         pad_output: bool = False,
+        pad_model_input: bool | None = None,
         inplace: Literal[True, False, "empty"] | None = None,
         device: torch.device | None = None,
         layout: torch.layout | None = None,
@@ -179,23 +324,76 @@ class vLLMWrapper(LLMWrapperBase):
         tokens_key: NestedKey | None = "tokens",
         masks_key: NestedKey | None = "masks",
         log_probs_key: NestedKey | None = "log_probs",
+        batching: bool | None = None,
+        min_batch_size: int | None = None,
+        max_batch_size: int | None = None,
+        batching_timeout: float = 10.0,
     ):
         super().__init__()
 
-        if vllm is None:
-            raise ImportError("vllm is required for vLLMWrapper")
-        if transformers is None:
-            raise ImportError("transformers is required for vLLMWrapper")
+        if batching and min_batch_size is None:
+            min_batch_size = 1
+        elif (min_batch_size is not None or max_batch_size is not None) and (
+            batching is False
+        ):
+            raise ValueError(
+                "min_batch_size and max_batch_size must be None if batching is False."
+            )
 
+        # Validate that min_batch_size <= max_batch_size when both are specified
+        if min_batch_size is not None and max_batch_size is not None:
+            if min_batch_size > max_batch_size:
+                raise ValueError(
+                    f"min_batch_size ({min_batch_size}) must be <= max_batch_size ({max_batch_size})"
+                )
+
+        self._min_batch_size = min_batch_size
+        self._max_batch_size = max_batch_size
+        self._batching_timeout = batching_timeout
+        self._batch_queue = []
+        self._futures = []
+        if self.batching:
+            self._batching_lock = threading.Lock()
+        else:
+            self._batching_lock = None
+
+        _require_transformers()
+
+        # Detect and initialize model
         if isinstance(model, str):
-            model = vllm.LLM(model)
+            # Import lazily to avoid importing vLLM backends unless actually needed.
+            from torchrl.modules.llm.backends.vllm import (  # local import is intentional / required
+                AsyncVLLM,
+            )
+
+            model = AsyncVLLM.from_pretrained(model)
+
+        # Validate model type
+        model_type = type(model)
+        model_module = getattr(model_type, "__module__", "")
+        model_name = getattr(model_type, "__name__", "")
+        if model_name == "AsyncVLLM" and model_module.startswith(
+            "torchrl.modules.llm.backends.vllm"
+        ):
+            self._model_type = "async_vllm"
+        elif model_name == "LLM" and model_module.startswith("vllm"):
+            self._model_type = "sync_vllm"
+        elif hasattr(model, "generate") and hasattr(model, "remote"):
+            # Ray actor with generate method
+            self._model_type = "ray_actor"
+        else:
+            raise ValueError(
+                f"model must be a string, vllm.LLM, AsyncVLLM, or Ray actor. Got {type(model)}"
+            )
 
         if isinstance(tokenizer, str):
             from transformers import AutoTokenizer
 
             tokenizer = AutoTokenizer.from_pretrained(tokenizer)
-
-        from vllm import SamplingParams
+        # Import vLLM lazily: only needed if we are going to interact with vLLM types.
+        # (This keeps importing this module safe even if vLLM hard-crashes on import.)
+        if self._model_type in ("sync_vllm",):
+            _require_vllm()
 
         # Validate input_mode
         if input_mode not in ["history", "text", "tokens"]:
@@ -204,10 +402,11 @@ class vLLMWrapper(LLMWrapperBase):
             )
 
         self.model = model
-        self._remote_calls = not isinstance(model, vllm.LLM)
         self.input_mode = input_mode
         self.attention_mask_key = attention_mask_key
         self.generate = generate
+        if pad_model_input is not None:
+            raise ValueError("pad_model_input is not supported by vLLMWrapper.")
 
         # Auto-determine what to return based on input mode
         self.return_history = input_mode in ("history",)
@@ -301,9 +500,29 @@ class vLLMWrapper(LLMWrapperBase):
         # Get tokenizer if needed
         if tokenizer is None:
             try:
-                tokenizer = model.get_tokenizer()
-            except AttributeError:
-                warnings.warn("No tokenizer provided and no tokenizer found in model.")
+                if hasattr(model, "get_tokenizer"):
+                    tokenizer = model.get_tokenizer()
+                else:
+                    # Try to extract model name and load tokenizer as fallback
+                    model_name = self._extract_model_name(model)
+                    if model_name:
+                        warnings.warn(
+                            f"No tokenizer provided. Attempting to load tokenizer from model name: {model_name}"
+                        )
+                        from transformers import AutoTokenizer
+
+                        try:
+                            tokenizer = AutoTokenizer.from_pretrained(model_name)
+                        except Exception as tokenizer_error:
+                            warnings.warn(
+                                f"Failed to load tokenizer from {model_name}: {tokenizer_error}"
+                            )
+                    else:
+                        warnings.warn(
+                            "No tokenizer provided and no tokenizer found in model."
+                        )
+            except Exception as e:
+                warnings.warn(f"Could not get tokenizer from model: {e}")
         self.tokenizer = tokenizer
 
         if self.tokenizer is not None and (
@@ -320,8 +539,49 @@ class vLLMWrapper(LLMWrapperBase):
         else:
             generate_kwargs = dict(generate_kwargs)
 
+        # Standardize common parameters
+        generate_kwargs = self._standardize_generate_kwargs(generate_kwargs)
+
+        # Extract wrapper-specific parameters
+        vllm_specific_kwargs = self._get_wrapper_specific_kwargs(
+            generate_kwargs, "vllm"
+        )
+
+        # Convert common parameters back to vLLM format
+        vllm_kwargs = {}
+        for key, value in generate_kwargs.items():
+            if key in self.COMMON_GENERATION_PARAMS:
+                # Convert common names to vLLM names
+                if key == "max_new_tokens":
+                    vllm_kwargs["max_tokens"] = value
+                elif key == "num_return_sequences":
+                    vllm_kwargs["n"] = value
+                elif key == "stop_sequences":
+                    vllm_kwargs["stop"] = value
+                elif key == "logprobs":
+                    # vLLM expects int for logprobs, not bool
+                    if isinstance(value, bool):
+                        value = 1 if value else None
+                    vllm_kwargs["logprobs"] = value
+                elif key == "do_sample":
+                    # do_sample is handled through the sampling parameters
+                    # If do_sample=False, we use greedy decoding (temperature=0)
+                    # If do_sample=True, we use the provided sampling parameters
+                    if not value:
+                        vllm_kwargs["temperature"] = 0.0
+                    # If do_sample=True, we keep the existing temperature/top_p/top_k values
+                elif key in ["length_penalty", "early_stopping", "num_beams"]:
+                    # These parameters are not supported by vLLM, skip them
+                    pass
+                else:
+                    # Direct mapping for other common parameters
+                    vllm_kwargs[key] = value
+
+        # Add vLLM-specific parameters
+        vllm_kwargs.update(vllm_specific_kwargs)
+
         self.num_samples = num_samples
-        if generate_kwargs.get("n", 1) > 1 or num_samples is not None:
+        if vllm_kwargs.get("n", 1) > 1 or num_samples is not None:
             if inplace in (True, "empty"):
                 raise ValueError(
                     "inplace must be False (or None) when generating more than one sample."
@@ -329,35 +589,36 @@ class vLLMWrapper(LLMWrapperBase):
             if inplace is None:
                 inplace = False
             if (
-                generate_kwargs.get("n", 1) > 1
+                vllm_kwargs.get("n", 1) > 1
                 and num_samples is not None
-                and generate_kwargs.get("n", 1) != num_samples
+                and vllm_kwargs.get("n", 1) != num_samples
             ):
                 raise ValueError("num_samples differs from generate_kwargs['n'].")
             elif num_samples is None:
-                self.num_samples = generate_kwargs.get("n", 1)
-            generate_kwargs["n"] = self.num_samples
+                self.num_samples = vllm_kwargs.get("n", 1)
+            vllm_kwargs["n"] = self.num_samples
         elif inplace is None:
             inplace = True
 
         self.inplace = inplace
 
-        prompt_logprobs = return_log_probs
+        # vLLM expects int for logprobs, not bool. Use 1 if True, None if False.
+        prompt_logprobs = 1 if return_log_probs else None
 
         if not generate:
             # We want only the log-probs, we generate a single token (that we then discard)
             # and retrieve the prompt log-probs
-            generate_kwargs["max_tokens"] = 1
+            vllm_kwargs["max_tokens"] = 1
             if not return_log_probs:
                 raise ValueError("return_log_probs must be True when generate=False.")
 
-        generate_kwargs.setdefault("detokenize", not pad_output)
-        generate_kwargs.setdefault("prompt_logprobs", prompt_logprobs)
-        generate_kwargs.setdefault("logprobs", return_log_probs)
-        generate_kwargs.setdefault("include_stop_str_in_output", True)
-        generate_kwargs.setdefault("skip_special_tokens", False)
+        vllm_kwargs.setdefault("detokenize", not pad_output)
+        vllm_kwargs.setdefault("prompt_logprobs", prompt_logprobs)
+        vllm_kwargs.setdefault("logprobs", 1 if return_log_probs else None)
+        vllm_kwargs.setdefault("include_stop_str_in_output", True)
+        vllm_kwargs.setdefault("skip_special_tokens", False)
 
-        sampling_params = SamplingParams(**generate_kwargs)
+        sampling_params = SamplingParams(**vllm_kwargs)
         self.sampling_params = sampling_params
 
         # Additional transformers-specific settings
@@ -497,7 +758,87 @@ class vLLMWrapper(LLMWrapperBase):
         # Create and return new instance
         return type(self)(**constructor_kwargs)
 
+    def set_tokenizer(self, tokenizer):
+        """Set the tokenizer for the wrapper. Useful for async engines where tokenizer retrieval is deferred."""
+        self.tokenizer = tokenizer
+        if self.tokenizer is not None and (
+            not hasattr(self.tokenizer, "pad_token") or self.tokenizer.pad_token is None
+        ):
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        if self.tokenizer is not None:
+            padding_value = self.tokenizer(self.tokenizer.pad_token)["input_ids"][0]
+        else:
+            padding_value = None
+        self.padding_value = padding_value
+
+    def _extract_model_name(self, model) -> str | None:
+        """Extract model name from different model types for tokenizer fallback."""
+        try:
+            # For AsyncVLLM, try to get the model name from engine_args
+            if hasattr(model, "engine_args") and hasattr(model.engine_args, "model"):
+                return model.engine_args.model
+
+            # For vllm.LLM, try to get the model name
+            elif hasattr(model, "llm_engine") and hasattr(
+                model.llm_engine, "model_config"
+            ):
+                return getattr(model.llm_engine.model_config, "model", None)
+
+            # For Ray actors, try to get model name via remote call
+            elif hasattr(model, "remote") and hasattr(model, "get_model_name"):
+                import ray
+
+                try:
+                    return ray.get(model.get_model_name.remote())
+                except Exception:
+                    pass
+
+            # Try common attributes that might contain model name
+            for attr in ["model_name", "model", "model_path", "_model_name"]:
+                if hasattr(model, attr):
+                    value = getattr(model, attr)
+                    if isinstance(value, str):
+                        return value
+
+            return None
+        except Exception:
+            return None
+
+    def _call_generate(self, *args, **kwargs):
+        """Call generate method based on model type.
+
+        In vLLM 0.14+, prompt_token_ids should be passed as TokensPrompt objects
+        rather than as a keyword argument.
+        """
+        # Convert prompt_token_ids to TokensPrompt format for vLLM 0.14+ compatibility
+        prompt_token_ids = kwargs.pop("prompt_token_ids", None)
+        if prompt_token_ids is not None and TokensPrompt is not None:
+            # Convert list of token ID lists to TokensPrompt objects
+            if isinstance(prompt_token_ids, list) and len(prompt_token_ids) > 0:
+                if isinstance(prompt_token_ids[0], list):
+                    # List of token ID lists -> list of TokensPrompt
+                    prompts = [
+                        TokensPrompt(prompt_token_ids=tids) for tids in prompt_token_ids
+                    ]
+                else:
+                    # Single token ID list -> single TokensPrompt
+                    prompts = TokensPrompt(prompt_token_ids=prompt_token_ids)
+                # Insert prompts as the first positional argument
+                args = (prompts,) + args
+        elif prompt_token_ids is not None:
+            # Fallback for older vLLM versions that still support prompt_token_ids kwarg
+            kwargs["prompt_token_ids"] = prompt_token_ids
+
+        if self._model_type == "ray_actor":
+            import ray
+
+            return ray.get(self.model.generate.remote(*args, **kwargs))
+        else:
+            # Both sync_vllm and async_vllm have direct generate methods
+            return self.model.generate(*args, **kwargs)
+
     @set_list_to_stack(True)
+    @_batching
     def forward(
         self,
         tensordict: TensorDictBase,
@@ -607,7 +948,7 @@ class vLLMWrapper(LLMWrapperBase):
     def _from_vllm_generate_history(
         self,
         tensordict_input: TensorDictBase,
-        sampling_params: SamplingParams,
+        sampling_params: Any,
         out: TensorDictBase,
     ) -> TensorDictBase:
         """Generate text from history input."""
@@ -741,13 +1082,16 @@ class vLLMWrapper(LLMWrapperBase):
                 text_full, prompt_histories, self.chat_template_name, self.tokenizer
             )
             history_chat_flat.response = h_responses
+            history_chat_flat.full = history_chat_flat.prompt.extend(
+                h_responses, inplace=False, dim=-1
+            )
         result.set(self.history_key, history_chat)
         return result
 
     def _from_vllm_logprobs_history(
         self,
         tensordict_input: TensorDictBase,
-        sampling_params: SamplingParams,
+        sampling_params: Any,
         out: TensorDictBase,
     ) -> TensorDictBase:
         """Compute log-probs from history input."""
@@ -804,7 +1148,7 @@ class vLLMWrapper(LLMWrapperBase):
         return result
 
     def _from_vllm_generate_text(
-        self, td: TensorDictBase, sampling_params: SamplingParams, out: TensorDictBase
+        self, td: TensorDictBase, sampling_params: Any, out: TensorDictBase
     ) -> TensorDictBase:
         """Generate text from text input."""
         # Type assertions
@@ -832,7 +1176,7 @@ class vLLMWrapper(LLMWrapperBase):
         return self._generate_from_text(text, sampling_params, out)
 
     def _from_vllm_logprobs_text(
-        self, td: TensorDictBase, sampling_params: SamplingParams, out: TensorDictBase
+        self, td: TensorDictBase, sampling_params: Any, out: TensorDictBase
     ) -> TensorDictBase:
         """Compute log-probs from text input."""
         # Type assertions
@@ -860,7 +1204,7 @@ class vLLMWrapper(LLMWrapperBase):
         return self._logprobs_from_text(text, sampling_params, out)
 
     def _from_vllm_generate_tokens(
-        self, td: TensorDictBase, sampling_params: SamplingParams, out: TensorDictBase
+        self, td: TensorDictBase, sampling_params: Any, out: TensorDictBase
     ) -> TensorDictBase:
         """Generate text from tokens input."""
         # Type assertions
@@ -901,7 +1245,7 @@ class vLLMWrapper(LLMWrapperBase):
         )
 
     def _from_vllm_logprobs_tokens(
-        self, td: TensorDictBase, sampling_params: SamplingParams, out: TensorDictBase
+        self, td: TensorDictBase, sampling_params: Any, out: TensorDictBase
     ) -> TensorDictBase:
         """Compute log-probs from tokens input."""
         # Type assertions
@@ -942,12 +1286,21 @@ class vLLMWrapper(LLMWrapperBase):
         )
 
     def _cat_text(
-        self, text: str | list[str], response_text: str | list[str]
+        self, text: str | list[str], response_text: str | list[str] | None
     ) -> str | list[str]:
         """Concatenate text and response text."""
         assert isinstance(
             text, (str, list)
         ), f"text must be str or list, got {type(text)}"
+
+        # Handle None response_text (when tokenizer is not available)
+        if response_text is None:
+            raise RuntimeError(
+                "response_text is None, likely due to missing tokenizer. "
+                "Cannot decode vLLM response without a tokenizer. "
+                "Please provide a tokenizer explicitly or ensure the model has one available."
+            )
+
         assert isinstance(
             response_text, (str, list)
         ), f"response_text must be str or list, got {type(response_text)}"
@@ -960,7 +1313,7 @@ class vLLMWrapper(LLMWrapperBase):
     def _generate_from_text(
         self,
         text: str | list[str] | NonTensorStack,
-        sampling_params: SamplingParams,
+        sampling_params: Any,
         out: TensorDictBase,
     ) -> TensorDictBase:
         """Generate text from text input."""
@@ -989,14 +1342,8 @@ class vLLMWrapper(LLMWrapperBase):
         elif not isinstance(text, list):
             text = text.tolist()
 
-        if not self._remote_calls:
-            request_output = self.model.generate(text, *args, **generate_kwargs)
-        else:
-            import ray
-
-            request_output = ray.get(
-                self.model.generate.remote(text, *args, **generate_kwargs)
-            )
+        # Call generate based on model type
+        request_output = self._call_generate(text, *args, **generate_kwargs)
 
         request_output_tc = _RequestOutput_tc.from_request_output(request_output)
 
@@ -1087,7 +1434,7 @@ class vLLMWrapper(LLMWrapperBase):
     def _logprobs_from_text(
         self,
         text: str | list[str] | NonTensorStack,
-        sampling_params: SamplingParams,
+        sampling_params: Any,
         out: TensorDictBase,
     ) -> TensorDictBase:
         """Compute log-probs from text input."""
@@ -1139,12 +1486,7 @@ class vLLMWrapper(LLMWrapperBase):
         }
 
         # Generate with vLLM to get prompt_logprobs
-        if not self._remote_calls:
-            request_output = self.model.generate(**generate_kwargs)
-        else:
-            import ray
-
-            request_output = ray.get(self.model.generate.remote(**generate_kwargs))
+        request_output = self._call_generate(**generate_kwargs)
 
         request_output_tc = _RequestOutput_tc.from_request_output(request_output)
 
@@ -1237,7 +1579,7 @@ class vLLMWrapper(LLMWrapperBase):
         self,
         tokens_prompt_unpadded: list[torch.Tensor] | None,
         tokens_prompt_padded: torch.Tensor | None,
-        sampling_params: SamplingParams,
+        sampling_params: Any,
         out: TensorDictBase,
     ) -> TensorDictBase:
         """Generate text from tokens input."""
@@ -1269,14 +1611,8 @@ class vLLMWrapper(LLMWrapperBase):
             tokens_prompt_list = self._to_list(tokens_prompt_unpadded, None)
         generate_kwargs.update({"prompt_token_ids": tokens_prompt_list})
 
-        if not self._remote_calls:
-            request_output = self.model.generate(*args, **generate_kwargs)
-        else:
-            import ray
-
-            request_output = ray.get(
-                self.model.generate.remote(*args, **generate_kwargs)
-            )
+        # Call generate based on model type
+        request_output = self._call_generate(*args, **generate_kwargs)
 
         request_output_tc = _RequestOutput_tc.from_request_output(request_output)
 
@@ -1440,7 +1776,7 @@ class vLLMWrapper(LLMWrapperBase):
         response_struct: TensorDictBase | None = None,
         tokens_full_unpadded: list[torch.Tensor] | None = None,
         tokens_full_padded: torch.Tensor | None = None,
-        sampling_params: SamplingParams | None = None,
+        sampling_params: Any | None = None,
         out: TensorDictBase | None = None,
     ) -> TensorDictBase:
         """Compute log-probs from tokens input."""
@@ -1513,12 +1849,7 @@ class vLLMWrapper(LLMWrapperBase):
         }
 
         # Generate with vLLM to get prompt_logprobs
-        if not self._remote_calls:
-            tokens_out_stuct = self.model.generate(**generate_kwargs)
-        else:
-            import ray
-
-            tokens_out_stuct = ray.get(self.model.generate.remote(**generate_kwargs))
+        tokens_out_stuct = self._call_generate(**generate_kwargs)
 
         request_output_tc = _RequestOutput_tc.from_request_output(tokens_out_stuct)
 
@@ -1656,12 +1987,11 @@ class vLLMWrapper(LLMWrapperBase):
 
     @_classproperty
     def CompletionOutput_tc(cls):
-        if vllm is None:
-            raise ImportError("vllm is required for CompletionOutput_tc")
+        _vllm = _require_vllm()
 
         if hasattr(cls, "_CompletionOutput_tc"):
             return cls._CompletionOutput_tc
-        CompletionOutput_tc = from_dataclass(vllm.outputs.CompletionOutput)  # type: ignore
+        CompletionOutput_tc = from_dataclass(_vllm.outputs.CompletionOutput)  # type: ignore
         cls._CompletionOutput_tc = CompletionOutput_tc
         return CompletionOutput_tc
 
@@ -1798,7 +2128,7 @@ class _RequestOutput_tc(TensorClass["nocast"]):
     prompt: str
     prompt_token_ids: torch.Tensor
     prompt_logprobs: torch.Tensor
-    outputs: list  # type: ignore
+    outputs: Any
     finished: str
     metrics: str
     lora_request: str
@@ -1812,11 +2142,12 @@ class _RequestOutput_tc(TensorClass["nocast"]):
         def postproc(output):
             def get_logprob(output):
                 t = []
-                for v, tid in zip(output.logprobs, output.token_ids):
+                token_ids = output.token_ids
+                if isinstance(token_ids, torch.Tensor):
+                    token_ids = token_ids.tolist()
+                for v, tid in zip(output.logprobs, token_ids):
                     t.append(
-                        v[int(tid)]["logprob"]
-                        if v[tid].get("logprob") is not None
-                        else 0.0
+                        v[tid]["logprob"] if v[tid].get("logprob") is not None else 0.0
                     )
                 return torch.tensor(t)
 

@@ -4,7 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Any, Callable, Literal, TYPE_CHECKING
+from collections.abc import Callable
+
+from typing import Any, Literal, TYPE_CHECKING
 
 import torch
 from tensordict import NonTensorData, NonTensorStack, TensorClass, TensorDict
@@ -116,6 +118,11 @@ class IFEvalEnv(DatasetChatEnv):
             collate function is used. Defaults to `None`.
         max_steps (int, optional): The maximum number of steps allowed in an episode. Defaults to `1`.
         input_mode (Literal["history", "text", "tokens"], optional): The mode of input to use. Defaults to `"history"`.
+        ray_backend (bool, optional): Whether to use the Ray backend for data loading. Defaults to `False`.
+            Using this backend allows for explicit resource control and avoids serialization issues, as well as
+            sharing the same dataloader across multiple environments and actors.
+        dataloader_actor_name (str, optional): Name of the Ray actor to use for data loading.
+            Defaults to `"ifeval_dataloader"`.
 
     Examples:
         >>> import transformers
@@ -235,7 +242,11 @@ I need to analyze what the user is asking for...
         collate_fn: Callable | None = None,
         max_steps: int = 1,
         input_mode: Literal["history", "text", "tokens"] = "history",
+        ray_backend: bool = False,
+        dataloader_actor_name: str | None = None,
     ):
+        if ray_backend and dataloader_actor_name is None:
+            dataloader_actor_name = "ifeval_dataloader"
         if collate_fn is None:
             collate_fn = _collate_fn
         super().__init__(
@@ -254,6 +265,8 @@ I need to analyze what the user is asking for...
             input_mode=input_mode,
             data_key="query",
             primers=IFEvalData.default_spec((num_envs,), device),
+            ray_backend=ray_backend,
+            dataloader_actor_name=dataloader_actor_name,
         )
         if max_steps:
             self.append_transform(StepCounter(max_steps=max_steps))

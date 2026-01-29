@@ -26,7 +26,12 @@ from torchrl.objectives.utils import (
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+from torchrl.objectives.value import (
+    TD0Estimator,
+    TD1Estimator,
+    TDLambdaEstimator,
+    ValueEstimatorBase,
+)
 
 
 class REDQLoss(LossModule):
@@ -44,7 +49,7 @@ class REDQLoss(LossModule):
             parameters will be stacked unless they share the same identity (in which case
             the original parameter will be expanded).
 
-            .. warning:: When a list of parameters if passed, it will __not__ be compared against the policy parameters
+            .. warning:: When a list of parameters if passed, it will **not** be compared against the policy parameters
               and all the parameters will be considered as untied.
 
     Keyword Args:
@@ -68,7 +73,8 @@ class REDQLoss(LossModule):
         fixed_alpha (bool, optional): whether alpha should be trained to match
             a target entropy. Default is ``False``.
         target_entropy (Union[str, Number], optional): Target entropy for the
-            stochastic policy. Default is "auto".
+            stochastic policy. Default is "auto", where target entropy is
+            computed as :obj:`-prod(n_actions)`.
         delay_qvalue (bool, optional): Whether to separate the target Q value
             networks from the Q value networks used
             for data collection. Default is ``False``.
@@ -279,9 +285,9 @@ class REDQLoss(LossModule):
         delay_qvalue: bool = True,
         gSDE: bool = False,
         gamma: float | None = None,
-        priority_key: str = None,
+        priority_key: str | None = None,
         separate_losses: bool = False,
-        reduction: str = None,
+        reduction: str | None = None,
         deactivate_vmap: bool = False,
     ):
         if reduction is None:
@@ -642,6 +648,13 @@ class REDQLoss(LossModule):
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
+
+        # Handle ValueEstimatorBase instance or class
+        if isinstance(value_type, ValueEstimatorBase) or (
+            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
+        ):
+            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+
         self.value_type = value_type
         hp = dict(default_value_kwargs(value_type))
         if hasattr(self, "gamma"):

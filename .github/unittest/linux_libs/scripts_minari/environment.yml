@@ -20,4 +20,11 @@ dependencies:
     - scipy
     - hydra-core
     - minari[gcs,hdf5,hf]
-    - gymnasium<1.0.0
+    - gymnasium>=1.2.0
+    - ale-py
+    - gymnasium-robotics
+    - minari[create]
+    - jax>=0.7.0
+    - mujoco>=2.3.0,<3.0.0
+    - mujoco-py<2.2,>=2.1
+    - minigrid

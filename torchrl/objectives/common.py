@@ -8,9 +8,9 @@ from __future__ import annotations
 import abc
 import functools
 import warnings
+from collections.abc import Iterator
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Iterator
 
 import torch
 from tensordict import is_tensor_collection, TensorDict, TensorDictBase
@@ -19,7 +19,7 @@ from tensordict.utils import Buffer
 from torch import nn
 from torch.nn import Parameter
 
-from torchrl._utils import RL_WARNINGS
+from torchrl._utils import rl_warnings
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.tensordict_module.rnn import set_recurrent_mode
 from torchrl.objectives.utils import ValueEstimators
@@ -34,7 +34,7 @@ except ImportError:
 def _updater_check_forward_prehook(module, *args, **kwargs):
     if (
         not all(module._has_update_associated.values())
-        and RL_WARNINGS
+        and rl_warnings()
         and not is_compiling()
     ):
         warnings.warn(
@@ -128,6 +128,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
     tensor_keys: _AcceptedKeys
     _vmap_randomness = None
     default_value_estimator: ValueEstimators = None
+    use_prioritized_weights: str | bool = "auto"
 
     deterministic_sampling_mode: ExplorationType = ExplorationType.DETERMINISTIC
 
@@ -214,8 +215,8 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         if keyset0 != keyset1:
             raise RuntimeError(
                 f"The keys of params and provided module differ: "
-                f"{keyset1-keyset0} are in self.params and not in the module, "
-                f"{keyset0-keyset1} are in the module but not in self.params."
+                f"{keyset1 - keyset0} are in self.params and not in the module, "
+                f"{keyset0 - keyset1} are in the module but not in self.params."
             )
         self_params.data.update_(params.data)
 
@@ -304,7 +305,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                   provided, the value of the parameters will be resampled uniformly
                   between the minimum and maximum value of the parameter content.
 
-             create_target_params (bool, optional): if ``True``, a detached
+            create_target_params (bool, optional): if ``True``, a detached
                 copy of the parameter will be available to feed a target network
                 under the name ``loss_module.<module_name>_target_params``.
                 If ``False`` (default), this attribute will still be available
@@ -449,7 +450,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 params = params.data
             elif (
                 not self._has_update_associated[item[7:-7]]
-                and RL_WARNINGS
+                and rl_warnings()
                 and not is_compiling()
             ):
                 # no updater associated
@@ -490,6 +491,25 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
     def reset(self) -> None:
         # mainly used for PPO with KL target
         pass
+
+    def _maybe_get_priority_weight(
+        self, tensordict: TensorDictBase
+    ) -> torch.Tensor | None:
+        """Extract priority weights from tensordict if prioritized replay is enabled.
+
+        Args:
+            tensordict (TensorDictBase): The input tensordict that may contain priority weights.
+
+        Returns:
+            torch.Tensor | None: The priority weights if available and enabled, None otherwise.
+        """
+        weights = None
+        if (
+            self.use_prioritized_weights in (True, "auto")
+            and self.tensor_keys.priority_weight in tensordict.keys()
+        ):
+            weights = tensordict.get(self.tensor_keys.priority_weight)
+        return weights
 
     def _reset_module_parameters(self, module_name, module):
         params_name = f"{module_name}_params"
@@ -559,16 +579,28 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         this method.
 
         Args:
-            value_type (ValueEstimators): A :class:`~torchrl.objectives.utils.ValueEstimators`
-                enum type indicating the value function to use. If none is provided,
-                the default stored in the ``default_value_estimator``
-                attribute will be used. The resulting value estimator class
-                will be registered in ``self.value_type``, allowing
-                future refinements.
+            value_type (ValueEstimators, ValueEstimatorBase, or type): The value
+                estimator to use. This can be one of the following:
+
+                - A :class:`~torchrl.objectives.utils.ValueEstimators` enum type
+                  indicating which value function to use. If none is provided,
+                  the default stored in the ``default_value_estimator``
+                  attribute will be used.
+                - A :class:`~torchrl.objectives.value.ValueEstimatorBase` instance,
+                  which will be used directly as the value estimator.
+                - A :class:`~torchrl.objectives.value.ValueEstimatorBase` subclass,
+                  which will be instantiated with the provided ``hyperparams``.
+
+                The resulting value estimator class will be registered in
+                ``self.value_type``, allowing future refinements.
             **hyperparams: hyperparameters to use for the value function.
                 If not provided, the value indicated by
                 :func:`~torchrl.objectives.utils.default_value_kwargs` will be
-                used.
+                used. When passing a ``ValueEstimatorBase`` subclass, these
+                hyperparameters are passed directly to the class constructor.
+
+        Returns:
+            self: Returns the loss module for method chaining.
 
         Examples:
             >>> from torchrl.objectives import DQNLoss
@@ -583,9 +615,35 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             >>> # if we want to change the gamma value
             >>> dqn_loss.make_value_estimator(dqn_loss.value_type, gamma=0.9)
 
+            Using a :class:`~torchrl.objectives.value.ValueEstimatorBase` subclass:
+
+            >>> from torchrl.objectives.value import TD0Estimator
+            >>> dqn_loss.make_value_estimator(TD0Estimator, gamma=0.99, value_network=value_net)
+
+            Using a :class:`~torchrl.objectives.value.ValueEstimatorBase` instance:
+
+            >>> from torchrl.objectives.value import GAE
+            >>> gae = GAE(gamma=0.99, lmbda=0.95, value_network=value_net)
+            >>> ppo_loss.make_value_estimator(gae)
+
         """
         if value_type is None:
             value_type = self.default_value_estimator
+
+        if isinstance(value_type, ValueEstimatorBase):
+            self._value_estimator = value_type
+            self.value_type = type(value_type)
+            return self
+
+        if isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase):
+            if "device" not in hyperparams:
+                device = self._default_device
+                if device is not None:
+                    hyperparams["device"] = device
+            self._value_estimator = value_type(**hyperparams)
+            self.value_type = value_type
+            return self
+
         self.value_type = value_type
         if value_type == ValueEstimators.TD1:
             raise NotImplementedError(

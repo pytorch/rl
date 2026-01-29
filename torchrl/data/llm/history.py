@@ -82,10 +82,14 @@ _CHAT_TEMPLATES = {
         {{- '<|im_end|>\\n' }}{% endgeneration %}
     {%- elif message.role == "tool" %}
         {%- if (loop.index0 == 0) or (messages[loop.index0 - 1].role != "tool") %}
-            {{- '<|im_start|>user' }}
+            {{- '<|im_start|>tool' }}
         {%- endif %}
         {{- '\\n<tool_response>\\n' }}
-        {{- message.content }}
+        {%- if message.tool_responses %}
+            {{- message.tool_responses }}
+        {%- else %}
+            {{- message.content }}
+        {%- endif %}
         {{- '\\n</tool_response>' }}
         {%- if loop.last or (messages[loop.index0 + 1].role != "tool") %}
             {{- '<|im_end|>\\n' }}
@@ -242,7 +246,7 @@ def add_chat_template(
           `name_or_path` attribute.
         - Templates are stored globally and persist for the duration of the Python session.
     """
-    global _CHAT_TEMPLATES, _CUSTOM_INVERSE_PARSERS, _CUSTOM_MODEL_FAMILY_KEYWORDS
+    global _CHAT_TEMPLATES, _CUSTOM_INVERSE_PARSERS, _CUSTOM_MODEL_FAMILY_KEYWORDS  # noqa: F824
 
     # Validate template contains generation blocks
     if "{% generation %}" not in template:
@@ -515,8 +519,10 @@ class History(TensorClass["nocast"]):
         :class:`~torchrl.modules.llm.policies.Tokens`: Container for token data.
     """
 
-    role: str
-    content: str | ContentBase
+    role: str | list[str] | list[list[str]]
+    content: str | ContentBase | list[str] | list[ContentBase] | list[list[str]] | list[
+        list[ContentBase]
+    ]
     is_complete: bool = True
     tool_calls: list[dict] | None = None
     tool_responses: list[str] | None = None
@@ -713,6 +719,42 @@ class History(TensorClass["nocast"]):
         | transformers.AutoProcessor  # noqa: F821
         | None = None,
     ) -> History:
+        r"""Inverts a chat template into a History object.
+
+        Args:
+            text (str | list[str]): The chat template to invert.
+            chat_template_name (str, optional): The name of the chat template to use.
+            tokenizer (transformers.AutoTokenizer | transformers.AutoProcessor, optional): The tokenizer to use.
+
+        Returns:
+            History: The inverted History object.
+
+        Examples:
+            >>> from torchrl.data.llm.history import History
+            >>> from transformers import AutoTokenizer
+            >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-7B-Instruct")
+            >>> text = "<|im_start|>system\nYou are a helpful assistant.\n<|im_end|>\n<|im_start|>user\nWrite a python script that gives the capital of France or Germany.\n<|im_end|>\n<|im_start|>assistant\n<think>The capital of France is Paris, the capital of Germany is Berlin.</think>\n<answer><python>\n"
+            >>> history = History.from_text(text, tokenizer=tokenizer)
+            >>> print(history)
+            History(
+                content=NonTensorStack(
+                    ['You are a helpful assistant.', 'Write a python s...,
+                    batch_size=torch.Size([3]),
+                    device=None),
+                is_complete=NonTensorStack(
+                    [True, True, False],
+                    batch_size=torch.Size([3]),
+                    device=None),
+                role=NonTensorStack(
+                    ['system', 'user', 'assistant'],
+                    batch_size=torch.Size([3]),
+                    device=None),
+                tool_calls=None,
+                tool_responses=None,
+                batch_size=torch.Size([3]),
+                device=None,
+                is_shared=False)
+        """
         if chat_template_name is None:
             if chat_template is not None:
                 # TODO: find best match given template
@@ -1177,15 +1219,6 @@ class History(TensorClass["nocast"]):
                 f"The new history to append must have one less dimension than self. Got self.ndim={self.ndim} and history.ndim={history.ndim}."
             )
         dim = _maybe_correct_neg_dim(dim, self.batch_size)
-        # if self.ndim > 1 and dim >= self.ndim - 1:
-        #     # then we need to append each element independently
-        #     result = []
-        #     for hist, new_hist in zip(self.unbind(0), history.unbind(0)):
-        #         hist_c = hist.append(new_hist, inplace=inplace, dim=dim - 1)
-        #         result.append(hist_c)
-        #     if inplace:
-        #         return self
-        #     return lazy_stack(result)
         if inplace:
             if (
                 isinstance(self._tensordict, LazyStackedTensorDict)

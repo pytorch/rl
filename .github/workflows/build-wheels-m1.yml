@@ -12,10 +12,33 @@ on:
         # Release candidate tags look like: v1.11.0-rc1
         - v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      test-infra-ref:
+        description: 'PyTorch test-infra ref (main for nightly, release/X.Y for stable)'
+        required: false
+        type: string
+        default: 'main'
+      tensordict-source:
+        description: 'TensorDict source: stable (PyPI), git, or auto (branch-based detection)'
+        required: false
+        type: string
+        default: 'auto'
+      channel:
+        description: 'Build channel: nightly, test, release, or empty for auto-detection'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   id-token: write
   contents: read
+
+env:
+  # TensorDict source passed to build scripts
+  # Note: This may not propagate to pytorch/test-infra called workflows;
+  # scripts also use GITHUB_REF_NAME for branch-based detection as fallback.
+  TENSORDICT_SOURCE: ${{ inputs.tensordict-source || 'auto' }}
 
 jobs:
   generate-matrix:
@@ -24,7 +47,9 @@ jobs:
       package-type: wheel
       os: macos-arm64
       test-infra-repository: pytorch/test-infra
-      test-infra-ref: main
+      test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
+      channel: ${{ inputs.channel || '' }}
+      use-only-dl-pytorch-org: ${{ inputs.channel == 'release' && 'true' || 'false' }}
   build:
     needs: generate-matrix
     strategy:
@@ -41,7 +66,7 @@ jobs:
       repository: ${{ matrix.repository }}
       ref: ""
       test-infra-repository: pytorch/test-infra
-      test-infra-ref: main
+      test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
       build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
       package-name: ${{ matrix.package-name }}
       runner-type: macos-m2-15

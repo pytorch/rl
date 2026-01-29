@@ -6,37 +6,50 @@ from __future__ import annotations
 
 import functools
 import os
+import random
 import sys
 import time
 import warnings
 from collections import defaultdict
 
+import numpy as np
+
 import pytest
 import torch
 
-CALL_TIMES = defaultdict(lambda: 0.0)
+CALL_TIMES = defaultdict(float)
 IS_OSX = sys.platform == "darwin"
 
 
-def pytest_sessionfinish(maxprint=50):
-    out_str = """
-Call times:
-===========
-"""
+def pytest_sessionfinish(session, exitstatus, maxprint=50):
+    """Print aggregated test times per function (across all parametrizations)."""
     keys = list(CALL_TIMES.keys())
-    if len(keys) > 1:
-        maxchar = max(*[len(key) for key in keys])
-    elif len(keys) == 1:
-        maxchar = len(keys[0])
-    else:
+    if not keys:
         return
+
+    # Calculate total time
+    total_time = sum(CALL_TIMES.values())
+
+    out_str = f"""
+================================================================================
+AGGREGATED TEST TIMES (by function, across all parametrizations)
+================================================================================
+Total test time: {total_time:.1f}s ({total_time / 60:.1f} min)
+Top {min(maxprint, len(keys))} slowest test functions:
+--------------------------------------------------------------------------------
+"""
+    maxchar = max(len(key) for key in keys)
     for i, (key, item) in enumerate(
         sorted(CALL_TIMES.items(), key=lambda x: x[1], reverse=True)
     ):
-        spaces = "  " + " " * (maxchar - len(key))
-        out_str += f"\t{key}{spaces}{item: 4.4f}s\n"
+        spaces = " " * (maxchar - len(key) + 2)
+        pct = (item / total_time) * 100 if total_time > 0 else 0
+        out_str += f"  {key}{spaces}{item:7.2f}s  ({pct:5.1f}%)\n"
         if i == maxprint - 1:
             break
+
+    out_str += "================================================================================\n"
+    sys.stdout.write(out_str)
 
 
 @pytest.fixture(autouse=True)
@@ -73,6 +86,11 @@ def set_warnings() -> None:
         "ignore",
         category=UserWarning,
         message=r"Skipping device Apple Paravirtual device",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        message=r"A lambda function was passed to ParallelEnv",
     )
     warnings.filterwarnings(
         "ignore",
@@ -130,6 +148,9 @@ def pytest_runtest_setup(item):
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "slow: mark test as slow to run")
+    config.addinivalue_line(
+        "markers", "gpu: mark test as requiring a GPU (CUDA device)"
+    )
 
 
 def pytest_collection_modifyitems(config, items):
@@ -155,3 +176,49 @@ def maybe_fork_ParallelEnv(request):
     ):
         return functools.partial(ParallelEnv, mp_start_method="fork")
     return ParallelEnv
+
+
+# LLM testing fixtures
+@pytest.fixture
+def mock_transformer_model():
+    """Fixture that provides a mock transformer model factory."""
+    from torchrl.testing import MockTransformerModel
+
+    def _make_model(
+        vocab_size: int = 1024, device: torch.device | str | int = "cpu"
+    ) -> MockTransformerModel:
+        """Make a mock transformer model."""
+        device = torch.device(device)
+        return MockTransformerModel(vocab_size, device)
+
+    return _make_model
+
+
+@pytest.fixture
+def mock_tokenizer():
+    """Fixture that provides a mock tokenizer."""
+    from transformers import AutoTokenizer
+
+    return AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+
+
+@pytest.fixture(autouse=True)
+def prevent_leaking_rng():
+    # Prevent each test from leaking the rng to all other test when they call
+    # torch.manual_seed() or random.seed() or np.random.seed().
+    # Note: the numpy rngs should never leak anyway, as we never use
+    # np.random.seed() and instead rely on np.random.RandomState instances
+
+    torch_rng_state = torch.get_rng_state()
+    builtin_rng_state = random.getstate()
+    nunmpy_rng_state = np.random.get_state()
+    if torch.cuda.is_available():
+        cuda_rng_state = torch.cuda.get_rng_state()
+
+    yield
+
+    torch.set_rng_state(torch_rng_state)
+    random.setstate(builtin_rng_state)
+    np.random.set_state(nunmpy_rng_state)
+    if torch.cuda.is_available():
+        torch.cuda.set_rng_state(cuda_rng_state)

@@ -13,10 +13,10 @@ from pathlib import Path
 
 import hydra
 
-from torchrl import torchrl_logger
-from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
+from torchrl import merge_ray_runtime_env, torchrl_logger
 from torchrl.data.llm.history import History
 from torchrl.record.loggers.wandb import WandbLogger
+from torchrl.weight_update.llm import get_model_metadata
 
 try:
     import ray
@@ -28,12 +28,14 @@ import torch
 import tqdm
 
 from grpo_utils import (
+    add_kl_transforms_to_replay_buffer,
+    check_grpo_dependencies,
     compute_device_allocation,
     get_inference_model,
     get_train_model,
     log_training_metrics,
     make_env,
-    make_weight_updater,
+    make_weight_sync_scheme,
 )
 from omegaconf import DictConfig
 
@@ -54,9 +56,6 @@ from torchrl.objectives.llm.grpo import GRPOLoss, MCAdvantage
 
 def setup_environment() -> None:
     """Setup required environment variables and configurations."""
-    if os.getenv("VLLM_USE_V1", "1") != "0":
-        raise RuntimeError("VLLM_USE_V1=0 must be set in environment")
-
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is required for training")
 
@@ -73,7 +72,8 @@ def setup_environment() -> None:
 def train(
     replay_buffer: ReplayBuffer,
     cfg: DictConfig,
-    collector: RayLLMCollector,
+    collectors: list[RayLLMCollector],
+    inference_policy,
     devices: list[int] | None = None,
 ):
     """Main training loop for GRPO async.
@@ -85,20 +85,21 @@ def train(
     Args:
         replay_buffer: The replay buffer to store experiences
         cfg: The configuration object containing training parameters
-        collector: The collector object.
+        collectors: The collectors objects.
         devices: The devices to use for the training model.
     """
     # Setup training model and tokenizer
     policy_training, train_tokenizer = get_train_model(cfg, devices=devices)
-    train_device = devices[0]  # Use first device for batch processing
+    train_device = torch.device(f"cuda:{devices[0]}" if devices else "cuda:0")
 
     # Setup loss function
     loss_fn = GRPOLoss(
         actor_network=policy_training,
-        kl_to_ref_coeff=cfg.train.kl_to_ref_coeff if cfg.train.kl_coef_in_loss else 0.0,
+        kl_to_ref_coeff=cfg.train.kl_to_ref_coeff
+        if (cfg.train.kl_coef_in_loss and cfg.train.use_kl_to_ref)
+        else 0.0,
         kl_to_inference_coeff=cfg.train.kl_to_inference_coeff,
         entropy_coeff=cfg.train.entropy_coeff,
-        # use prompt/response masking for regular training, and assistant masking for reasoning
         masking_strategy="rlhf" if cfg.env.reasoning else "sft",
         device=train_device,
     )
@@ -108,37 +109,39 @@ def train(
     if cfg.model.compile:
         loss_fn = torch.compile(loss_fn)
 
-    # Get metadata
-    model_metadata = vLLMUpdater.get_model_metadata(policy_training)
+    vllm_engine = inference_policy.model
 
-    # Create weight updater with remote LLM
-    ray_managed_externally = os.environ.get("RAY_CLUSTER_MANAGED_EXTERNALLY")
-    weight_updater: vLLMUpdater = make_weight_updater(
-        master_address="localhost"
-        if not ray_managed_externally
-        else ray.util.get_node_ip_address(),
-        master_port=None,  # Will auto-assign an open port
-        model_metadata=model_metadata,
-        vllm_tp_size=cfg.inference_model.num_devices
-        if cfg.inference_model.num_devices is not None
-        else len(cfg.inference_model.get("devices", [1])),
-    )
-    collector.weight_updater = weight_updater
+    # Create weight sync scheme for the collectors
+    weight_sync_scheme = make_weight_sync_scheme(vllm_engine=vllm_engine)
 
-    # Initialize the weight updater
-    weight_updater.init(model_metadata=model_metadata)
+    # Set up weight sync scheme for collectors
+    # Note: We need to get the sender after the collectors are created
+    # For now, we'll update the collectors to use the scheme
+    torchrl_logger.info("Setting up weight synchronization scheme...")
 
-    # First update the weights
+    # We'll need to manually set up the sender since collectors were already created
+    # without the scheme. In production, collectors should be created with weight_sync_schemes parameter.
+    sender = weight_sync_scheme.create_sender()
+    sender.register_model(policy_training)
+
+    # Initialize collective group
+    torchrl_logger.info("Initializing collective group...")
+    metadata = get_model_metadata(policy_training)
+    sender.init_all_workers_group(metadata, vllm_engine=vllm_engine)
+
+    # First weight update
     with timeit("update_policy_weights"):
-        weight_updater.push_weights(policy_training)
+        sender.update_weights()
+    torchrl_logger.info("Completed first update_policy_weights. Starting collectors...")
     timeit.print(prefix="First update_policy_weights_ time")
     timeit.reset()
 
-    # Start collector
-    collector.start()
+    for i, collector in enumerate(collectors):
+        torchrl_logger.info(f"Starting collector {i}...")
+        collector.start()
 
-    # Wait for initial data
     while not replay_buffer.write_count:
+        torchrl_logger.info("Waiting for replay buffer...")
         time.sleep(1)
 
     # Make optimizer
@@ -180,17 +183,20 @@ def train(
     start_time = time.time()
 
     for step in range(total_steps):
-        if not collector.is_running():
-            torchrl_logger.info("Collector stopped, stopping training")
+        if not any(collector.is_running() for collector in collectors):
+            torchrl_logger.info("Collectors stopped, stopping training")
             break
         pbar.update(1)
         pbar.set_description(f"Step {step}, writes: {replay_buffer.write_count}")
 
         with timeit("sampling"):
-            # Sample batch and move to device
-            batch = replay_buffer.sample(cfg.train.optim_batch_size).to(train_device)
-            # For logging purposes, we get the last element of the history
-            # and convert it to a string
+            # Sample the correct batch size for gradient accumulation
+            # The replay buffer is configured with batch_size = optim_batch_size // gradient_accumulation_steps
+            # So we should sample that amount per step, not the full optim_batch_size
+            batch_size_per_step = (
+                cfg.train.optim_batch_size // cfg.train.gradient_accumulation_steps
+            )
+            batch = replay_buffer.sample(batch_size_per_step).to(train_device)
             history: History = batch.view(-1)[0]["history", "full"]
             history_str: list[str] | str = history.apply_chat_template(
                 tokenizer=train_tokenizer
@@ -201,7 +207,6 @@ def train(
             data_read_count += batch.numel()
 
         with timeit("forward_pass"):
-            # Forward pass with mixed precision
             with autocast("cuda", enabled=cfg.train.mixed_precision):
                 loss = loss_fn(batch)
                 loss_val = (
@@ -209,14 +214,12 @@ def train(
                 )
 
         with timeit("backward_pass"):
-            # Backward pass
             if cfg.train.mixed_precision and cfg.train_model.torch_dtype == "float16":
                 scaler = GradScaler(enabled=True)
                 scaler.scale(loss_val).backward()
             else:
                 loss_val.backward()
 
-        # Optimization step
         if (step + 1) % cfg.train.gradient_accumulation_steps == 0:
             with timeit("optim_step"):
                 if (
@@ -240,7 +243,6 @@ def train(
                     optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
 
-        # Update metrics
         if (step % cfg.train.logging_frequency) == 0:
             log_training_metrics(
                 wandb_logger=wandb_logger,
@@ -250,17 +252,17 @@ def train(
                 grad_norm=grad_norm,
                 global_step=step,
                 data_read_count=data_read_count,
-                collector=collector,
+                collector=collectors[0],
                 start_time=start_time,
                 gradient_accumulation_steps=cfg.train.gradient_accumulation_steps,
                 history_str=history_str,
+                use_kl_to_ref=cfg.train.use_kl_to_ref,
             )
 
-        # Update policy weights
         if step % cfg.train.weight_update_frequency == 0:
             with timeit("update_policy_weights"):
                 torchrl_logger.info("Updating policy weights...")
-                weight_updater.push_weights(policy_training)
+                sender.update_weights()
                 # TODO: do we need this? Does it interfere with other processes?
                 # torch.cuda.empty_cache()
                 gc.collect()
@@ -286,7 +288,6 @@ def train(
                 wandb_logger.log_scalar(f"timeit/{key}", val)
             timeit.reset()
 
-        # Clear memory
         del loss_val
         # TODO: do we need this? Does it interfere with other processes?
         # torch.cuda.empty_cache()
@@ -298,6 +299,9 @@ def train(
 
 @hydra.main(version_base=None, config_path="config", config_name="grpo_gsm8k")
 def main(cfg):
+    # Check for required GRPO dependencies
+    check_grpo_dependencies()
+
     # Force async mode
     if cfg.train.sync:
         raise ValueError(
@@ -315,19 +319,9 @@ def main(cfg):
             if not k.startswith("_")
         }
 
-        # Add computed GPU configuration
+        # Add computed GPU configuration and merge with default runtime_env
         ray_init_config["num_gpus"] = device_config["ray_num_gpus"]
-        # Ensure runtime_env and env_vars exist
-        if "runtime_env" not in ray_init_config:
-            ray_init_config["runtime_env"] = {}
-        if not isinstance(ray_init_config["runtime_env"], dict):
-            ray_init_config["runtime_env"] = dict(ray_init_config["runtime_env"])
-        if "env_vars" not in ray_init_config["runtime_env"]:
-            ray_init_config["runtime_env"]["env_vars"] = {}
-        if not isinstance(ray_init_config["runtime_env"]["env_vars"], dict):
-            ray_init_config["runtime_env"]["env_vars"] = dict(
-                ray_init_config["runtime_env"]["env_vars"]
-            )
+        ray_init_config = merge_ray_runtime_env(ray_init_config)
         torchrl_logger.info(f"Ray init config: {ray_init_config=}")
         ray_managed_externally = os.environ.get("RAY_CLUSTER_MANAGED_EXTERNALLY")
         if ray_managed_externally:
@@ -340,8 +334,10 @@ def main(cfg):
         raise ValueError(
             "Inference model num_devices must be set via inference_model.num_devices"
         )
-    if cfg.ref_model.num_devices is None:
-        raise ValueError("Ref model num_devices must be set via ref_model.num_devices")
+    if cfg.train.use_kl_to_ref and cfg.ref_model.num_devices is None:
+        raise ValueError(
+            "Ref model num_devices must be set via ref_model.num_devices when use_kl_to_ref is True"
+        )
     if cfg.train_model.num_devices is None:
         raise ValueError(
             "Train model num_devices must be set via train_model.num_devices"
@@ -371,36 +367,48 @@ def main(cfg):
             else cfg.env.repeats * cfg.env.num_envs,
         ),
         transform_factory=partial(MCAdvantage, grpo_size=cfg.env.repeats),
-        batch_size=cfg.train.optim_batch_size // cfg.train.gradient_accumulation_steps,
+        batch_size=max(
+            1, cfg.train.optim_batch_size // cfg.train.gradient_accumulation_steps
+        ),
         remote_config=replay_buffer_config,
     )
+
+    add_kl_transforms_to_replay_buffer(rb, cfg)
+
     torchrl_logger.info(f"Replay buffer: {rb}")
 
-    # Create remote collector using RayLLMCollector
-    collector_config["num_gpus"] = (
-        # The ref model will be instantiated within the collector, so we only need to allocate the number of devices for the inference model
-        cfg.ref_model.num_devices
-    )
+    collector_config["num_gpus"] = 0
+    collector_config["num_cpus"] = 2
     torchrl_logger.info(f"Starting collector with {collector_config=}")
 
     if cfg.train.sync_iter is not None:
         raise ValueError("sync_iter is not supported in async mode.")
-    collector = RayLLMCollector(
-        env=partial(make_env, cfg, devices=device_config["ref_model_devices"]),
-        policy=inference_policy,
-        dialog_turns_per_batch=cfg.train.dialog_turns_per_batch,
-        total_dialog_turns=cfg.train.total_dialog_turns,
-        replay_buffer=rb,
-        ray_init_config=None,  # Ray is already initialized
-        weight_updater=None,  # We'll create this after getting the remote LLM
-        track_policy_version=True,
-        remote_config=collector_config,
-        yield_only_last_steps=cfg.env.reasoning,
-        verbose=False,
-    )
-    # Ensure collector is initialized by calling a method that will block until ready
-    ray.get(collector._collector.is_initialized.remote())
-    torchrl_logger.info(f"Collector: {collector}")
+    collectors = []
+    for i in tqdm.trange(cfg.env.num_envs, desc="Starting collectors"):
+        collector = RayLLMCollector(
+            env=partial(make_env, cfg, single_env=True),
+            policy=inference_policy,
+            dialog_turns_per_batch=cfg.train.dialog_turns_per_batch,
+            total_dialog_turns=cfg.train.total_dialog_turns,
+            replay_buffer=rb,
+            ray_init_config=None,
+            weight_updater=None,
+            track_policy_version=True,
+            remote_config=collector_config,
+            yield_only_last_steps=cfg.env.reasoning,
+            verbose=False,
+        )
+        collectors.append(collector)
+        if i == 0:
+            # wait for the first collector to initialize
+            ray.get(collector._collector.is_initialized.remote())
+    inits = []
+    for collector in tqdm.tqdm(
+        collectors[1:], desc="Checking collector initialization"
+    ):
+        inits.append(collector._collector.is_initialized.remote())
+    ray.get(inits)
+    torchrl_logger.info("All collectors initialized")
 
     train_handler_config = {
         "num_cpus": train_handler_config.get("num_cpus", 1),
@@ -414,7 +422,11 @@ def main(cfg):
     # launch training
     ray.get(
         train_handler.remote(
-            rb, cfg, collector, devices=device_config["train_model_devices"]
+            rb,
+            cfg,
+            collectors,
+            inference_policy,
+            devices=device_config["train_model_devices"],
         )
     )
 

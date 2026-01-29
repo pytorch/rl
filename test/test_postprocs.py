@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import argparse
 import functools
-import os
 
 import pytest
 import torch
@@ -16,10 +15,7 @@ from torchrl._utils import _ends_with
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.postprocs.postprocs import DensifyReward, MultiStep
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import get_default_devices
-else:
-    from _utils_internal import get_default_devices
+from torchrl.testing import get_default_devices
 
 
 class TestMultiStep:

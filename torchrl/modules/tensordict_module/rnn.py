@@ -363,10 +363,12 @@ class LSTMModule(ModuleBase):
             appended before these.
         out_keys (list of str): a triplet of strings corresponding to the output value,
             first and second hidden key.
+
             .. note::
-              For a better integration with TorchRL's environments, the best naming
-              for the output hidden key is ``("next", <custom_key>)``, such
-              that the hidden values are passed from step to step during a rollout.
+               For a better integration with TorchRL's environments, the best naming
+               for the output hidden key is ``("next", <custom_key>)``, such
+               that the hidden values are passed from step to step during a rollout.
+
         device (torch.device or compatible): the device of the module.
         lstm (torch.nn.LSTM, optional): an LSTM instance to be wrapped.
             Exclusive with other nn.LSTM arguments.
@@ -393,7 +395,7 @@ class LSTMModule(ModuleBase):
     Examples:
         >>> from torchrl.envs import TransformedEnv, InitTracker
         >>> from torchrl.envs import GymEnv
-        >>> from torchrl.modules import MLP
+        >>> from torchrl.modules import MLP, LSTMModule
         >>> from torch import nn
         >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
         >>> env = TransformedEnv(GymEnv("Pendulum-v1"), InitTracker())
@@ -596,7 +598,7 @@ class LSTMModule(ModuleBase):
         module.
 
         Examples:
-            >>> from torchrl.collectors import SyncDataCollector
+            >>> from torchrl.collectors import Collector
             >>> from torchrl.envs import TransformedEnv, InitTracker
             >>> from torchrl.envs import GymEnv
             >>> from torchrl.modules import MLP, LSTMModule
@@ -613,7 +615,7 @@ class LSTMModule(ModuleBase):
             >>> policy = Seq(lstm_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
             >>> policy(env.reset())
             >>> env = env.append_transform(lstm_module.make_tensordict_primer())
-            >>> data_collector = SyncDataCollector(
+            >>> data_collector = Collector(
             ...     env,
             ...     policy,
             ...     frames_per_batch=10
@@ -724,9 +726,6 @@ class LSTMModule(ModuleBase):
             tensordict_shaped.get(key, default)
             for key, default in zip(self.in_keys, defaults)
         )
-        batch, steps = value.shape[:2]
-        device = value.device
-        dtype = value.dtype
         # packed sequences do not help to get the accurate last hidden values
         # if splits is not None:
         #     value = torch.nn.utils.rnn.pack_padded_sequence(value, splits, batch_first=True)
@@ -737,8 +736,13 @@ class LSTMModule(ModuleBase):
             #  When using the recurrent_mode=True option, the lstm can be called from
             #  any intermediate state, hence zeroing should not be done.
             is_init_expand = expand_as_right(is_init, hidden0)
-            hidden0 = torch.where(is_init_expand, 0, hidden0)
-            hidden1 = torch.where(is_init_expand, 0, hidden1)
+            zeros = torch.zeros_like(hidden0)
+            hidden0 = torch.where(is_init_expand, zeros, hidden0)
+            hidden1 = torch.where(is_init_expand, zeros, hidden1)
+
+        batch, steps = value.shape[:2]
+        device = value.device
+        dtype = value.dtype
 
         val, hidden0, hidden1 = self._lstm(
             value, batch, steps, device, dtype, hidden0, hidden1
@@ -1137,10 +1141,12 @@ class GRUModule(ModuleBase):
             appended before these.
         out_keys (list of str): a pair of strings corresponding to the output value,
             first and second hidden key.
+
             .. note::
-              For a better integration with TorchRL's environments, the best naming
-              for the output hidden key is ``("next", <custom_key>)``, such
-              that the hidden values are passed from step to step during a rollout.
+               For a better integration with TorchRL's environments, the best naming
+               for the output hidden key is ``("next", <custom_key>)``, such
+               that the hidden values are passed from step to step during a rollout.
+
         device (torch.device or compatible): the device of the module.
         gru (torch.nn.GRU, optional): a GRU instance to be wrapped.
             Exclusive with other nn.GRU arguments.
@@ -1391,7 +1397,7 @@ class GRUModule(ModuleBase):
         module.
 
         Examples:
-            >>> from torchrl.collectors import SyncDataCollector
+            >>> from torchrl.collectors import Collector
             >>> from torchrl.envs import TransformedEnv, InitTracker
             >>> from torchrl.envs import GymEnv
             >>> from torchrl.modules import MLP, LSTMModule
@@ -1408,7 +1414,7 @@ class GRUModule(ModuleBase):
             >>> policy = Seq(gru_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
             >>> policy(env.reset())
             >>> env = env.append_transform(gru_module.make_tensordict_primer())
-            >>> data_collector = SyncDataCollector(
+            >>> data_collector = Collector(
             ...     env,
             ...     policy,
             ...     frames_per_batch=10

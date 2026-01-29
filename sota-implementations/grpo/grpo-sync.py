@@ -12,10 +12,10 @@ from pathlib import Path
 
 import hydra
 
-from torchrl import torchrl_logger
-from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
+from torchrl import merge_ray_runtime_env, torchrl_logger
 from torchrl.data.llm.history import History
 from torchrl.record.loggers.wandb import WandbLogger
+from torchrl.weight_update.llm import get_model_metadata
 
 try:
     import ray
@@ -29,12 +29,14 @@ import torch
 import tqdm
 
 from grpo_utils import (
+    add_kl_transforms_to_replay_buffer,
+    check_grpo_dependencies,
     compute_device_allocation,
     get_inference_model,
     get_train_model,
     log_training_metrics,
     make_env,
-    make_weight_updater,
+    make_weight_sync_scheme,
 )
 from omegaconf import DictConfig
 
@@ -55,9 +57,6 @@ from torchrl.objectives.llm.grpo import GRPOLoss, MCAdvantage
 
 def setup_environment() -> None:
     """Setup required environment variables and configurations."""
-    if os.getenv("VLLM_USE_V1", "1") != "0":
-        raise RuntimeError("VLLM_USE_V1=0 must be set in environment")
-
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is required for training")
 
@@ -75,6 +74,7 @@ def train(
     replay_buffer: ReplayBuffer,
     cfg: DictConfig,
     collector: RayLLMCollector,
+    inference_policy,
     devices: list[int] | None = None,
 ):
     """Main training loop for GRPO sync.
@@ -91,15 +91,16 @@ def train(
     """
     # Setup training model and tokenizer
     policy_training, train_tokenizer = get_train_model(cfg, devices=devices)
-    train_device = devices[0]  # Use first device for batch processing
+    train_device = torch.device(f"cuda:{devices[0]}" if devices else "cuda:0")
 
     # Setup loss function
     loss_fn = GRPOLoss(
         actor_network=policy_training,
-        kl_to_ref_coeff=cfg.train.kl_to_ref_coeff if cfg.train.kl_coef_in_loss else 0.0,
+        kl_to_ref_coeff=cfg.train.kl_to_ref_coeff
+        if (cfg.train.kl_coef_in_loss and cfg.train.use_kl_to_ref)
+        else 0.0,
         kl_to_inference_coeff=cfg.train.kl_to_inference_coeff,
         entropy_coeff=cfg.train.entropy_coeff,
-        # use prompt/response masking for regular training, and assistant masking for reasoning
         masking_strategy="rlhf" if cfg.env.reasoning else "sft",
         device=train_device,
     )
@@ -109,29 +110,24 @@ def train(
     if cfg.model.compile:
         loss_fn = torch.compile(loss_fn)
 
-    # Get metadata
-    model_metadata = vLLMUpdater.get_model_metadata(policy_training)
+    vllm_engine = inference_policy.model
 
-    # Create weight updater with remote LLM
-    ray_managed_externally = os.environ.get("RAY_CLUSTER_MANAGED_EXTERNALLY")
-    weight_updater: vLLMUpdater = make_weight_updater(
-        master_address="localhost"
-        if not ray_managed_externally
-        else ray.util.get_node_ip_address(),
-        master_port=None,  # Will auto-assign an open port
-        model_metadata=model_metadata,
-        vllm_tp_size=cfg.inference_model.num_devices
-        if cfg.inference_model.num_devices is not None
-        else len(cfg.inference_model.get("devices", [1])),
-    )
-    collector.weight_updater = weight_updater
+    # Create weight sync scheme
+    weight_sync_scheme = make_weight_sync_scheme(vllm_engine=vllm_engine)
 
-    # Initialize the weight updater
-    weight_updater.init(model_metadata=model_metadata)
+    # Set up weight sender
+    torchrl_logger.info("Setting up weight synchronization scheme...")
+    sender = weight_sync_scheme.create_sender()
+    sender.register_model(policy_training)
 
-    # First update the weights
+    # Initialize collective group
+    torchrl_logger.info("Initializing collective group...")
+    metadata = get_model_metadata(policy_training)
+    sender.init_all_workers_group(metadata, vllm_engine=vllm_engine)
+
+    # First weight update
     with timeit("update_policy_weights"):
-        weight_updater.push_weights(policy_training)
+        sender.update_weights()
     timeit.print(prefix="First update_policy_weights_ time")
     timeit.reset()
 
@@ -194,8 +190,6 @@ def train(
                 pbar.set_description(
                     f"Gradient step {global_step}, writes: {replay_buffer.write_count}, batch size: {batch.shape}"
                 )
-                # For logging purposes, we get the last element of the history
-                # and convert it to a string
                 history: History = batch.view(-1)[0]["next", "history"].prompt
                 history_str: list[str] | str = history.apply_chat_template(
                     tokenizer=train_tokenizer
@@ -206,7 +200,6 @@ def train(
                 data_read_count += batch.numel()
 
                 with timeit("forward_pass"):
-                    # Forward pass with mixed precision
                     with autocast("cuda", enabled=cfg.train.mixed_precision):
                         loss = loss_fn(batch)
                         loss_val = (
@@ -215,7 +208,6 @@ def train(
                         )
 
                 with timeit("backward_pass"):
-                    # Backward pass
                     if (
                         cfg.train.mixed_precision
                         and cfg.train_model.torch_dtype == "float16"
@@ -225,7 +217,6 @@ def train(
                     else:
                         loss_val.backward()
 
-                # Optimization step
                 if ((global_step + 1) % cfg.train.gradient_accumulation_steps) == 0:
                     with timeit("optim_step"):
                         if (
@@ -249,13 +240,11 @@ def train(
                             optimizer.step()
                         optimizer.zero_grad(set_to_none=True)
 
-                # Clear memory
                 del loss_val
                 # TODO: do we need this? Does it interfere with other processes?
                 # torch.cuda.empty_cache()
                 gc.collect()
 
-                # Update metrics
                 if (global_step % cfg.train.logging_frequency) == 0:
                     log_training_metrics(
                         wandb_logger=wandb_logger,
@@ -269,6 +258,7 @@ def train(
                         start_time=start_time,
                         gradient_accumulation_steps=cfg.train.gradient_accumulation_steps,
                         history_str=history_str,
+                        use_kl_to_ref=cfg.train.use_kl_to_ref,
                     )
 
                 # Checkpointing disabled to prevent disk space issues
@@ -286,10 +276,9 @@ def train(
                 #         }
                 #         torch.save(checkpoint, checkpoint_dir / f"checkpoint_{global_step:04d}.pt")
 
-        # Update policy weights
         with timeit("update_policy_weights"):
             torchrl_logger.info("Updating policy weights...")
-            weight_updater.push_weights(policy_training)
+            sender.update_weights()
             # TODO: do we need this? Does it interfere with other processes?
             # torch.cuda.empty_cache()
             gc.collect()
@@ -308,6 +297,9 @@ def train(
 
 @hydra.main(version_base=None, config_path="config", config_name="grpo_gsm8k")
 def main(cfg):
+    # Check for required GRPO dependencies
+    check_grpo_dependencies()
+
     # Force sync mode
     if not cfg.train.sync:
         raise ValueError(
@@ -327,19 +319,9 @@ def main(cfg):
             if not k.startswith("_")
         }
 
-        # Add computed GPU configuration
+        # Add computed GPU configuration and merge with default runtime_env
         ray_init_config["num_gpus"] = device_config["ray_num_gpus"]
-        # Ensure runtime_env and env_vars exist
-        if "runtime_env" not in ray_init_config:
-            ray_init_config["runtime_env"] = {}
-        if not isinstance(ray_init_config["runtime_env"], dict):
-            ray_init_config["runtime_env"] = dict(ray_init_config["runtime_env"])
-        if "env_vars" not in ray_init_config["runtime_env"]:
-            ray_init_config["runtime_env"]["env_vars"] = {}
-        if not isinstance(ray_init_config["runtime_env"]["env_vars"], dict):
-            ray_init_config["runtime_env"]["env_vars"] = dict(
-                ray_init_config["runtime_env"]["env_vars"]
-            )
+        ray_init_config = merge_ray_runtime_env(ray_init_config)
         torchrl_logger.info(f"Ray init config: {ray_init_config=}")
         ray_managed_externally = os.environ.get("RAY_CLUSTER_MANAGED_EXTERNALLY")
         if ray_managed_externally:
@@ -352,8 +334,10 @@ def main(cfg):
         raise ValueError(
             "Inference model num_devices must be set via inference_model.num_devices"
         )
-    if cfg.ref_model.num_devices is None:
-        raise ValueError("Ref model num_devices must be set via ref_model.num_devices")
+    if cfg.train.use_kl_to_ref and cfg.ref_model.num_devices is None:
+        raise ValueError(
+            "Ref model num_devices must be set via ref_model.num_devices when use_kl_to_ref is True"
+        )
     if cfg.train_model.num_devices is None:
         raise ValueError(
             "Train model num_devices must be set via train_model.num_devices"
@@ -392,35 +376,35 @@ def main(cfg):
             else cfg.env.repeats * cfg.env.num_envs,
         ),
         sampler=SamplerWithoutReplacement,
-        transform_factory=partial(MCAdvantage, grpo_size=cfg.env.repeats, verbose=True),
-        batch_size=cfg.train.optim_batch_size // cfg.train.gradient_accumulation_steps,
+        transform_factory=partial(MCAdvantage, grpo_size=cfg.env.repeats),
+        batch_size=max(
+            1, cfg.train.optim_batch_size // cfg.train.gradient_accumulation_steps
+        ),
         remote_config=replay_buffer_config,
     )
+
+    add_kl_transforms_to_replay_buffer(rb, cfg)
+
     torchrl_logger.info(f"Replay buffer: {rb}")
 
-    # Create remote collector using RayLLMCollector
-    collector_config["num_gpus"] = (
-        # The ref model will be instantiated within the collector, so we only need to allocate the number of devices for the inference model
-        cfg.ref_model.num_devices
-    )
+    collector_config["num_gpus"] = 0
     collector_config["num_cpus"] = cfg.ray.collector_config.get("num_cpus", 1)
     torchrl_logger.info(f"Starting collector with {collector_config=}")
 
     collector = RayLLMCollector(
-        env=partial(make_env, cfg, devices=device_config["ref_model_devices"]),
+        env=partial(make_env, cfg),
         policy=inference_policy,
         dialog_turns_per_batch=cfg.train.dialog_turns_per_batch,
         total_dialog_turns=cfg.train.total_dialog_turns,
         replay_buffer=rb,
-        ray_init_config=None,  # Ray is already initialized
-        weight_updater=None,  # We'll create this after getting the remote LLM
+        ray_init_config=None,
+        weight_updater=None,
         track_policy_version=True,
         remote_config=collector_config,
         sync_iter=cfg.train.sync_iter,
         verbose=False,
         yield_only_last_steps=cfg.env.reasoning,
     )
-    # Ensure collector is initialized by calling a method that will block until ready
     ray.get(collector._collector.is_initialized.remote())
     torchrl_logger.info(f"Collector: {collector}")
 
@@ -436,7 +420,11 @@ def main(cfg):
     # launch training
     ray.get(
         train_handler.remote(
-            rb, cfg, collector, devices=device_config["train_model_devices"]
+            rb,
+            cfg,
+            collector,
+            inference_policy,
+            devices=device_config["train_model_devices"],
         )
     )
 

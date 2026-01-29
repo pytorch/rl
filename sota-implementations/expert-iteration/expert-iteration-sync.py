@@ -7,16 +7,15 @@ from __future__ import annotations
 
 import gc
 import math
-import os
 from functools import partial
 from pathlib import Path
 
 import hydra
 
-from torchrl import torchrl_logger
-from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
+from torchrl import merge_ray_runtime_env, torchrl_logger
 from torchrl.data.llm.history import History
 from torchrl.record.loggers.wandb import WandbLogger
+from torchrl.weight_update.llm import get_model_metadata
 
 try:
     import ray
@@ -36,7 +35,7 @@ from ei_utils import (
     get_train_model,
     log_training_metrics,
     make_env,
-    make_weight_updater,
+    make_weight_sync_scheme,
     RemoteDataLogger,
 )
 from omegaconf import DictConfig
@@ -62,8 +61,6 @@ DEFAULT_DIALOG_TURNS_PER_BATCH = 256
 
 def setup_environment() -> None:
     """Setup required environment variables and configurations."""
-    if os.getenv("VLLM_USE_V1", "1") != "0":
-        raise RuntimeError("VLLM_USE_V1=0 must be set in environment")
 
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is required for training")
@@ -117,26 +114,33 @@ def train(
     if cfg.model.compile:
         loss_fn = torch.compile(loss_fn)
 
-    # Get metadata
-    model_metadata = vLLMUpdater.get_model_metadata(policy_training)
-
-    # Create weight updater with remote LLM
-    weight_updater: vLLMUpdater = make_weight_updater(
+    # Create weight sync scheme
+    weight_sync_scheme = make_weight_sync_scheme(
         master_address="localhost",  # Since we're running locally
         master_port=None,  # Will auto-assign an open port
-        model_metadata=model_metadata,
         vllm_tp_size=cfg.inference_model.num_devices
         if cfg.inference_model.num_devices is not None
         else len(cfg.inference_model.get("devices", [1])),
     )
-    collector.weight_updater = weight_updater
 
-    # Initialize the weight updater
-    weight_updater.init(model_metadata=model_metadata)
+    # Set up weight sender
+    torchrl_logger.info("Setting up weight synchronization scheme...")
+    sender = weight_sync_scheme.create_sender()
+    sender.register_model(policy_training)
 
-    # First update the weights
+    # Get vLLM engine reference from collector's policy
+    vllm_engine = collector.policy.model if hasattr(collector, "policy") else None
+    if vllm_engine is None:
+        raise RuntimeError("Could not get vLLM engine from collector policy")
+
+    # Initialize collective group
+    torchrl_logger.info("Initializing collective group...")
+    metadata = get_model_metadata(policy_training)
+    sender.init_all_workers_group(metadata, vllm_engine=vllm_engine)
+
+    # First weight update
     with timeit("update_policy_weights"):
-        weight_updater.push_weights(policy_training)
+        sender.update_weights()
     timeit.print(prefix="First update_policy_weights_ time")
     timeit.reset()
 
@@ -336,7 +340,7 @@ def train(
                 ):
                     with timeit("update_policy_weights"):
                         torchrl_logger.info("Updating policy weights...")
-                        weight_updater.push_weights(policy_training)
+                        sender.update_weights()
                         torch.cuda.empty_cache()
                         gc.collect()
                 # Checkpointing disabled to prevent disk space issues
@@ -359,7 +363,7 @@ def train(
             # If weight_update_frequency is not set, we update the weights after each batch
             with timeit("update_policy_weights"):
                 torchrl_logger.info("Updating policy weights...")
-                weight_updater.push_weights(policy_training)
+                sender.update_weights()
                 torch.cuda.empty_cache()
                 gc.collect()
 
@@ -394,19 +398,9 @@ def main(cfg):
             if not k.startswith("_")
         }
 
-        # Add computed GPU configuration
+        # Add computed GPU configuration and merge with default runtime_env
         ray_init_config["num_gpus"] = device_config["ray_num_gpus"]
-        # Ensure runtime_env and env_vars exist
-        if "runtime_env" not in ray_init_config:
-            ray_init_config["runtime_env"] = {}
-        if not isinstance(ray_init_config["runtime_env"], dict):
-            ray_init_config["runtime_env"] = dict(ray_init_config["runtime_env"])
-        if "env_vars" not in ray_init_config["runtime_env"]:
-            ray_init_config["runtime_env"]["env_vars"] = {}
-        if not isinstance(ray_init_config["runtime_env"]["env_vars"], dict):
-            ray_init_config["runtime_env"]["env_vars"] = dict(
-                ray_init_config["runtime_env"]["env_vars"]
-            )
+        ray_init_config = merge_ray_runtime_env(ray_init_config)
         torchrl_logger.info(f"Ray init config: {ray_init_config=}")
         ray.init(**ray_init_config)
 

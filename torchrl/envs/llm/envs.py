@@ -5,8 +5,9 @@
 from __future__ import annotations
 
 import warnings
+from collections.abc import Callable
 
-from typing import Any, Callable, Literal, TYPE_CHECKING
+from typing import Any, Literal, TYPE_CHECKING
 
 import torch
 
@@ -78,8 +79,10 @@ class LLMEnv(EnvBase):
             is written during calls to `step()`. Defaults to ``False``.
         assign_done (bool, optional): If ``True``, a zero-valued done and terminated state of shape equal to the
             action shape is written during calls to `step()`. Defaults to ``False``.
+
             .. note:: Regardless of the value assigned to `assign_done`, a done state will be written at the root
-                as it is a requirement for all TorchRL environments.
+               as it is a requirement for all TorchRL environments.
+
         batch_size (int or torch.Size, optional): Batch size of the environment.
             If left empty, an empty batch-size is assumed.
             The batch size can be null (`torch.Size([])`) or one-dimensional. Batchless environments are not supported.
@@ -600,10 +603,10 @@ class LLMHashingEnv(EnvBase):
     The primary goal of this environment is to identify token chains using a hashing function.
     This allows the data to be stored in a :class:`~torchrl.data.MCTSForest` using nothing but hashes as node
     identifiers, or easily prune repeated token chains in a data structure.
-    The following figure gives an overview of this workflow:
 
-    .. figure:: /_static/img/rollout-llm.png
-        :alt: Data collection loop with our LLM environment.
+    .. The following figure gives an overview of this workflow:
+    .. .. figure:: /_static/img/rollout-llm.png
+    ..     :alt: Data collection loop with our LLM environment.
 
     Args:
         vocab_size (int): The size of the vocabulary. Can be omitted if the tokenizer is passed.

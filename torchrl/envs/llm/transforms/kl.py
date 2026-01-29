@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import warnings
 
+from collections.abc import Callable
 from contextlib import nullcontext
 from copy import copy
 from typing import Any, Literal, TYPE_CHECKING
@@ -15,7 +16,9 @@ from tensordict import NestedKey, set_list_to_stack, TensorDictBase, unravel_key
 from tensordict.utils import _zip_strict, is_seq_of_nested_key, logger as torchrl_logger
 from torch.nn.utils.rnn import pad_sequence
 from torchrl.data import Composite, Unbounded
+from torchrl.data.tensor_specs import DEVICE_TYPING
 from torchrl.envs import EnvBase, Transform
+from torchrl.envs.transforms.ray_service import _RayServiceMetaClass, RayTransform
 from torchrl.envs.transforms.transforms import Compose
 from torchrl.envs.transforms.utils import _set_missing_tolerance
 from torchrl.modules.llm.policies.common import LLMWrapperBase
@@ -24,7 +27,135 @@ if TYPE_CHECKING:
     import transformers
 
 
-class KLRewardTransform(Transform):
+class RayKLRewardTransform(RayTransform):
+    """A Ray-based implementation of :class:`~torchrl.envs.llm.transforms.kl.KLRewardTransform`.
+
+    This class creates a Ray remote actor from KLRewardTransform that can be shared across multiple workers.
+    All method calls are delegated to the remote actor, ensuring that multiple environments can
+    share the same KL computation resources.
+
+    To avoid serialization issues with large models, this class supports model factories
+    that create models on the remote actor rather than passing full models through Ray channels.
+
+    Args:
+        ref_model (LLMWrapperBase, optional): the reference model. Prefer using a model factory instead
+            to avoid serialization issues.
+
+    Keyword Args:
+        ref_model_factory (Callable[[], LLMWrapperBase], optional): A callable that returns a reference model.
+            This allows for explicit resource control and avoids serialization issues.
+        num_cpus (int, optional): Number of CPUs to allocate to the Ray actor. Defaults to 1.
+        num_gpus (int, optional): Number of GPUs to allocate to the Ray actor. Defaults to 0.
+        device (torch.device, optional): Device to use on the remote Ray actor for tensor operations.
+            The local Ray transform will handle CPU serialization and device restoration automatically.
+            Defaults to None.
+        actor_name (str, optional): Name of the Ray actor to use. If provided, the actor will be reused if it already exists.
+        **kwargs: Additional keyword arguments to pass to KLRewardTransform.
+
+    Note:
+        When using model factories, the corresponding model argument (ref_model) should be None.
+        Model factories are preferred for large models to avoid serialization overhead.
+
+    Examples:
+        >>> # Option 1: Using model factory for explicit resource control
+        >>> def create_ref_model():
+        ...     return TransformersWrapper(ref_model, tokenizer=tokenizer, generate=False, return_log_probs=True)
+        >>> transform = RayKLRewardTransform(
+        ...     ref_model=None,
+        ...     ref_model_factory=create_ref_model,
+        ...     num_gpus=1,
+        ...     device=torch.device("cuda")
+        ... )
+
+        >>> # Option 2: Pass model directly (Ray handles serialization)
+        >>> transform = RayKLRewardTransform(ref_model=ref_model, device=torch.device("cuda"))
+    """
+
+    def __init__(
+        self,
+        ref_model: LLMWrapperBase | None = None,
+        *,
+        ref_model_factory: Callable[[], LLMWrapperBase] | None = None,
+        num_cpus: int | None = None,
+        num_gpus: int = 0,
+        device: DEVICE_TYPING | None = None,
+        actor_name: str | None = None,
+        **kwargs,
+    ):
+        # Validate arguments: model and factory should not both be provided
+        if ref_model is not None and ref_model_factory is not None:
+            raise ValueError(
+                "Cannot provide both 'ref_model' and 'ref_model_factory'. Choose one."
+            )
+        if ref_model is None and ref_model_factory is None:
+            raise ValueError(
+                "Must provide exactly one of 'ref_model' or 'ref_model_factory'."
+            )
+
+        # Store creation parameters for actor creation
+        self._ref_model = ref_model
+        self._ref_model_factory = ref_model_factory
+        self._creation_kwargs = kwargs
+        # Store device separately for passing to remote actor
+        self._remote_device = device
+
+        # Default num_cpus
+        if num_cpus is None:
+            num_cpus = 1
+
+        # Call parent constructor without device (Ray transform handles CPU/device mapping)
+        super().__init__(
+            num_cpus=num_cpus,
+            num_gpus=num_gpus,
+            device=None,  # Don't store device locally
+            actor_name=actor_name,
+            **kwargs,
+        )
+
+    def _create_actor(self, **kwargs):
+        """Create the remote KLRewardTransform actor."""
+        # Create the remote KLRewardTransform with resource specifications
+        RemoteKLRewardTransform = self._ray.remote(
+            num_cpus=self._num_cpus, num_gpus=self._num_gpus
+        )(KLRewardTransform)
+
+        if self._actor_name is not None:
+            RemoteKLRewardTransform = RemoteKLRewardTransform.options(
+                name=self._actor_name
+            )
+
+        # Determine how to create model on the remote actor
+        ref_model_arg = self._ref_model
+
+        # If we have factory, we'll pass it and set model to None
+        creation_kwargs = self._creation_kwargs.copy()
+        if self._ref_model_factory is not None:
+            creation_kwargs["ref_model_factory"] = self._ref_model_factory
+            ref_model_arg = None
+
+        # Pass device to the remote actor
+        if self._remote_device is not None:
+            creation_kwargs["device"] = self._remote_device
+
+        # Create the shared actor
+        actor = RemoteKLRewardTransform.remote(
+            ref_model=ref_model_arg, **creation_kwargs
+        )
+
+        return actor
+
+    def __repr__(self):
+        """String representation."""
+        try:
+            if hasattr(self, "_actor") and self._actor is not None:
+                return self._ray.get(self._actor.__repr__.remote())
+            else:
+                return "RayKLRewardTransform(actor=None)"
+        except Exception:
+            return f"RayKLRewardTransform(actor={getattr(self, '_actor', 'None')})"
+
+
+class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
     """A legacy transform for computing KL divergence-based rewards.
 
     **Deprecated**: This transform is maintained for backward compatibility but is no longer
@@ -32,6 +163,7 @@ class KLRewardTransform(Transform):
     which provides better modularity and integration with the new wrapper design.
 
     **Recent Changes:**
+
     - **Legacy Status**: This transform is now considered legacy and may not work optimally
       with the new modular wrapper design.
     - **ChatHistory Integration**: Limited support for the new :class:`~torchrl.modules.llm.policies.ChatHistory` objects.
@@ -45,15 +177,20 @@ class KLRewardTransform(Transform):
     - More modular and composable architecture
 
     Args:
-        gen_model (LLMWrapperBase): the generation model.
         ref_model (LLMWrapperBase): the reference model.
 
     Keyword Args:
+        ref_model_factory (Callable[[], LLMWrapperBase], optional): A callable that returns a reference model.
         assistant_only (bool): whether to only compute KL on assistant tokens. Defaults to `True`.
         tokenizer (transformers.AutoTokenizer): the tokenizer to use. Defaults to `None`.
         detach (bool): whether to detach the KL from the computation graph. Defaults to `True`.
-        device (torch.device): the device to use. Defaults to `None`.
+        device (torch.device): the device to cast the tensors to. This is not the device of the specs, but the device
+            onto which the tensors will be moved. It allows to keep the model on a different device
+            than the upcoming data. When using Ray service, this device will be used on the remote actor.
+            Defaults to `None`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
+        use_ray_service (bool, optional): whether to use Ray service. Defaults to `False`.
+        actor_name (str, optional): the name of the Ray actor to use. Defaults to `None`.
 
     Examples:
         >>> # Legacy usage (not recommended for new code)
@@ -70,11 +207,13 @@ class KLRewardTransform(Transform):
     """
 
     DEFAULT_IN_KEYS = ["reward"]
+    _RayServiceClass = RayKLRewardTransform
 
     def __init__(
         self,
-        ref_model: LLMWrapperBase,
+        ref_model: LLMWrapperBase | None = None,
         *,
+        ref_model_factory: Callable[[], LLMWrapperBase] | None = None,
         coef=1.0,
         in_keys=None,
         out_keys=None,
@@ -84,13 +223,26 @@ class KLRewardTransform(Transform):
         tokenizer: transformers.AutoTokenizer | None = None,
         assistant_only: bool = True,
         padding_side: str = "left",
+        use_ray_service: bool = False,
     ):
+        # Handle model factory - create model if factory is provided
+        if ref_model_factory is not None:
+            if ref_model is not None:
+                raise ValueError(
+                    "Cannot provide both 'ref_model' and 'ref_model_factory'. Choose one."
+                )
+            ref_model = ref_model_factory()
+        elif ref_model is None:
+            raise ValueError(
+                "Must provide exactly one of 'ref_model' or 'ref_model_factory'."
+            )
+
         if in_keys is None:
             in_keys = self.DEFAULT_IN_KEYS
         if out_keys is None:
             out_keys = copy(in_keys)
         if len(out_keys) == len(in_keys):
-            out_keys = out_keys + ["kl_penalty", "ref_log_prob"]
+            out_keys = out_keys + ["kl_penalty", "ref_log_probs"]
         elif len(out_keys) != len(in_keys) + 2:
             raise ValueError(
                 "The out_keys must have the same length as the in_keys (plus two additional optional kl entries for logging)."
@@ -193,7 +345,9 @@ class KLRewardTransform(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
+        original_device = None
         if self.device is not None:
+            original_device = tensordict.device
             tensordict = tensordict.to(self.device)
             next_tensordict = next_tensordict.to(self.device)
         # tensordict = self._get_text_response(tensordict, next_tensordict)
@@ -216,7 +370,7 @@ class KLRewardTransform(Transform):
             ref_log_prob_padded = ref_log_prob_td.get(self.log_prob_full_key)
         else:
             ref_log_prob_unpadded = ref_log_prob_td.get(
-                self.log_prob_full_key, as_list=True
+                self.log_prob_full_key, as_list=True  # type: ignore[misc]
             )
         if self.assistant_only:
             # Get the assistant mask
@@ -232,9 +386,9 @@ class KLRewardTransform(Transform):
                     # simple case: just take the prompt length
                     prompt_length = [
                         t.size(-1)
-                        for t in tensordict.get(("tokens", "prompt"), as_list=True)
+                        for t in tensordict.get(("tokens", "prompt"), as_list=True)  # type: ignore[misc]
                     ]
-                    mask = tensordict.get(("masks", "all_attention_mask"), as_list=True)
+                    mask = tensordict.get(("masks", "all_attention_mask"), as_list=True)  # type: ignore[misc]
                     for i in range(len(prompt_length)):
                         mask[i] = mask[i].clone()
                         mask[i][..., : prompt_length[i]] = False
@@ -268,7 +422,7 @@ class KLRewardTransform(Transform):
             curr_log_prob_padded = tensordict.get(self.log_prob_full_key)
         else:
             curr_log_prob_unpadded = tensordict.get(
-                self.log_prob_full_key, as_list=True
+                self.log_prob_full_key, as_list=True  # type: ignore[misc]
             )
         if self.assistant_only:
             # we want to keep the batch dimension
@@ -329,6 +483,8 @@ class KLRewardTransform(Transform):
             next_tensordict.set(self.out_keys[0], reward)
         next_tensordict.set(self.out_keys[1], kl)
         next_tensordict.set(self.out_keys[2], ref_log_prob)
+        if original_device is not None:
+            next_tensordict = next_tensordict.to(original_device)
         return next_tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -362,7 +518,7 @@ class KLRewardTransform(Transform):
                 shape = output_spec.shape
                 reward_key = "reward"
             # For LLMs, the shape of the reward is (batch, -1, 1)
-            shape = (*shape, -1, 1)
+            shape = torch.Size((*shape, -1, 1))
             reward_spec = Unbounded(
                 device=output_spec.device,
                 shape=shape,
@@ -378,9 +534,9 @@ class KLRewardTransform(Transform):
 
             shape = output_spec["full_reward_spec"].shape
             # For LLMs, the shape of the reward is (batch, -1, 1)
-            shape = (*shape, -1, 1)
+            shape = torch.Size((*shape, -1, 1))
             reward_spec = reward_spec.clone()
-            reward_spec.shape = torch.Size(shape)
+            reward_spec.shape = shape
 
             # then we need to populate the output keys
             observation_spec[out_key] = reward_spec
@@ -389,9 +545,9 @@ class KLRewardTransform(Transform):
             reward_spec = observation_spec[in_key]
 
             shape = observation_spec.shape
-            shape = (*shape, -1, 1)
+            shape = torch.Size((*shape, -1, 1))
             reward_spec = reward_spec.clone()
-            reward_spec.shape = torch.Size(shape)
+            reward_spec.shape = shape
 
             # then we need to populate the output keys
             observation_spec[out_key] = reward_spec
@@ -605,8 +761,8 @@ class RetrieveLogProb(Transform):
         """
         with torch.device(self.device) if self.device is not None else nullcontext():
             # Get assistant mask
-            assistant_masks = td.get(("masks", "all_assistant_mask"), as_list=True)
-            log_probs = td.get(lp_key, as_list=True)
+            assistant_masks = td.get(("masks", "all_assistant_mask"), as_list=True)  # type: ignore[misc]
+            log_probs = td.get(lp_key, as_list=True)  # type: ignore[misc]
             log_probs = [
                 torch.masked_fill(lp, ~mask, 0.0)
                 for lp, mask in _zip_strict(log_probs, assistant_masks)
@@ -654,7 +810,148 @@ class RetrieveLogProb(Transform):
         return observation_spec
 
 
-class RetrieveKL(Compose):
+class RayRetrieveKL(RayTransform):
+    """A Ray-based implementation of :class:`~torchrl.envs.llm.transforms.kl.RetrieveKL`.
+
+    This class creates a Ray remote actor from RetrieveKL that can be shared across multiple workers.
+    All method calls are delegated to the remote actor, ensuring that multiple environments can
+    share the same KL computation resources.
+
+    To avoid serialization issues with large models, this class supports model factories
+    that create models on the remote actor rather than passing full models through Ray channels.
+
+    Args:
+        gen_model (LLMWrapperBase | Literal["from_collector"]): the generation model, or "from_collector" for lazy initialization.
+            Prefer using a model factory instead to avoid serialization issues.
+        ref_model (LLMWrapperBase | None): the reference model. Prefer using a model factory instead
+            to avoid serialization issues.
+
+    Keyword Args:
+        gen_model_factory (Callable[[], LLMWrapperBase], optional): A callable that returns a generation model.
+            This allows for explicit resource control and avoids serialization issues.
+        ref_model_factory (Callable[[], LLMWrapperBase], optional): A callable that returns a reference model.
+            This allows for explicit resource control and avoids serialization issues.
+        num_cpus (int, optional): Number of CPUs to allocate to the Ray actor. Defaults to 1.
+        num_gpus (int, optional): Number of GPUs to allocate to the Ray actor. Defaults to 0.
+        device (torch.device, optional): Device to use on the remote Ray actor for tensor operations.
+            The local Ray transform will handle CPU serialization and device restoration automatically.
+            Defaults to None.
+        actor_name (str, optional): Name of the Ray actor to use. If provided, the actor will be reused if it already exists.
+        **kwargs: Additional keyword arguments to pass to RetrieveKL.
+
+    Note:
+        When using model factories, the corresponding model arguments (gen_model, ref_model) should be None.
+        Model factories are preferred for large models to avoid serialization overhead.
+
+    Examples:
+        >>> # Option 1: Using model factories for explicit resource control
+        >>> def create_gen_model():
+        ...     return TransformersWrapper(model, tokenizer=tokenizer, generate=False, return_log_probs=True)
+        >>> def create_ref_model():
+        ...     return TransformersWrapper(ref_model, tokenizer=tokenizer, generate=False, return_log_probs=True)
+        >>> transform = RayRetrieveKL(
+        ...     gen_model=None, ref_model=None,
+        ...     gen_model_factory=create_gen_model,
+        ...     ref_model_factory=create_ref_model,
+        ...     num_gpus=1,
+        ...     device=torch.device("cuda")
+        ... )
+
+        >>> # Option 2: Pass models directly (Ray handles serialization)
+        >>> transform = RayRetrieveKL(gen_model=gen_model, ref_model=ref_model, device=torch.device("cuda"))
+    """
+
+    def __init__(
+        self,
+        gen_model: LLMWrapperBase | Literal["from_collector"] | None = "from_collector",
+        ref_model: LLMWrapperBase | None = None,
+        *,
+        gen_model_factory: Callable[[], LLMWrapperBase] | None = None,
+        ref_model_factory: Callable[[], LLMWrapperBase] | None = None,
+        num_cpus: int | None = None,
+        num_gpus: int = 0,
+        device: DEVICE_TYPING | None = None,
+        actor_name: str | None = None,
+        **kwargs,
+    ):
+        # Validate arguments: models and factories should not both be provided
+        if gen_model is not None and gen_model_factory is not None:
+            raise ValueError(
+                "Cannot provide both 'gen_model' and 'gen_model_factory'. Choose one."
+            )
+        if ref_model is not None and ref_model_factory is not None:
+            raise ValueError(
+                "Cannot provide both 'ref_model' and 'ref_model_factory'. Choose one."
+            )
+
+        # Store creation parameters for actor creation
+        self._gen_model = gen_model
+        self._ref_model = ref_model
+        self._gen_model_factory = gen_model_factory
+        self._ref_model_factory = ref_model_factory
+        self._creation_kwargs = kwargs
+        # Store device separately for passing to remote actor
+        self._remote_device = device
+
+        # Default num_cpus
+        if num_cpus is None:
+            num_cpus = 1
+
+        # Call parent constructor without device (Ray transform handles CPU/device mapping)
+        super().__init__(
+            num_cpus=num_cpus,
+            num_gpus=num_gpus,
+            device=None,  # Don't store device locally
+            actor_name=actor_name,
+            **kwargs,
+        )
+
+    def _create_actor(self, **kwargs):
+        """Create the remote RetrieveKL actor."""
+        # Create the remote RetrieveKL with resource specifications
+        RemoteRetrieveKL = self._ray.remote(
+            num_cpus=self._num_cpus, num_gpus=self._num_gpus
+        )(RetrieveKL)
+
+        if self._actor_name is not None:
+            RemoteRetrieveKL = RemoteRetrieveKL.options(name=self._actor_name)
+
+        # Determine how to create models on the remote actor
+        gen_model_arg = self._gen_model
+        ref_model_arg = self._ref_model
+
+        # If we have factories, we'll pass them and set models to None
+        creation_kwargs = self._creation_kwargs.copy()
+        if self._gen_model_factory is not None:
+            creation_kwargs["gen_model_factory"] = self._gen_model_factory
+            gen_model_arg = None
+        if self._ref_model_factory is not None:
+            creation_kwargs["ref_model_factory"] = self._ref_model_factory
+            ref_model_arg = None
+
+        # Pass device to the remote actor
+        if self._remote_device is not None:
+            creation_kwargs["device"] = self._remote_device
+
+        # Create the shared actor
+        actor = RemoteRetrieveKL.remote(
+            gen_model=gen_model_arg, ref_model=ref_model_arg, **creation_kwargs
+        )
+
+        return actor
+
+    def __repr__(self):
+        """String representation."""
+        try:
+            if hasattr(self, "_actor") and self._actor is not None:
+                return self._ray.get(self._actor.__repr__.remote())
+            else:
+                return "RayRetrieveKL(actor=None)"
+        except Exception:
+            return f"RayRetrieveKL(actor={getattr(self, '_actor', 'None')})"
+
+
+class RetrieveKL(Compose, metaclass=_RayServiceMetaClass):
     """A transform to retrieve the KL divergence between two models' log-probabilities.
 
     This transform combines two :class:`~torchrl.envs.llm.transforms.kl.RetrieveLogProb` instances
@@ -673,6 +970,10 @@ class RetrieveKL(Compose):
         ref_model (LLMWrapperBase): the reference model, wrapped in such a way that it does not generate but computes the log-probs.
 
     Keyword Args:
+        gen_model_factory (Callable[[], LLMWrapperBase], optional): A callable that returns a generation model.
+            This allows for explicit resource control and avoids serialization issues when using Ray.
+        ref_model_factory (Callable[[], LLMWrapperBase], optional): A callable that returns a reference model.
+            This allows for explicit resource control and avoids serialization issues when using Ray.
         assistant_only (bool): whether to only retrieve the log-probs of the assistant tokens (i.e., steps of history
             where the role is `"assistant"`). Defaults to `True`.
 
@@ -687,13 +988,20 @@ class RetrieveKL(Compose):
             To control the tokenization in the actor, pass the tokenizer kwargs to the actor constructor.
             Defaults to `{"return_assistant_tokens_mask": True, "tokenize": True, "return_tensors": "pt", "padding": True, "add_generation_prompt": False}`.
         detach (bool): whether to exclude the log-probs from the gradient computation. Defaults to `True`.
-        device (torch.device): the device to use for tensor creation. Defaults to `None`.
+        device (torch.device): the device to cast the tensors to. This is not the device of the specs, but the device
+            onto which the tensors will be moved. It allows to keep the model on a different device
+            than the upcoming data itself. When using Ray service, this device will be used on the remote actor.
+            Defaults to `None`.
         tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the `actor`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
         kl_key (NestedKey): the key where the KL divergence is stored. Defaults to `"kl_penalty"`.
         add_to_reward (bool): whether to add the KL divergence to the reward. Defaults to `True`.
         coeff (float): the coefficient for the KL term when adding to reward. Defaults to `1.0`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
+        use_ray_service (bool, optional): if ``True``, returns a :class:`RayRetrieveKL` instance instead,
+            which creates a Ray actor for shared KL computation across multiple environments.
+            Defaults to ``False``.
+        actor_name (str, optional): the name of the Ray actor to use. Defaults to `None`.
         **kwargs: additional arguments to pass to the `RetrieveLogProb` transform.
 
     Examples:
@@ -780,12 +1088,16 @@ class RetrieveKL(Compose):
         :class:`~torchrl.envs.llm.transforms.kl.KLRewardTransform`: A legacy transform for KL reward computation (use `RetrieveKL` instead).
     """
 
+    _RayServiceClass = RayRetrieveKL
+
     def __init__(
         self,
         gen_model: LLMWrapperBase | Literal["from_collector"] = "from_collector",
         ref_model: LLMWrapperBase | None = None,
         *,
-        assistant_only: bool | None = True,
+        gen_model_factory: Callable[[], LLMWrapperBase] | None = None,
+        ref_model_factory: Callable[[], LLMWrapperBase] | None = None,
+        assistant_only: bool = True,
         history_key: str = "history",
         tokenizer_kwargs: dict[str, Any] | None = None,
         detach: bool = True,
@@ -797,13 +1109,31 @@ class RetrieveKL(Compose):
         kl_key: NestedKey = "kl_penalty",
         add_to_reward: bool = True,
         coeff: float = 1.0,
+        use_ray_service: bool = False,
         **kwargs,
     ):
+        # Handle model factories - create models if factories are provided
+        if gen_model_factory is not None:
+            if gen_model is not None and gen_model != "from_collector":
+                raise ValueError(
+                    "Cannot provide both 'gen_model' and 'gen_model_factory'. Choose one."
+                )
+            gen_model = gen_model_factory()
+
+        if ref_model_factory is not None:
+            if ref_model is not None:
+                raise ValueError(
+                    "Cannot provide both 'ref_model' and 'ref_model_factory'. Choose one."
+                )
+            ref_model = ref_model_factory()
+
         if isinstance(gen_model, str) and gen_model == "from_collector":
             # Lazy init
             self._initialized = False
             self._init_params = {
                 "ref_model": ref_model,
+                "gen_model_factory": gen_model_factory,
+                "ref_model_factory": ref_model_factory,
                 "assistant_only": assistant_only,
                 "history_key": history_key,
                 "tokenizer_kwargs": tokenizer_kwargs,
@@ -855,6 +1185,11 @@ class RetrieveKL(Compose):
             raise ValueError(
                 "The generation and reference models must have different `log_prob_key` values to use the `RetrieveKL` transform."
             )
+        if gen_model is None:
+            raise ValueError("gen_model cannot be None when not using 'from_collector'")
+        if ref_model is None:
+            raise ValueError("ref_model cannot be None")
+
         t1 = RetrieveLogProb(
             gen_model,
             log_probs_full_key=gen_log_probs_full_key,
@@ -1129,8 +1464,8 @@ class KLComputation(Transform):
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
         # Get log-probs
-        gen_log_probs = next_tensordict.get(self.gen_log_probs_full_key, as_list=True)
-        ref_log_probs = next_tensordict.get(self.ref_log_probs_full_key, as_list=True)
+        gen_log_probs = next_tensordict.get(self.gen_log_probs_full_key, as_list=True)  # type: ignore[misc]
+        ref_log_probs = next_tensordict.get(self.ref_log_probs_full_key, as_list=True)  # type: ignore[misc]
 
         if gen_log_probs is None or ref_log_probs is None:
             raise ValueError(
@@ -1163,7 +1498,7 @@ class KLComputation(Transform):
 
         # Add to reward if requested
         if self.add_to_reward:
-            reward = next_tensordict.get("reward", as_list=True)
+            reward = next_tensordict.get("reward", as_list=True)  # type: ignore[misc]
             if reward is not None:
                 if isinstance(reward, list):
                     if reward[0].ndim != kl[0].ndim + 1:
@@ -1203,7 +1538,7 @@ class KLComputation(Transform):
         if self.add_to_reward:
             shape = reward_spec["reward"].shape
             # For LLMs, the shape of the reward is (batch, -1, 1)
-            shape = (*shape, -1, 1)
+            shape = torch.Size((*shape, -1, 1))
             reward_spec["reward"] = reward_spec["reward"].clone()
-            reward_spec["reward"].shape = torch.Size(shape)
+            reward_spec["reward"].shape = shape
         return reward_spec

@@ -9,11 +9,10 @@ from dataclasses import dataclass
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import dispatch, TensorDictModule
+from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
-from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import _reduce, distance_loss
 
@@ -24,7 +23,7 @@ class OnlineDTLoss(LossModule):
     Presented in `"Online Decision Transformer" <https://arxiv.org/abs/2202.05607>`
 
     Args:
-        actor_network (ProbabilisticActor): stochastic actor
+        actor_network (ProbabilisticTensorDictSequential): stochastic actor
 
     Keyword Args:
         alpha_init (:obj:`float`, optional): initial entropy multiplier.
@@ -77,7 +76,7 @@ class OnlineDTLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: ProbabilisticActor,
+        actor_network: ProbabilisticTensorDictSequential,
         *,
         alpha_init: float = 1.0,
         min_alpha: float | None = None,
@@ -85,7 +84,7 @@ class OnlineDTLoss(LossModule):
         fixed_alpha: bool = False,
         target_entropy: str | float = "auto",
         samples_mc_entropy: int = 1,
-        reduction: str = None,
+        reduction: str | None = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -255,7 +254,7 @@ class DTLoss(LossModule):
     Presented in `"Decision Transformer: Reinforcement Learning via Sequence Modeling" <https://arxiv.org/abs/2106.01345>`
 
     Args:
-        actor_network (ProbabilisticActor): stochastic actor
+        actor_network (ProbabilisticTensorDictSequential): stochastic actor
 
     Keyword Args:
         loss_function (str): loss function to use. Defaults to ``"l2"``.
@@ -293,10 +292,10 @@ class DTLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: ProbabilisticActor,
+        actor_network: ProbabilisticTensorDictSequential,
         *,
         loss_function: str = "l2",
-        reduction: str = None,
+        reduction: str | None = None,
         device: torch.device | None = None,
     ) -> None:
         self._in_keys = None

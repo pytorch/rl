@@ -26,11 +26,11 @@ import torch.cuda
 import tqdm
 from torchrl._utils import logger as torchrl_logger
 
-from torchrl.collectors.collectors import SyncDataCollector
-from torchrl.collectors.distributed import RPCDataCollector
+from torchrl.collectors import Collector
+from torchrl.collectors.distributed import RPCCollector
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
-from torchrl.envs.utils import RandomPolicy
+from torchrl.modules import RandomPolicy
 
 parser = ArgumentParser()
 parser.add_argument(
@@ -104,13 +104,13 @@ if __name__ == "__main__":
         )
         action_spec = make_env.action_spec
 
-    collector = RPCDataCollector(
+    collector = RPCCollector(
         [make_env] * num_nodes,
         RandomPolicy(action_spec),
         num_workers_per_collector=1,
         frames_per_batch=frames_per_batch,
         total_frames=args.total_frames,
-        collector_class=SyncDataCollector,
+        collector_class=Collector,
         collector_kwargs=collector_kwargs,
         sync=args.sync,
         storing_device="cuda:0" if device_count else "cpu",
@@ -129,5 +129,5 @@ if __name__ == "__main__":
             t0 = time.time()
     collector.shutdown()
     t1 = time.time()
-    torchrl_logger.info(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
+    torchrl_logger.info(f"time elapsed: {t1 - t0}s, rate: {counter / (t1 - t0)} fps")
     exit()

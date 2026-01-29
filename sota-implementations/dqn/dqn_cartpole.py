@@ -12,7 +12,7 @@ import torch.nn
 import torch.optim
 import tqdm
 from tensordict.nn import CudaGraphModule, TensorDictSequential
-from torchrl._utils import timeit
+from torchrl._utils import get_available_device, timeit
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.envs import ExplorationType, set_exploration_type
@@ -28,13 +28,7 @@ torch.set_float32_matmul_precision("high")
 @hydra.main(config_path="", config_name="config_cartpole", version_base="1.1")
 def main(cfg: DictConfig):  # noqa: F821
 
-    device = cfg.device
-    if device in ("", None):
-        if torch.cuda.is_available():
-            device = "cuda:0"
-        else:
-            device = "cpu"
-    device = torch.device(device)
+    device = torch.device(cfg.device) if cfg.device else get_available_device()
 
     # Make the components
     model = make_dqn_model(cfg.env.env_name, device=device)

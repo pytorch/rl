@@ -4,20 +4,88 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import functools
+
 import time
-from typing import Any, Callable, Literal
+import warnings
+from typing import Any, Literal
 
 import torch
 from omegaconf import DictConfig
 from torch import device as torch_device, dtype as torch_dtype
 
-from torchrl._utils import logger as torchrl_logger
-from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
+from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.envs.llm import AddThinkingPrompt, GSM8KEnv, KLRewardTransform, RetrieveKL
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
+from torchrl.weight_update.llm import VLLMWeightSyncScheme
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
+
+
+def check_grpo_dependencies() -> None:
+    """Check for required GRPO dependencies and provide helpful error messages.
+
+    This function checks for critical dependencies needed for GRPO training and
+    provides installation instructions for missing packages.
+    """
+    missing_packages = []
+    missing_optional = []
+
+    # Core required packages
+    required_packages = {
+        "datasets": "pip install datasets",
+        "peft": "pip install peft",
+        "wandb": "pip install wandb",
+        "vllm": "pip install vllm",
+        "transformers": "pip install transformers",
+        "accelerate": "pip install accelerate",
+        "ray": "pip install ray",
+        "tqdm": "pip install tqdm",
+    }
+
+    # Optional but recommended packages
+    optional_packages = {
+        "flash_attn": "pip install flash-attn",
+        "bitsandbytes": "pip install bitsandbytes",
+        "xformers": "pip install xformers",
+    }
+
+    # Check required packages
+    for package, install_cmd in required_packages.items():
+        try:
+            __import__(package)
+        except ImportError:
+            missing_packages.append((package, install_cmd))
+
+    # Check optional packages
+    for package, install_cmd in optional_packages.items():
+        try:
+            __import__(package)
+        except ImportError:
+            missing_optional.append((package, install_cmd))
+
+    # Report missing required packages
+    if missing_packages:
+        error_msg = (
+            "Missing required packages for GRPO training:\n"
+            + "\n".join(f"  - {pkg}: {cmd}" for pkg, cmd in missing_packages)
+            + "\n\nYou can install all GRPO dependencies with:\n"
+            + "  pip install torchrl[grpo]\n"
+            + "or install individual packages as shown above."
+        )
+        raise ImportError(error_msg)
+
+    # Report missing optional packages as warnings
+    if missing_optional:
+        warning_msg = (
+            "Missing optional packages that may improve GRPO performance:\n"
+            + "\n".join(f"  - {pkg}: {cmd}" for pkg, cmd in missing_optional)
+            + "\n\nThese packages are optional but recommended for optimal performance."
+        )
+        warnings.warn(warning_msg, UserWarning, stacklevel=2)
+
+    torchrl_logger.info("✓ All required GRPO dependencies are available")
 
 
 def get_tokenizer(cfg: DictConfig) -> PreTrainedTokenizer:
@@ -101,6 +169,8 @@ def get_train_model(
         return_log_probs=True,
         pad_output=False,
         device=torch.device("cuda:0"),
+        # Enable packing when cfg.train.packing=True by disabling padding
+        pad_model_input=not cfg.train.packing,
     )
     # Ensure model stays in eval mode after wrapping
     policy_training.model.eval()
@@ -134,30 +204,102 @@ def get_inference_model(
     Raises:
         AssertionError: If the vLLM server or model initialization fails
     """
-    from torchrl.modules.llm.backends.vllm import make_vllm_worker
+    from torchrl.modules.llm.backends.vllm import AsyncVLLM
 
     num_devices = cfg.inference_model.num_devices
     if num_devices is None:
         vllm_devices = devices if devices is not None else [1]
+        num_devices = len(vllm_devices)
     else:
         vllm_devices = None
     torchrl_logger.info(
-        f"Creating inference model with num_devices={num_devices}, devices={vllm_devices}"
+        f"Creating AsyncVLLM inference model with num_devices={num_devices}, devices={vllm_devices}"
     )
 
     model_name = cfg.model.name
 
-    # vLLM handles device mapping internally
-    inference_server = make_vllm_worker(
-        model_name=model_name,
-        gpu_memory_utilization=cfg.inference_model.gpu_memory_utilization,
-        num_devices=num_devices,
-        devices=list(vllm_devices)
-        if vllm_devices is not None
-        else None,  # Convert to list for type compatibility
-        make_ray_worker=make_ray_worker,
-        enforce_eager=cfg.inference_model.enforce_eager,
-    )
+    # Use AsyncVLLM for better performance and async processing
+    verbose = getattr(cfg.inference_model, "verbose", True)
+    compile_model = getattr(
+        cfg.inference_model, "compile", False
+    )  # Disabled by default for GRPO
+
+    # Build parameters dict for AsyncVLLM with all config options
+    inference_params = {
+        "model_name": model_name,
+        "num_devices": 1,
+        "num_replicas": num_devices,
+        "gpu_memory_utilization": cfg.inference_model.gpu_memory_utilization,
+        "enforce_eager": cfg.inference_model.enforce_eager,
+        "verbose": verbose,
+        "compile": compile_model,
+    }
+
+    # CRITICAL FIX: Configure attention implementation to prevent Flash Attention errors
+    # vLLM doesn't accept attn_implementation directly through AsyncEngineArgs
+    # Instead, we set the VLLM_ATTENTION_BACKEND environment variable
+    if hasattr(cfg.inference_model, "attn_implementation"):
+        import os
+
+        attn_impl = cfg.inference_model.attn_implementation
+
+        # Map common attention implementations to vLLM backend names
+        attn_backend_map = {
+            "flash_attention_2": "FLASH_ATTN",
+            "flash_attn": "FLASH_ATTN",
+            "sdpa": "TORCH_SDPA",
+            "torch_sdpa": "TORCH_SDPA",
+            "xformers": "XFORMERS",
+        }
+
+        vllm_backend = attn_backend_map.get(attn_impl, attn_impl.upper())
+        os.environ["VLLM_ATTENTION_BACKEND"] = vllm_backend
+
+        torchrl_logger.info(
+            f"Setting VLLM_ATTENTION_BACKEND={vllm_backend} (from config: {attn_impl})"
+        )
+
+    # Handle FP32 output configuration
+    if hasattr(cfg.inference_model, "enable_fp32_output"):
+        enable_fp32 = cfg.inference_model.enable_fp32_output
+        if enable_fp32:
+            os.environ["VLLM_ENABLE_FP32_OUTPUT"] = "1"
+            torchrl_logger.info(
+                "Enabled FP32 output for vLLM (VLLM_ENABLE_FP32_OUTPUT=1). "
+                "This will use FP32 for the final output layer if the model supports it."
+            )
+        # Add to inference params so it gets passed to AsyncVLLM
+        inference_params["enable_fp32_output"] = enable_fp32
+
+    # Add other common vLLM parameters from config if present
+    optional_vllm_params = [
+        "max_model_len",
+        "dtype",
+        "trust_remote_code",
+        "seed",
+        "swap_space",
+        "cpu_offload_gb",
+        "enable_prefix_caching",
+        "tensor_parallel_size",
+        "pipeline_parallel_size",
+    ]
+
+    for param in optional_vllm_params:
+        if hasattr(cfg.inference_model, param):
+            value = getattr(cfg.inference_model, param)
+            if value is not None:
+                inference_params[param] = value
+
+    # Handle torch_dtype specifically (convert string to torch dtype)
+    if hasattr(cfg.inference_model, "torch_dtype"):
+        dtype_str = cfg.inference_model.torch_dtype
+        if dtype_str is not None:
+            if isinstance(dtype_str, str):
+                inference_params["dtype"] = getattr(torch, dtype_str)
+            else:
+                inference_params["dtype"] = dtype_str
+
+    inference_server = AsyncVLLM.from_pretrained(**inference_params)
     assert inference_server is not None
     if tokenizer is None:
         from transformers import AutoTokenizer
@@ -177,6 +319,7 @@ def get_inference_model(
             "max_tokens": cfg.inference_model.max_tokens,
             "include_stop_str_in_output": cfg.inference_model.include_stop_str_in_output,
             "temperature": cfg.inference_model.temperature,
+            "top_p": cfg.inference_model.top_p,
         },
     )
     assert policy.model is not None
@@ -413,47 +556,45 @@ def get_hf_model(
         torch.set_default_dtype(original_dtype)
 
 
-def make_weight_updater(
-    policy_training=None,
-    master_address=None,
-    master_port=None,
-    model_metadata=None,
-    vllm_tp_size=None,
-) -> vLLMUpdater | Callable[[], vLLMUpdater]:
-    """Creates a vLLM weight updater for the policy.
+def make_weight_sync_scheme(
+    vllm_engine,
+) -> VLLMWeightSyncScheme:
+    """Creates a vLLM weight synchronization scheme using NCCL collectives.
 
-    This function can be used in two ways:
-    1. Synchronous mode (grpo.py): Pass policy_training to get an initialized updater with metadata
-    2. Async mode (grpo-async.py): Pass master_address, master_port, model_metadata, and remote_actor
+    This function creates a weight sync scheme that uses NCCL for high-performance
+    GPU-to-GPU weight transfers from the training model to vLLM inference workers.
 
     Args:
-        policy_training (Optional[TransformersWrapper]): The training policy model. Required for sync mode.
-        master_address (Optional[str]): Ray master address for async mode.
-        master_port (Optional[int]): Ray master port for async mode.
-        model_metadata (Optional[dict]): Model metadata for async mode. If not provided but policy_training is,
-            it will be extracted from the policy.
-        vllm_tp_size (Optional[int]): vLLM tensor parallel size. If not provided, will be set to 1.
+        vllm_engine: A vLLM engine implementing the RLvLLMEngine interface
+            (like RayLLMWorker, LocalLLMWrapper, or AsyncVLLM).
+            This is typically obtained from the inference policy's model attribute.
 
     Returns:
-        vLLMUpdater | partial[vLLMUpdater]: An instance of the weight updater configured to update
-            the vLLM worker's weights.
+        VLLMWeightSyncScheme: A weight sync scheme configured for the vLLM engine.
     """
-    if model_metadata is None and policy_training is not None:
-        # Extract metadata from training policy
-        model_metadata = {
-            k: (v.dtype, v.shape) for k, v in policy_training.model.state_dict().items()
-        }
+    # Get configuration from the vLLM engine
+    tp_size = vllm_engine.get_tp_size()
+    num_replicas = getattr(vllm_engine, "num_replicas", 1)
+    master_address = vllm_engine.get_master_address()
+    master_port = vllm_engine.get_master_port()
 
-    return vLLMUpdater(
+    torchrl_logger.info(
+        f"Creating VLLMWeightSyncScheme with tp_size={tp_size}, "
+        f"num_replicas={num_replicas}, master_address={master_address}, "
+        f"master_port={master_port}"
+    )
+
+    return VLLMWeightSyncScheme(
         master_address=master_address,
         master_port=master_port,
-        model_metadata=model_metadata,
-        vllm_tp_size=vllm_tp_size,
+        gpus_per_replica=tp_size,
+        num_replicas=num_replicas,
+        strategy="state_dict",
     )
 
 
 def compute_device_allocation(cfg):
-    """Compute device allocations and Ray GPU config based on sync mode.
+    """Compute device allocations and Ray GPU config.
 
     Args:
         cfg: The configuration object
@@ -462,45 +603,40 @@ def compute_device_allocation(cfg):
         dict: Updated device configuration containing:
             - train_model_devices: list of devices for training
             - inference_model_devices: list of devices for inference
-            - ref_model_devices: list of devices for reference model
             - ray_num_gpus: number of GPUs to tell Ray about
             - cuda_visible_devices: string for CUDA_VISIBLE_DEVICES
     """
     train_devices = cfg.train_model.num_devices
     inf_devices = cfg.inference_model.num_devices
-    ref_devices = cfg.ref_model.num_devices
 
-    # So we need all GPUs for Ray
     train_start = 0
     train_end = train_devices
     inference_start = 0
     inference_end = inf_devices
-    ref_start = inference_end
-    ref_end = ref_start + ref_devices
+
+    ref_devices = cfg.ref_model.num_devices if cfg.train.use_kl_to_ref else 0
     ray_num_gpus = train_devices + inf_devices + ref_devices
 
-    # Create device lists
     train_model_devices = list(range(train_start, train_end))
     inference_model_devices = list(range(inference_start, inference_end))
-    ref_model_devices = list(range(ref_start, ref_end))
 
-    # Get total unique devices for CUDA_VISIBLE_DEVICES
-    all_devices = sorted(
-        set(train_model_devices + inference_model_devices + ref_model_devices)
-    )
+    all_devices = sorted(set(train_model_devices + inference_model_devices))
+    if cfg.train.use_kl_to_ref:
+        ref_device_start = max(all_devices) + 1 if all_devices else 0
+        ref_devices_list = list(range(ref_device_start, ref_device_start + ref_devices))
+        all_devices.extend(ref_devices_list)
     cuda_visible_devices = ",".join(map(str, all_devices))
 
     return {
         "train_model_devices": train_model_devices,
         "inference_model_devices": inference_model_devices,
-        "ref_model_devices": ref_model_devices,
         "ray_num_gpus": ray_num_gpus,
         "cuda_visible_devices": cuda_visible_devices,
     }
 
 
-def make_env(cfg: DictConfig, devices: list[int] | None = None):
-    """Create the environment with proper device allocation.
+def make_env(cfg: DictConfig, single_env: bool = False):
+    """Create the environment.
 
     Args:
         cfg: The configuration object
@@ -508,17 +644,7 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
     Returns:
         The configured environment
     """
-    # Create reference model with proper device allocation
-    # For the collector actor, we want inference_model devices first, then ref_model devices
     train_tokenizer = get_tokenizer(cfg)
-
-    # Create a new config with adjusted device assignments
-    ref_cfg = DictConfig(dict(cfg))
-    ref_model = get_ref_model(
-        ref_cfg,
-        train_tokenizer,
-        devices=devices,
-    )
 
     # Setup environment
     max_steps = cfg.env.max_steps if cfg.env.reasoning else 1
@@ -528,9 +654,10 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
         env = GSM8KEnv(
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs,
+            num_envs=cfg.env.num_envs if not single_env else 1,
             max_steps=max_steps,
-            device=torch.device("cuda:0") if devices is not None else None,
+            device=torch.device("cpu"),
+            ray_backend=True,
         )
     elif cfg.env.dataset == "ifeval":  # ifeval
         # Reward scale is 0.0 to 2.2
@@ -538,12 +665,14 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
         env = IFEvalEnv(
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs,
+            num_envs=cfg.env.num_envs if not single_env else 1,
             max_steps=max_steps,
-            device=torch.device("cuda:0") if devices is not None else None,
+            device=torch.device("cpu"),
+            ray_backend=True,
         )
     else:
         raise NotImplementedError(f"Dataset {cfg.env.dataset} not implemented")
+
     if cfg.env.reasoning:
         env = env.append_transform(
             AddThinkingPrompt(
@@ -559,31 +688,66 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
                 random_prompt=True,
             ),
         )
-        env = env.append_transform(
-            # RetrieveKL will be lazily initialized in the collector.
-            # We use RetrieveKL instead of KLRewardTransform because the assistant response may change when
-            # adding the thinking prompt, requiring a second pass in vllm to compute the log-probs.
-            RetrieveKL(
-                ref_model=ref_model,
-                add_to_reward=not cfg.train.kl_coef_in_loss,
-                coeff=cfg.train.kl_to_ref_coeff,
-            )
-        )
-    else:
-        # Pass device directly to KLRewardTransform - Since, for Ray, the local device is always 0
-        # we can just use 0 here.
-        device = torch.device("cuda:0")
-        env = env.append_transform(
-            KLRewardTransform(
-                ref_model=ref_model,
-                coef=cfg.train.kl_to_ref_coeff,
-                add_to_reward=not cfg.train.kl_coef_in_loss,
-                device=device,
-            )
-        )
     return env
 
 
+def make_ref_model_factory(cfg: DictConfig) -> functools.partial | None:
+    """Create a factory for the reference model if KL to ref is enabled.
+
+    Args:
+        cfg: The configuration object
+
+    Returns:
+        A partial function that creates the reference model, or None if KL to ref is disabled
+    """
+    if not cfg.train.use_kl_to_ref:
+        return None
+
+    train_tokenizer = get_tokenizer(cfg)
+    ref_cfg = DictConfig(dict(cfg))
+    ref_model_factory = functools.partial(
+        get_ref_model,
+        ref_cfg,
+        train_tokenizer,
+        devices=[0],
+    )
+    return ref_model_factory
+
+
+def add_kl_transforms_to_replay_buffer(replay_buffer, cfg: DictConfig):
+    """Add KL transforms to replay buffer.
+
+    Args:
+        replay_buffer: The replay buffer to add transforms to
+        cfg: The configuration object
+    """
+    if not cfg.train.use_kl_to_ref:
+        return
+
+    ref_model_factory = make_ref_model_factory(cfg)
+    if ref_model_factory is None:
+        return
+
+    if cfg.env.reasoning:
+        kl_transform = RetrieveKL(
+            ref_model_factory=ref_model_factory,
+            add_to_reward=not cfg.train.kl_coef_in_loss,
+            coeff=cfg.train.kl_to_ref_coeff,
+            use_ray_service=True,
+        )
+    else:
+        kl_transform = KLRewardTransform(
+            ref_model_factory=ref_model_factory,
+            coef=cfg.train.kl_to_ref_coeff,
+            add_to_reward=not cfg.train.kl_coef_in_loss,
+            device=torch.device("cuda:0"),
+            use_ray_service=True,
+        )
+
+    replay_buffer.append_transform(kl_transform, invert=True)
+
+
+@timeit("Logging metrics")
 def log_training_metrics(
     wandb_logger,
     replay_buffer,
@@ -596,6 +760,7 @@ def log_training_metrics(
     start_time,
     gradient_accumulation_steps,
     history_str=None,
+    use_kl_to_ref=True,
 ):
     """Log training metrics to wandb.
 
@@ -623,9 +788,6 @@ def log_training_metrics(
             "reward from buffer": float(
                 torch.cat(rb_content.get(("next", "reward"), as_list=True)).mean()
             ),
-            "kl_penalty (inference to ref) from buffer": float(
-                torch.cat(rb_content.get(("next", "kl_penalty"), as_list=True)).mean()
-            ),
             "seq_length from buffer": float(
                 torch.tensor(
                     [
@@ -642,9 +804,7 @@ def log_training_metrics(
             "kl_to_inference (train to inference - differentiable), from loss": float(
                 loss.kl_to_inference.mean()
             ),
-            "kl_to_ref, from loss": float(loss.kl_to_ref.mean()),
             "loss_kl_to_inference, from loss": float(loss.loss_kl_to_inference.mean()),
-            "loss_kl_to_ref, from loss": float(loss.loss_kl_to_ref.mean()),
             "entropy loss, from loss": float(loss.loss_entropy.mean()),
             "grad_norm": float(grad_norm)
             if global_step % gradient_accumulation_steps == 0
@@ -669,6 +829,12 @@ def log_training_metrics(
                 global_step / (time.time() - start_time)
             ),
         }
+        if use_kl_to_ref:
+            metrics["kl_penalty (inference to ref) from buffer"] = float(
+                torch.cat(rb_content.get(("next", "kl_penalty"), as_list=True)).mean()
+            )
+            metrics["kl_to_ref, from loss"] = float(loss.kl_to_ref.mean())
+            metrics["loss_kl_to_ref, from loss"] = float(loss.loss_kl_to_ref.mean())
 
         for name, value in metrics.items():
             wandb_logger.log_scalar(name, value, step=global_step)

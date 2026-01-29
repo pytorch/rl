@@ -26,7 +26,7 @@ jobs:
   build-docs:
     strategy:
       matrix:
-        python_version: [ "3.9" ]
+        python_version: [ "3.12" ]
         cuda_arch_version: [ "12.8" ]
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -34,59 +34,48 @@ jobs:
       repository: pytorch/rl
       upload-artifact: docs
       timeout: 120
+      # Use PyTorch image with newer GCC for GLIBCXX_3.4.30 support (needed by AOTInductor in export.py)
+      docker-image: pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel
       script: |
         set -e
         set -v
-        yum makecache
-        # Install Mesa and OpenGL Libraries:
-        yum install -y glfw mesa-libGL mesa-libGL-devel egl-utils freeglut mesa-libGLU mesa-libEGL python39-pip
-        # Install DRI Drivers:
-        yum install -y mesa-dri-drivers
-        # Install Xvfb for Headless Environments:
-        yum install -y xorg-x11-server-Xvfb
-        # xhost +local:docker
-        # Xvfb :1 -screen 0 1024x768x24 &
-
-        root_dir="$(pwd)"
-        conda_dir="${root_dir}/conda"
-        env_dir="${root_dir}/env"
-        os=Linux
         
-        # 1. Install conda at ./conda
-        printf "* Installing conda\n"
-        wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
-        bash ./miniconda.sh -b -f -p "${conda_dir}"
-        eval "$(${conda_dir}/bin/conda shell.bash hook)"
-        printf "* Creating a test environment\n"
-        conda create --prefix "${env_dir}" -y python=3.9
-        printf "* Activating\n"
-        conda activate "${env_dir}"
-
+        # Install system dependencies (Ubuntu-based PyTorch image)
+        apt-get update
+        apt-get install -y libglfw3 libglfw3-dev libgl1-mesa-glx libgl1-mesa-dev libegl1-mesa-dev \
+          freeglut3-dev libglu1-mesa libegl1 mesa-utils xvfb wget git cmake
+        
         # 2. upgrade pip, ninja and packaging
-        conda install anaconda::cmake -y
-        python3 -m pip install --upgrade pip
-        python3 -m pip install setuptools ninja packaging "pybind11[global]" -U
+        python -m pip install --upgrade pip
+        python -m pip install setuptools ninja packaging "pybind11[global]" -U
         
         # 3. check python version
-        python3 --version
+        python --version
         
         # 4. Check git version
         git version
         
         # 5. Install PyTorch
+        # Uninstall pre-installed packages from Docker image to avoid conflicts
+        # (gym conflicts with gymnasium, torch/torchaudio versions conflict with nightly)
+        python -m pip uninstall -y torch torchvision torchaudio gym || true
+        
         if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
-          python3 -m pip install torch torchvision
-          python3 -m pip install tensordict
+          # Use stable PyTorch for releases (tags and release/* branches)
+          python -m pip install torch torchvision --quiet --root-user-action=ignore
+          python -m pip install tensordict --quiet --root-user-action=ignore
         else
-          python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
-          python3 -m pip install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
+          # Use nightly PyTorch for main, nightly, and PRs
+          python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
+          python -m pip install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
         fi
         
-        # 7. Install TorchRL
-        python3 setup.py develop
+        # 6. Install doc requirements BEFORE TorchRL to ensure gymnasium is available
+        # (TorchRL's gym backend detection happens at import time)
+        python -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
         
-        # 8. Install requirements
-        python3 -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
+        # 7. Install TorchRL
+        python -m pip install -e . --no-build-isolation
 
         # 9. Set sanitize version
         if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
@@ -100,7 +89,7 @@ jobs:
         # 10. Test torchrl installation
         mkdir _tmp
         cd _tmp
-        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python3 -c """from torchrl.envs.libs.dm_control import DMControlEnv
+        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python -c """from torchrl.envs.libs.dm_control import DMControlEnv
         print(DMControlEnv('cheetah', 'run', from_pixels=True).reset())"""
         cd ..
         

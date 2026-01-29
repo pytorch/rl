@@ -5,12 +5,15 @@
 from __future__ import annotations
 
 import abc
+from typing import TYPE_CHECKING
 
 import torch
 from tensordict import TensorDictBase
 
-from torchrl.envs.common import EnvBase
 from torchrl.modules import SafeModule
+
+if TYPE_CHECKING:
+    from torchrl.envs.common import EnvBase
 
 
 class MPCPlannerBase(SafeModule, metaclass=abc.ABCMeta):

@@ -91,14 +91,15 @@ except NameError:
     is_sphinx = False
 
 try:
-    multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
+    multiprocessing.set_start_method(
+        "spawn" if is_sphinx else "fork", force=not is_sphinx
+    )
 except RuntimeError:
     pass
 
 # sphinx_gallery_end_ignore
 
 from collections import defaultdict
-from typing import Optional
 
 import numpy as np
 import torch
@@ -366,8 +367,8 @@ def _reset(self, tensordict):
 #
 # There are four specs that we must code in our environment:
 #
-# * :obj:`EnvBase.observation_spec`: This will be a :class:`~torchrl.data.CompositeSpec`
-#   instance where each key is an observation (a :class:`CompositeSpec` can be
+# * :obj:`EnvBase.observation_spec`: This will be a :class:`~torchrl.data.Composite`
+#   instance where each key is an observation (a :class:`Composite` can be
 #   viewed as a dictionary of specs).
 # * :obj:`EnvBase.action_spec`: It can be any type of spec, but it is required
 #   that it corresponds to the ``"action"`` entry in the input ``tensordict``;
@@ -470,7 +471,7 @@ def make_composite_from_td(td):
 #
 
 
-def _set_seed(self, seed: Optional[int]) -> None:
+def _set_seed(self, seed: int | None) -> None:
     rng = torch.manual_seed(seed)
     self.rng = rng
 
@@ -497,7 +498,7 @@ def gen_params(g=10.0, batch_size=None) -> TensorDictBase:
         {
             "params": TensorDict(
                 {
-                    "max_speed": 8,
+                    "max_speed": 8.0,
                     "max_torque": 2.0,
                     "dt": 0.05,
                     "g": g,

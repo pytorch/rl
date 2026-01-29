@@ -12,6 +12,7 @@ dependencies:
     - pytest-mock
     - pytest-instafail
     - pytest-rerunfailures
+    - pytest-json-report
     - pytest-error-for-skips
     - pytest-asyncio
     - expecttest
@@ -19,6 +20,6 @@ dependencies:
     - pyyaml
     - scipy
     - hydra-core
-    - jax[cuda12]
+    - jax[cuda12]>=0.7.0
     - brax
     - psutil

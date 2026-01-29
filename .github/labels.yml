@@ -1,0 +1,294 @@
+# Labels for TorchRL repository
+# Use with: gh label create "Label Name" --description "Description" --color "hex"
+# Or run: .github/scripts/create_labels.sh pytorch/rl
+
+# =============================================================================
+# Issue/PR Type Labels
+# =============================================================================
+- name: bug
+  description: "Something isn't working"
+  color: "d73a4a"
+
+- name: enhancement
+  description: "New feature or request"
+  color: "a2eeef"
+
+- name: Feature
+  description: "New feature"
+  color: "a2eeef"
+
+- name: documentation
+  description: "Improvements or additions to documentation"
+  color: "0075ca"
+
+- name: duplicate
+  description: "This issue or pull request already exists"
+  color: "cfd3d7"
+
+- name: invalid
+  description: "This doesn't seem right"
+  color: "e4e669"
+
+- name: help wanted
+  description: "Extra attention is needed"
+  color: "008672"
+
+- name: Good first issue
+  description: "A good way to start hacking torchrl!"
+  color: "7057ff"
+
+- name: Discussion needed
+  description: "Input from the community is welcome and needed"
+  color: "d876e3"
+
+- name: Deprecation
+  description: "Marks deprecated features or deprecation-related changes"
+  color: "FEF2C0"
+
+- name: Tests
+  description: "Related to tests"
+  color: "BFDADC"
+
+- name: Refactoring
+  description: "Code refactoring without functional changes"
+  color: "C2E0C6"
+
+- name: performance
+  description: "Performance improvements"
+  color: "FBCA04"
+
+# =============================================================================
+# Category Labels
+# =============================================================================
+- name: bc breaking
+  description: "Backward compatibility breaking change"
+  color: "B60205"
+
+- name: BE
+  description: "Better errors, logs, docs or test utils"
+  color: "C2E0C6"
+
+- name: Benchmarks
+  description: "rl/benchmark changes"
+  color: "5319E7"
+
+- name: CI
+  description: "Has to do with CI setup (e.g. wheels & builds, tests...)"
+  color: "BFDADC"
+
+- name: Collectors
+  description: "Related to data collectors"
+  color: "1D76DB"
+
+- name: distributions
+  description: "Related to probability distributions"
+  color: "D4C5F9"
+
+- name: Examples
+  description: "Related to example scripts"
+  color: "C5DEF5"
+
+- name: formatting
+  description: "Code formatting changes"
+  color: "FEF2C0"
+
+- name: dependencies
+  description: "Pull requests that update a dependency file"
+  color: "0366D6"
+
+# =============================================================================
+# CI Workflow Labels
+# =============================================================================
+- name: CLA Signed
+  description: "This label is managed by the Facebook bot. Authors need to sign the CLA before a PR can be reviewed."
+  color: "5319E7"
+
+- name: ci-no-td
+  description: "Skip TensorDict CI checks"
+  color: "BFDADC"
+
+- name: ciflow/binaries/all
+  description: "Build all binaries"
+  color: "BFDADC"
+
+- name: ciflow/docs
+  description: "Tests full docs CI"
+  color: "BFDADC"
+
+# =============================================================================
+# CI Trigger Labels - Environments
+# =============================================================================
+# Parent label - triggers ALL environment tests
+- name: Environments
+  description: "Triggers all environment CI tests"
+  color: "0E8A16"
+
+# Individual environment labels - trigger only specific tests
+- name: Environments/brax
+  description: "Triggers brax environment tests only"
+  color: "0E8A16"
+
+- name: Environments/chess
+  description: "Triggers chess environment tests only"
+  color: "0E8A16"
+
+- name: Environments/dm_control
+  description: "Triggers dm_control environment tests"
+  color: "0E8A16"
+
+- name: Environments/envpool
+  description: "Triggers envpool environment tests only"
+  color: "0E8A16"
+
+- name: Environments/gym
+  description: "Triggers gym environment tests only"
+  color: "0E8A16"
+
+- name: Environments/habitat
+  description: "Triggers habitat environment tests"
+  color: "0E8A16"
+
+- name: Environments/isaaclab
+  description: "Triggers Isaac Lab environment tests only"
+  color: "0E8A16"
+
+- name: Environments/jumanji
+  description: "Triggers jumanji environment tests only"
+  color: "0E8A16"
+
+- name: Environments/meltingpot
+  description: "Triggers meltingpot environment tests only"
+  color: "0E8A16"
+
+- name: Environments/open_spiel
+  description: "Triggers open_spiel environment tests only"
+  color: "0E8A16"
+
+- name: Environments/pettingzoo
+  description: "Triggers pettingzoo environment tests only"
+  color: "0E8A16"
+
+- name: Environments/procgen
+  description: "Triggers procgen environment tests only"
+  color: "0E8A16"
+
+- name: Environments/robohive
+  description: "Triggers robohive environment tests only"
+  color: "0E8A16"
+
+- name: Environments/sklearn
+  description: "Triggers sklearn tests only"
+  color: "0E8A16"
+
+- name: Environments/smacv2
+  description: "Triggers smacv2 environment tests only"
+  color: "0E8A16"
+
+- name: Environments/unity_mlagents
+  description: "Triggers Unity ML-Agents environment tests only"
+  color: "0E8A16"
+
+- name: Environments/vmas
+  description: "Triggers vmas environment tests only"
+  color: "0E8A16"
+
+# =============================================================================
+# CI Trigger Labels - Data
+# =============================================================================
+# Parent label - triggers ALL data tests
+- name: Data
+  description: "Triggers all data CI tests"
+  color: "1D76DB"
+
+# Individual data labels - trigger only specific tests
+- name: Data/gendgrl
+  description: "Triggers gen-dgrl data tests only"
+  color: "1D76DB"
+
+- name: Data/minari
+  description: "Triggers minari data tests only"
+  color: "1D76DB"
+
+- name: Data/openx
+  description: "Triggers openx data tests only"
+  color: "1D76DB"
+
+- name: Data/roboset
+  description: "Triggers roboset data tests only"
+  color: "1D76DB"
+
+- name: Data/vd4rl
+  description: "Triggers vd4rl data tests only"
+  color: "1D76DB"
+
+# =============================================================================
+# CI Trigger Labels - LLM
+# =============================================================================
+- name: llm/
+  description: "LLM-related PR, triggers LLM CI tests"
+  color: "FBCA04"
+
+- name: llm/api
+  description: "LLM API changes"
+  color: "FBCA04"
+
+- name: llm/ci
+  description: "LLM CI configuration changes"
+  color: "FBCA04"
+
+- name: llm/feature
+  description: "LLM new feature"
+  color: "FBCA04"
+
+# =============================================================================
+# CI Trigger Labels - Benchmarks
+# =============================================================================
+- name: benchmarks/upload
+  description: "Upload results of the PR to benchmarks"
+  color: "5319E7"
+
+# =============================================================================
+# TorchRL Module Component Labels
+# =============================================================================
+- name: Objectives
+  description: "Changes to torchrl/objectives/"
+  color: "1D76DB"
+
+- name: Modules
+  description: "Changes to torchrl/modules/"
+  color: "1D76DB"
+
+- name: Transforms
+  description: "Changes to torchrl/envs/transforms/"
+  color: "1D76DB"
+
+- name: Record
+  description: "Changes to torchrl/record/"
+  color: "1D76DB"
+
+- name: Trainers
+  description: "Changes to torchrl/trainers/"
+  color: "1D76DB"
+
+- name: WeightUpdate
+  description: "Changes to torchrl/weight_update/"
+  color: "1D76DB"
+
+- name: Services
+  description: "Changes to torchrl/services/"
+  color: "1D76DB"
+
+- name: ReplayBuffers
+  description: "Changes to torchrl/data/replay_buffers/"
+  color: "1D76DB"
+
+# =============================================================================
+# Other Useful Labels
+# =============================================================================
+- name: sota-implementations/
+  description: "Changes to sota-implementations/"
+  color: "5319E7"
+
+- name: tutorials/
+  description: "Changes to tutorials/"
+  color: "0075ca"

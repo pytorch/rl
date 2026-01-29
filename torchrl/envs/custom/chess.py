@@ -76,11 +76,9 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
             If False, the state will be stored in the observation and passed back
             to the environment on each call. Default: ``True``.
         include_san (bool): Whether to include SAN (Standard Algebraic Notation) in the observations. Default: ``False``.
-
-            .. note:: The `"san"` entry corresponding to `rollout["action"]` will be found in `rollout["next", "san"]`,
-                whereas the value at the root `rollout["san"]` will correspond to the value of the san preceding the
-                same index action.
-
+            The ``"san"`` entry corresponding to ``rollout["action"]`` will be found in ``rollout["next", "san"]``,
+            whereas the value at the root ``rollout["san"]`` will correspond to the value of the san preceding the
+            same index action.
         include_fen (bool): Whether to include FEN (Forsyth-Edwards Notation) in the observations. Default: ``False``.
         include_pgn (bool): Whether to include PGN (Portable Game Notation) in the observations. Default: ``False``.
         include_legal_moves (bool): Whether to include legal moves in the observations. Default: ``False``.
@@ -89,7 +87,8 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
             to the env to make sure that the actions are properly masked. Default: ``True``.
         pixels (bool): Whether to include pixel-based observations of the board. Default: ``False``.
 
-    .. note:: The action spec is a :class:`~torchrl.data.Categorical` with a number of actions equal to the number of possible SAN moves.
+    .. note::
+        The action spec is a :class:`~torchrl.data.Categorical` with a number of actions equal to the number of possible SAN moves.
         The action space is structured as a categorical distribution over all possible SAN moves, with the legal moves
         being a subset of this space. The environment uses a mask to ensure only legal moves are selected.
 

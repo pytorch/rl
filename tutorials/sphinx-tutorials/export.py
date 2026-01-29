@@ -389,7 +389,7 @@ from ale_py import ALEInterface, roms
 # Create the interface
 ale = ALEInterface()
 # Load the pong environment
-ale.loadROM(roms.Pong)
+ale.loadROM(roms.get_rom_path("pong"))
 ale.reset_game()
 
 # Make a step in the simulator
@@ -410,51 +410,56 @@ plt.title("Screen rendering of Pong game.")
 
 import onnxruntime
 
-with set_exploration_type("DETERMINISTIC"):
-    # We use torch.onnx.dynamo_export to capture the computation graph from our policy_explore model
-    pixels = torch.as_tensor(screen_obs)
-    onnx_policy_export = torch.onnx.dynamo_export(policy_transform, pixels=pixels)
-
-#####################################
-# We can now save the program on disk and load it:
 with TemporaryDirectory() as tmpdir:
     onnx_file_path = str(Path(tmpdir) / "policy.onnx")
-    onnx_policy_export.save(onnx_file_path)
+
+    with set_exploration_type("DETERMINISTIC"):
+        # We use torch.onnx.export with dynamo=True to capture the computation graph
+        pixels = torch.as_tensor(screen_obs)
+        torch.onnx.export(
+            policy_transform,
+            kwargs={"pixels": pixels},
+            f=onnx_file_path,
+            dynamo=True,
+        )
+
+    #####################################
+    # We can now load the model and run it with ONNX Runtime:
 
     ort_session = onnxruntime.InferenceSession(
         onnx_file_path, providers=["CPUExecutionProvider"]
     )
 
-onnxruntime_input = {ort_session.get_inputs()[0].name: screen_obs}
-onnx_policy = ort_session.run(None, onnxruntime_input)
-
-#####################################
-# Running a rollout with ONNX
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#
-# We now have an ONNX model that runs our policy. Let's compare it to the original TorchRL instance: because it is
-# more lightweight, the ONNX version should be faster than the TorchRL one.
-
-
-def onnx_policy(screen_obs: np.ndarray) -> int:
     onnxruntime_input = {ort_session.get_inputs()[0].name: screen_obs}
-    onnxruntime_outputs = ort_session.run(None, onnxruntime_input)
-    action = int(onnxruntime_outputs[0])
-    return action
+    onnx_result = ort_session.run(None, onnxruntime_input)
 
+    #####################################
+    # Running a rollout with ONNX
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    #
+    # We now have an ONNX model that runs our policy. Let's compare it to the original TorchRL instance: because it is
+    # more lightweight, the ONNX version should be faster than the TorchRL one.
 
-with timeit("ONNX rollout"):
-    num_steps = 1000
-    ale.reset_game()
-    for _ in range(num_steps):
-        screen_obs = ale.getScreenRGB()
-        action = onnx_policy(screen_obs)
-        reward = ale.act(action)
+    def onnx_policy(screen_obs: np.ndarray) -> int:
+        onnxruntime_input = {ort_session.get_inputs()[0].name: screen_obs}
+        onnxruntime_outputs = ort_session.run(None, onnxruntime_input)
+        action = int(onnxruntime_outputs[0])
+        return action
 
-with timeit("TorchRL version"), torch.no_grad(), set_exploration_type("DETERMINISTIC"):
-    env.rollout(num_steps, policy_explore)
+    with timeit("ONNX rollout"):
+        num_steps = 1000
+        ale.reset_game()
+        for _ in range(num_steps):
+            screen_obs = ale.getScreenRGB()
+            action = onnx_policy(screen_obs)
+            reward = ale.act(action)
 
-print(timeit.print())
+    with timeit("TorchRL version"), torch.no_grad(), set_exploration_type(
+        "DETERMINISTIC"
+    ):
+        env.rollout(num_steps, policy_explore)
+
+    print(timeit.print())
 
 #####################################
 # Note that ONNX also offers the possibility of optimizing models directly, but this is beyond the scope of this

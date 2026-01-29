@@ -6,11 +6,13 @@
 from __future__ import annotations
 
 import abc
+import re
 import warnings
 import weakref
+from collections.abc import Callable, Iterator, Sequence
 from copy import deepcopy
 from functools import partial, wraps
-from typing import Any, Callable, Iterator
+from typing import Any
 
 import numpy as np
 import torch
@@ -544,18 +546,16 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         LLMCollector  # noqa: F821 # type: ignore
     ] | None = None
 
-    def register_collector(
-        self, collector: DataCollectorBase  # noqa: F821 # type: ignore
-    ):
+    def register_collector(self, collector: BaseCollector):  # noqa: F821 # type: ignore
         """Registers a collector with the environment.
 
         Args:
-            collector (DataCollectorBase): The collector to register.
+            collector (BaseCollector): The collector to register.
         """
         self._collector = weakref.ref(collector)
 
     @property
-    def collector(self) -> DataCollectorBase | None:  # noqa: F821 # type: ignore
+    def collector(self) -> BaseCollector | None:  # noqa: F821 # type: ignore
         """Returns the collector associated with the container, if it exists."""
         return self._collector() if self._collector is not None else None
 
@@ -725,7 +725,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         return self
 
-    @wraps(check_env_specs_func)
     def check_env_specs(self, *args, **kwargs):
         kwargs.setdefault("return_contiguous", not self._has_dynamic_specs)
         return check_env_specs_func(self, *args, **kwargs)
@@ -750,6 +749,149 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         """
         return self.full_action_spec.cardinality()
+
+    def configure_parallel(
+        self,
+        *,
+        use_buffers: bool | None = None,
+        shared_memory: bool | None = None,
+        memmap: bool | None = None,
+        mp_start_method: str | None = None,
+        num_threads: int | None = None,
+        num_sub_threads: int | None = None,
+        non_blocking: bool | None = None,
+        daemon: bool | None = None,
+    ) -> EnvBase:
+        """Configure parallel execution parameters.
+
+        This method allows configuring parameters for parallel environment
+        execution before the environment is started. It is only effective
+        on :class:`~torchrl.envs.BatchedEnvBase` and its subclasses.
+
+        Args:
+            use_buffers (bool, optional): whether communication between workers should
+                occur via circular preallocated memory buffers.
+            shared_memory (bool, optional): whether the returned tensordict will be
+                placed in shared memory.
+            memmap (bool, optional): whether the returned tensordict will be placed
+                in memory map.
+            mp_start_method (str, optional): the multiprocessing start method.
+            num_threads (int, optional): number of threads for this process.
+            num_sub_threads (int, optional): number of threads of the subprocesses.
+            non_blocking (bool, optional): if ``True``, device moves will be done using
+                the ``non_blocking=True`` option.
+            daemon (bool, optional): whether the processes should be daemonized.
+
+        Returns:
+            self: Returns self for method chaining.
+
+        Raises:
+            NotImplementedError: If called on an environment that does not support
+                parallel configuration.
+            RuntimeError: If called after the environment has already started.
+
+        Example:
+            >>> env = DMControlEnv("cheetah", "run", num_envs=4)
+            >>> env.configure_parallel(use_buffers=True, num_threads=2)
+            >>> env.reset()  # Environment starts here, configure_parallel no longer effective
+
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support configure_parallel. "
+            "This method is only available on BatchedEnvBase and its subclasses."
+        )
+
+    @classmethod
+    def make_parallel(
+        cls,
+        create_env_fn,
+        *,
+        num_envs: int = 1,
+        create_env_kwargs: dict | Sequence[dict] | None = None,
+        pin_memory: bool = False,
+        share_individual_td: bool | None = None,
+        shared_memory: bool = True,
+        memmap: bool = False,
+        policy_proof: Callable | None = None,
+        device: DEVICE_TYPING | None = None,
+        allow_step_when_done: bool = False,
+        num_threads: int | None = None,
+        num_sub_threads: int = 1,
+        serial_for_single: bool = False,
+        non_blocking: bool = False,
+        mp_start_method: str | None = None,
+        use_buffers: bool | None = None,
+        consolidate: bool = True,
+        daemon: bool = False,
+        **parallel_kwargs,
+    ) -> EnvBase:
+        """Factory method to create a ParallelEnv from an environment creator.
+
+        This method provides a convenient way to create parallel environments
+        with the same signature as :class:`~torchrl.envs.ParallelEnv`.
+
+        Args:
+            create_env_fn (callable): A callable that creates an environment instance.
+            num_envs (int, optional): Number of parallel environments. Defaults to 1.
+            create_env_kwargs (dict or list of dicts, optional): kwargs to be used
+                with the environments being created.
+            pin_memory (bool, optional): Whether to pin memory. Defaults to False.
+            share_individual_td (bool, optional): if ``True``, a different tensordict
+                is created for every process/worker and a lazy stack is returned.
+            shared_memory (bool, optional): whether the returned tensordict will be
+                placed in shared memory. Defaults to True.
+            memmap (bool, optional): whether the returned tensordict will be placed
+                in memory map. Defaults to False.
+            policy_proof (callable, optional): if provided, it'll be used to get
+                the list of tensors to return through step() and reset() methods.
+            device (str, int, torch.device, optional): The device of the batched
+                environment.
+            allow_step_when_done (bool, optional): Allow stepping when done.
+                Defaults to False.
+            num_threads (int, optional): number of threads for this process.
+            num_sub_threads (int, optional): number of threads of the subprocesses.
+                Defaults to 1.
+            serial_for_single (bool, optional): if ``True``, creating a parallel
+                environment with a single worker will return a SerialEnv instead.
+                Defaults to False.
+            non_blocking (bool, optional): if ``True``, device moves will be done
+                using the ``non_blocking=True`` option. Defaults to False.
+            mp_start_method (str, optional): the multiprocessing start method.
+            use_buffers (bool, optional): whether communication between workers
+                should occur via circular preallocated memory buffers.
+            consolidate (bool, optional): Whether to consolidate tensordicts.
+                Defaults to True.
+            daemon (bool, optional): whether the processes should be daemonized.
+                Defaults to False.
+            **parallel_kwargs: Additional keyword arguments passed to ParallelEnv.
+
+        Returns:
+            EnvBase: A ParallelEnv (or SerialEnv if serial_for_single=True and num_envs=1).
+
+        """
+        from torchrl.envs import ParallelEnv
+
+        return ParallelEnv(
+            num_workers=num_envs,
+            create_env_fn=create_env_fn,
+            create_env_kwargs=create_env_kwargs,
+            pin_memory=pin_memory,
+            share_individual_td=share_individual_td,
+            shared_memory=shared_memory,
+            memmap=memmap,
+            policy_proof=policy_proof,
+            device=device,
+            allow_step_when_done=allow_step_when_done,
+            num_threads=num_threads,
+            num_sub_threads=num_sub_threads,
+            serial_for_single=serial_for_single,
+            non_blocking=non_blocking,
+            mp_start_method=mp_start_method,
+            use_buffers=use_buffers,
+            consolidate=consolidate,
+            daemon=daemon,
+            **parallel_kwargs,
+        )
 
     @classmethod
     def __new__(cls, *args, _inplace_update=False, _batch_locked=True, **kwargs):
@@ -2266,7 +2408,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         entry_point: Callable | None = None,
         transform: Transform | None = None,  # noqa: F821
         info_keys: list[NestedKey] | None = None,
-        backend: str = None,
+        backend: str | None = None,
         to_numpy: bool = False,
         reward_threshold: float | None = None,
         nondeterministic: bool = False,
@@ -2646,6 +2788,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             nondeterministic=nondeterministic,
             max_episode_steps=max_episode_steps,
             order_enforce=order_enforce,
+            autoreset=bool(autoreset),
         )
 
     @implement_for("gym", None, "0.21", class_method=True)
@@ -2927,7 +3070,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     ):
                         warnings.warn(
                             f"A partial `'_reset'` key has been passed to `reset` ({reset_key}), "
-                            f"but the corresponding done_key ({done_key}) was not present in the input "
+                            f"but the corresponding done_key ({done_key}) wasn't present in the input "
                             f"tensordict. "
                             f"This is discouraged, since the input tensordict should contain "
                             f"all the data not being reset."
@@ -3084,6 +3227,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         set_truncated: bool = False,
         out=None,
         trust_policy: bool = False,
+        storing_device: DEVICE_TYPING | None = None,
     ) -> TensorDictBase:
         """Executes a rollout in the environment.
 
@@ -3139,6 +3283,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
                 assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
                 and ``False`` otherwise.
+            storing_device (Device, optional): if provided, the tensordict will be stored on this device.
+                Defaults to ``None``.
 
         Returns:
             TensorDict object containing the resulting trajectory.
@@ -3371,6 +3517,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             "policy": policy,
             "policy_device": policy_device,
             "env_device": env_device,
+            "storing_device": None
+            if storing_device is None
+            else torch.device(storing_device),
             "callback": callback,
         }
         if break_when_any_done or break_when_all_done:
@@ -3387,12 +3536,26 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 out_td = torch.stack(tensordicts, len(batch_size), out=out)
             except RuntimeError as err:
                 if (
-                    "The shapes of the tensors to stack is incompatible" in str(err)
+                    re.match(
+                        "The shapes of the tensors to stack is incompatible", str(err)
+                    )
                     and self._has_dynamic_specs
                 ):
                     raise RuntimeError(
                         "The environment specs are dynamic. Call rollout with return_contiguous=False."
                     )
+                if re.match(
+                    "The sets of keys in the tensordicts to stack are exclusive",
+                    str(err),
+                ):
+                    for reward_key in self.reward_keys:
+                        if any(reward_key in td for td in tensordicts):
+                            raise RuntimeError(
+                                "The reward key was present in the root tensordict of at least one of the tensordicts to stack. "
+                                "The likely cause is that your environment returns a reward during a call to `reset`, which is not allowed. "
+                                "To fix this, you should return the reward in the `step` method but not in during `reset`. If you need a reward "
+                                "to be returned during `reset`, submit an issue on github."
+                            )
                 raise
         else:
             out_td = LazyStackedTensorDict.maybe_dense_stack(
@@ -3493,6 +3656,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         policy,
         policy_device,
         env_device,
+        storing_device,
         callback,
     ):
         # Get the sync func
@@ -3516,7 +3680,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 else:
                     tensordict.clear_device_()
             tensordict = self.step(tensordict)
-            td_append = tensordict.copy()
+            if storing_device is None or tensordict.device == storing_device:
+                td_append = tensordict.copy()
+            else:
+                td_append = tensordict.to(storing_device)
             if break_when_all_done:
                 if partial_steps is not True and not partial_steps.all():
                     # At least one step is partial
@@ -3574,6 +3741,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         policy,
         policy_device,
         env_device,
+        storing_device,
         callback,
     ):
         if auto_cast_to_device:
@@ -3599,7 +3767,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 tensordict = self.step(tensordict_)
             else:
                 tensordict, tensordict_ = self.step_and_maybe_reset(tensordict_)
-            tensordicts.append(tensordict)
+            if storing_device is None or tensordict.device == storing_device:
+                tensordicts.append(tensordict)
+            else:
+                tensordicts.append(tensordict.to(storing_device))
             if i == max_steps - 1:
                 # we don't truncate as one could potentially continue the run
                 break
@@ -3844,7 +4015,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         fake_obs = observation_spec.zero()
         fake_reward = reward_spec.zero()
         fake_done = full_done_spec.zero()
-
         fake_state = state_spec.zero()
         fake_action = action_spec.zero()
 
@@ -3913,9 +4083,9 @@ class _EnvWrapper(EnvBase):
                 "Make sure only keywords arguments are used when calling `super().__init__`."
             )
 
-        frame_skip = kwargs.get("frame_skip", 1)
-        if "frame_skip" in kwargs:
-            del kwargs["frame_skip"]
+        frame_skip = kwargs.pop("frame_skip", 1)
+        if not isinstance(frame_skip, int):
+            raise ValueError(f"frame_skip must be an integer, got {frame_skip}")
         self.frame_skip = frame_skip
         # this value can be changed if frame_skip is passed during env construction
         self.wrapper_frame_skip = frame_skip
@@ -3967,7 +4137,7 @@ class _EnvWrapper(EnvBase):
         super().__getattr__(attr)
 
         raise AttributeError(
-            f"env not set in {self.__class__.__name__}, cannot access {attr}"
+            f"The env wasn't set in {self.__class__.__name__}, cannot access {attr}"
         )
 
     @abc.abstractmethod

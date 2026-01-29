@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import abc
 import json
+import tempfile
 import warnings
 from pathlib import Path
 
@@ -13,11 +14,14 @@ import numpy as np
 import torch
 from tensordict import (
     is_tensor_collection,
+    lazy_stack,
     NonTensorData,
     PersistentTensorDict,
     TensorDict,
 )
 from tensordict.memmap import MemoryMappedTensor
+from tensordict.utils import _zip_strict
+from torch.utils._pytree import tree_map
 from torchrl._utils import _STRDTYPE2DTYPE
 
 from torchrl.data.replay_buffers.utils import (
@@ -38,6 +42,52 @@ class StorageCheckpointerBase:
     path.
 
     """
+
+    def __init__(self):
+        self._save_hooks = []
+        self._load_hooks = []
+
+    def register_save_hook(self, hook):
+        """Registers a save hook for this checkpointer."""
+        self._save_hooks.append(hook)
+
+    def register_load_hook(self, hook):
+        """Registers a load hook for this checkpointer."""
+        self._load_hooks.append(hook)
+
+    def _get_shift_from_last_cursor(self, last_cursor):
+        """Computes shift from the last cursor position."""
+        if isinstance(last_cursor, slice):
+            return last_cursor.stop + 1
+        if isinstance(last_cursor, int):
+            return last_cursor + 1
+        if isinstance(last_cursor, range):
+            return last_cursor[-1] + 1
+        if isinstance(last_cursor, torch.Tensor):
+            return last_cursor.reshape(-1)[-1].item() + 1
+        if isinstance(last_cursor, np.ndarray):
+            return last_cursor.reshape(-1)[-1].item() + 1
+        raise ValueError(f"Unrecognised last_cursor type {type(last_cursor)}.")
+
+    def _set_hooks_shift_is_full(self, storage):
+        """Sets shift and is_full attributes on save hooks that have them."""
+        is_full = storage._is_full
+        last_cursor = storage._last_cursor
+        for hook in self._save_hooks:
+            if hasattr(hook, "is_full"):
+                hook.is_full = is_full
+        if last_cursor is None:
+            warnings.warn(
+                "last_cursor is None. The replay buffer "
+                "may not be saved properly in this setting. To solve this issue, make "
+                "sure the storage updates the _last_cursor value during calls to `set`."
+            )
+            shift = 0
+        else:
+            shift = self._get_shift_from_last_cursor(last_cursor)
+        for hook in self._save_hooks:
+            if hasattr(hook, "shift"):
+                hook.shift = shift
 
     @abc.abstractmethod
     def dumps(self, storage, path):
@@ -68,6 +118,211 @@ class ListStorageCheckpointer(StorageCheckpointerBase):
         )
 
 
+class CompressedListStorageCheckpointer(StorageCheckpointerBase):
+    """A storage checkpointer for CompressedListStorage.
+
+    This checkpointer saves compressed data and metadata using memory-mapped storage
+    for efficient disk I/O and memory usage.
+
+    """
+
+    def dumps(self, storage, path):
+        """Save compressed storage to disk using memory-mapped storage.
+
+        Args:
+            storage: The CompressedListStorage instance to save
+            path: Directory path where to save the storage
+        """
+        path = Path(path)
+        path.mkdir(exist_ok=True)
+
+        if not hasattr(storage, "_storage") or len(storage._storage) == 0:
+            raise RuntimeError(
+                "Cannot save an empty or non-initialized CompressedListStorage."
+            )
+
+        # Get state dict from storage
+        state_dict = storage.state_dict()
+        compressed_data = state_dict["_storage"]
+        metadata = state_dict["_metadata"]
+
+        # Create a temporary directory for processing
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+
+            # Process compressed data for memmap storage
+            processed_data = []
+            for item in compressed_data:
+                if item is None:
+                    processed_data.append(None)
+                    continue
+
+                if isinstance(item, torch.Tensor):
+                    # For tensor data, create a TensorDict with the tensor
+                    processed_item = TensorDict({"data": item}, batch_size=[])
+                elif isinstance(item, dict):
+                    # For dict data (tensordict fields), convert to TensorDict
+                    processed_item = TensorDict(item, batch_size=[])
+                else:
+                    # For other types, wrap in TensorDict
+                    processed_item = TensorDict({"data": item}, batch_size=[])
+
+                processed_data.append(processed_item)
+
+            # Stack all non-None items into a single TensorDict for memmap
+            non_none_data = [item for item in processed_data if item is not None]
+            if non_none_data:
+                # Use lazy_stack to handle heterogeneous structures
+                stacked_data = lazy_stack(non_none_data)
+
+                # Save to memmap
+                stacked_data.memmap_(tmp_path / "compressed_data")
+
+                # Create index mapping for None values
+                data_indices = []
+                current_idx = 0
+                for item in processed_data:
+                    if item is None:
+                        data_indices.append(None)
+                    else:
+                        data_indices.append(current_idx)
+                        current_idx += 1
+            else:
+                # No data to save
+                data_indices = []
+
+            # Process metadata for JSON serialization
+            def is_leaf(item):
+                return isinstance(
+                    item,
+                    (
+                        torch.Size,
+                        torch.dtype,
+                        torch.device,
+                        str,
+                        int,
+                        float,
+                        bool,
+                        torch.Tensor,
+                        NonTensorData,
+                    ),
+                )
+
+            def map_to_json_serializable(item):
+                if isinstance(item, torch.Size):
+                    return {"__type__": "torch.Size", "value": list(item)}
+                elif isinstance(item, torch.dtype):
+                    return {"__type__": "torch.dtype", "value": str(item)}
+                elif isinstance(item, torch.device):
+                    return {"__type__": "torch.device", "value": str(item)}
+                elif isinstance(item, torch.Tensor):
+                    return {"__type__": "torch.Tensor", "value": item.tolist()}
+                elif isinstance(item, NonTensorData):
+                    return {"__type__": "NonTensorData", "value": item.data}
+                return item
+
+            serializable_metadata = tree_map(
+                map_to_json_serializable, metadata, is_leaf=is_leaf
+            )
+
+            # Save metadata and indices
+            metadata_file = tmp_path / "metadata.json"
+            with open(metadata_file, "w") as f:
+                json.dump(serializable_metadata, f, indent=2)
+
+            indices_file = tmp_path / "data_indices.json"
+            with open(indices_file, "w") as f:
+                json.dump(data_indices, f, indent=2)
+
+            # Copy all files from temp directory to final destination
+            import shutil
+
+            for item in tmp_path.iterdir():
+                if item.is_file():
+                    shutil.copy2(item, path / item.name)
+                elif item.is_dir():
+                    shutil.copytree(item, path / item.name, dirs_exist_ok=True)
+
+    def loads(self, storage, path):
+        """Load compressed storage from disk.
+
+        Args:
+            storage: The CompressedListStorage instance to load into
+            path: Directory path where the storage was saved
+        """
+        path = Path(path)
+
+        # Load metadata
+        metadata_file = path / "metadata.json"
+        if not metadata_file.exists():
+            raise FileNotFoundError(f"Metadata file not found at {metadata_file}")
+
+        with open(metadata_file) as f:
+            serializable_metadata = json.load(f)
+
+        # Load data indices
+        indices_file = path / "data_indices.json"
+        if not indices_file.exists():
+            raise FileNotFoundError(f"Data indices file not found at {indices_file}")
+
+        with open(indices_file) as f:
+            data_indices = json.load(f)
+
+        # Convert serializable metadata back to original format
+        def is_leaf(item):
+            return isinstance(item, dict) and "__type__" in item
+
+        def map_from_json_serializable(item):
+            if isinstance(item, dict) and "__type__" in item:
+                if item["__type__"] == "torch.Size":
+                    return torch.Size(item["value"])
+                elif item["__type__"] == "torch.dtype":
+                    # Handle torch.dtype conversion
+                    dtype_str = item["value"]
+                    if hasattr(torch, dtype_str.replace("torch.", "")):
+                        return getattr(torch, dtype_str.replace("torch.", ""))
+                    else:
+                        # Handle cases like 'torch.float32' -> torch.float32
+                        return eval(dtype_str)
+                elif item["__type__"] == "torch.device":
+                    return torch.device(item["value"])
+                elif item["__type__"] == "torch.Tensor":
+                    return torch.tensor(item["value"])
+                elif item["__type__"] == "NonTensorData":
+                    return NonTensorData(item["value"])
+            return item
+
+        metadata = tree_map(
+            map_from_json_serializable, serializable_metadata, is_leaf=is_leaf
+        )
+
+        # Load compressed data from memmap
+        compressed_data = []
+        memmap_path = path / "compressed_data"
+
+        if memmap_path.exists():
+            # Load the memmapped data
+            stacked_data = TensorDict.load_memmap(memmap_path)
+            compressed_data = stacked_data.tolist()
+            if len(compressed_data) != len(data_indices):
+                raise ValueError(
+                    f"Length of compressed data ({len(compressed_data)}) does not match length of data indices ({len(data_indices)})"
+                )
+            for i, (data, mtdt) in enumerate(_zip_strict(compressed_data, metadata)):
+                if mtdt["type"] == "tensor":
+                    compressed_data[i] = data["data"]
+                else:
+                    compressed_data[i] = data
+
+        else:
+            # No data to load
+            compressed_data = [None] * len(data_indices)
+
+        # Load into storage
+        storage._storage = compressed_data
+        storage._metadata = metadata
+
+
 class TensorStorageCheckpointer(StorageCheckpointerBase):
     """A storage checkpointer for TensorStorages.
 
@@ -78,9 +333,6 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
 
     """
 
-    _save_hooks = []
-    _load_hooks = []
-
     def dumps(self, storage, path):
         path = Path(path)
         path.mkdir(exist_ok=True)
@@ -89,6 +341,9 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
             raise RuntimeError("Cannot save a non-initialized storage.")
         metadata = {}
         _storage = storage._storage
+
+        self._set_hooks_shift_is_full(storage)
+
         for hook in self._save_hooks:
             _storage = hook(_storage, path=path)
         if is_tensor_collection(_storage):
@@ -215,6 +470,7 @@ class FlatStorageCheckpointer(TensorStorageCheckpointer):
     """
 
     def __init__(self, done_keys=None, reward_keys=None):
+        super().__init__()
         kwargs = {}
         if done_keys is not None:
             kwargs["done_keys"] = done_keys
@@ -222,38 +478,6 @@ class FlatStorageCheckpointer(TensorStorageCheckpointer):
             kwargs["reward_keys"] = reward_keys
         self._save_hooks = [TED2Flat(**kwargs)]
         self._load_hooks = [Flat2TED(**kwargs)]
-
-    def _save_shift_is_full(self, storage):
-        is_full = storage._is_full
-        last_cursor = storage._last_cursor
-        for hook in self._save_hooks:
-            if hasattr(hook, "is_full"):
-                hook.is_full = is_full
-        if last_cursor is None:
-            warnings.warn(
-                "las_cursor is None. The replay buffer "
-                "may not be saved properly in this setting. To solve this issue, make "
-                "sure the storage updates the _las_cursor value during calls to `set`."
-            )
-        shift = self._get_shift_from_last_cursor(last_cursor)
-        for hook in self._save_hooks:
-            if hasattr(hook, "shift"):
-                hook.shift = shift
-
-    def dumps(self, storage, path):
-        self._save_shift_is_full(storage)
-        return super().dumps(storage, path)
-
-    def _get_shift_from_last_cursor(self, last_cursor):
-        if isinstance(last_cursor, slice):
-            return last_cursor.stop + 1
-        if isinstance(last_cursor, int):
-            return last_cursor + 1
-        if isinstance(last_cursor, torch.Tensor):
-            return last_cursor.reshape(-1)[-1].item() + 1
-        if isinstance(last_cursor, np.ndarray):
-            return last_cursor.reshape(-1)[-1].item() + 1
-        raise ValueError(f"Unrecognised last_cursor type {type(last_cursor)}.")
 
 
 class NestedStorageCheckpointer(FlatStorageCheckpointer):
@@ -269,7 +493,8 @@ class NestedStorageCheckpointer(FlatStorageCheckpointer):
 
     """
 
-    def __init__(self, done_keys=None, reward_keys=None, **kwargs):
+    def __init__(self, done_keys=None, reward_keys=None):
+        super().__init__()
         kwargs = {}
         if done_keys is not None:
             kwargs["done_keys"] = done_keys
@@ -313,6 +538,7 @@ class H5StorageCheckpointer(NestedStorageCheckpointer):
         h5_kwargs=None,
         **kwargs,
     ):
+        StorageCheckpointerBase.__init__(self)
         ted2_kwargs = kwargs
         if done_keys is not None:
             ted2_kwargs["done_keys"] = done_keys
@@ -326,7 +552,7 @@ class H5StorageCheckpointer(NestedStorageCheckpointer):
     def dumps(self, storage, path):
         path = self._get_path(path)
 
-        self._save_shift_is_full(storage)
+        self._set_hooks_shift_is_full(storage)
 
         if not storage.initialized:
             raise RuntimeError("Cannot save a non-initialized storage.")

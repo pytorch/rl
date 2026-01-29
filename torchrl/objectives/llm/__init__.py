@@ -4,7 +4,27 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from .grpo import GRPOLoss, GRPOLossOutput, MCAdvantage
+from .grpo import (
+    CISPOLoss,
+    CISPOLossOutput,
+    DAPO,
+    DAPOLossOutput,
+    GRPOLoss,
+    GRPOLossOutput,
+    LLMLossOutput,
+    MCAdvantage,
+)
 from .sft import SFTLoss, SFTLossOutput
 
-__all__ = ["GRPOLoss", "GRPOLossOutput", "MCAdvantage", "SFTLoss", "SFTLossOutput"]
+__all__ = [
+    "CISPOLoss",
+    "CISPOLossOutput",
+    "DAPO",
+    "DAPOLossOutput",
+    "GRPOLoss",
+    "GRPOLossOutput",
+    "LLMLossOutput",
+    "MCAdvantage",
+    "SFTLoss",
+    "SFTLossOutput",
+]

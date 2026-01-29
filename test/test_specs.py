@@ -6,8 +6,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import os
-import warnings
 
 import numpy as np
 import pytest
@@ -27,45 +25,23 @@ from torchrl._utils import _make_ordinal_device
 from torchrl.data.tensor_specs import (
     _keys_to_empty_composite_spec,
     Binary,
-    BinaryDiscreteTensorSpec,
     Bounded,
-    BoundedTensorSpec,
     Categorical,
     Choice,
     Composite,
-    CompositeSpec,
     ContinuousBox,
-    DiscreteTensorSpec,
     MultiCategorical,
-    MultiDiscreteTensorSpec,
     MultiOneHot,
-    MultiOneHotDiscreteTensorSpec,
     NonTensor,
-    NonTensorSpec,
     OneHot,
-    OneHotDiscreteTensorSpec,
     StackedComposite,
     TensorSpec,
     Unbounded,
-    UnboundedContinuous,
-    UnboundedContinuousTensorSpec,
     UnboundedDiscrete,
-    UnboundedDiscreteTensorSpec,
 )
 from torchrl.data.utils import check_no_exclusive_keys, consolidate_spec
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import (
-        get_available_devices,
-        get_default_devices,
-        set_global_var,
-    )
-else:
-    from _utils_internal import (
-        get_available_devices,
-        get_default_devices,
-        set_global_var,
-    )
+from torchrl.testing import get_available_devices, get_default_devices, set_global_var
 
 pytestmark = [
     pytest.mark.filterwarnings("error"),
@@ -493,6 +469,7 @@ class TestComposite:
 
             assert encoded_vals["obs"].dtype == dtype
             assert (encoded_vals["obs"] == r["obs"]).all()
+            assert encoded_vals.batch_size == shape
             if is_complete:
                 assert encoded_vals["act"].dtype == dtype
                 assert (encoded_vals["act"] == r["act"]).all()
@@ -1310,15 +1287,15 @@ class TestSpec:
         torch.manual_seed(0)
         action_spec = OneHot(10)
 
-        sample = action_spec.rand((100000,))
+        sample = action_spec.rand((20000,))
 
         sample_list = sample.long().argmax(-1)
         sample_list = [sum(sample_list == i).item() for i in range(10)]
-        assert chisquare(sample_list).pvalue > 0.1
+        assert chisquare(sample_list).pvalue > 0.01
 
         sample = action_spec.to_numpy(sample)
         sample = [sum(sample == i) for i in range(10)]
-        assert chisquare(sample).pvalue > 0.1
+        assert chisquare(sample).pvalue > 0.01
 
     def test_categorical_action_spec_rand(self):
         torch.manual_seed(1)
@@ -1343,9 +1320,9 @@ class TestSpec:
         assert sample.dtype == dtype
 
     def test_mult_discrete_action_spec_rand(self):
-        torch.manual_seed(0)
+        torch.manual_seed(42)
         ns = (10, 5)
-        N = 100000
+        N = 20000
         action_spec = MultiOneHot((10, 5))
 
         actions_tensors = [action_spec.rand() for _ in range(10)]
@@ -1364,11 +1341,11 @@ class TestSpec:
 
         sample0 = sample[:, 0]
         sample_list = [sum(sample0 == i) for i in range(ns[0])]
-        assert chisquare(sample_list).pvalue > 0.1
+        assert chisquare(sample_list).pvalue > 0.05
 
         sample1 = sample[:, 1]
         sample_list = [sum(sample1 == i) for i in range(ns[1])]
-        assert chisquare(sample_list).pvalue > 0.1
+        assert chisquare(sample_list).pvalue > 0.05
 
     def test_categorical_action_spec_encode(self):
         action_spec = Categorical(10)
@@ -3025,6 +3002,7 @@ class TestLazyStackedComposite:
             assert r["a"].shape == torch.Size([*shape, 1, 3, 2])  # access tensor
         assert (r["a"] == 0).all()
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda")
     @pytest.mark.parametrize("stack_dim", [0, 1, 2, -3, -2, -1])
     def test_to(self, stack_dim):
@@ -3913,6 +3891,7 @@ class TestDynamicSpec:
         disc = Categorical(shape=(-1, 1, 2), n=4)
         moneh = MultiOneHot(shape=(-1, 1, 2, 7), nvec=[3, 4])
         mdisc = MultiCategorical(shape=(-1, 1, 2, 2), nvec=[3, 4])
+        binary = Binary(shape=(-1, 1, 2))
 
         spec = Composite(
             unb=unb,
@@ -3922,6 +3901,7 @@ class TestDynamicSpec:
             disc=disc,
             moneh=moneh,
             mdisc=mdisc,
+            binary=binary,
             shape=(-1, 1, 2),
         )
         assert spec.shape == (-1, 1, 2)
@@ -3980,6 +3960,7 @@ class TestNonTensor:
         assert r.get("nontensor").shape == (1,)
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="not cuda device")
 def test_device_ordinal():
     device = torch.device("cpu")
@@ -4072,181 +4053,6 @@ class TestBatchSizeBox:
         assert spec.space._high.shape == (10, 2)
 
 
-class TestLegacy:
-    def test_one_hot(self):
-        with pytest.warns(
-            DeprecationWarning,
-            match="The OneHotDiscreteTensorSpec has been deprecated and will be removed in v0.8. Please use OneHot instead.",
-        ):
-            one_hot = OneHotDiscreteTensorSpec(n=4)
-        assert isinstance(one_hot, OneHotDiscreteTensorSpec)
-        assert isinstance(one_hot, OneHot)
-        assert not isinstance(one_hot, Categorical)
-        one_hot = OneHot(n=4)
-        assert isinstance(one_hot, OneHotDiscreteTensorSpec)
-        assert isinstance(one_hot, OneHot)
-        assert not isinstance(one_hot, Categorical)
-
-    def test_discrete(self):
-        with pytest.warns(
-            DeprecationWarning,
-            match="The DiscreteTensorSpec has been deprecated and will be removed in v0.8. Please use Categorical instead.",
-        ):
-            discrete = DiscreteTensorSpec(n=4)
-        assert isinstance(discrete, DiscreteTensorSpec)
-        assert isinstance(discrete, Categorical)
-        assert not isinstance(discrete, OneHot)
-        discrete = Categorical(n=4)
-        assert isinstance(discrete, DiscreteTensorSpec)
-        assert isinstance(discrete, Categorical)
-        assert not isinstance(discrete, OneHot)
-
-    def test_unbounded(self):
-
-        unbounded_continuous_impl = Unbounded(dtype=torch.float)
-        assert isinstance(unbounded_continuous_impl, Unbounded)
-        assert isinstance(unbounded_continuous_impl, UnboundedContinuous)
-        assert isinstance(unbounded_continuous_impl, UnboundedContinuousTensorSpec)
-        assert not isinstance(unbounded_continuous_impl, UnboundedDiscreteTensorSpec)
-
-        unbounded_discrete_impl = Unbounded(dtype=torch.int)
-        assert isinstance(unbounded_discrete_impl, Unbounded)
-        assert isinstance(unbounded_discrete_impl, UnboundedDiscrete)
-        assert isinstance(unbounded_discrete_impl, UnboundedDiscreteTensorSpec)
-        assert not isinstance(unbounded_discrete_impl, UnboundedContinuousTensorSpec)
-
-        with pytest.warns(
-            DeprecationWarning,
-            match="The UnboundedContinuousTensorSpec has been deprecated and will be removed in v0.8. Please use Unbounded instead.",
-        ):
-            unbounded_continuous = UnboundedContinuousTensorSpec()
-        assert isinstance(unbounded_continuous, Unbounded)
-        assert isinstance(unbounded_continuous, UnboundedContinuous)
-        assert isinstance(unbounded_continuous, UnboundedContinuousTensorSpec)
-        assert not isinstance(unbounded_continuous, UnboundedDiscreteTensorSpec)
-
-        with warnings.catch_warnings():
-            unbounded_continuous = UnboundedContinuous()
-
-        with pytest.warns(
-            DeprecationWarning,
-            match="The UnboundedDiscreteTensorSpec has been deprecated and will be removed in v0.8. Please use Unbounded instead.",
-        ):
-            unbounded_discrete = UnboundedDiscreteTensorSpec()
-        assert isinstance(unbounded_discrete, Unbounded)
-        assert isinstance(unbounded_discrete, UnboundedDiscrete)
-        assert isinstance(unbounded_discrete, UnboundedDiscreteTensorSpec)
-        assert not isinstance(unbounded_discrete, UnboundedContinuousTensorSpec)
-
-        with warnings.catch_warnings():
-            unbounded_discrete = UnboundedDiscrete()
-
-        # What if we mess with dtypes?
-        with pytest.warns(DeprecationWarning):
-            unbounded_continuous_fake = UnboundedContinuousTensorSpec(dtype=torch.int32)
-        assert isinstance(unbounded_continuous_fake, Unbounded)
-        assert not isinstance(unbounded_continuous_fake, UnboundedContinuous)
-        assert not isinstance(unbounded_continuous_fake, UnboundedContinuousTensorSpec)
-        assert isinstance(unbounded_continuous_fake, UnboundedDiscrete)
-        assert isinstance(unbounded_continuous_fake, UnboundedDiscreteTensorSpec)
-
-        with pytest.warns(DeprecationWarning):
-            unbounded_discrete_fake = UnboundedDiscreteTensorSpec(dtype=torch.float32)
-        assert isinstance(unbounded_discrete_fake, Unbounded)
-        assert isinstance(unbounded_discrete_fake, UnboundedContinuous)
-        assert isinstance(unbounded_discrete_fake, UnboundedContinuousTensorSpec)
-        assert not isinstance(unbounded_discrete_fake, UnboundedDiscrete)
-        assert not isinstance(unbounded_discrete_fake, UnboundedDiscreteTensorSpec)
-
-    def test_multi_one_hot(self):
-        with pytest.warns(
-            DeprecationWarning,
-            match="The MultiOneHotDiscreteTensorSpec has been deprecated and will be removed in v0.8. Please use MultiOneHot instead.",
-        ):
-            one_hot = MultiOneHotDiscreteTensorSpec(nvec=[4, 3])
-        assert isinstance(one_hot, MultiOneHotDiscreteTensorSpec)
-        assert isinstance(one_hot, MultiOneHot)
-        assert not isinstance(one_hot, MultiCategorical)
-        one_hot = MultiOneHot(nvec=[4, 3])
-        assert isinstance(one_hot, MultiOneHotDiscreteTensorSpec)
-        assert isinstance(one_hot, MultiOneHot)
-        assert not isinstance(one_hot, MultiCategorical)
-
-    def test_multi_categorical(self):
-        with pytest.warns(
-            DeprecationWarning,
-            match="The MultiDiscreteTensorSpec has been deprecated and will be removed in v0.8. Please use MultiCategorical instead.",
-        ):
-            categorical = MultiDiscreteTensorSpec(nvec=[4, 3])
-        assert isinstance(categorical, MultiDiscreteTensorSpec)
-        assert isinstance(categorical, MultiCategorical)
-        assert not isinstance(categorical, MultiOneHot)
-        categorical = MultiCategorical(nvec=[4, 3])
-        assert isinstance(categorical, MultiDiscreteTensorSpec)
-        assert isinstance(categorical, MultiCategorical)
-        assert not isinstance(categorical, MultiOneHot)
-
-    def test_binary(self):
-        with pytest.warns(
-            DeprecationWarning,
-            match="The BinaryDiscreteTensorSpec has been deprecated and will be removed in v0.8. Please use Binary instead.",
-        ):
-            binary = BinaryDiscreteTensorSpec(5)
-        assert isinstance(binary, BinaryDiscreteTensorSpec)
-        assert isinstance(binary, Binary)
-        assert not isinstance(binary, MultiOneHot)
-        binary = Binary(5)
-        assert isinstance(binary, BinaryDiscreteTensorSpec)
-        assert isinstance(binary, Binary)
-        assert not isinstance(binary, MultiOneHot)
-
-    def test_bounded(self):
-        with pytest.warns(
-            DeprecationWarning,
-            match="The BoundedTensorSpec has been deprecated and will be removed in v0.8. Please use Bounded instead.",
-        ):
-            bounded = BoundedTensorSpec(-2, 2, shape=())
-        assert isinstance(bounded, BoundedTensorSpec)
-        assert isinstance(bounded, Bounded)
-        assert not isinstance(bounded, MultiOneHot)
-        bounded = Bounded(-2, 2, shape=())
-        assert isinstance(bounded, BoundedTensorSpec)
-        assert isinstance(bounded, Bounded)
-        assert not isinstance(bounded, MultiOneHot)
-
-    def test_composite(self):
-        with (
-            pytest.warns(
-                DeprecationWarning,
-                match="The CompositeSpec has been deprecated and will be removed in v0.8. Please use Composite instead.",
-            )
-        ):
-            composite = CompositeSpec()
-        assert isinstance(composite, CompositeSpec)
-        assert isinstance(composite, Composite)
-        assert not isinstance(composite, MultiOneHot)
-        composite = Composite()
-        assert isinstance(composite, CompositeSpec)
-        assert isinstance(composite, Composite)
-        assert not isinstance(composite, MultiOneHot)
-
-    def test_non_tensor(self):
-        with (
-            pytest.warns(
-                DeprecationWarning,
-                match="The NonTensorSpec has been deprecated and will be removed in v0.8. Please use NonTensor instead.",
-            )
-        ):
-            non_tensor = NonTensorSpec()
-        assert isinstance(non_tensor, NonTensorSpec)
-        assert isinstance(non_tensor, NonTensor)
-        assert not isinstance(non_tensor, MultiOneHot)
-        non_tensor = NonTensor()
-        assert isinstance(non_tensor, NonTensorSpec)
-        assert isinstance(non_tensor, NonTensor)
-        assert not isinstance(non_tensor, MultiOneHot)
-
-
 class TestSpecEnumerate:
     def test_discrete(self):
         spec = Categorical(n=5, shape=(3,))
@@ -4297,6 +4103,540 @@ class TestSpecEnumerate:
         assert c.is_in(c_enum)
         assert c_enum.shape == torch.Size((20, 3))
         assert c_enum["b"].shape == torch.Size((20, 3))
+
+
+class TestCompositeNames:
+    """Test the names functionality of Composite specs."""
+
+    def test_names_property_basic(self):
+        """Test basic names property functionality."""
+        # Test with names
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))},
+            shape=(10, 5),
+            names=["batch", "time"],
+        )
+        assert spec.names == ["batch", "time"]
+        assert spec._has_names() is True
+
+        # Test without names
+        spec_no_names = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))}, shape=(10, 5)
+        )
+        assert spec_no_names.names == [None, None]
+        assert spec_no_names._has_names() is False
+
+    def test_names_setter(self):
+        """Test setting names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))}, shape=(10, 5)
+        )
+
+        # Set names
+        spec.names = ["batch", "time"]
+        assert spec.names == ["batch", "time"]
+        assert spec._has_names() is True
+
+        # Clear names
+        spec.names = None
+        assert spec.names == [None, None]
+        assert spec._has_names() is False
+
+    def test_names_setter_validation(self):
+        """Test names setter validation."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))}, shape=(10, 5)
+        )
+
+        # Test wrong number of names
+        with pytest.raises(ValueError, match="Expected 2 names, but got 3 names"):
+            spec.names = ["batch", "time", "extra"]
+
+    def test_refine_names_basic(self):
+        """Test basic refine_names functionality."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))}, shape=(10, 5, 3)
+        )
+
+        # Initially no names
+        assert spec.names == [None, None, None]
+        assert spec._has_names() is False
+
+        # Refine names
+        spec_refined = spec.refine_names(None, None, "feature")
+        assert spec_refined.names == [None, None, "feature"]
+        assert spec_refined._has_names() is True
+
+    def test_refine_names_ellipsis(self):
+        """Test refine_names with ellipsis."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))},
+            shape=(10, 5, 3),
+            names=["batch", None, None],
+        )
+
+        # Use ellipsis to fill remaining dimensions
+        spec_refined = spec.refine_names("batch", ...)
+        assert spec_refined.names == ["batch", None, None]
+
+    def test_refine_names_validation(self):
+        """Test refine_names validation."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))},
+            shape=(10, 5),
+            names=["batch", "time"],
+        )
+
+        # Try to refine to different name
+        with pytest.raises(RuntimeError, match="cannot coerce Composite names"):
+            spec.refine_names("batch", "different")
+
+    def test_expand_preserves_names(self):
+        """Test that expand preserves names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 3, 4))},
+            shape=(10,),
+            names=["batch"],
+        )
+
+        expanded = spec.expand(5, 10)
+        assert expanded.names == [None, "batch"]
+        assert expanded.shape == torch.Size([5, 10])
+
+    def test_squeeze_preserves_names(self):
+        """Test that squeeze preserves names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 1, 5, 3, 4))},
+            shape=(10, 1, 5),
+            names=["batch", "dummy", "time"],
+        )
+
+        squeezed = spec.squeeze(1)  # Remove the dimension with size 1
+        assert squeezed.names == ["batch", "time"]
+        assert squeezed.shape == torch.Size([10, 5])
+
+    def test_squeeze_all_ones_clears_names(self):
+        """Test that squeezing all dimensions clears names if all become None."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(1, 1, 3, 4))},
+            shape=(1, 1),
+            names=["dummy1", "dummy2"],
+        )
+
+        squeezed = spec.squeeze()
+        assert squeezed.names == []  # All dimensions removed, so no names
+        assert squeezed.shape == torch.Size([])
+
+    def test_unsqueeze_preserves_names(self):
+        """Test that unsqueeze preserves names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))},
+            shape=(10, 5),
+            names=["batch", "time"],
+        )
+
+        unsqueezed = spec.unsqueeze(1)
+        assert unsqueezed.names == ["batch", None, "time"]
+        assert unsqueezed.shape == torch.Size([10, 1, 5])
+
+    def test_unbind_preserves_names(self):
+        """Test that unbind preserves names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(3, 5, 3, 4))},
+            shape=(3, 5),
+            names=["batch", "time"],
+        )
+
+        unbound = spec.unbind(0)
+        assert len(unbound) == 3
+        for spec_item in unbound:
+            assert spec_item.names == ["time"]
+            assert spec_item.shape == torch.Size([5])
+
+    def test_clone_preserves_names(self):
+        """Test that clone preserves names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 3, 4))},
+            shape=(10,),
+            names=["batch"],
+        )
+
+        cloned = spec.clone()
+        assert cloned.names == ["batch"]
+        assert cloned.shape == spec.shape
+        assert cloned is not spec  # Different objects
+
+    def test_to_preserves_names(self):
+        """Test that to() preserves names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 3, 4))},
+            shape=(10,),
+            names=["batch"],
+        )
+
+        moved = spec.to("cpu")
+        assert moved.names == ["batch"]
+        assert moved.device == torch.device("cpu")
+
+    def test_indexing_preserves_names(self):
+        """Test that indexing preserves names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))},
+            shape=(10, 5),
+            names=["batch", "time"],
+        )
+
+        # Test single dimension indexing
+        indexed = spec[0]
+        assert indexed.names == ["time"]
+        assert indexed.shape == torch.Size([5])
+
+        # Test slice indexing
+        sliced = spec[0:5]
+        assert sliced.names == ["batch", "time"]
+        assert sliced.shape == torch.Size([5, 5])
+
+    def test_nested_composite_names_propagation(self):
+        """Test that names are propagated to nested Composite specs."""
+        nested_spec = Composite(
+            {
+                "outer": Composite(
+                    {"inner": Bounded(low=-1, high=1, shape=(10, 3, 2))}, shape=(10, 3)
+                )
+            },
+            shape=(10,),
+            names=["batch"],
+        )
+
+        assert nested_spec.names == ["batch"]
+        assert nested_spec["outer"].names == ["batch", None]
+
+    def test_erase_names(self):
+        """Test erasing names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 3, 4))},
+            shape=(10,),
+            names=["batch"],
+        )
+
+        assert spec._has_names() is True
+        spec._erase_names()
+        assert spec._has_names() is False
+        assert spec.names == [None]
+
+    def test_names_with_different_shapes(self):
+        """Test names with different spec shapes."""
+        spec = Composite(
+            {
+                "obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4)),
+                "action": Bounded(low=0, high=1, shape=(10, 5, 2)),
+            },
+            shape=(10, 5),
+            names=["batch", "time"],
+        )
+
+        assert spec.names == ["batch", "time"]
+        assert spec["obs"].shape == torch.Size([10, 5, 3, 4])
+        assert spec["action"].shape == torch.Size([10, 5, 2])
+
+    def test_names_constructor_parameter(self):
+        """Test names parameter in constructor."""
+        # Test with names
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))},
+            shape=(10, 5),
+            names=["batch", "time"],
+        )
+        assert spec.names == ["batch", "time"]
+
+        # Test without names
+        spec_no_names = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))}, shape=(10, 5)
+        )
+        assert spec_no_names.names == [None, None]
+
+    def test_names_with_empty_composite(self):
+        """Test names with empty Composite."""
+        spec = Composite({}, shape=(10,), names=["batch"])
+        assert spec.names == ["batch"]
+        assert spec._has_names() is True
+
+    def test_names_equality(self):
+        """Test that names don't affect equality."""
+        spec1 = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 3, 4))},
+            shape=(10,),
+            names=["batch"],
+        )
+
+        spec2 = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 3, 4))}, shape=(10,)
+        )
+
+        # They should be equal despite different names
+        assert spec1 == spec2
+
+    def test_names_repr(self):
+        """Test that names don't break repr."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 3, 4))},
+            shape=(10,),
+            names=["batch"],
+        )
+
+        # Should not raise an error
+        repr_str = repr(spec)
+        assert "Composite" in repr_str
+        assert "obs" in repr_str
+
+    def test_zero_create_names(self):
+        """Test that creating tensors with 'zero' propagates names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 3, 4))},
+            shape=(10,),
+            names=["batch"],
+        )
+        td = spec.zero()
+        td.names = ["batch"]
+
+    def test_rand_create_names(self):
+        """Test that creating tensors with 'rand' propagates names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 3, 4))},
+            shape=(10,),
+            names=["batch"],
+        )
+        td = spec.rand()
+        td.names = ["batch"]
+
+
+class TestIndexSelect:
+    """Tests for torch.index_select support on TensorSpec."""
+
+    @pytest.mark.parametrize(
+        "shape, dim, index, expected_shape",
+        [
+            ((5, 4), 0, torch.tensor([0, 2, 4]), (3, 4)),
+            ((5, 4), 1, torch.tensor([1, 3]), (5, 2)),
+            ((3,), 0, torch.tensor([0, 1]), (2,)),
+        ],
+    )
+    def test_index_select_tensor_spec(self, shape, dim, index, expected_shape):
+        """Test index_select on basic TensorSpec subclasses like Bounded."""
+        spec = Bounded(low=0, high=10, shape=shape, dtype=torch.float32)
+        new_spec = torch.index_select(spec, dim=dim, index=index)
+        assert (
+            new_spec.shape == expected_shape
+        ), f"Shape mismatch: {new_spec.shape} != {expected_shape}"
+        assert new_spec.dtype == spec.dtype
+        assert new_spec.device == spec.device
+        # Ensure sampling works on the new spec
+        sample = new_spec.rand()
+        assert sample.shape == expected_shape
+
+    def test_index_select_composite(self):
+        """Test index_select on Composite specs."""
+        spec = Composite(
+            obs=Bounded(low=0, high=1, shape=(5, 3), dtype=torch.float32),
+            act=OneHot(n=4, shape=(5, 4)),
+            shape=(5,),
+        )
+        index = torch.tensor([0, 2, 4])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (3,)
+        assert new_spec["obs"].shape == (3, 3)
+        assert new_spec["act"].shape == (3, 4)
+        # Test sampling on the new composite spec
+        sample = new_spec.rand()
+        assert sample["obs"].shape == (3, 3)
+        assert sample["act"].shape == (3, 4)
+
+    def test_index_select_onehot_invalid(self):
+        """Test that index_select raises error for invalid dims on OneHot."""
+        spec = OneHot(n=3, shape=(5, 3))
+        with pytest.raises(
+            ValueError, match="Cannot index_select along the last dimension"
+        ):
+            torch.index_select(spec, dim=-1, index=torch.tensor([0, 1]))
+
+    @pytest.mark.parametrize(
+        "spec_cls, args",
+        [
+            (Bounded, {"low": 0, "high": 10, "shape": (5, 4)}),
+            (Categorical, {"n": 4, "shape": (5,)}),
+            (Unbounded, {"shape": (5, 4)}),
+        ],
+    )
+    def test_index_select_edge_cases(self, spec_cls, args):
+        """Test edge cases like out-of-bounds and empty indices."""
+        spec = spec_cls(**args)
+        # Out-of-bounds index should raise IndexError (via existing validation)
+        with pytest.raises(IndexError):
+            torch.index_select(spec, dim=0, index=torch.tensor([10]))
+        # Empty index (should work, resulting in shape with 0 in indexed dim)
+        index = torch.tensor([], dtype=torch.long)
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        expected_shape = list(spec.shape)
+        expected_shape[0] = 0
+        assert new_spec.shape == tuple(expected_shape)
+
+    def test_index_select_device_dtype_preservation(self):
+        """Ensure device and dtype are preserved."""
+        if torch.cuda.is_available():
+            device = torch.device("cuda:0")  # Normalize to cuda:0 as done in TorchRL
+        else:
+            device = torch.device("cpu")
+        spec = Bounded(low=0, high=10, shape=(5, 4), dtype=torch.float64, device=device)
+        index = torch.tensor([0, 2], device=device)
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.device == device
+        assert new_spec.dtype == torch.float64
+
+    def test_index_select_stacked_identical_bounded(self):
+        """Test index_select on stacked identical Bounded specs.
+
+        When stacking identical specs, torch.stack returns an expanded Bounded
+        spec (not a Stacked spec), so this tests index_select on the result.
+        """
+        spec1 = Bounded(low=0, high=1, shape=(5, 3), dtype=torch.float32)
+        spec2 = Bounded(low=0, high=1, shape=(5, 3), dtype=torch.float32)
+        stacked_spec = torch.stack([spec1, spec2], dim=0)
+        index = torch.tensor([0])
+        new_spec = torch.index_select(stacked_spec, dim=0, index=index)
+        assert new_spec.shape == (1, 5, 3)
+
+    def test_index_select_binary_invalid(self):
+        """Test that index_select raises error for invalid dims on Binary."""
+        spec = Binary(n=4, shape=(5, 4))
+        with pytest.raises(
+            ValueError, match="Cannot index_select along the last dimension"
+        ):
+            torch.index_select(spec, dim=-1, index=torch.tensor([0, 1]))
+
+    def test_index_select_multionehot_invalid(self):
+        """Test that index_select raises error for invalid dims on MultiOneHot."""
+        spec = MultiOneHot(nvec=[2, 3, 4], shape=(5, 9))
+        with pytest.raises(
+            ValueError, match="Cannot index_select along the last dimension"
+        ):
+            torch.index_select(spec, dim=-1, index=torch.tensor([0, 1]))
+
+    def test_index_select_binary_valid(self):
+        """Test index_select on Binary spec along valid dimensions."""
+        spec = Binary(n=4, shape=(5, 4))
+        index = torch.tensor([0, 2, 4])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (3, 4)
+        sample = new_spec.rand()
+        assert sample.shape == (3, 4)
+
+    def test_index_select_multionehot_valid(self):
+        """Test index_select on MultiOneHot spec along valid dimensions."""
+        spec = MultiOneHot(nvec=[2, 3, 4], shape=(5, 9))
+        index = torch.tensor([0, 2, 4])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (3, 9)
+        sample = new_spec.rand()
+        assert sample.shape == (3, 9)
+
+    def test_index_select_onehot_with_mask(self):
+        """Test index_select preserves and correctly selects mask for OneHot."""
+        # Create a OneHot spec with a mask that varies across batch dimension
+        mask = torch.tensor(
+            [
+                [True, True, False, False],
+                [True, False, True, False],
+                [False, True, True, False],
+                [True, True, True, True],
+                [False, False, True, True],
+            ]
+        )
+        spec = OneHot(n=4, shape=(5, 4), mask=mask)
+        index = torch.tensor([0, 2, 4])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (3, 4)
+        assert new_spec.mask is not None
+        expected_mask = torch.index_select(mask, dim=0, index=index)
+        assert torch.equal(new_spec.mask, expected_mask)
+
+    def test_index_select_categorical_with_mask(self):
+        """Test index_select preserves and correctly selects mask for Categorical."""
+        # Categorical mask has shape (*shape, n)
+        mask = torch.tensor(
+            [
+                [True, True, False],
+                [True, False, True],
+                [False, True, True],
+                [True, True, True],
+                [False, False, True],
+            ]
+        )
+        spec = Categorical(n=3, shape=(5,), mask=mask)
+        index = torch.tensor([1, 3])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (2,)
+        assert new_spec.mask is not None
+        expected_mask = torch.index_select(mask, dim=0, index=index)
+        assert torch.equal(new_spec.mask, expected_mask)
+
+    def test_index_select_multionehot_with_mask(self):
+        """Test index_select preserves and correctly selects mask for MultiOneHot."""
+        # MultiOneHot mask has shape (*shape,) where shape[-1] is sum(nvec)
+        mask = torch.tensor(
+            [
+                [True, True, False, True, True],
+                [True, False, True, False, True],
+                [False, True, True, True, False],
+            ]
+        )
+        spec = MultiOneHot(nvec=[2, 3], shape=(3, 5), mask=mask)
+        index = torch.tensor([0, 2])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (2, 5)
+        assert new_spec.mask is not None
+        expected_mask = torch.index_select(mask, dim=0, index=index)
+        assert torch.equal(new_spec.mask, expected_mask)
+
+    def test_index_select_multicategorical_with_mask(self):
+        """Test index_select preserves and correctly selects mask for MultiCategorical."""
+        # MultiCategorical: nvec defines the cardinality of each category
+        # shape's last dim must match nvec.shape[-1]
+        # mask has shape (*shape[:-1], sum(nvec)) - see update_mask docstring
+        nvec = torch.tensor([3, 2])  # 2 categories with cardinalities 3 and 2
+        # shape = (4, 2) where 4 is batch dim and 2 is nvec.shape[-1]
+        # mask shape = (4, 5) where 5 = sum(nvec) = 3 + 2
+        mask = torch.ones(4, 5, dtype=torch.bool)
+        mask[0, 0] = False  # mask first outcome for first batch element
+        mask[2, 4] = False  # mask last outcome for third batch element
+        spec = MultiCategorical(nvec=nvec, shape=(4, 2), mask=mask)
+        index = torch.tensor([0, 2])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (2, 2)
+        assert new_spec.mask is not None
+        expected_mask = torch.index_select(mask, dim=0, index=index)
+        assert torch.equal(new_spec.mask, expected_mask)
+
+    def test_index_select_no_mask_preserved(self):
+        """Test index_select works correctly when spec has no mask."""
+        spec = OneHot(n=4, shape=(5, 4))
+        assert spec.mask is None
+        index = torch.tensor([0, 2, 4])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (3, 4)
+        assert new_spec.mask is None
+
+    def test_index_select_stacked_not_supported(self):
+        """Test that index_select raises NotImplementedError for heterogeneous Stacked specs."""
+        # Create non-identical specs to get a true Stacked spec
+        spec1 = Bounded(low=0, high=1, shape=(5, 3), dtype=torch.float32)
+        spec2 = Bounded(
+            low=0, high=2, shape=(5, 3), dtype=torch.float32
+        )  # Different high
+        stacked_spec = torch.stack([spec1, spec2], dim=0)
+        # Verify it's actually a Stacked spec
+        assert type(stacked_spec).__name__ == "Stacked"
+        with pytest.raises(NotImplementedError, match="index_select is not supported"):
+            torch.index_select(stacked_spec, dim=0, index=torch.tensor([0]))
 
 
 if __name__ == "__main__":

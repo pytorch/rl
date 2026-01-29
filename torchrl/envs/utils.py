@@ -47,6 +47,7 @@ from torchrl.data.tensor_specs import (
     Unbounded,
 )
 from torchrl.data.utils import check_no_exclusive_keys, CloudpickleWrapper
+from torchrl.modules.tensordict_module.exploration import RandomPolicy  # noqa
 
 __all__ = [
     "exploration_type",
@@ -58,7 +59,6 @@ __all__ = [
     "MarlGroupMapType",
     "check_marl_grouping",
 ]
-
 
 ACTION_MASK_ERROR = RuntimeError(
     "An out-of-bounds actions has been provided to an env with an 'action_mask' output. "
@@ -191,7 +191,7 @@ class _StepMDP:
                     "extra keys can be present in the input TensorDict). "
                     "As a result, step_mdp will need to run extra key checks at each iteration. "
                     f"{{Expected keys}}-{{Actual keys}}={set(expected) - actual} (<= this set should be empty), \n"
-                    f"{{Actual keys}}-{{Expected keys}}={actual- set(expected)}."
+                    f"{{Actual keys}}-{{Expected keys}}={actual - set(expected)}."
                 )
         return self.validated
 
@@ -689,7 +689,7 @@ def check_env_specs(
     check_dtype=True,
     seed: int | None = None,
     tensordict: TensorDictBase | None = None,
-    break_when_any_done: bool | Literal["both"] = None,
+    break_when_any_done: bool | Literal["both"] | None = None,
 ):
     """Tests an environment specs against the results of short rollout.
 
@@ -786,10 +786,12 @@ def check_env_specs(
         real_tensordict.keys(True, True, is_leaf=_is_leaf_nontensor)
     )
     if fake_tensordict_keys != real_tensordict_keys:
+        keys_in_real_not_in_fake = real_tensordict_keys - fake_tensordict_keys
+        keys_in_fake_not_in_real = fake_tensordict_keys - real_tensordict_keys
         raise AssertionError(
             f"""The keys of the specs and data do not match:
-    - List of keys present in real but not in fake: {real_tensordict_keys-fake_tensordict_keys},
-    - List of keys present in fake but not in real: {fake_tensordict_keys-real_tensordict_keys}.
+- List of keys present in real but not in fake: {keys_in_real_not_in_fake=},
+- List of keys present in fake but not in real: {keys_in_fake_not_in_real=}.
 """
         )
 
@@ -850,7 +852,7 @@ def check_env_specs(
     ):
         if not check_no_exclusive_keys(spec):
             raise AssertionError(
-                "It appears you are using some LazyStackedCompositeSpecs with exclusive keys "
+                "It appears you are using some StackedComposite specs with exclusive keys "
                 "(keys present in some but not all of the stacked specs). To use such heterogeneous specs, "
                 "you will need to first pass your stack through `torchrl.data.consolidate_spec`."
             )
@@ -1105,14 +1107,14 @@ def check_marl_grouping(group_map: dict[str, list[str]], agent_names: list[str])
             raise ValueError(f"Group {group_name} is empty")
         for agent_name in group:
             if agent_name not in found_agents:
-                raise ValueError(f"Agent {agent_name} not present in environment")
+                raise ValueError(f"Agent {agent_name} wasn't present in environment")
             if not found_agents[agent_name]:
                 found_agents[agent_name] = True
             else:
                 raise ValueError(f"Agent {agent_name} present more than once")
     for agent_name, found in found_agents.items():
         if not found:
-            raise ValueError(f"Agent {agent_name} not found in any group")
+            raise ValueError(f"Agent {agent_name} wasn't found in any group")
 
 
 def _terminated_or_truncated(
@@ -1138,8 +1140,10 @@ def _terminated_or_truncated(
         key (NestedKey, optional): where the aggregated result should be written.
             If ``None``, then the function will not write any key but just output
             whether any of the done values was true.
+
             .. note:: if a value is already present for the ``key`` entry,
-                the previous value will prevail and no update will be achieved.
+               the previous value will prevail and no update will be achieved.
+
         write_full_false (bool, optional): if ``True``, the reset keys will be
             written even if the output is ``False`` (ie, no done is ``True``
             in the provided data structure).
@@ -1263,8 +1267,10 @@ def terminated_or_truncated(
         key (NestedKey, optional): where the aggregated result should be written.
             If ``None``, then the function will not write any key but just output
             whether any of the done values was true.
+
             .. note:: if a value is already present for the ``key`` entry,
-                the previous value will prevail and no update will be achieved.
+               the previous value will prevail and no update will be achieved.
+
         write_full_false (bool, optional): if ``True``, the reset keys will be
             written even if the output is ``False`` (ie, no done is ``True``
             in the provided data structure).
@@ -1607,19 +1613,19 @@ def _make_compatible_policy(
         else:
             raise TypeError(
                 f"""This error is raised because TorchRL tried to automatically wrap your policy in
-    a TensorDictModule. If you're confident the policy can directly process environment outputs, set
-    the `trust_policy` argument to `True` in the constructor.
+a TensorDictModule. If you're confident the policy can directly process environment outputs, set
+the `trust_policy` argument to `True` in the constructor.
 
-    Arguments to policy.forward are incompatible with entries in
-    env.observation_spec (got incongruent signatures:
-    the function signature is {set(sig.parameters)} but the specs have keys {set(next_observation)}).
-    If you want TorchRL to automatically wrap your policy with a TensorDictModule
-    then the arguments to policy.forward must correspond one-to-one with entries
-    in env.observation_spec.
-    For more complex behavior and more control you can consider writing your
-    own TensorDictModule.
-    Check the collector documentation to know more about accepted policies.
-    """
+Arguments to policy.forward are incompatible with entries in
+env.observation_spec (got incongruent signatures:
+the function signature is {set(sig.parameters)} but the specs have keys {set(next_observation)}).
+If you want TorchRL to automatically wrap your policy with a TensorDictModule
+then the arguments to policy.forward must correspond one-to-one with entries
+in env.observation_spec.
+For more complex behavior and more control you can consider writing your
+own TensorDictModule.
+Check the collector documentation to know more about accepted policies.
+"""
             )
     return policy
 
@@ -1670,34 +1676,6 @@ def _policy_is_tensordict_compatible(policy: nn.Module):
     )
 
 
-class RandomPolicy:
-    """A random policy for data collectors.
-
-    This is a wrapper around the action_spec.rand method.
-
-    Args:
-        action_spec: TensorSpec object describing the action specs
-
-    Examples:
-        >>> from tensordict import TensorDict
-        >>> from torchrl.data.tensor_specs import Bounded
-        >>> action_spec = Bounded(-torch.ones(3), torch.ones(3))
-        >>> actor = RandomPolicy(action_spec=action_spec)
-        >>> td = actor(TensorDict()) # selects a random action in the cube [-1; 1]
-    """
-
-    def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
-        super().__init__()
-        self.action_spec = action_spec.clone()
-        self.action_key = action_key
-
-    def __call__(self, td: TensorDictBase) -> TensorDictBase:
-        if isinstance(self.action_spec, Composite):
-            return td.update(self.action_spec.rand())
-        else:
-            return td.set(self.action_key, self.action_spec.rand())
-
-
 class _PolicyMetaClass(abc.ABCMeta):
     def __call__(cls, *args, **kwargs):
         # no kwargs
@@ -1736,5 +1714,5 @@ class _NonParametricPolicyWrapper(nn.Module, metaclass=_PolicyMetaClass):
             super().__getattr__(attr)
         except Exception:
             raise AttributeError(
-                f"policy not set in {self.__class__.__name__}, cannot access {attr}."
+                f"The policy wasn't set in {self.__class__.__name__}, cannot access {attr}."
             )

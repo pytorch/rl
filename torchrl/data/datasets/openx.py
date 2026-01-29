@@ -10,8 +10,9 @@ import json
 import os
 import shutil
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import torch
 from tensordict import make_tensordict, NonTensorData, pad, TensorDict
@@ -126,7 +127,7 @@ class OpenXExperienceReplay(BaseDatasetExperienceReplay):
         streaming (bool, optional): if ``True``, the data won't be downloaded but
             read from a stream instead.
 
-            .. note:: The formatting of the data __will change__ when `download=True`
+            .. note:: The formatting of the data **will change** when `download=True`
                 compared to `streaming=True`. If the data is downloaded and
                 the sampler is left untouched (ie, `num_slices=None`, `slice_len=None`
                 and `sampler=None`, transitions will be sampled randomly from

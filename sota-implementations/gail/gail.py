@@ -20,7 +20,7 @@ import tqdm
 from gail_utils import log_metrics, make_gail_discriminator, make_offline_replay_buffer
 from ppo_utils import eval_model, make_env, make_ppo_models
 from tensordict.nn import CudaGraphModule
-from torchrl._utils import compile_with_warmup, timeit
+from torchrl._utils import compile_with_warmup, get_available_device, timeit
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -38,13 +38,9 @@ torch.set_float32_matmul_precision("high")
 def main(cfg: DictConfig):  # noqa: F821
     set_gym_backend(cfg.env.backend).set()
 
-    device = cfg.gail.device
-    if device in ("", None):
-        if torch.cuda.is_available():
-            device = "cuda:0"
-        else:
-            device = "cpu"
-    device = torch.device(device)
+    device = (
+        torch.device(cfg.gail.device) if cfg.gail.device else get_available_device()
+    )
     num_mini_batches = (
         cfg.ppo.collector.frames_per_batch // cfg.ppo.loss.mini_batch_size
     )
@@ -105,8 +101,8 @@ def main(cfg: DictConfig):  # noqa: F821
         critic_network=critic,
         clip_epsilon=cfg.ppo.loss.clip_epsilon,
         loss_critic_type=cfg.ppo.loss.loss_critic_type,
-        entropy_coef=cfg.ppo.loss.entropy_coef,
-        critic_coef=cfg.ppo.loss.critic_coef,
+        entropy_coeff=cfg.ppo.loss.entropy_coeff,
+        critic_coeff=cfg.ppo.loss.critic_coeff,
         normalize_advantage=True,
     )
 

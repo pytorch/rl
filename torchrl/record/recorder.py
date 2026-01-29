@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import importlib.util
 import math
+from collections.abc import Callable, Sequence
 from copy import copy
-from typing import Callable, Sequence
 
 import numpy as np
 import torch
@@ -235,13 +235,15 @@ class VideoRecorder(ObservationTransform):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         return self._call(tensordict)
 
-    def dump(self, suffix: str | None = None) -> None:
+    def dump(self, suffix: str | None = None, step: int | None = None) -> None:
         """Writes the video to the ``self.logger`` attribute.
 
         Calling ``dump`` when no image has been stored in a no-op.
 
         Args:
-            suffix (str, optional): a suffix for the video to be recorded
+            suffix (str, optional): a suffix for the video to be recorded.
+            step (int, optional): the step to log the video at. If not provided,
+                uses an internal counter that increments with each dump call.
         """
         if self.obs:
             obs = torch.stack(self.obs, 0).unsqueeze(0).cpu()
@@ -257,7 +259,7 @@ class VideoRecorder(ObservationTransform):
                 self.logger.log_video(
                     name=tag,
                     video=obs,
-                    step=self.iter,
+                    step=step if step is not None else self.iter,
                     **self.video_kwargs,
                 )
         self.iter += 1

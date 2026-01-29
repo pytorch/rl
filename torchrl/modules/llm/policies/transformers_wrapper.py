@@ -5,10 +5,10 @@
 from __future__ import annotations
 
 import contextlib
-
+import threading
 from contextlib import nullcontext
 from copy import copy
-from typing import Literal
+from typing import Any, Literal
 
 import torch
 from tensordict import (
@@ -23,8 +23,9 @@ from tensordict import (
 from tensordict.utils import _zip_strict, NestedKey
 from torch import distributions as D
 from torch.nn.utils.rnn import pad_sequence
-
+from torchrl import logger as torchrl_logger
 from torchrl.modules.llm.policies.common import (
+    _batching,
     _extract_responses_from_full_histories,
     ChatHistory,
     LLMWrapperBase,
@@ -39,12 +40,23 @@ from torchrl.modules.utils.utils import _unpad_tensors
 class TransformersWrapper(LLMWrapperBase):
     """A wrapper class for Hugging Face Transformers models, providing a consistent interface for text generation and log probability computation.
 
-    This class is a subclass of :class:`~torchrl.modules.llm.policies.LLMWrapperBase` and provides a unified API for handling different input modalities
-    (history, text, tokens) with consistent output structure using :class:`~tensordict.TensorClass` objects.
+    Packing vs Padding:
+        - Packing (`pad_model_input=False`):
+            * More memory efficient for variable-length sequences.
+            * Not all models support packed input (requires custom attention masks and position ids).
+            * May be less compatible with some HuggingFace models or custom architectures.
+        - Padding (`pad_model_input=True`):
+            * Universally supported by all models.
+            * Wastes memory for short sequences in a batch.
+            * Simpler, but less efficient for highly variable-length data.
+        - If unsure, use padding for maximum compatibility. Use packing for large batches of variable-length data and when your model supports it.
+
+    Additional error handling is provided for empty and overlong sequences.
 
     Args:
         model (transformers.AutoModelForCausalLM | str): The Hugging Face Transformers model to wrap.
-            If a string, it will be passed to `transformers.AutoModelForCausalLM.from_pretrained`.
+            If a string, it will be passed to `transformers.AutoModelForCausalLM.from_pretrained` (and `AutoTokenizer.from_pretrained`
+            if `tokenizer` is not provided).
 
     Keyword Args:
         tokenizer (transformers.tokenization_utils.PreTrainedTokenizer | str | None, optional): The tokenizer to use for
@@ -58,15 +70,71 @@ class TransformersWrapper(LLMWrapperBase):
             - `("tokens", "prompt")` for `"tokens"` when `generate=True`, `("tokens", "full")` for `"tokens"` when `generate=False`
         attention_mask_key (str, optional): The key for attention masks (used in `"tokens"` mode). Defaults to `"attention_mask"`.
 
-                    .. warning:: This argument is under development and may change in the future.
+            .. warning:: This argument is under development and may change in the future.
 
         generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on the input.
             If `False`, only log probabilities will be computed. Defaults to `True`.
         return_log_probs (bool, optional): Whether to return log probabilities. Defaults to `False`.
         generate_kwargs (dict | None, optional): Additional arguments to pass to the model's generate method. Defaults to `None`.
+
+            **Standardized Parameters (cross-backend compatible):**
+
+            * **max_new_tokens** (int): Maximum number of new tokens to generate
+            * **num_return_sequences** (int): Number of sequences to return
+            * **temperature** (float): Sampling temperature (0.0 = deterministic, higher = more random)
+            * **top_p** (float): Nucleus sampling parameter (0.0-1.0)
+            * **top_k** (int): Top-k sampling parameter
+            * **repetition_penalty** (float): Penalty for repeating tokens
+            * **do_sample** (bool): Whether to use sampling vs greedy decoding
+            * **num_beams** (int): Number of beams for beam search
+            * **length_penalty** (float): Penalty for sequence length
+            * **early_stopping** (bool): Whether to stop early in beam search
+            * **stop_sequences** (list): Sequences that stop generation (requires custom stopping criteria)
+            * **skip_special_tokens** (bool): Whether to skip special tokens in output
+            * **logprobs** (bool): Whether to return log probabilities (maps to output_scores)
+
+                .. warning:: Usage of this parameter is discouraged as it may conflict with the `generate` parameter
+                    of the class.
+
+            **Transformers-Specific Parameters:**
+
+            * **pad_token_id** (int): Token ID for padding
+            * **eos_token_id** (int): Token ID for end of sequence
+            * **bad_words_ids** (list): List of token IDs to avoid
+            * **force_words_ids** (list): List of token IDs to force
+            * **no_repeat_ngram_size** (int): Size of n-grams to avoid repeating
+            * **encoder_repetition_penalty** (float): Repetition penalty for encoder-decoder models
+            * **num_beam_groups** (int): Number of beam groups for diverse beam search
+            * **diversity_penalty** (float): Penalty for beam diversity
+            * **output_scores** (bool): Whether to output scores
+            * **return_dict_in_generate** (bool): Whether to return dict in generate
+
+            **Legacy Parameter Support:**
+
+            * **max_tokens** (int): Automatically converted to max_new_tokens
+            * **n** (int): Automatically converted to num_return_sequences
+
+            **Parameter Conflict Resolution:**
+
+            When both legacy (Transformers-specific) and standardized parameter names are provided,
+            a :exc:`ValueError` is raised to prevent confusion. For example:
+
+            * If both ``max_tokens`` and ``max_new_tokens`` are passed, an error is raised
+            * If both ``n`` and ``num_return_sequences`` are passed, an error is raised
+
+            This ensures clear parameter usage and prevents unexpected behavior.
+
         tokenizer_kwargs (dict | None, optional): Additional arguments to pass to the tokenizer. Defaults to `None`.
-        pad_output (bool, optional): Whether to pad the output sequences to a uniform length. Transformers require `pad_output=True`, and the output
-            sequences will be padded and represented as tensors. Defaults to `False`.
+        pad_output (bool, optional): Whether to pad the output sequences to a uniform length. This does not impact the underlying padding
+            during call to the model. To use padding or packing during the model `forward` call, see `pad_model_input`.
+            Defaults to `False`.
+        pad_model_input (bool, optional): Whether to pad the model input sequences to a uniform length.
+            If `False`, packing will be used instead. Packing is generally more memory efficient than padding,
+            but this feature may not work with all models.
+            `pad_model_input` can only be used when `generate=False`.
+            This does not impact the padding of the model output - one may ask for padded output though `pad_output=True` while the model
+            is called with `pad_model_input=False`.
+            Defaults to `True`.
         inplace (Literal[True, False, "empty"] | None, optional): Determines how the module should handle in-place operations. Defaults to `True`.
         device (torch.device | None, optional): The device to use for computation. Defaults to `None`.
         layout (torch.layout | None, optional): The layout to use for the output tensors when `pad_output=False`. Defaults to `torch.strided`.
@@ -81,9 +149,33 @@ class TransformersWrapper(LLMWrapperBase):
         tokens_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Tokens` object. Defaults to `"tokens"`.
         masks_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Masks` object. Defaults to `"masks"`.
         history_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.ChatHistory` object. Defaults to `"history"`.
+        batching (bool | None, optional): Whether to enable batching. See `Batching`_ below for more details.
+        min_batch_size (int | None, optional): The minimum batch size to use for batching. See `Batching`_ below for more details.
+        max_batch_size (int | None, optional): The maximum batch size to use for batching. See `Batching`_ below for more details.
+        batching_timeout (float, optional): The timeout for batching. See `Batching`_ below for more details.
+
+    .. _Batching:
+
+    **Batching**
+
+    Batching is a feature that allows the module to process multiple inputs in a single call.
+        It is designed to work in a multi-threaded environment.
+        To enable batching, it suffices to set `batching=True` which will set `min_batch_size` to 1 if not provided.
+        If you want to set a different value for `min_batch_size` or `max_batch_size` for a fine-grained control,
+        you can to set `batching=True` and then set `min_batch_size` or `max_batch_size` to a value greater or equal to 1.
+        The way batching works is as follows:
+        - If `min_batch_size` is not provided but `max_batch_size` is, `min_batch_size` is set to 1.
+        - If `max_batch_size` is not provided but `min_batch_size` is, `max_batch_size` is set to the number of inputs in the queue.
+        - When the model is called, a check is performed to see if the number of inputs in the queue is greater or equal to `min_batch_size`.
+          If it is, the batch is processed immediately, while waiting for the previous batch to be processed if the model is busy.
+          Otherwise, the input is added to the queue and the function waits for the batch to be completed.
+          While waiting for the batch to be completed, a timeout is set to `batching_timeout` seconds such that if the batch is not
+          completed after `batching_timeout` seconds, the remaining items to process are processed as is and the function returns after
+          at most `batching_timeout` seconds (plus the time to finish processing the previous and current batch).
 
     Input Keys:
         The input key depends on both `input_mode` and `generate`:
+
         - If `input_mode="history"` and `generate=True`: `input_key` (defaults to `("history", "prompt")`)
         - If `input_mode="history"` and `generate=False`: `input_key` (defaults to `("history", "full")`)
         - If `input_mode="text"` and `generate=True`: `input_key` (defaults to `("text", "prompt")`)
@@ -99,16 +191,15 @@ class TransformersWrapper(LLMWrapperBase):
         - **Masks**: Always returned (`masks_key`, defaults to `"masks"`)
         - **Log Probs**: Returned when `return_log_probs=True` (`log_probs_key`, defaults to `"log_probs"`)
 
-        Example output structure for `input_mode="history"`:
-        ```
-        TensorDict(
-            text=Text(prompt=..., response=..., full=...),
-            masks=Masks(all_attention_mask=..., all_assistant_mask=...),
-            tokens=Tokens(prompt=..., response=..., full=...),
-            log_probs=LogProbs(prompt=..., response=..., full=...),
-            history=ChatHistory(prompt=..., response=..., full=...)
-        )
-        ```
+        Example output structure for `input_mode="history"`::
+
+            TensorDict(
+                text=Text(prompt=..., response=..., full=...),
+                masks=Masks(all_attention_mask=..., all_assistant_mask=...),
+                tokens=Tokens(prompt=..., response=..., full=...),
+                log_probs=LogProbs(prompt=..., response=..., full=...),
+                history=ChatHistory(prompt=..., response=..., full=...)
+            )
 
     Example:
         >>> from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -124,7 +215,13 @@ class TransformersWrapper(LLMWrapperBase):
         ...     tokenizer=tokenizer,
         ...     input_mode="history",
         ...     generate=True,
-        ...     return_log_probs=True
+        ...     return_log_probs=True,
+        ...     generate_kwargs={
+        ...         "max_new_tokens": 50,  # Standardized parameter
+        ...         "temperature": 0.7,
+        ...         "top_p": 0.9,
+        ...         "do_sample": True,
+        ...     }
         ... )
         >>>
         >>> history = History.from_chats([[
@@ -141,8 +238,8 @@ class TransformersWrapper(LLMWrapperBase):
         collector: The collector associated with the module, if it exists.
 
     .. seealso::
-        - :class:`~torchrl.modules.llm.policies.LLMWrapperBase` (see :ref:`ref_categorical_sequential`)
-        - :class:`~torchrl.modules.llm.policies.vLLMWrapper` (see :ref:`ref_vllm_wrapper`)
+        - :class:`~torchrl.modules.llm.policies.LLMWrapperBase`
+        - :class:`~torchrl.modules.llm.policies.vLLMWrapper`
     """
 
     def __init__(
@@ -157,6 +254,7 @@ class TransformersWrapper(LLMWrapperBase):
         generate_kwargs: dict | None = None,
         tokenizer_kwargs: dict | None = None,
         pad_output: bool = False,
+        pad_model_input: bool | None = None,
         inplace: Literal[True, False, "empty"] | None = None,
         device: torch.device | None = None,
         layout: torch.layout | None = None,
@@ -169,10 +267,45 @@ class TransformersWrapper(LLMWrapperBase):
         tokens_key: NestedKey | None = "tokens",
         masks_key: NestedKey | None = "masks",
         log_probs_key: NestedKey | None = "log_probs",
+        batching: bool | None = None,
+        min_batch_size: int | None = None,
+        max_batch_size: int | None = None,
+        batching_timeout: float = 10.0,
     ):
         super().__init__()
 
+        if batching and min_batch_size is None:
+            min_batch_size = 1
+        elif (min_batch_size is not None or max_batch_size is not None) and (
+            batching is False
+        ):
+            raise ValueError(
+                "min_batch_size and max_batch_size must be None if batching is False."
+            )
+
+        # Validate that min_batch_size <= max_batch_size when both are specified
+        if min_batch_size is not None and max_batch_size is not None:
+            if min_batch_size > max_batch_size:
+                raise ValueError(
+                    f"min_batch_size ({min_batch_size}) must be <= max_batch_size ({max_batch_size})"
+                )
+
+        self._min_batch_size = min_batch_size
+        self._max_batch_size = max_batch_size
+        self._batching_timeout = batching_timeout
+        self._batch_queue = []
+        self._futures = []
+        if self.batching:
+            self._batching_lock = threading.Lock()
+        else:
+            self._batching_lock = None
+
         if isinstance(model, str):
+            if tokenizer is None:
+                from transformers import AutoTokenizer
+
+                tokenizer = AutoTokenizer.from_pretrained(model)
+
             from transformers import AutoModelForCausalLM
 
             model = AutoModelForCausalLM.from_pretrained(model)
@@ -192,6 +325,10 @@ class TransformersWrapper(LLMWrapperBase):
         self.input_mode = input_mode
         self.attention_mask_key = attention_mask_key
         self.generate = generate
+        if pad_model_input is not None and generate:
+            raise ValueError("pad_model_input is not supported when generate=True.")
+        pad_model_input = pad_model_input if pad_model_input is not None else True
+        self.pad_model_input = pad_model_input
 
         # Auto-determine what to return based on input mode
         self.return_history = input_mode in ("history",)
@@ -303,9 +440,44 @@ class TransformersWrapper(LLMWrapperBase):
         else:
             generate_kwargs = dict(generate_kwargs)
 
+        # Standardize common parameters
+        generate_kwargs = self._standardize_generate_kwargs(generate_kwargs)
+
+        # Extract wrapper-specific parameters
+        transformers_specific_kwargs = self._get_wrapper_specific_kwargs(
+            generate_kwargs, "transformers"
+        )
+
+        # Convert common parameters to Transformers format
+        transformers_kwargs = {}
+        for key, value in generate_kwargs.items():
+            if key in self.COMMON_GENERATION_PARAMS:
+                # Convert common names to Transformers names
+                if key == "stop_sequences":
+                    # Transformers uses stopping_criteria for stop sequences
+                    # This requires custom stopping criteria implementation
+                    # For now, we'll warn and skip this parameter
+                    import warnings
+
+                    warnings.warn(
+                        "stop_sequences parameter is not yet fully supported in TransformersWrapper. "
+                        "Use eos_token_id or implement custom stopping criteria for full support.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    continue
+                elif key == "logprobs":
+                    transformers_kwargs["output_scores"] = value
+                else:
+                    # Direct mapping for other common parameters
+                    transformers_kwargs[key] = value
+
+        # Add Transformers-specific parameters
+        transformers_kwargs.update(transformers_specific_kwargs)
+
         self.num_samples = num_samples
         if (
-            generate_kwargs.get("num_return_sequences", 1) > 1
+            transformers_kwargs.get("num_return_sequences", 1) > 1
             or num_samples is not None
         ):
             if inplace in (True, "empty"):
@@ -315,14 +487,14 @@ class TransformersWrapper(LLMWrapperBase):
             if inplace is None:
                 inplace = False
             if (
-                generate_kwargs.get("num_return_sequences", 1) > 1
+                transformers_kwargs.get("num_return_sequences", 1) > 1
                 and num_samples is not None
-                and generate_kwargs.get("num_return_sequences", 1) != num_samples
+                and transformers_kwargs.get("num_return_sequences", 1) != num_samples
             ):
                 raise ValueError("num_samples differs from generate_kwargs['n'].")
             elif num_samples is None:
-                self.num_samples = generate_kwargs.get("num_return_sequences", 1)
-            generate_kwargs["num_return_sequences"] = self.num_samples
+                self.num_samples = transformers_kwargs.get("num_return_sequences", 1)
+            transformers_kwargs["num_return_sequences"] = self.num_samples
         elif inplace is None:
             inplace = True
 
@@ -331,13 +503,13 @@ class TransformersWrapper(LLMWrapperBase):
         if not generate:
             # We want only the log-probs, we generate a single token (that we then discard)
             # and retrieve the prompt log-probs
-            generate_kwargs["max_tokens"] = 1
+            transformers_kwargs["max_new_tokens"] = 1
 
-        generate_kwargs.setdefault("tokenizer", self.tokenizer)
-        generate_kwargs.setdefault("output_logits", self.return_log_probs)
-        generate_kwargs.setdefault("return_dict_in_generate", True)
+        transformers_kwargs.setdefault("tokenizer", self.tokenizer)
+        transformers_kwargs.setdefault("output_logits", self.return_log_probs)
+        transformers_kwargs.setdefault("return_dict_in_generate", True)
 
-        self.generate_kwargs = generate_kwargs
+        self.generate_kwargs = transformers_kwargs
 
         # Additional transformers-specific settings
         self.chat_template_name = chat_template_name
@@ -466,6 +638,7 @@ class TransformersWrapper(LLMWrapperBase):
         return type(self)(**constructor_kwargs)
 
     @set_list_to_stack(True)
+    @_batching
     def forward(
         self,
         tensordict: TensorDictBase,
@@ -616,6 +789,10 @@ class TransformersWrapper(LLMWrapperBase):
         response_struct = history.apply_chat_template(
             tokenizer=self.tokenizer, **tokenizer_kwargs
         )
+
+        if self._device is not None:
+            response_struct = response_struct.to(self._device)
+
         tokens_prompt_padded = response_struct.get(
             "input_ids",
             as_padded_tensor=True,
@@ -707,6 +884,10 @@ class TransformersWrapper(LLMWrapperBase):
                 text_full, prompt_histories, self.chat_template_name, self.tokenizer
             )
             history_chat_flat.response = h_responses
+            # Combine prompt and response to create full history
+            history_chat_flat.full = history_chat_flat.prompt.extend(
+                h_responses, inplace=False, dim=-1
+            )
         result.set(self.history_key, history_chat)
         return result
 
@@ -980,49 +1161,96 @@ class TransformersWrapper(LLMWrapperBase):
         """Compute log-probs from history tokens."""
         pad_val = self.tokenizer.pad_token_id
 
-        # unfortunately HF wants us to use padded tensors
-        tokens_full_padded = response_tokens.get(
-            "input_ids",
-            as_padded_tensor=True,
-            padding_side="left",
-            padding_value=pad_val,
-        )
-        if not isinstance(tokens_full_padded, torch.Tensor):
-            raise ValueError(
-                f"Expected Tensor for tokens_full_padded, got {type(tokens_full_padded)}"
-            )
-        attention_mask_full_padded = response_tokens.get(
-            "attention_mask",
-            as_padded_tensor=True,
-            padding_side="left",
-            padding_value=0,
-        )
-        if not isinstance(attention_mask_full_padded, torch.Tensor):
-            raise ValueError(
-                f"Expected Tensor for attention_mask_full_padded, got {type(attention_mask_full_padded)}"
-            )
-
         if cfg is not None:
             kwargs = copy(self.generate_kwargs)
             kwargs["generation_config"] = cfg
         else:
             kwargs = self.generate_kwargs
 
-        tokens_out_struct = self.model(
-            tokens_full_padded, attention_mask=attention_mask_full_padded, **kwargs
-        )
+        # non-packed forward pass
+        if self.pad_model_input:
+            # unfortunately HF wants us to use padded tensors
+            tokens_full_padded = response_tokens.get(
+                "input_ids",
+                as_padded_tensor=True,
+                padding_side="left",
+                padding_value=pad_val,
+            )
+            if not isinstance(tokens_full_padded, torch.Tensor):
+                raise ValueError(
+                    f"Expected Tensor for tokens_full_padded, got {type(tokens_full_padded)}"
+                )
+            attention_mask_full_padded = response_tokens.get(
+                "attention_mask",
+                as_padded_tensor=True,
+                padding_side="left",
+                padding_value=0,
+            )
+            if not isinstance(attention_mask_full_padded, torch.Tensor):
+                raise ValueError(
+                    f"Expected Tensor for attention_mask_full_padded, got {type(attention_mask_full_padded)}"
+                )
 
-        (
-            log_probs_full_padded,
-            logits_full_padded,
-        ) = self._compute_log_probs_from_model_output(
-            tokens_out_struct,
-            tokens_full_padded,
-            attention_mask_full_padded,
-            pad_val,
-            logits_only=logits_only,
-        )
-
+            (
+                log_probs_full_padded,
+                logits_full_padded,
+            ) = self._model_forward_with_padded_sequences(
+                tokens_full_padded,
+                attention_mask_full_padded,
+                pad_val=pad_val,
+                logits_only=logits_only,
+                **kwargs,
+            )
+        else:
+            # unfortunately HF wants us to use padded tensors
+            tokens_full_unpadded = response_tokens.get(
+                "input_ids",
+                as_nested_tensor=True,
+                layout=torch.jagged,
+            )
+            attention_mask_full_unpadded = response_tokens.get(
+                "attention_mask",
+                as_nested_tensor=True,
+                layout=torch.jagged,
+            )
+            (
+                log_probs_full_unpadded,
+                logits_full_unpadded,
+            ) = self._model_forward_with_packed_sequences(
+                # TODO: no padding if we don't need to
+                tokens_full_unpadded,
+                attention_mask_full_unpadded,
+                pad=False,
+                logits_only=logits_only,
+                **kwargs,
+            )
+            tokens_full_padded = pad_sequence(
+                tokens_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=pad_val,
+                padding_side="left",
+            )
+            attention_mask_full_padded = pad_sequence(
+                attention_mask_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=0,
+                padding_side="left",
+            )
+            if log_probs_full_unpadded is not None:
+                log_probs_full_padded = pad_sequence(
+                    log_probs_full_unpadded.unbind(0),
+                    batch_first=True,
+                    padding_value=0.0,
+                    padding_side="left",
+                )
+            else:
+                log_probs_full_padded = None
+            logits_full_padded = pad_sequence(
+                logits_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=0.0,
+                padding_side="left",
+            )
         # Build output TensorClass objects
         text_obj = Text._from_tensordict(
             TensorDict(batch_size=out.batch_size).to_lazystack(0)
@@ -1168,34 +1396,74 @@ class TransformersWrapper(LLMWrapperBase):
             .to_lazystack(0)
             .update(dict(tokens_in))
         )
-        input_ids_full_padded = tokens_in.get(
-            "input_ids",
-            as_padded_tensor=True,
-            padding_side="left",
-            padding_value=self.padding_value,
-        )
-        attention_mask_full_padded = tokens_in.get(
-            "attention_mask",
-            as_padded_tensor=True,
-            padding_side="left",
-            padding_value=0,
-        )
+        pad_val = self.padding_value
 
-        tokens_out_struct = self.model(
-            input_ids_full_padded, attention_mask=attention_mask_full_padded, **kwargs
-        )
+        if self.pad_model_input:
+            tokens_full_padded = tokens_in.get(
+                "input_ids",
+                as_padded_tensor=True,
+                padding_side="left",
+                padding_value=pad_val,
+            )
+            attention_mask_full_padded = tokens_in.get(
+                "attention_mask",
+                as_padded_tensor=True,
+                padding_side="left",
+                padding_value=0,
+            )
 
-        # Compute log-probs for the input tokens
-        (
-            log_probs_full_padded,
-            logits_full_padded,
-        ) = self._compute_log_probs_from_model_output(
-            tokens_out_struct,
-            input_ids_full_padded,
-            attention_mask_full_padded,
-            self.tokenizer.pad_token_id,
-            logits_only=logits_only,
-        )
+            (
+                log_probs_full_padded,
+                logits_full_padded,
+            ) = self._model_forward_with_padded_sequences(
+                tokens_full_padded,
+                attention_mask_full_padded,
+                pad_val=pad_val,
+                logits_only=logits_only,
+                **kwargs,
+            )
+        else:
+            # packed forward pass
+            tokens_full_unpadded = tokens_in.get(
+                "input_ids",
+                as_nested_tensor=True,
+                layout=torch.jagged,
+            )
+            attention_mask_full_unpadded = tokens_in.get(
+                "attention_mask",
+                as_nested_tensor=True,
+                layout=torch.jagged,
+            )
+            (
+                log_probs_full_unpadded,
+                logits_full_unpadded,
+            ) = self._model_forward_with_packed_sequences(
+                tokens_full_unpadded, attention_mask_full_unpadded, pad=False, **kwargs
+            )
+            tokens_full_padded = pad_sequence(
+                tokens_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=pad_val,
+                padding_side="left",
+            )
+            attention_mask_full_padded = pad_sequence(
+                attention_mask_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=0,
+                padding_side="left",
+            )
+            log_probs_full_padded = pad_sequence(
+                log_probs_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=0.0,
+                padding_side="left",
+            )
+            logits_full_padded = pad_sequence(
+                logits_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=0.0,
+                padding_side="left",
+            )
 
         # Build output TensorClass objects
         text_obj = Text._from_tensordict(
@@ -1210,10 +1478,10 @@ class TransformersWrapper(LLMWrapperBase):
             TensorDict(batch_size=out.batch_size).to_lazystack(0)
         )
         if self.pad_output:
-            tokens_obj.full = input_ids_full_padded
+            tokens_obj.full = tokens_full_padded
         else:
             input_ids_full_unpadded = _unpad_tensors(
-                input_ids_full_padded, attention_mask_full_padded, as_nested=False
+                tokens_full_padded, attention_mask_full_padded, as_nested=False
             )
             tokens_obj.full = input_ids_full_unpadded
         tokens_obj.response = None
@@ -1460,50 +1728,112 @@ class TransformersWrapper(LLMWrapperBase):
 
         pad_val = self.tokenizer.pad_token_id
 
-        input_ids_full_padded = td.get(
-            self.input_key,
-            as_padded_tensor=True,
-            padding_side="left",
-            padding_value=pad_val,
-        )
-        # Attention mask: try first the regular entry, then the key provided in the constructor, finally fallback on eager attention mask
-        attention_mask_full_padded = td.get(
-            ("masks", "all_attention_mask"),
-            as_padded_tensor=True,
-            padding_side="left",
-            padding_value=False,
-        )
-        if attention_mask_full_padded is None:
-            attention_mask_full_padded = td.get(
-                self.attention_mask_key,
-                as_padded_tensor=True,
-                padding_side="left",
-                padding_value=False,
-            )
-            if attention_mask_full_padded is None:
-                attention_mask_full_padded = input_ids_full_padded != pad_val
-
         if cfg is not None:
             kwargs = copy(self.generate_kwargs)
             kwargs["generation_config"] = cfg
         else:
             kwargs = self.generate_kwargs
 
-        tokens_out_struct = self.model(
-            input_ids_full_padded, attention_mask=attention_mask_full_padded, **kwargs
-        )
+        if self.pad_model_input:
+            tokens_full_padded = td.get(
+                self.input_key,
+                as_padded_tensor=True,
+                padding_side="left",
+                padding_value=pad_val,
+            )
+            # Attention mask: try first the regular entry, then the key provided in the constructor, finally fallback on eager attention mask
+            attention_mask_full_padded = td.get(
+                ("masks", "all_attention_mask"),
+                as_padded_tensor=True,
+                padding_side="left",
+                padding_value=False,
+            )
+            if attention_mask_full_padded is None:
+                attention_mask_full_padded = td.get(
+                    self.attention_mask_key,
+                    as_padded_tensor=True,
+                    padding_side="left",
+                    padding_value=False,
+                )
+                if attention_mask_full_padded is None:
+                    attention_mask_full_padded = tokens_full_padded != pad_val
 
-        # Compute log-probs for the input tokens
-        (
-            log_probs_full_padded,
-            logits_full_padded,
-        ) = self._compute_log_probs_from_model_output(
-            tokens_out_struct,
-            input_ids_full_padded,
-            attention_mask_full_padded,
-            self.tokenizer.pad_token_id,
-            logits_only=logits_only,
-        )
+            (
+                log_probs_full_padded,
+                logits_full_padded,
+            ) = self._model_forward_with_padded_sequences(
+                tokens_full_padded,
+                attention_mask_full_padded,
+                pad_val=pad_val,
+                logits_only=logits_only,
+                **kwargs,
+            )
+        else:
+            # packed forward pass
+            # unfortunately HF wants us to use padded tensors
+            tokens_full_unpadded = td.get(
+                self.input_key,
+                as_nested_tensor=True,
+                layout=torch.jagged,
+            )
+            if tokens_full_unpadded is None:
+                raise ValueError(
+                    f"Expected '{self.input_key}' key for tokens input mode, but found keys: {list(td.keys())}"
+                )
+            # Attention mask: try first the regular entry, then the key provided in the constructor, finally fallback on eager attention mask
+            attention_mask_full_unpadded = td.get(
+                ("masks", "all_attention_mask"),
+                as_nested_tensor=True,
+                layout=torch.jagged,
+            )
+            if attention_mask_full_unpadded is None:
+                attention_mask_full_unpadded = td.get(
+                    self.attention_mask_key,
+                    as_nested_tensor=True,
+                    layout=torch.jagged,
+                )
+                if attention_mask_full_unpadded is None:
+                    # does this even work?
+                    attention_mask_full_unpadded = tokens_full_unpadded != pad_val
+
+            (
+                log_probs_full_unpadded,
+                logits_full_unpadded,
+            ) = self._model_forward_with_packed_sequences(
+                # TODO: no padding if we don't need to
+                tokens_full_unpadded,
+                attention_mask_full_unpadded,
+                pad=False,
+                logits_only=logits_only,
+                **kwargs,
+            )
+            tokens_full_padded = pad_sequence(
+                tokens_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=pad_val,
+                padding_side="left",
+            )
+            attention_mask_full_padded = pad_sequence(
+                attention_mask_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=0,
+                padding_side="left",
+            )
+            if log_probs_full_unpadded is not None:
+                log_probs_full_padded = pad_sequence(
+                    log_probs_full_unpadded.unbind(0),
+                    batch_first=True,
+                    padding_value=0.0,
+                    padding_side="left",
+                )
+            else:
+                log_probs_full_padded = None
+            logits_full_padded = pad_sequence(
+                logits_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=0.0,
+                padding_side="left",
+            )
 
         # Build output TensorClass objects
         text_obj = Text._from_tensordict(
@@ -1519,11 +1849,11 @@ class TransformersWrapper(LLMWrapperBase):
         )
         if not self.pad_output:
             input_ids_full_unpadded = _unpad_tensors(
-                input_ids_full_padded, attention_mask_full_padded, as_nested=False
+                tokens_full_padded, attention_mask_full_padded, as_nested=False
             )
             tokens_obj.full = input_ids_full_unpadded
         else:
-            tokens_obj.full = input_ids_full_padded
+            tokens_obj.full = tokens_full_padded
         tokens_obj.response = None
         tokens_obj.padded = MetaData(self.pad_output)
         out.set(self.tokens_key, tokens_obj)
@@ -1846,3 +2176,581 @@ class TransformersWrapper(LLMWrapperBase):
         finally:
             self._in_get_dist_call = False
             self.out_keys.remove("logits")
+
+    def _pack_sequences(
+        self,
+        input_ids: torch.nested.NestedTensor,
+        attention_mask: torch.nested.NestedTensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, dict[str, Any]]:
+        """Pack sequences into a single tensor."""
+        packed_input_ids = input_ids.values()
+        lengths = input_ids.lengths()
+        if lengths is None:
+            offsets = input_ids.offsets()
+            lengths = offsets.diff()
+            offsets = offsets[1:]
+        else:
+            offsets = lengths.cumsum(0)
+        # Create block-diagonal attention mask to prevent cross-sequence attention
+        attention_mask = self._create_block_diagonal_attention_mask(lengths)
+        # Create position IDs that restart for each sequence
+        position_ids = self._create_packed_position_ids(
+            lengths, total_length=packed_input_ids.numel()
+        )
+
+        packing_metadata = {
+            "sequence_lengths": lengths,
+            "cumulative_lengths": offsets,
+            "attention_mask": attention_mask,
+            "position_ids": position_ids,
+        }
+
+        return (
+            packed_input_ids.unsqueeze(0),
+            attention_mask.unsqueeze(0),
+            packing_metadata,
+        )
+
+    def _model_forward_with_padded_sequences(
+        self,
+        tokens_full_padded: torch.Tensor,
+        attention_mask_full_padded: torch.Tensor,
+        *,
+        pad_val: float | int | torch.Tensor | None = None,
+        logits_only: bool = False,
+        **kwargs,
+    ):
+        """Forward pass with padded sequences."""
+        # Error handling for empty sequences
+        if tokens_full_padded.numel() == 0:
+            raise ValueError(
+                "Input contains empty sequences. Packing/padding requires at least one token per sequence."
+            )
+        # Error handling for overlong sequences
+        config = getattr(self.model, "config", None)
+        max_len = getattr(config, "max_position_embeddings", None)
+        if max_len is not None and tokens_full_padded.shape[-1] > max_len:
+            raise ValueError(
+                f"Input sequence length ({tokens_full_padded.shape[-1]}) exceeds model's max_position_embeddings ({max_len}). Consider truncating or splitting your input."
+            )
+        tokens_out_struct = self.model(
+            tokens_full_padded, attention_mask_full_padded, **kwargs
+        )
+        (
+            log_probs_full_padded,
+            logits_full_padded,
+        ) = self._compute_log_probs_from_model_output(
+            tokens_out_struct,
+            tokens_full_padded,
+            attention_mask_full_padded,
+            pad_val,
+            logits_only=logits_only,
+        )
+        return log_probs_full_padded, logits_full_padded
+
+    def _model_forward_with_packed_sequences(
+        self,
+        flat_input_ids: torch.Tensor,
+        block_diag_attention_mask: torch.Tensor,
+        *,
+        pad: bool = True,
+        logits_only: bool = False,
+        **kwargs,
+    ):
+        """Pack sequences into a single tensor and forward them through the model.
+
+        Args:
+            flat_input_ids (NestedTensor): NestedTensor of shape (batch_size, -1)
+            block_diag_attention_mask (NestedTensor): NestedTensor of shape (batch_size, -1)
+
+        Returns:
+            pad (bool): Whether to pad the output tensors.
+            logits_only (bool): Whether to return only logits.
+            kwargs (dict): Additional keyword arguments to pass to the model.
+
+        """
+        # Error handling for empty sequences
+        if flat_input_ids.numel() == 0:
+            raise ValueError(
+                "Input contains empty sequences. Packing requires at least one token per sequence."
+            )
+        # Error handling for overlong sequences
+        # Note: Skipping this check for nested tensors due to symbolic representation issues
+        # The model will handle sequence length limits internally
+        max_len = getattr(self.model.config, "max_position_embeddings", None)
+        if max_len is not None and not hasattr(flat_input_ids, "size"):
+            # Only check for regular tensors, not nested tensors
+            actual_size = flat_input_ids.shape[-1]
+            if actual_size > max_len:
+                raise ValueError(
+                    f"Input sequence length ({actual_size}) exceeds model's max_position_embeddings ({max_len}). Consider truncating or splitting your input."
+                )
+        (
+            flat_input_ids,
+            block_diag_attention_mask,
+            packing_metadata,
+        ) = self._pack_sequences(flat_input_ids, block_diag_attention_mask)
+
+        outputs = self.model(
+            input_ids=flat_input_ids,
+            attention_mask=block_diag_attention_mask.unsqueeze(0),
+            position_ids=packing_metadata["position_ids"],
+            use_cache=False,  # Disable KV cache for packing
+            **kwargs,
+        )
+        log_probs, logits = self._unpack_outputs(
+            outputs, packing_metadata, flat_input_ids, pad=pad, logits_only=logits_only
+        )
+        return log_probs, logits
+
+    def _unpack_outputs(
+        self,
+        outputs,
+        packing_metadata: dict[str, Any],
+        flat_input_ids: torch.Tensor,
+        pad: bool = True,
+        logits_only: bool = False,
+    ) -> tuple[torch.Tensor | None, torch.Tensor]:
+        """Unpack outputs using nested tensors - zero syncs."""
+        # use cross_entropy to compute log_probs
+        log_probs, logits = self._compute_log_probs_from_model_output(
+            outputs,
+            flat_input_ids,
+            torch.ones_like(flat_input_ids, dtype=torch.bool),
+            -100,
+            logits_only=logits_only,
+        )
+        # check shapes: [1, L] for log_probs, [1, L, vocab_size] for logits
+        sequence_lengths = packing_metadata["sequence_lengths"]
+        if logits_only:
+            log_probs = None
+        else:
+            if log_probs.shape != logits.shape[:2]:
+                raise ValueError(
+                    f"Log probs shape {log_probs.shape=} does not match logits shape {logits.shape[:2]=}"
+                )
+            if log_probs.ndim != 2:
+                raise ValueError(f"Log probs shape {log_probs.shape=} is not 2D")
+            if logits.ndim != 3:
+                raise ValueError(f"Logits shape {logits.shape=} is not 3D")
+            if log_probs.shape[1] != sequence_lengths.sum():
+                raise ValueError(
+                    f"Log probs shape {log_probs.shape=} does not match sequence lengths {sequence_lengths.sum()=}"
+                )
+
+            log_probs = log_probs.squeeze(0)
+            nested_logprobs = torch.nested.nested_tensor_from_jagged(
+                log_probs,
+                lengths=sequence_lengths,
+            )
+
+        logits = logits.squeeze(0)
+        nested_logits = torch.nested.nested_tensor_from_jagged(
+            logits,  # Remove batch dim: (total_length, vocab_size)
+            lengths=sequence_lengths,
+        )
+
+        if logits_only:
+            if pad:
+                return None, nested_logits.to_padded_tensor(padding=0.0)
+            return None, nested_logits
+        else:
+            if pad:
+                return nested_logprobs.to_padded_tensor(
+                    padding=0.0
+                ), nested_logits.to_padded_tensor(padding=0.0)
+            return nested_logprobs, nested_logits
+
+    def _create_block_diagonal_attention_mask(
+        self, sequence_lengths: torch.Tensor
+    ) -> torch.Tensor:
+        """Efficient creation of a block-diagonal attention mask.
+
+        Zero cuda syncs, no integer involved except len(tensor) - compilable.
+
+        Args:
+            sequence_lengths: Tensor of shape (batch_size,) containing the lengths of the sequences
+
+        Returns:
+            attention_mask: Tensor of shape (batch_size, total_length, total_length)
+                where each sequence can only attend to itself.
+        """
+        seq_ids = torch.arange(len(sequence_lengths), device=sequence_lengths.device)
+        position_to_seq_id = seq_ids.repeat_interleave(sequence_lengths)
+
+        attention_mask = position_to_seq_id.unsqueeze(
+            1
+        ) == position_to_seq_id.unsqueeze(0)
+        return attention_mask
+
+    def repeat_interleave_causal(self, sequence_lengths: torch.Tensor) -> torch.Tensor:
+        """Same as _create_block_diagonal_attention_mask, but with causal masking."""
+        total_length = sequence_lengths.sum()
+
+        seq_ids = torch.arange(len(sequence_lengths), device=sequence_lengths.device)
+        position_to_seq_id = seq_ids.repeat_interleave(sequence_lengths)
+
+        positions = torch.arange(int(total_length), device=sequence_lengths.device)
+
+        same_sequence = position_to_seq_id.unsqueeze(1) == position_to_seq_id.unsqueeze(
+            0
+        )
+        causal = positions.unsqueeze(0) <= positions.unsqueeze(1)
+
+        attention_mask = same_sequence & causal
+        return attention_mask
+
+    def _create_packed_position_ids(
+        self, sequence_lengths: torch.Tensor, total_length: int | None = None
+    ) -> torch.Tensor:
+        """Create position IDs that restart from 0 for each sequence.
+
+        For sequences of length [3, 2], creates: [0, 1, 2, 0, 1]
+
+        No cuda syncs.
+        """
+        if total_length is None:
+            total_length = int(sequence_lengths.sum().item())
+
+        # Create global position IDs: [0, 1, 2, 3, 4]
+        global_positions = torch.arange(total_length, device=sequence_lengths.device)
+
+        # Create sequence start offsets repeated for each position: [0, 0, 0, 3, 3]
+        offsets = torch.cat(
+            [
+                torch.zeros(1, device=sequence_lengths.device),
+                sequence_lengths.cumsum(0)[:-1],
+            ]
+        )
+        sequence_starts = offsets.repeat_interleave(sequence_lengths)
+
+        # Subtract to get local positions: [0, 1, 2, 0, 1]
+        position_ids = global_positions - sequence_starts
+
+        return position_ids.unsqueeze(0)  # (1, total_length)
+
+
+class RemoteTransformersWrapper:
+    """A remote Ray actor wrapper for TransformersWrapper that provides a simplified interface.
+
+    This class wraps a TransformersWrapper instance as a Ray actor, allowing remote execution
+    while providing a clean interface that doesn't require explicit `remote()` and `get()` calls.
+
+    Args:
+        model (str): The Hugging Face Transformers model to wrap.
+            Must be a string (model name or path) that will be passed to `transformers.AutoModelForCausalLM.from_pretrained`.
+            Transformers models are not serializable, so only model names/paths are supported.
+        max_concurrency (int, optional): Maximum number of concurrent calls to the remote actor. Defaults to 16.
+        validate_model (bool, optional): Whether to validate the model. Defaults to True.
+        num_gpus (int, optional): Number of GPUs to use. Defaults to 0.
+        num_cpus (int, optional): Number of CPUs to use. Defaults to 0.
+        **kwargs: All other arguments are passed directly to TransformersWrapper.
+
+    Example:
+        >>> import ray
+        >>> from torchrl.modules.llm.policies import RemoteTransformersWrapper
+        >>>
+        >>> # Initialize Ray if not already done
+        >>> if not ray.is_initialized():
+        ...     ray.init()
+        >>>
+        >>> # Create remote wrapper
+        >>> remote_wrapper = RemoteTransformersWrapper(
+        ...     model="gpt2",
+        ...     input_mode="history",
+        ...     generate=True,
+        ...     generate_kwargs={"max_new_tokens": 50}
+        ... )
+        >>>
+        >>> # Use like a regular wrapper (no remote/get calls needed)
+        >>> result = remote_wrapper(tensordict_input)
+        >>> print(result["text"].response)
+    """
+
+    def __init__(
+        self,
+        model,
+        max_concurrency: int = 16,
+        validate_model: bool = True,
+        actor_name: str | None = None,
+        num_gpus: int = 1,
+        num_cpus: int = 1,
+        **kwargs,
+    ):
+        import ray
+
+        # Validate model parameter - only strings are allowed for Transformers
+        if not isinstance(model, str) and validate_model:
+            raise ValueError(
+                "For RemoteTransformersWrapper, the model parameter must be a string "
+                f"(model name or path). Got type: {type(model)}. "
+                "Transformers models are not serializable, so only model names/paths are supported. "
+                "You can bypass this check by setting validate_model=False."
+            )
+
+        if not ray.is_initialized():
+            ray.init()
+
+        if actor_name is not None:
+            # Check if an actor with this name already exists
+            try:
+                existing_actor = ray.get_actor(actor_name)
+                # If we can get the actor, assume it's alive and use it
+                self._remote_wrapper = existing_actor
+                torchrl_logger.info(f"Using existing actor {actor_name}")
+                return
+            except ValueError:
+                # Actor doesn't exist, create a new one
+                torchrl_logger.info(f"Creating new actor {actor_name}")
+
+        # Create the remote actor with the unique name
+        self._remote_wrapper = (
+            ray.remote(TransformersWrapper)
+            .options(
+                max_concurrency=max_concurrency,
+                name=actor_name,
+                num_gpus=num_gpus,
+                num_cpus=num_cpus,
+            )
+            .remote(model, **kwargs)
+        )
+
+    def __call__(self, tensordict, **kwargs):
+        """Forward pass that automatically handles remote execution."""
+        import ray
+
+        return ray.get(self._remote_wrapper.forward.remote(tensordict, **kwargs))
+
+    def get_new_version(self, **kwargs):
+        """Get a new version of the wrapper with altered parameters."""
+        import ray
+
+        return ray.get(self._remote_wrapper.get_new_version.remote(**kwargs))
+
+    def get_dist(self, tensordict, **kwargs):
+        """Get distribution from logits/log-probs with optional masking."""
+        import ray
+
+        return ray.get(self._remote_wrapper.get_dist.remote(tensordict, **kwargs))
+
+    def get_dist_with_prompt_mask(self, tensordict, **kwargs):
+        """Get distribution masked to only include response tokens (exclude prompt)."""
+        import ray
+
+        return ray.get(
+            self._remote_wrapper.get_dist_with_prompt_mask.remote(tensordict, **kwargs)
+        )
+
+    def _get_dist_with_assistant_mask(self, tensordict, **kwargs):
+        """Get distribution masked to only include assistant tokens."""
+        import ray
+
+        return ray.get(
+            self._remote_wrapper._get_dist_with_assistant_mask.remote(
+                tensordict, **kwargs
+            )
+        )
+
+    def _get_dist_with_attention_mask(self, tensordict, **kwargs):
+        """Get distribution masked using attention mask."""
+        import ray
+
+        return ray.get(
+            self._remote_wrapper._get_dist_with_attention_mask.remote(
+                tensordict, **kwargs
+            )
+        )
+
+    def _get_dist_with_custom_mask(self, tensordict, **kwargs):
+        """Get distribution with custom mask."""
+        import ray
+
+        return ray.get(
+            self._remote_wrapper._get_dist_with_custom_mask.remote(tensordict, **kwargs)
+        )
+
+    def _get_sft_dist(self, tensordict, **kwargs):
+        """Get distribution suitable for SFT loss (response tokens only)."""
+        import ray
+
+        return ray.get(self._remote_wrapper._get_sft_dist.remote(tensordict, **kwargs))
+
+    def _get_rlhf_dist(self, tensordict, **kwargs):
+        """Get distribution suitable for RLHF loss (assistant tokens only)."""
+        import ray
+
+        return ray.get(self._remote_wrapper._get_rlhf_dist.remote(tensordict, **kwargs))
+
+    def _get_generic_dist(self, tensordict, **kwargs):
+        """Get distribution suitable for generic losses (all tokens)."""
+        import ray
+
+        return ray.get(
+            self._remote_wrapper._get_generic_dist.remote(tensordict, **kwargs)
+        )
+
+    def log_prob(self, data, **kwargs):
+        """Compute log probabilities."""
+        import ray
+
+        return ray.get(self._remote_wrapper.log_prob.remote(data, **kwargs))
+
+    def cleanup_batching(self):
+        """Clean up batching resources."""
+        import ray
+
+        return ray.get(self._remote_wrapper.cleanup_batching.remote())
+
+    def __del__(self):
+        """Cleanup when the wrapper is destroyed."""
+        try:
+            import ray
+
+            if hasattr(self, "_remote_wrapper") and ray.is_initialized():
+                # Clean up batching resources
+                try:
+                    ray.get(self._remote_wrapper.cleanup_batching.remote())
+                except Exception:
+                    pass  # Ignore cleanup errors during destruction
+        except Exception:
+            pass  # Ignore any errors during cleanup
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit with cleanup."""
+        self.cleanup_batching()
+
+    def get_batching_state(self):
+        """Get the current batching state."""
+        import ray
+
+        return ray.get(self._remote_wrapper.get_batching_state.remote())
+
+    @property
+    def generate(self):
+        """Whether text generation is enabled."""
+        import ray
+
+        return ray.get(self._remote_wrapper.generate.remote)
+
+    @property
+    def pad_output(self):
+        """Whether output sequences are padded."""
+        import ray
+
+        return ray.get(self._remote_wrapper.pad_output.remote)
+
+    @property
+    def text_key(self):
+        """The key for text output."""
+        import ray
+
+        return ray.get(self._remote_wrapper.text_key.remote)
+
+    @property
+    def tokens_key(self):
+        """The key for tokens output."""
+        import ray
+
+        return ray.get(self._remote_wrapper.tokens_key.remote)
+
+    @property
+    def masks_key(self):
+        """The key for masks output."""
+        import ray
+
+        return ray.get(self._remote_wrapper.masks_key.remote)
+
+    @property
+    def log_probs_key(self):
+        """The key for log probabilities output."""
+        import ray
+
+        return ray.get(self._remote_wrapper.log_probs_key.remote)
+
+    @property
+    def in_keys(self):
+        """The input keys."""
+        import ray
+
+        return ray.get(self._remote_wrapper.in_keys.remote)
+
+    @property
+    def out_keys(self):
+        """The output keys."""
+        import ray
+
+        return ray.get(self._remote_wrapper.out_keys.remote)
+
+    @property
+    def inplace(self):
+        """Whether in-place operations are used."""
+        import ray
+
+        return ray.get(self._remote_wrapper.inplace.remote)
+
+    @property
+    def device(self):
+        """The device used for computation."""
+        import ray
+
+        return ray.get(self._remote_wrapper.device.remote)
+
+    @property
+    def layout(self):
+        """The layout used for output tensors."""
+        import ray
+
+        return ray.get(self._remote_wrapper.layout.remote)
+
+    @property
+    def num_samples(self):
+        """The number of samples to generate."""
+        import ray
+
+        return ray.get(self._remote_wrapper.num_samples.remote)
+
+    @property
+    def batching(self):
+        """Whether batching is enabled."""
+        import ray
+
+        return ray.get(self._remote_wrapper.batching.remote)
+
+    @property
+    def collector(self):
+        """The collector associated with the module."""
+        import ray
+
+        return ray.get(self._remote_wrapper.collector.remote)
+
+    @property
+    def log_prob_keys(self):
+        """The keys for log probabilities."""
+        import ray
+
+        return ray.get(self._remote_wrapper.log_prob_keys.remote)
+
+    @log_prob_keys.setter
+    def log_prob_keys(self, value):
+        """Set the keys for log probabilities."""
+        import ray
+
+        ray.get(self._remote_wrapper.log_prob_keys.remote(value))
+
+    @property
+    def dist_params_keys(self):
+        """The keys for distribution parameters."""
+        import ray
+
+        return ray.get(self._remote_wrapper.dist_params_keys.remote)
+
+    @property
+    def dist_sample_keys(self):
+        """The keys for distribution samples."""
+        import ray
+
+        return ray.get(self._remote_wrapper.dist_sample_keys.remote)

@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import os
 from collections import defaultdict
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import tensordict.utils
 import torch
@@ -21,9 +21,9 @@ class CSVExperiment:
     """A CSV logger experiment class."""
 
     def __init__(self, log_dir: str, *, video_format="pt", video_fps: int = 30):
-        self.scalars = defaultdict(lambda: [])
-        self.videos_counter = defaultdict(lambda: 0)
-        self.text_counter = defaultdict(lambda: 0)
+        self.scalars = defaultdict(list)
+        self.videos_counter = defaultdict(int)
+        self.text_counter = defaultdict(int)
         self.log_dir = log_dir
         self.video_format = video_format
         self.video_fps = video_fps
