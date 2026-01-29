@@ -10,7 +10,6 @@ applications in quantitative finance.
 """
 
 import math
-from typing import Optional
 
 import torch
 from tensordict import TensorDict, TensorDictBase
@@ -264,9 +263,7 @@ class FinancialRegimeEnv(EnvBase):
 
         # Generate random price history
         returns = (
-            torch.randn(
-                (*shape, window_size), generator=self.rng, device=self.device
-            )
+            torch.randn((*shape, window_size), generator=self.rng, device=self.device)
             * volatility.unsqueeze(-1)
             * math.sqrt(dt)
         )
@@ -277,9 +274,7 @@ class FinancialRegimeEnv(EnvBase):
         current_holdings = torch.zeros(
             (*shape, 1), dtype=torch.bool, device=self.device
         )
-        entry_price = torch.zeros(
-            (*shape, 1), dtype=torch.float32, device=self.device
-        )
+        entry_price = torch.zeros((*shape, 1), dtype=torch.float32, device=self.device)
         step_count = torch.zeros(shape, dtype=torch.long, device=self.device)
 
         out = TensorDict(
