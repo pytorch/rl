@@ -469,6 +469,7 @@ class TestComposite:
 
             assert encoded_vals["obs"].dtype == dtype
             assert (encoded_vals["obs"] == r["obs"]).all()
+            assert encoded_vals.batch_size == shape
             if is_complete:
                 assert encoded_vals["act"].dtype == dtype
                 assert (encoded_vals["act"] == r["act"]).all()
