@@ -328,13 +328,20 @@ class Tokenizer(UnaryTransform):
 class IncrementalTokenizer(Transform):
     """Maintains tokens synchronized with history for token-first LLM inference.
 
-    This transform keeps ``tokens.full`` in sync with ``history.prompt``, enabling
+    This transform keeps ``tokens.prompt`` in sync with ``history.prompt``, enabling
     LLM wrappers to use existing tokens directly instead of re-tokenizing. This
     ensures KV cache consistency across multi-turn conversations.
 
-    The transform uses an "overlap" strategy for incremental tokenization: when new
-    messages are added to history, it re-tokenizes the last message plus new messages
-    to correctly handle cross-message token boundaries.
+    **How it works:**
+
+    - **On reset**: Tokenizes ``history.prompt`` and stores in ``tokens.prompt``.
+    - **On step**: Reuses ``tokens.full`` from the LLM wrapper output as the new
+      ``tokens.prompt``. Since ``ChatEnv`` sets ``next.history.prompt = history.full``,
+      and the LLM wrapper already produced ``tokens.full`` (tokenized ``history.full``),
+      no re-tokenization is needed - we simply copy ``tokens.full`` to ``next.tokens.prompt``.
+
+    This approach is both efficient (avoids redundant tokenization) and ensures perfect
+    token consistency (the exact same tokens are reused).
 
     Args:
         tokenizer (transformers.PreTrainedTokenizer): The tokenizer to use for encoding.
@@ -343,7 +350,7 @@ class IncrementalTokenizer(Transform):
         history_key (NestedKey): Key for the history in the tensordict.
             Defaults to ``("history", "prompt")``.
         tokens_key (NestedKey): Key for storing tokens in the tensordict.
-            Defaults to ``("tokens", "full")``.
+            Defaults to ``("tokens", "prompt")``.
         chat_template_name (str, optional): Name of the chat template to use.
             Defaults to ``None`` (uses tokenizer's default).
         chat_template (str, optional): Custom chat template string.
@@ -482,17 +489,29 @@ class IncrementalTokenizer(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        """Tokenize history on step.
+        """Set tokens.prompt on step, reusing tokens.full when available.
 
-        TODO: Add incremental tokenization using overlap strategy for efficiency.
-        Currently re-tokenizes the full history on each step for simplicity.
+        The LLM wrapper produces tokens.full (tokenized history.full).
+        Since ChatEnv sets next.history.prompt = history.full, we can
+        directly use tokens.full as next.tokens.prompt without re-tokenization.
+
+        Falls back to tokenizing next.history.prompt if tokens.full is not available.
         """
+        # Try to reuse tokens.full from the action tensordict
+        # Since next.history.prompt = history.full, tokens.full is already the correct tokenization
+        tokens_full_key = (self.tokens_key[0], "full") if isinstance(self.tokens_key, tuple) else "tokens_full"
+        existing_tokens_full = tensordict.get(tokens_full_key, None)
+
+        if existing_tokens_full is not None:
+            # Reuse tokens.full as the new tokens.prompt - no tokenization needed!
+            next_tensordict.set(self.tokens_key, existing_tokens_full)
+            return next_tensordict
+
+        # Fallback: tokenize next.history.prompt if tokens.full was not available
         history = self._get_history(next_tensordict)
         if history is None:
             return next_tensordict
 
-        # For now, just re-tokenize the full history
-        # TODO: Implement incremental tokenization with overlap strategy
         tokens_list = self._tokenize_history(history)
         self._set_tokens(next_tensordict, tokens_list)
         self._prev_history_len = self._get_history_len(history)
