@@ -23,6 +23,10 @@ lib_dir="${env_dir}/lib"
 
 conda deactivate && conda activate ./env
 
+# JSON report for flaky test tracking
+json_report_dir="${RUNNER_ARTIFACT_DIR:-${root_dir}}"
+json_report_args="--json-report --json-report-file=${json_report_dir}/test-results-llm.json --json-report-indent=2"
+
 # Run pytest with:
 # - --runslow: Run slow tests that would otherwise skip
 # - --ignore: Exclude tests requiring unavailable dependencies (mlgym not on PyPI)
@@ -30,6 +34,9 @@ conda deactivate && conda activate ./env
 # Note: Removed --isolate (too slow - each test in subprocess adds huge overhead)
 # Note: Removed --error-for-skips as many LLM tests use pytest.skip for optional dependencies
 # Note: Removed --exitfirst to run all tests and collect all failures
-pytest test/llm -vvv --instafail --durations 600 --capture no --timeout=300 \
+pytest test/llm ${json_report_args} -vvv --instafail --durations 600 --capture no --timeout=300 \
     --runslow \
     --ignore=test/llm/libs/test_mlgym.py
+
+# Upload test results with metadata for flaky tracking
+python .github/unittest/helpers/upload_test_results.py || echo "Warning: Failed to process test results for flaky tracking"
