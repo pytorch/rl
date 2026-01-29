@@ -1315,10 +1315,14 @@ class TestNoisyLinear:
 
         # Save and load
         with tempfile.NamedTemporaryFile(delete=False) as f:
-            torch.save(layer.state_dict(), f.name)
+            filepath = f.name
+        # File is now closed, so we can safely work with it on Windows
+        try:
+            torch.save(layer.state_dict(), filepath)
             layer_loaded = NoisyLinear(10, 5, device=device)
-            layer_loaded.load_state_dict(torch.load(f.name))
-            os.unlink(f.name)
+            layer_loaded.load_state_dict(torch.load(filepath))
+        finally:
+            os.unlink(filepath)
 
         # Check that parameters are the same
         assert torch.allclose(layer.weight_mu, layer_loaded.weight_mu, atol=1e-6)
