@@ -12537,11 +12537,18 @@ class TestEndOfLife(TransformBase):
             with set_gym_backend("gymnasium"):
                 return GymEnv(BREAKOUT_VERSIONED())
 
-        with pytest.raises(AttributeError):
+        # Chained attribute access on ParallelEnv now works with __getattr__
+        with pytest.warns(UserWarning, match="The base_env is not a gym env"):
             env = TransformedEnv(
                 maybe_fork_ParallelEnv(2, make), transform=EndOfLifeTransform()
             )
-            check_env_specs(env)
+            try:
+                check_env_specs(env)
+            finally:
+                try:
+                    env.close()
+                except RuntimeError:
+                    pass
 
     def test_trans_serial_env_check(self):
         def make():

@@ -1165,6 +1165,18 @@ class TestParallel:
         with set_auto_unwrap_transformed_env(False):
             yield
 
+    # Helper classes for test_parallel_env_chained_attr
+    class _NestedObject:
+        value = 42
+
+        def get_value(self):
+            return self.value
+
+    class _EnvWithNestedAttr(DiscreteActionVecMockEnv):
+        def __init__(self):
+            super().__init__()
+            self.nested = TestParallel._NestedObject()
+
     def test_create_env_fn(self, maybe_fork_ParallelEnv):
         def make_env():
             return GymEnv(PENDULUM_VERSIONED())
@@ -1637,6 +1649,20 @@ class TestParallel:
             assert all(result == 0 for result in env.custom_fun())
             assert all(result == 1 for result in env.custom_attr)
             assert all(result == 2 for result in env.custom_prop)  # to be fixed
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_parallel_env_chained_attr(self, maybe_fork_ParallelEnv):
+        """Test chained attribute access like env.nested.value works in ParallelEnv."""
+        env = maybe_fork_ParallelEnv(2, TestParallel._EnvWithNestedAttr)
+        try:
+            env.reset()
+            # Test chained attribute access
+            results = list(env.nested.value)
+            assert all(result == 42 for result in results)
+            # Test chained method access
+            results = list(env.nested.get_value())
+            assert all(result == 42 for result in results)
         finally:
             env.close(raise_if_closed=False)
 
