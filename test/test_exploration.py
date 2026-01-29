@@ -1337,29 +1337,12 @@ class TestNoisyLinear:
     def test_noisy_linear_deprecation_warning(self, device):
         """Test that FutureWarning is raised when use_exploration_type is None."""
         # Should emit FutureWarning when use_exploration_type is not specified
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            layer = NoisyLinear(10, 5, device=device)
-
-            # Check that a FutureWarning was raised
-            assert len(w) == 1
-            assert issubclass(w[0].category, FutureWarning)
-            assert "exploration_type" in str(w[0].message)
+        with pytest.warns(FutureWarning, match="exploration_type"):
+            NoisyLinear(10, 5, device=device)
 
         # Should NOT emit warning when use_exploration_type is explicitly set
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            layer = NoisyLinear(10, 5, device=device, use_exploration_type=True)
-            # Filter to only FutureWarning about exploration_type
-            exploration_warnings = [
-                x for x in w if "exploration_type" in str(x.message)
-            ]
-            assert len(exploration_warnings) == 0
-
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            layer = NoisyLinear(10, 5, device=device, use_exploration_type=False)
-            exploration_warnings = [
-                x for x in w if "exploration_type" in str(x.message)
-            ]
-            assert len(exploration_warnings) == 0
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            # These should not raise FutureWarning
+            NoisyLinear(10, 5, device=device, use_exploration_type=True)
+            NoisyLinear(10, 5, device=device, use_exploration_type=False)
