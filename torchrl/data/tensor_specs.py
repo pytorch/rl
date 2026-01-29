@@ -5601,7 +5601,7 @@ class Composite(TensorSpec):
         elif self.data_cls is not None:
             out = {}
         else:
-            out = TensorDict._new_unsafe({}, _size([]))
+            out = TensorDict._new_unsafe({}, self.shape)
         for key, item in vals.items():
             if item is None:
                 raise RuntimeError(
@@ -5644,7 +5644,7 @@ class Composite(TensorSpec):
         else:
 
             def empty(vals):
-                out = TensorDict._new_unsafe({}, _size([]))
+                out = TensorDict._new_unsafe({}, self.shape)
                 return vals, out
 
         funcs.append(empty)
