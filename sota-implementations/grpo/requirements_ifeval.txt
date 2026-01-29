@@ -1,4 +1,4 @@
-vllm==0.11.0
+vllm==0.14.1
 torch
 transformers
 peft

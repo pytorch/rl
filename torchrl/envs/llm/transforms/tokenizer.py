@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any, TYPE_CHECKING
 
 import torch
 from tensordict import NonTensorData, NonTensorStack, TensorDictBase
@@ -16,6 +17,9 @@ from torchrl._utils import _replace_last
 from torchrl.data.tensor_specs import Bounded, Composite, TensorSpec
 from torchrl.envs import Transform, UnaryTransform
 from torchrl.envs.transforms.utils import _set_missing_tolerance
+
+if TYPE_CHECKING:
+    import transformers
 
 
 class Tokenizer(UnaryTransform):
@@ -318,4 +322,209 @@ class Tokenizer(UnaryTransform):
                     device=device,
                     dtype=attention_dtype,
                 )
+        return observation_spec
+
+
+class IncrementalTokenizer(Transform):
+    """Maintains tokens synchronized with history for token-first LLM inference.
+
+    This transform keeps ``tokens.prompt`` in sync with ``history.prompt``, enabling
+    LLM wrappers to use existing tokens directly instead of re-tokenizing. This
+    ensures KV cache consistency across multi-turn conversations.
+
+    **How it works:**
+
+    - **On reset**: Tokenizes ``history.prompt`` and stores in ``tokens.prompt``.
+    - **On step**: Reuses ``tokens.full`` from the LLM wrapper output as the new
+      ``tokens.prompt``. Since ``ChatEnv`` sets ``next.history.prompt = history.full``,
+      and the LLM wrapper already produced ``tokens.full`` (tokenized ``history.full``),
+      no re-tokenization is needed - we simply copy ``tokens.full`` to ``next.tokens.prompt``.
+
+    This approach is both efficient (avoids redundant tokenization) and ensures perfect
+    token consistency (the exact same tokens are reused).
+
+    Args:
+        tokenizer (transformers.PreTrainedTokenizer): The tokenizer to use for encoding.
+
+    Keyword Args:
+        history_key (NestedKey): Key for the history in the tensordict.
+            Defaults to ``("history", "prompt")``.
+        tokens_key (NestedKey): Key for storing tokens in the tensordict.
+            Defaults to ``("tokens", "prompt")``.
+        chat_template_name (str, optional): Name of the chat template to use.
+            Defaults to ``None`` (uses tokenizer's default).
+        chat_template (str, optional): Custom chat template string.
+            Defaults to ``None``.
+        add_generation_prompt (bool): Whether to add generation prompt when tokenizing.
+            Defaults to ``True``.
+
+    Example:
+        >>> from torchrl.envs.llm import ChatEnv
+        >>> from torchrl.envs.llm.transforms import IncrementalTokenizer
+        >>> from torchrl.envs import TransformedEnv
+        >>> from transformers import AutoTokenizer
+        >>>
+        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+        >>> env = ChatEnv(batch_size=(1,), tokenizer=tokenizer)
+        >>> env = TransformedEnv(env, IncrementalTokenizer(tokenizer))
+        >>>
+        >>> # After reset and step, tokens.prompt will be maintained
+        >>> td = env.reset(TensorDict({"query": "Hello"}, batch_size=(1,)))
+        >>> assert ("tokens", "prompt") in td.keys(True, True)
+
+    .. note::
+        This transform is automatically added by :class:`~torchrl.envs.llm.ChatEnv`
+        when ``with_tokenizer=True`` is passed to the constructor.
+
+    .. warning::
+        **TODO**: Add validation that tokens match history (hash or length check).
+        For now, we trust that tokens are kept in sync. If you manually modify the
+        history, clear the tokens field to trigger re-tokenization.
+
+    See Also:
+        :class:`~torchrl.modules.llm.policies.vLLMWrapper`: Uses ``prefer_tokens=True``
+            to leverage tokens maintained by this transform.
+        :class:`~torchrl.modules.llm.policies.TransformersWrapper`: Uses ``prefer_tokens=True``
+            to leverage tokens maintained by this transform.
+    """
+
+    def __init__(
+        self,
+        tokenizer: transformers.PreTrainedTokenizer,  # noqa: F821
+        *,
+        history_key: NestedKey = ("history", "prompt"),
+        tokens_key: NestedKey = ("tokens", "prompt"),
+        chat_template_name: str | None = None,
+        chat_template: str | None = None,
+        add_generation_prompt: bool = True,
+    ):
+        super().__init__()
+        self.tokenizer = tokenizer
+        self.history_key = history_key
+        self.tokens_key = tokens_key
+        self.chat_template_name = chat_template_name
+        self.chat_template = chat_template
+        self.add_generation_prompt = add_generation_prompt
+
+    def _tokenize_history(
+        self,
+        history: Any,  # History object
+        add_generation_prompt: bool | None = None,
+    ) -> list[Tensor]:
+        """Tokenize a history object and return list of token tensors.
+
+        Args:
+            history: The History object to tokenize.
+            add_generation_prompt: Whether to add generation prompt. If None, uses
+                the instance's default.
+
+        Returns:
+            List of token tensors (one per batch element).
+        """
+        if add_generation_prompt is None:
+            add_generation_prompt = self.add_generation_prompt
+
+        tokenizer_kwargs = {
+            "tokenize": True,
+            "padding": False,
+            "return_dict": True,
+            "add_generation_prompt": add_generation_prompt,
+        }
+        if self.chat_template_name is not None:
+            tokenizer_kwargs["chat_template_name"] = self.chat_template_name
+        if self.chat_template is not None:
+            tokenizer_kwargs["chat_template"] = self.chat_template
+
+        result = history.apply_chat_template(
+            tokenizer=self.tokenizer,
+            **tokenizer_kwargs,
+        )
+        # Get input_ids as list of tensors
+        tokens_list = result.get("input_ids", as_list=True)
+        return tokens_list
+
+    def _get_history(self, tensordict: TensorDictBase) -> Any | None:
+        """Get history from tensordict, handling both nested keys and tensorclass access."""
+        history_key = self.history_key
+        if isinstance(history_key, tuple) and len(history_key) == 2:
+            # Try to access via tensorclass attribute pattern (e.g., tensordict["history"].prompt)
+            container_key, attr_key = history_key
+            container = tensordict.get(container_key, None)
+            if container is not None and hasattr(container, attr_key):
+                return getattr(container, attr_key)
+        # Fall back to regular nested key access
+        return tensordict.get(history_key, None)
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        """Tokenize full history on reset."""
+        history = self._get_history(tensordict_reset)
+        if history is None:
+            # No history to tokenize
+            return tensordict_reset
+
+        # Tokenize full history
+        tokens_list = self._tokenize_history(history)
+
+        # Store tokens in tensordict - handle batched case
+        self._set_tokens(tensordict_reset, tokens_list)
+
+        return tensordict_reset
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        """Set tokens.prompt on step, reusing tokens.full when available.
+
+        The LLM wrapper produces tokens.full (tokenized history.full).
+        Since ChatEnv sets next.history.prompt = history.full, we can
+        directly use tokens.full as next.tokens.prompt without re-tokenization.
+
+        Falls back to tokenizing next.history.prompt if tokens.full is not available.
+        """
+        # Try to reuse tokens.full from the action tensordict
+        # Since next.history.prompt = history.full, tokens.full is already the correct tokenization
+        tokens_full_key = (
+            (self.tokens_key[0], "full")
+            if isinstance(self.tokens_key, tuple)
+            else "tokens_full"
+        )
+        existing_tokens_full = tensordict.get(tokens_full_key, None)
+
+        if existing_tokens_full is not None:
+            # Reuse tokens.full as the new tokens.prompt - no tokenization needed!
+            next_tensordict.set(self.tokens_key, existing_tokens_full)
+            return next_tensordict
+
+        # Fallback: tokenize next.history.prompt if tokens.full was not available
+        history = self._get_history(next_tensordict)
+        if history is None:
+            return next_tensordict
+
+        tokens_list = self._tokenize_history(history)
+        self._set_tokens(next_tensordict, tokens_list)
+
+        return next_tensordict
+
+    def _set_tokens(self, tensordict: TensorDictBase, tokens_list: list) -> None:
+        """Set tokens in tensordict, handling variable-length tokens properly.
+
+        Uses nested tensors for storing variable-length token sequences,
+        which is compatible with as_list=True retrieval.
+        """
+        # Store as nested tensor which handles variable-length sequences
+        tokens_nested = torch.nested.as_nested_tensor(tokens_list)
+        tensordict.set(self.tokens_key, tokens_nested)
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        """Add tokens spec to observation spec."""
+        new_shape = observation_spec.shape + torch.Size((-1,))
+        observation_spec[self.tokens_key] = Bounded(
+            0,
+            self.tokenizer.vocab_size,
+            shape=new_shape,
+            device=observation_spec.device,
+            dtype=torch.int64,
+        )
         return observation_spec

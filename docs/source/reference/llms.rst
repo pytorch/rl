@@ -163,6 +163,63 @@ On each call to `step`, the environment:
 
 This mechanism enables seamless multi-turn interactions and supports complex workflows such as tool use and reward shaping.
 
+Token-First API
+^^^^^^^^^^^^^^^
+
+For maximum reliability in multi-turn conversations, TorchRL provides a **token-first API** that maintains 
+pre-tokenized inputs throughout the conversation. This ensures KV cache prefix consistency and consistent 
+log-probabilities across turns, which is more robust than repeatedly detokenizing and re-tokenizing.
+
+**How it works:**
+
+1. Use ``ChatEnv`` with ``with_tokenizer=True`` to automatically wrap the environment with an 
+   :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer` transform
+2. Set ``prefer_tokens=True`` in the LLM wrapper to use pre-tokenized inputs when available
+
+.. code-block:: python
+
+    from torchrl.envs.llm import ChatEnv
+    from torchrl.modules.llm import TransformersWrapper
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+    model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+
+    # Create environment with automatic tokenization
+    env = ChatEnv(
+        tokenizer=tokenizer,
+        system_prompt="You are a helpful assistant.",
+        batch_size=[1],
+        with_tokenizer=True,  # Wraps with IncrementalTokenizer
+    )
+
+    # Create wrapper that uses pre-tokenized inputs
+    wrapper = TransformersWrapper(
+        model=model,
+        tokenizer=tokenizer,
+        input_mode="history",
+        prefer_tokens=True,  # Use tokens.prompt when available
+    )
+
+    # The environment maintains tokens.prompt in sync with history.prompt
+    td = env.reset()
+    assert ("tokens", "prompt") in td.keys(True, True)
+
+    # The wrapper uses these tokens directly, bypassing re-tokenization
+    td_out = wrapper(td)
+
+**Benefits:**
+
+- **KV cache consistency**: The token prefix stays exactly the same across turns
+- **Consistent log-probs**: No tokenization variations between forward passes
+- **Efficiency**: Avoids redundant tokenization work
+
+The :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer` transform automatically tokenizes 
+``history.prompt`` on each reset and step, storing the result in ``tokens.prompt``. The LLM wrappers 
+(:class:`~torchrl.modules.llm.TransformersWrapper` and :class:`~torchrl.modules.llm.vLLMWrapper`) 
+check for ``tokens.prompt`` when ``prefer_tokens=True`` and use it directly as input instead of 
+re-tokenizing from history.
+
 Task-Specific Environments
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -411,6 +468,7 @@ By following these design principles, reward transforms can be effectively integ
     AddThinkingPrompt
     BrowserTransform
     DataLoadingPrimer
+    IncrementalTokenizer
     KLComputation
     KLRewardTransform
     MCPToolTransform
