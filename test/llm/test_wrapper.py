@@ -16,7 +16,6 @@ from typing import Any, TYPE_CHECKING
 import pytest
 import torch
 from tensordict import assert_close, lazy_stack, set_list_to_stack, TensorDict
-
 from tensordict.utils import _zip_strict
 from torchrl.data.llm import History
 from torchrl.envs.llm import ChatEnv
@@ -32,7 +31,6 @@ from torchrl.modules.llm.policies.common import (
 )
 from torchrl.modules.llm.policies.transformers_wrapper import TransformersWrapper
 from torchrl.modules.llm.policies.vllm_wrapper import vLLMWrapper
-
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
@@ -95,9 +93,9 @@ def vllm_instance() -> tuple[LLM, AutoTokenizer]:  # noqa # type: ignore
 
 
 @pytest.fixture(scope="module")
-def async_vllm_instance() -> tuple[
-    Any, AutoTokenizer  # noqa # type: ignore
-]:  # noqa # type: ignore
+def async_vllm_instance() -> (
+    tuple[Any, AutoTokenizer]  # noqa # type: ignore
+):  # noqa # type: ignore
     """Create async vLLM engine and tokenizer for testing."""
     if not _has_vllm:
         pytest.skip("vllm not available")
@@ -128,9 +126,9 @@ def async_vllm_instance() -> tuple[
 
 
 @pytest.fixture(scope="module")
-def transformers_instance() -> tuple[
-    AutoModelForCausalLM, AutoTokenizer  # noqa # type: ignore
-]:  # noqa # type: ignore
+def transformers_instance() -> (
+    tuple[AutoModelForCausalLM, AutoTokenizer]  # noqa # type: ignore
+):  # noqa # type: ignore
     """Create transformers model and tokenizer for testing."""
     if not _has_transformers:
         pytest.skip("transformers not available")
@@ -440,9 +438,9 @@ def monkey_patch_forward_for_instrumentation():
             processing_events.append(
                 {
                     "timestamp": time.time(),
-                    "batch_size": td_input.batch_size[0]
-                    if td_input.batch_dims > 0
-                    else 1,
+                    "batch_size": (
+                        td_input.batch_size[0] if td_input.batch_dims > 0 else 1
+                    ),
                     "thread_id": threading.current_thread().ident,
                 }
             )
