@@ -27,9 +27,16 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
 export CUDA_LAUNCH_BLOCKING=1
 
-python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 200
+# JSON report for flaky test tracking
+json_report_dir="${RUNNER_ARTIFACT_DIR:-${root_dir}}"
+json_report_args="--json-report --json-report-file=${json_report_dir}/test-results-sota.json --json-report-indent=2"
 
-coverage run -m pytest .github/unittest/linux_sota/scripts/test_sota.py --instafail --durations 200 -vvv --capture no
+python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py ${json_report_args} -v --durations 200
+
+coverage run -m pytest .github/unittest/linux_sota/scripts/test_sota.py ${json_report_args} --instafail --durations 200 -vvv --capture no
 
 coverage combine -q
 coverage xml -i
+
+# Upload test results with metadata for flaky tracking
+python .github/unittest/helpers/upload_test_results.py || echo "Warning: Failed to process test results for flaky tracking"

@@ -2041,19 +2041,59 @@ class TestStepCounter(TransformBase):
         check_env_specs(transformed_env)
         transformed_env.close()
 
-    def test_stepcounter_ignore(self):
-        # checks that step_count_keys respect the convention that nested dones should
-        # be ignored if there is a done in a root td
+    def test_stepcounter_nested(self):
+        # checks that step_count_keys are only created at root level when both exist
+        # (nested keys are filtered out to avoid shape mismatches)
         env = TransformedEnv(
             NestedCountingEnv(has_root_done=True, nest_done=True), StepCounter()
         )
         assert len(env.transform.step_count_keys) == 1
         assert env.transform.step_count_keys[0] == "step_count"
+        # all_truncated_keys should include both root and nested
+        assert len(env.transform.all_truncated_keys) == 2
+        assert "truncated" in env.transform.all_truncated_keys
+        assert ("data", "truncated") in env.transform.all_truncated_keys
         env = TransformedEnv(
             NestedCountingEnv(has_root_done=False, nest_done=True), StepCounter()
         )
         assert len(env.transform.step_count_keys) == 1
         assert env.transform.step_count_keys[0] == ("data", "step_count")
+
+    def test_stepcounter_marl_truncation(self):
+        # Regression test for https://github.com/pytorch/rl/issues/3400
+        # In MARL envs with both root and nested done keys, StepCounter should
+        # propagate done to nested levels when max_steps is reached.
+        max_steps = 3
+        env = TransformedEnv(
+            NestedCountingEnv(has_root_done=True, nest_done=True, max_steps=10),
+            StepCounter(max_steps=max_steps),
+        )
+
+        # step_count is only tracked at root level (to avoid shape mismatches)
+        assert "step_count" in env.transform.step_count_keys
+        assert ("data", "step_count") not in env.transform.step_count_keys
+
+        # done should be propagated to nested keys via all_done_keys
+        assert "done" in env.transform.all_done_keys
+        assert ("data", "done") in env.transform.all_done_keys
+
+        # Roll out past max_steps
+        td = env.rollout(max_steps + 1)
+
+        # Check that done is set at BOTH root and nested levels when max_steps is reached
+        root_done = td["next", "done"]
+        nested_done = td["next", "data", "done"]
+
+        # At step max_steps, both should be True (due to truncation)
+        assert root_done[max_steps - 1].all(), "Root done should be True at max_steps"
+        assert nested_done[
+            max_steps - 1
+        ].all(), "Nested (agent-level) done should also be True at max_steps"
+
+        # Before max_steps, root done should be False (nested may be True due to agent deaths)
+        assert not root_done[
+            : max_steps - 1
+        ].any(), "Root done should be False before max_steps"
 
 
 class TestTrajCounter(TransformBase):
