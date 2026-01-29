@@ -469,11 +469,11 @@ class TestIncrementalTokenizer:
         td = TensorDict({"query": "Hello, how are you?"}, batch_size=(1,))
         result = env.reset(td)
 
-        # Check that tokens.full exists
-        assert ("tokens", "full") in result.keys(True, True)
+        # Check that tokens.prompt exists
+        assert ("tokens", "prompt") in result.keys(True, True)
 
         # Verify tokens are valid
-        tokens = result.get(("tokens", "full"), as_list=True)
+        tokens = result.get(("tokens", "prompt"), as_list=True)
         assert len(tokens) == 1
         assert tokens[0].ndim == 1
         assert tokens[0].numel() > 0
@@ -490,11 +490,11 @@ class TestIncrementalTokenizer:
         td = TensorDict({"query": ["Hello!", "What is the weather?"]}, batch_size=(2,))
         result = env.reset(td)
 
-        # Check that tokens.full exists
-        assert ("tokens", "full") in result.keys(True, True)
+        # Check that tokens.prompt exists
+        assert ("tokens", "prompt") in result.keys(True, True)
 
         # Verify we have tokens for each batch element
-        tokens = result.get(("tokens", "full"), as_list=True)
+        tokens = result.get(("tokens", "prompt"), as_list=True)
         assert len(tokens) == 2
 
     def test_step_incremental_tokenization(self, tokenizer):
@@ -508,7 +508,7 @@ class TestIncrementalTokenizer:
         # Reset with initial query
         td = TensorDict({"query": "Hello"}, batch_size=(1,))
         result = env.reset(td)
-        initial_tokens = result.get(("tokens", "full"), as_list=True)
+        initial_tokens = result.get(("tokens", "prompt"), as_list=True)
 
         # Simulate LLM response - create a full history with response
         # Need to match batch_dims: history_prompt has batch_dims=1, so response needs batch_dims=1 too
@@ -531,11 +531,11 @@ class TestIncrementalTokenizer:
         step_result = env.step(action_td)
         next_td = step_result["next"]
 
-        # Verify tokens.full has been updated
-        assert ("tokens", "full") in next_td.keys(True, True)
-        new_tokens = next_td.get(("tokens", "full"), as_list=True)
+        # Verify tokens.prompt has been updated (next turn's prompt)
+        assert ("tokens", "prompt") in next_td.keys(True, True)
+        new_tokens = next_td.get(("tokens", "prompt"), as_list=True)
 
-        # New tokens should be longer (more messages)
+        # New tokens should be longer (more messages in the new prompt)
         assert new_tokens[0].numel() > initial_tokens[0].numel()
 
     def test_with_tokenizer_constructor_arg(self, tokenizer):
@@ -556,7 +556,7 @@ class TestIncrementalTokenizer:
         # Test that it works
         td = TensorDict({"query": "Hello!"}, batch_size=(1,))
         result = env.reset(td)
-        assert ("tokens", "full") in result.keys(True, True)
+        assert ("tokens", "prompt") in result.keys(True, True)
 
     def test_with_tokenizer_provides_tokens(self, tokenizer):
         """Test that with_tokenizer factory creates env that provides tokens."""
@@ -566,7 +566,7 @@ class TestIncrementalTokenizer:
         )
         td = TensorDict({"query": "Test"}, batch_size=(1,))
         result = env.reset(td)
-        assert ("tokens", "full") in result.keys(True, True)
+        assert ("tokens", "prompt") in result.keys(True, True)
 
     def test_tokens_consistency_across_multiple_steps(self, tokenizer):
         """Test that tokens remain consistent across multiple steps."""
@@ -589,7 +589,7 @@ class TestIncrementalTokenizer:
         action_td.set(("history", "full"), history_full1)
         step1 = env.step(action_td)
         next1 = step1["next"]
-        tokens1 = next1.get(("tokens", "full"), as_list=True)[0]
+        tokens1 = next1.get(("tokens", "prompt"), as_list=True)[0]
 
         # Second message - need proper batch dimensions
         history2 = next1.get(("history", "prompt"))
@@ -608,7 +608,7 @@ class TestIncrementalTokenizer:
         action_td2.set(("history", "full"), history_full2)
         step2 = env.step(action_td2)
         next2 = step2["next"]
-        tokens2 = next2.get(("tokens", "full"), as_list=True)[0]
+        tokens2 = next2.get(("tokens", "prompt"), as_list=True)[0]
 
         # Tokens should keep growing
         assert tokens2.numel() > tokens1.numel()
@@ -627,9 +627,9 @@ class TestIncrementalTokenizer:
         transform = IncrementalTokenizer(tokenizer)
         env = TransformedEnv(env, transform)
 
-        # The spec should include tokens.full
+        # The spec should include tokens.prompt
         obs_spec = env.observation_spec
-        assert ("tokens", "full") in obs_spec.keys(True, True)
+        assert ("tokens", "prompt") in obs_spec.keys(True, True)
 
     def test_custom_keys(self, tokenizer):
         """Test that custom history_key and tokens_key work."""
@@ -663,6 +663,6 @@ class TestIncrementalTokenizer:
         result = env.reset(td)
 
         # Should still produce valid tokens
-        assert ("tokens", "full") in result.keys(True, True)
-        tokens = result.get(("tokens", "full"), as_list=True)
+        assert ("tokens", "prompt") in result.keys(True, True)
+        tokens = result.get(("tokens", "prompt"), as_list=True)
         assert tokens[0].numel() > 0

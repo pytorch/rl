@@ -201,9 +201,9 @@ log-probabilities across turns, which is more robust than repeatedly detokenizin
         prefer_tokens=True,  # Use tokens.full when available
     )
 
-    # The environment maintains tokens.full in sync with history
+    # The environment maintains tokens.prompt in sync with history.prompt
     td = env.reset()
-    assert ("tokens", "full") in td.keys(True, True)
+    assert ("tokens", "prompt") in td.keys(True, True)
 
     # The wrapper uses these tokens directly, bypassing re-tokenization
     td_out = wrapper(td)
@@ -214,10 +214,11 @@ log-probabilities across turns, which is more robust than repeatedly detokenizin
 - **Consistent log-probs**: No tokenization variations between forward passes
 - **Efficiency**: Avoids redundant tokenization work
 
-The :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer` transform automatically tokenizes the 
-conversation history on each reset and step, storing the result in ``tokens.full``. The LLM wrappers 
+The :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer` transform automatically tokenizes 
+``history.prompt`` on each reset and step, storing the result in ``tokens.prompt``. The LLM wrappers 
 (:class:`~torchrl.modules.llm.TransformersWrapper` and :class:`~torchrl.modules.llm.vLLMWrapper`) 
-check for this field when ``prefer_tokens=True`` and use it directly instead of tokenizing from history.
+check for ``tokens.prompt`` when ``prefer_tokens=True`` and use it directly as input instead of 
+re-tokenizing from history.
 
 Task-Specific Environments
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -209,7 +209,7 @@ class vLLMWrapper(LLMWrapperBase):
         min_batch_size (int | None, optional): The minimum batch size to use for batching. See `Batching`_ below for more details.
         max_batch_size (int | None, optional): The maximum batch size to use for batching. See `Batching`_ below for more details.
         batching_timeout (float, optional): The timeout for batching. See `Batching`_ below for more details.
-        prefer_tokens (bool, optional): If ``True`` and ``tokens.full`` exists in the input tensordict,
+        prefer_tokens (bool, optional): If ``True`` and ``tokens.prompt`` exists in the input tensordict,
             use those tokens directly instead of re-tokenizing from history. This enables KV cache
             consistency when used with :class:`~torchrl.envs.llm.ChatEnv` with ``with_tokenizer=True``
             or :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer`. Defaults to ``False``.
@@ -992,11 +992,12 @@ class vLLMWrapper(LLMWrapperBase):
         # This enables token-first inference for KV cache consistency
         existing_tokens = None
         if self.prefer_tokens:
-            existing_tokens = tensordict_input.get((self.tokens_key, "full"), None)
+            # Primary: tokens.prompt (from IncrementalTokenizer)
+            existing_tokens = tensordict_input.get((self.tokens_key, "prompt"), None)
             if existing_tokens is None:
-                # Also try tokens.prompt as fallback
+                # Fallback: tokens.full (for backward compatibility)
                 existing_tokens = tensordict_input.get(
-                    (self.tokens_key, "prompt"), None
+                    (self.tokens_key, "full"), None
                 )
 
         tokens_prompt_padded = None

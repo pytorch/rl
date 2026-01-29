@@ -363,11 +363,11 @@ class IncrementalTokenizer(Transform):
         >>>
         >>> # After reset and step, tokens.full will be maintained
         >>> td = env.reset(TensorDict({"query": "Hello"}, batch_size=(1,)))
-        >>> assert ("tokens", "full") in td.keys(True, True)
+        >>> assert ("tokens", "prompt") in td.keys(True, True)
 
     .. note::
         This transform is automatically added by :class:`~torchrl.envs.llm.ChatEnv`
-        when ``maintain_tokens=True`` is passed to the constructor.
+        when ``with_tokenizer=True`` is passed to the constructor.
 
     .. warning::
         **TODO**: Add validation that tokens match history (hash or length check).
@@ -386,7 +386,7 @@ class IncrementalTokenizer(Transform):
         tokenizer: transformers.PreTrainedTokenizer,  # noqa: F821
         *,
         history_key: NestedKey = ("history", "prompt"),
-        tokens_key: NestedKey = ("tokens", "full"),
+        tokens_key: NestedKey = ("tokens", "prompt"),
         chat_template_name: str | None = None,
         chat_template: str | None = None,
         add_generation_prompt: bool = True,

@@ -3242,14 +3242,14 @@ class TestPreferTokens:
         # Reset and verify tokens are created
         td = TensorDict({"query": "Hello, world!"}, batch_size=(1,))
         result = env.reset(td)
-        assert ("tokens", "full") in result.keys(True, True)
+        assert ("tokens", "prompt") in result.keys(True, True)
 
         # Run through wrapper - it should use the existing tokens
         output = wrapper(result)
 
         # Verify output has expected keys
         assert ("text", "response") in output.keys(True, True)
-        assert ("tokens", "full") in output.keys(True, True)
+        assert ("tokens", "full") in output.keys(True, True)  # Output has full tokens
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
     def test_transformers_wrapper_prefer_tokens_false(self):
@@ -3336,7 +3336,7 @@ class TestPreferTokens:
         # Turn 1
         td = TensorDict({"query": "Hi"}, batch_size=(1,))
         result = env.reset(td)
-        tokens_after_reset = result.get(("tokens", "full"), as_list=True)[0].clone()
+        tokens_after_reset = result.get(("tokens", "prompt"), as_list=True)[0].clone()
 
         output = wrapper(result)
 
@@ -3345,9 +3345,9 @@ class TestPreferTokens:
         step_result = env.step(action_td)
         next_td = step_result["next"]
 
-        tokens_after_step = next_td.get(("tokens", "full"), as_list=True)[0]
+        tokens_after_step = next_td.get(("tokens", "prompt"), as_list=True)[0]
 
-        # Tokens should have grown (we added more messages)
+        # Tokens should have grown (we added more messages to the new prompt)
         assert tokens_after_step.numel() > tokens_after_reset.numel()
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
@@ -3365,7 +3365,7 @@ class TestPreferTokens:
         # Reset
         td = TensorDict({"query": "Hello"}, batch_size=(1,))
         result = env.reset(td)
-        initial_tokens = result.get(("tokens", "full"), as_list=True)[0].clone()
+        initial_tokens = result.get(("tokens", "prompt"), as_list=True)[0].clone()
 
         # Simulate a response - need proper batch dimensions
         history_prompt = result.get(("history", "prompt"))
@@ -3377,9 +3377,9 @@ class TestPreferTokens:
 
         step_result = env.step(action_td)
         next_td = step_result["next"]
-        new_tokens = next_td.get(("tokens", "full"), as_list=True)[0]
+        new_tokens = next_td.get(("tokens", "prompt"), as_list=True)[0]
 
-        # The prefix should be preserved
+        # The prefix should be preserved in the new prompt tokens
         prefix_length = initial_tokens.numel()
         assert new_tokens.numel() >= prefix_length
 
