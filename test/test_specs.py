@@ -469,6 +469,7 @@ class TestComposite:
 
             assert encoded_vals["obs"].dtype == dtype
             assert (encoded_vals["obs"] == r["obs"]).all()
+            assert encoded_vals.batch_size == shape
             if is_complete:
                 assert encoded_vals["act"].dtype == dtype
                 assert (encoded_vals["act"] == r["act"]).all()
@@ -3001,6 +3002,7 @@ class TestLazyStackedComposite:
             assert r["a"].shape == torch.Size([*shape, 1, 3, 2])  # access tensor
         assert (r["a"] == 0).all()
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda")
     @pytest.mark.parametrize("stack_dim", [0, 1, 2, -3, -2, -1])
     def test_to(self, stack_dim):
@@ -3958,6 +3960,7 @@ class TestNonTensor:
         assert r.get("nontensor").shape == (1,)
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="not cuda device")
 def test_device_ordinal():
     device = torch.device("cpu")
@@ -4405,6 +4408,235 @@ class TestCompositeNames:
         )
         td = spec.rand()
         td.names = ["batch"]
+
+
+class TestIndexSelect:
+    """Tests for torch.index_select support on TensorSpec."""
+
+    @pytest.mark.parametrize(
+        "shape, dim, index, expected_shape",
+        [
+            ((5, 4), 0, torch.tensor([0, 2, 4]), (3, 4)),
+            ((5, 4), 1, torch.tensor([1, 3]), (5, 2)),
+            ((3,), 0, torch.tensor([0, 1]), (2,)),
+        ],
+    )
+    def test_index_select_tensor_spec(self, shape, dim, index, expected_shape):
+        """Test index_select on basic TensorSpec subclasses like Bounded."""
+        spec = Bounded(low=0, high=10, shape=shape, dtype=torch.float32)
+        new_spec = torch.index_select(spec, dim=dim, index=index)
+        assert (
+            new_spec.shape == expected_shape
+        ), f"Shape mismatch: {new_spec.shape} != {expected_shape}"
+        assert new_spec.dtype == spec.dtype
+        assert new_spec.device == spec.device
+        # Ensure sampling works on the new spec
+        sample = new_spec.rand()
+        assert sample.shape == expected_shape
+
+    def test_index_select_composite(self):
+        """Test index_select on Composite specs."""
+        spec = Composite(
+            obs=Bounded(low=0, high=1, shape=(5, 3), dtype=torch.float32),
+            act=OneHot(n=4, shape=(5, 4)),
+            shape=(5,),
+        )
+        index = torch.tensor([0, 2, 4])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (3,)
+        assert new_spec["obs"].shape == (3, 3)
+        assert new_spec["act"].shape == (3, 4)
+        # Test sampling on the new composite spec
+        sample = new_spec.rand()
+        assert sample["obs"].shape == (3, 3)
+        assert sample["act"].shape == (3, 4)
+
+    def test_index_select_onehot_invalid(self):
+        """Test that index_select raises error for invalid dims on OneHot."""
+        spec = OneHot(n=3, shape=(5, 3))
+        with pytest.raises(
+            ValueError, match="Cannot index_select along the last dimension"
+        ):
+            torch.index_select(spec, dim=-1, index=torch.tensor([0, 1]))
+
+    @pytest.mark.parametrize(
+        "spec_cls, args",
+        [
+            (Bounded, {"low": 0, "high": 10, "shape": (5, 4)}),
+            (Categorical, {"n": 4, "shape": (5,)}),
+            (Unbounded, {"shape": (5, 4)}),
+        ],
+    )
+    def test_index_select_edge_cases(self, spec_cls, args):
+        """Test edge cases like out-of-bounds and empty indices."""
+        spec = spec_cls(**args)
+        # Out-of-bounds index should raise IndexError (via existing validation)
+        with pytest.raises(IndexError):
+            torch.index_select(spec, dim=0, index=torch.tensor([10]))
+        # Empty index (should work, resulting in shape with 0 in indexed dim)
+        index = torch.tensor([], dtype=torch.long)
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        expected_shape = list(spec.shape)
+        expected_shape[0] = 0
+        assert new_spec.shape == tuple(expected_shape)
+
+    def test_index_select_device_dtype_preservation(self):
+        """Ensure device and dtype are preserved."""
+        if torch.cuda.is_available():
+            device = torch.device("cuda:0")  # Normalize to cuda:0 as done in TorchRL
+        else:
+            device = torch.device("cpu")
+        spec = Bounded(low=0, high=10, shape=(5, 4), dtype=torch.float64, device=device)
+        index = torch.tensor([0, 2], device=device)
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.device == device
+        assert new_spec.dtype == torch.float64
+
+    def test_index_select_stacked_identical_bounded(self):
+        """Test index_select on stacked identical Bounded specs.
+
+        When stacking identical specs, torch.stack returns an expanded Bounded
+        spec (not a Stacked spec), so this tests index_select on the result.
+        """
+        spec1 = Bounded(low=0, high=1, shape=(5, 3), dtype=torch.float32)
+        spec2 = Bounded(low=0, high=1, shape=(5, 3), dtype=torch.float32)
+        stacked_spec = torch.stack([spec1, spec2], dim=0)
+        index = torch.tensor([0])
+        new_spec = torch.index_select(stacked_spec, dim=0, index=index)
+        assert new_spec.shape == (1, 5, 3)
+
+    def test_index_select_binary_invalid(self):
+        """Test that index_select raises error for invalid dims on Binary."""
+        spec = Binary(n=4, shape=(5, 4))
+        with pytest.raises(
+            ValueError, match="Cannot index_select along the last dimension"
+        ):
+            torch.index_select(spec, dim=-1, index=torch.tensor([0, 1]))
+
+    def test_index_select_multionehot_invalid(self):
+        """Test that index_select raises error for invalid dims on MultiOneHot."""
+        spec = MultiOneHot(nvec=[2, 3, 4], shape=(5, 9))
+        with pytest.raises(
+            ValueError, match="Cannot index_select along the last dimension"
+        ):
+            torch.index_select(spec, dim=-1, index=torch.tensor([0, 1]))
+
+    def test_index_select_binary_valid(self):
+        """Test index_select on Binary spec along valid dimensions."""
+        spec = Binary(n=4, shape=(5, 4))
+        index = torch.tensor([0, 2, 4])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (3, 4)
+        sample = new_spec.rand()
+        assert sample.shape == (3, 4)
+
+    def test_index_select_multionehot_valid(self):
+        """Test index_select on MultiOneHot spec along valid dimensions."""
+        spec = MultiOneHot(nvec=[2, 3, 4], shape=(5, 9))
+        index = torch.tensor([0, 2, 4])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (3, 9)
+        sample = new_spec.rand()
+        assert sample.shape == (3, 9)
+
+    def test_index_select_onehot_with_mask(self):
+        """Test index_select preserves and correctly selects mask for OneHot."""
+        # Create a OneHot spec with a mask that varies across batch dimension
+        mask = torch.tensor(
+            [
+                [True, True, False, False],
+                [True, False, True, False],
+                [False, True, True, False],
+                [True, True, True, True],
+                [False, False, True, True],
+            ]
+        )
+        spec = OneHot(n=4, shape=(5, 4), mask=mask)
+        index = torch.tensor([0, 2, 4])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (3, 4)
+        assert new_spec.mask is not None
+        expected_mask = torch.index_select(mask, dim=0, index=index)
+        assert torch.equal(new_spec.mask, expected_mask)
+
+    def test_index_select_categorical_with_mask(self):
+        """Test index_select preserves and correctly selects mask for Categorical."""
+        # Categorical mask has shape (*shape, n)
+        mask = torch.tensor(
+            [
+                [True, True, False],
+                [True, False, True],
+                [False, True, True],
+                [True, True, True],
+                [False, False, True],
+            ]
+        )
+        spec = Categorical(n=3, shape=(5,), mask=mask)
+        index = torch.tensor([1, 3])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (2,)
+        assert new_spec.mask is not None
+        expected_mask = torch.index_select(mask, dim=0, index=index)
+        assert torch.equal(new_spec.mask, expected_mask)
+
+    def test_index_select_multionehot_with_mask(self):
+        """Test index_select preserves and correctly selects mask for MultiOneHot."""
+        # MultiOneHot mask has shape (*shape,) where shape[-1] is sum(nvec)
+        mask = torch.tensor(
+            [
+                [True, True, False, True, True],
+                [True, False, True, False, True],
+                [False, True, True, True, False],
+            ]
+        )
+        spec = MultiOneHot(nvec=[2, 3], shape=(3, 5), mask=mask)
+        index = torch.tensor([0, 2])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (2, 5)
+        assert new_spec.mask is not None
+        expected_mask = torch.index_select(mask, dim=0, index=index)
+        assert torch.equal(new_spec.mask, expected_mask)
+
+    def test_index_select_multicategorical_with_mask(self):
+        """Test index_select preserves and correctly selects mask for MultiCategorical."""
+        # MultiCategorical: nvec defines the cardinality of each category
+        # shape's last dim must match nvec.shape[-1]
+        # mask has shape (*shape[:-1], sum(nvec)) - see update_mask docstring
+        nvec = torch.tensor([3, 2])  # 2 categories with cardinalities 3 and 2
+        # shape = (4, 2) where 4 is batch dim and 2 is nvec.shape[-1]
+        # mask shape = (4, 5) where 5 = sum(nvec) = 3 + 2
+        mask = torch.ones(4, 5, dtype=torch.bool)
+        mask[0, 0] = False  # mask first outcome for first batch element
+        mask[2, 4] = False  # mask last outcome for third batch element
+        spec = MultiCategorical(nvec=nvec, shape=(4, 2), mask=mask)
+        index = torch.tensor([0, 2])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (2, 2)
+        assert new_spec.mask is not None
+        expected_mask = torch.index_select(mask, dim=0, index=index)
+        assert torch.equal(new_spec.mask, expected_mask)
+
+    def test_index_select_no_mask_preserved(self):
+        """Test index_select works correctly when spec has no mask."""
+        spec = OneHot(n=4, shape=(5, 4))
+        assert spec.mask is None
+        index = torch.tensor([0, 2, 4])
+        new_spec = torch.index_select(spec, dim=0, index=index)
+        assert new_spec.shape == (3, 4)
+        assert new_spec.mask is None
+
+    def test_index_select_stacked_not_supported(self):
+        """Test that index_select raises NotImplementedError for heterogeneous Stacked specs."""
+        # Create non-identical specs to get a true Stacked spec
+        spec1 = Bounded(low=0, high=1, shape=(5, 3), dtype=torch.float32)
+        spec2 = Bounded(
+            low=0, high=2, shape=(5, 3), dtype=torch.float32
+        )  # Different high
+        stacked_spec = torch.stack([spec1, spec2], dim=0)
+        # Verify it's actually a Stacked spec
+        assert type(stacked_spec).__name__ == "Stacked"
+        with pytest.raises(NotImplementedError, match="index_select is not supported"):
+            torch.index_select(stacked_spec, dim=0, index=torch.tensor([0]))
 
 
 if __name__ == "__main__":

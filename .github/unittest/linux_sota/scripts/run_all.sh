@@ -80,6 +80,7 @@ uv pip install \
   pytest-mock \
   pytest-instafail \
   pytest-rerunfailures \
+  pytest-json-report \
   expecttest \
   pybind11 \
   pyyaml \

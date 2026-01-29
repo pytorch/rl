@@ -21,6 +21,7 @@ permissions:
 
 jobs:
   tests:
+    if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && (contains(join(github.event.pull_request.labels.*.name, ', '), 'Environments/habitat') || contains(format(', {0}, ', join(github.event.pull_request.labels.*.name, ', ')), ', Environments, '))) }}
     strategy:
       matrix:
         python_version: ["3.10"]
@@ -28,7 +29,7 @@ jobs:
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
-      runner: linux.g5.4xlarge.nvidia.gpu
+      runner: linux.g5.12xlarge.nvidia.gpu
       repository: pytorch/rl
       docker-image: "nvidia/cuda:12.1.1-devel-ubuntu22.04"
       gpu-arch-type: cuda
