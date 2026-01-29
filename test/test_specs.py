@@ -3001,6 +3001,7 @@ class TestLazyStackedComposite:
             assert r["a"].shape == torch.Size([*shape, 1, 3, 2])  # access tensor
         assert (r["a"] == 0).all()
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda")
     @pytest.mark.parametrize("stack_dim", [0, 1, 2, -3, -2, -1])
     def test_to(self, stack_dim):
@@ -3958,6 +3959,7 @@ class TestNonTensor:
         assert r.get("nontensor").shape == (1,)
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="not cuda device")
 def test_device_ordinal():
     device = torch.device("cpu")
