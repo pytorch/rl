@@ -36,6 +36,16 @@ class NoisyLinear(nn.Linear):
     with gradient descent along with any other remaining network weights. Factorized Gaussian
     noise is the type of noise usually employed.
 
+    .. note:: The noise is controlled by the exploration mode set via
+        :func:`~torchrl.envs.utils.set_exploration_type`. When exploration type is
+        :class:`~torchrl.envs.utils.ExplorationType.RANDOM`, noise is added to the weights.
+        When exploration type is :class:`~torchrl.envs.utils.ExplorationType.DETERMINISTIC`,
+        :class:`~torchrl.envs.utils.ExplorationType.MODE`, or
+        :class:`~torchrl.envs.utils.ExplorationType.MEAN`, only the mean weights are used.
+
+        This behavior is controlled by the ``use_exploration_type`` argument. When set to
+        ``True``, the exploration type is used. When set to ``False``, the legacy behavior
+        of using ``self.training`` (i.e., ``model.train()``/``model.eval()``) is used instead.
 
     Args:
         in_features (int): input features dimension
@@ -47,7 +57,13 @@ class NoisyLinear(nn.Linear):
         dtype (torch.dtype, optional): dtype of the parameters.
             Defaults to ``None`` (default pytorch dtype)
         std_init (scalar, optional): initial value of the Gaussian standard deviation before optimization.
-            Defaults to ``0.1``
+            Defaults to ``0.5`` as per the original paper.
+        use_exploration_type (bool or None, optional): if ``True``, noise is controlled by
+            :func:`~torchrl.envs.utils.exploration_type`. If ``False``, noise is controlled
+            by ``self.training`` (legacy behavior). If ``None`` (default), uses the legacy
+            behavior but emits a ``FutureWarning`` that the default will change to ``True``
+            in v0.13. Pass ``True`` to opt into the new behavior, or ``False`` to silence
+            the warning and keep the legacy behavior.
 
     """
 
@@ -58,12 +74,29 @@ class NoisyLinear(nn.Linear):
         bias: bool = True,
         device: DEVICE_TYPING | None = None,
         dtype: torch.dtype | None = None,
-        std_init: float = 0.1,
+        std_init: float = 0.5,
+        use_exploration_type: bool | None = None,
     ):
         nn.Module.__init__(self)
         self.in_features = int(in_features)
         self.out_features = int(out_features)
         self.std_init = std_init
+
+        # Handle use_exploration_type deprecation
+        if use_exploration_type is None:
+            warnings.warn(
+                "NoisyLinear currently uses `self.training` to control noise. "
+                "In v0.13, this will change to use `exploration_type()` from "
+                "torchrl.envs.utils for consistency with other exploration modules. "
+                "To opt into the new behavior now, pass `use_exploration_type=True`. "
+                "To silence this warning and keep the legacy behavior, pass "
+                "`use_exploration_type=False`.",
+                FutureWarning,
+                stacklevel=2,
+            )
+            self._use_exploration_type = False
+        else:
+            self._use_exploration_type = use_exploration_type
 
         self.weight_mu = nn.Parameter(
             torch.empty(
@@ -134,9 +167,16 @@ class NoisyLinear(nn.Linear):
         x = torch.randn(*size, device=self.weight_mu.device)
         return x.sign().mul_(x.abs().sqrt_())
 
+    def _should_use_noise(self) -> bool:
+        """Determine whether to add noise based on exploration type or training mode."""
+        if self._use_exploration_type:
+            return exploration_type() is ExplorationType.RANDOM
+        else:
+            return self.training
+
     @property
     def weight(self) -> torch.Tensor:
-        if self.training:
+        if self._should_use_noise():
             return self.weight_mu + self.weight_sigma * self.weight_epsilon
         else:
             return self.weight_mu
@@ -144,7 +184,7 @@ class NoisyLinear(nn.Linear):
     @property
     def bias(self) -> torch.Tensor | None:
         if self.bias_mu is not None:
-            if self.training:
+            if self._should_use_noise():
                 return self.bias_mu + self.bias_sigma * self.bias_epsilon
             else:
                 return self.bias_mu
@@ -169,9 +209,15 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
         dtype (torch.dtype, optional): dtype of the parameters.
             Defaults to the default PyTorch dtype.
         std_init (scalar): initial value of the Gaussian standard deviation before optimization.
-            Defaults to 0.1
+            Defaults to ``0.5`` as per the original paper.
+        use_exploration_type (bool or None, optional): if ``True``, noise is controlled by
+            :func:`~torchrl.envs.utils.exploration_type`. If ``False``, noise is controlled
+            by ``self.training`` (legacy behavior). If ``None`` (default), uses the legacy
+            behavior but emits a ``FutureWarning``. See :class:`NoisyLinear` for details.
 
     """
+
+    cls_to_become = NoisyLinear
 
     def __init__(
         self,
@@ -179,23 +225,41 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
         bias: bool = True,
         device: DEVICE_TYPING | None = None,
         dtype: torch.dtype | None = None,
-        std_init: float = 0.1,
+        std_init: float = 0.5,
+        use_exploration_type: bool | None = None,
     ):
-        super().__init__(0, 0, False, device=device)
+        # Handle use_exploration_type deprecation
+        if use_exploration_type is None:
+            warnings.warn(
+                "NoisyLazyLinear currently uses `self.training` to control noise. "
+                "In v0.13, this will change to use `exploration_type()` from "
+                "torchrl.envs.utils for consistency with other exploration modules. "
+                "To opt into the new behavior now, pass `use_exploration_type=True`. "
+                "To silence this warning and keep the legacy behavior, pass "
+                "`use_exploration_type=False`.",
+                FutureWarning,
+                stacklevel=2,
+            )
+            _use_exploration_type = False
+        else:
+            _use_exploration_type = use_exploration_type
+
+        # Call super().__init__ with use_exploration_type to avoid duplicate warning
+        # This goes through LazyModuleMixin.__init__ which registers the forward pre-hook
+        factory_kwargs = {"device": device, "dtype": dtype}
+        super().__init__(
+            0, 0, False, device=device, use_exploration_type=_use_exploration_type
+        )
         self.out_features = out_features
         self.std_init = std_init
 
-        self.weight_mu = UninitializedParameter(device=device, dtype=dtype)
-        self.weight_sigma = UninitializedParameter(device=device, dtype=dtype)
-        self.register_buffer(
-            "weight_epsilon", UninitializedBuffer(device=device, dtype=dtype)
-        )
+        self.weight_mu = UninitializedParameter(**factory_kwargs)
+        self.weight_sigma = UninitializedParameter(**factory_kwargs)
+        self.register_buffer("weight_epsilon", UninitializedBuffer(**factory_kwargs))
         if bias:
-            self.bias_mu = UninitializedParameter(device=device, dtype=dtype)
-            self.bias_sigma = UninitializedParameter(device=device, dtype=dtype)
-            self.register_buffer(
-                "bias_epsilon", UninitializedBuffer(device=device, dtype=dtype)
-            )
+            self.bias_mu = UninitializedParameter(**factory_kwargs)
+            self.bias_sigma = UninitializedParameter(**factory_kwargs)
+            self.register_buffer("bias_epsilon", UninitializedBuffer(**factory_kwargs))
         else:
             self.bias_mu = None
         self.reset_parameters()
