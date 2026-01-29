@@ -48,11 +48,6 @@ from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, EnvMetaData
 
 from torchrl.envs.env_creator import EnvCreator, get_env_metadata
 
-# legacy
-from torchrl.envs.libs.envpool import (  # noqa: F401
-    MultiThreadedEnv,
-    MultiThreadedEnvWrapper,
-)
 from torchrl.envs.utils import (
     _aggregate_end_of_traj,
     _sort_keys,
@@ -3090,3 +3085,9 @@ def _mps_sync(device):
 
 # Create an alias for possible imports
 _BatchedEnv = BatchedEnvBase
+
+# legacy re-exports (must be at end of file to avoid circular imports)
+from torchrl.envs.libs.envpool import (  # noqa: F401, E402
+    MultiThreadedEnv,
+    MultiThreadedEnvWrapper,
+)

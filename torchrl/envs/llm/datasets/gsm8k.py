@@ -80,7 +80,7 @@ def _collate_fn(batch):
 
 
 def make_gsm8k_env(
-    dataset: str = "gsm8k",
+    dataset: str = "openai/gsm8k",
     num_envs: int = 1,
     repeats: int | None = None,
     batch_size_dl: int = 1,
@@ -306,7 +306,7 @@ i.e., <think>reasoning process here</think> <answer>answer here</answer>. The an
     def __init__(
         self,
         *,
-        dataset: str = "gsm8k",
+        dataset: str = "openai/gsm8k",
         shuffle: bool = True,
         num_envs: int = 1,
         repeats: int | None = None,

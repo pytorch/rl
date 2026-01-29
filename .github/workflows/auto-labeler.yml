@@ -1,0 +1,31 @@
+# Automatically add labels to PRs based on which files changed
+#
+# This complements auto-tag.yml (title-based labeling):
+# - auto-tag.yml: Labels based on PR title prefix ([BugFix], [Feature], etc.)
+# - auto-labeler.yml: Labels based on which files/directories changed
+#
+# Together they provide complete PR categorization:
+# - Title-based labels capture the INTENT (bug fix, feature, etc.)
+# - File-based labels capture the SCOPE (which components changed)
+#------------------------------------------------------------
+
+name: Auto Label PR (File-Based)
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Apply labels based on changed files
+        uses: actions/labeler@v5
+        with:
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+          # Don't remove labels that aren't in the config
+          # This preserves manually-added labels and title-based labels from auto-tag.yml
+          sync-labels: false
