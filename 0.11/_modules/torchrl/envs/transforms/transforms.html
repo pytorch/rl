@@ -8385,6 +8385,26 @@
         <span class="k">return</span> <span class="n">truncated_keys</span>
 
     <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">all_truncated_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns truncated keys for ALL reset keys (including nested ones).</span>
+
+<span class="sd">        Used for propagating truncated to nested agent-level keys in MARL envs.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">all_truncated_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_all_truncated_keys&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">all_truncated_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">all_truncated_keys</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">truncated_keys</span>
+            <span class="k">for</span> <span class="n">reset_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">reset_keys</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reset_key</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                    <span class="n">key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">truncated_key</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">reset_key</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">truncated_key</span><span class="p">)</span>
+                <span class="n">all_truncated_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;_all_truncated_keys&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">all_truncated_keys</span>
+        <span class="k">return</span> <span class="n">all_truncated_keys</span>
+
+    <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">done_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]:</span>
         <span class="n">done_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_done_keys&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">done_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -8398,6 +8418,26 @@
                 <span class="n">done_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;_done_keys&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">done_keys</span>
         <span class="k">return</span> <span class="n">done_keys</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">all_done_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns done keys for ALL reset keys (including nested ones).</span>
+
+<span class="sd">        Used for propagating done to nested agent-level keys in MARL envs.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">all_done_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_all_done_keys&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">all_done_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">all_done_keys</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_keys</span>
+            <span class="k">for</span> <span class="n">reset_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">reset_keys</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reset_key</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                    <span class="n">key</span> <span class="o">=</span> <span class="s2">&quot;done&quot;</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">reset_key</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="s2">&quot;done&quot;</span><span class="p">)</span>
+                <span class="n">all_done_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;_all_done_keys&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">all_done_keys</span>
+        <span class="k">return</span> <span class="n">all_done_keys</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">terminated_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]:</span>
@@ -8514,7 +8554,58 @@
                     <span class="n">done</span> <span class="o">=</span> <span class="n">truncated</span> <span class="o">|</span> <span class="n">done</span>  <span class="c1"># we assume no done after reset</span>
                     <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">done_key</span><span class="p">,</span> <span class="n">done</span><span class="p">)</span>
                 <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">truncated_key</span><span class="p">,</span> <span class="n">truncated</span><span class="p">)</span>
+
+        <span class="c1"># Propagate truncated/done to nested agent-level keys in MARL envs</span>
+        <span class="c1"># This ensures that when max_steps is reached, all agent truncated/done keys are updated</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_propagate_to_nested_keys</span><span class="p">(</span><span class="n">next_tensordict</span><span class="p">)</span>
+
         <span class="k">return</span> <span class="n">next_tensordict</span>
+
+    <span class="k">def</span> <span class="nf">_propagate_to_nested_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Propagate truncated and done values to nested agent-level keys.</span>
+
+<span class="sd">        In MARL envs, there may be nested agent-level truncated/done keys that</span>
+<span class="sd">        are children of the root truncated/done. When StepCounter sets truncated</span>
+<span class="sd">        at the root level, we need to propagate this to nested keys.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Get the set of keys we already updated (filtered keys)</span>
+        <span class="n">updated_truncated</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">truncated_keys</span><span class="p">)</span>
+        <span class="n">updated_done</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">done_keys</span><span class="p">)</span>
+
+        <span class="c1"># Propagate truncated to nested keys</span>
+        <span class="k">for</span> <span class="n">nested_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">all_truncated_keys</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">nested_key</span> <span class="ow">in</span> <span class="n">updated_truncated</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="c1"># Find the parent truncated key that should be propagated</span>
+            <span class="n">nested_truncated</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">nested_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">nested_truncated</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="c1"># Find a parent truncated key to propagate from</span>
+            <span class="k">for</span> <span class="n">parent_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">truncated_keys</span><span class="p">:</span>
+                <span class="n">parent_truncated</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">parent_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">parent_truncated</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="c1"># Expand parent truncated to match nested shape and apply OR</span>
+                    <span class="n">expanded</span> <span class="o">=</span> <span class="n">parent_truncated</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">nested_truncated</span><span class="p">)</span>
+                    <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">nested_key</span><span class="p">,</span> <span class="n">nested_truncated</span> <span class="o">|</span> <span class="n">expanded</span><span class="p">)</span>
+                    <span class="k">break</span>
+
+        <span class="c1"># Propagate done to nested keys if update_done is True</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_done</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">nested_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">all_done_keys</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">nested_key</span> <span class="ow">in</span> <span class="n">updated_done</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="n">nested_done</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">nested_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">nested_done</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="c1"># Find a parent done key to propagate from</span>
+                <span class="k">for</span> <span class="n">parent_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_keys</span><span class="p">:</span>
+                    <span class="n">parent_done</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">parent_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">parent_done</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="c1"># Expand parent done to match nested shape and apply OR</span>
+                        <span class="n">expanded</span> <span class="o">=</span> <span class="n">parent_done</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">nested_done</span><span class="p">)</span>
+                        <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">nested_key</span><span class="p">,</span> <span class="n">nested_done</span> <span class="o">|</span> <span class="n">expanded</span><span class="p">)</span>
+                        <span class="k">break</span>
 
 <div class="viewcode-block" id="StepCounter.transform_observation_spec">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.StepCounter.html#torchrl.envs.transforms.StepCounter.transform_observation_spec">[docs]</a>

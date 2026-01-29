@@ -328,6 +328,20 @@ every done entry within the tensordict.</p>
 <span class="go">        [5]])</span>
 </pre></div>
 </div>
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.envs.transforms.StepCounter.all_done_keys">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">all_done_keys</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrl.envs.transforms.StepCounter.all_done_keys" title="Link to this definition">¶</a></dt>
+<dd><p>Returns done keys for ALL reset keys (including nested ones).</p>
+<p>Used for propagating done to nested agent-level keys in MARL envs.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.envs.transforms.StepCounter.all_truncated_keys">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">all_truncated_keys</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrl.envs.transforms.StepCounter.all_truncated_keys" title="Link to this definition">¶</a></dt>
+<dd><p>Returns truncated keys for ALL reset keys (including nested ones).</p>
+<p>Used for propagating truncated to nested agent-level keys in MARL envs.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.transforms.StepCounter.forward">
 <span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.11)"><span class="pre">TensorDictBase</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.11)"><span class="pre">TensorDictBase</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#StepCounter.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.StepCounter.forward" title="Link to this definition">¶</a></dt>
@@ -447,6 +461,8 @@ names to the keys.</p>
               <ul>
 <li><a class="reference internal" href="#">StepCounter</a><ul>
 <li><a class="reference internal" href="#torchrl.envs.transforms.StepCounter"><code class="docutils literal notranslate"><span class="pre">StepCounter</span></code></a><ul>
+<li><a class="reference internal" href="#torchrl.envs.transforms.StepCounter.all_done_keys"><code class="docutils literal notranslate"><span class="pre">StepCounter.all_done_keys</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.envs.transforms.StepCounter.all_truncated_keys"><code class="docutils literal notranslate"><span class="pre">StepCounter.all_truncated_keys</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.transforms.StepCounter.forward"><code class="docutils literal notranslate"><span class="pre">StepCounter.forward()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.transforms.StepCounter.transform_input_spec"><code class="docutils literal notranslate"><span class="pre">StepCounter.transform_input_spec()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.transforms.StepCounter.transform_observation_spec"><code class="docutils literal notranslate"><span class="pre">StepCounter.transform_observation_spec()</span></code></a></li>
