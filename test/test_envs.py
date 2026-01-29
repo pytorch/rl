@@ -597,6 +597,7 @@ class TestEnvBase:
         env.auto_specs_(policy, tensordict=td.copy(), observation_key=obs_vals)
         env.check_env_specs(tensordict=td.copy())
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device found.")
     @pytest.mark.parametrize("break_when_any_done", [True, False])
     def test_auto_cast_to_device(self, break_when_any_done):
@@ -1526,6 +1527,7 @@ class TestParallel:
             # env_serial.close()
             env0.close(raise_if_closed=False)
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
     @pytest.mark.parametrize("heterogeneous", [False, True])
     def test_transform_env_transform_no_device(
@@ -1638,6 +1640,7 @@ class TestParallel:
         finally:
             env.close(raise_if_closed=False)
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda to test on")
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("frame_skip", [4])
@@ -1742,6 +1745,7 @@ class TestParallel:
             env_serial.close(raise_if_closed=False)
             env0.close(raise_if_closed=False)
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device detected")
     @pytest.mark.parametrize("frame_skip", [4])
@@ -2726,6 +2730,7 @@ def test_marl_group_type(group_type):
         check_marl_grouping(group_type.get_group_map(agent_names), agent_names)
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device")
 class TestConcurrentEnvs:
     """Concurrent parallel envs on multiple procs can interfere."""

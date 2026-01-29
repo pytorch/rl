@@ -2333,6 +2333,7 @@ class TestCollectorDevices:
         def _set_seed(self, seed: int | None) -> None:
             ...
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
     @pytest.mark.parametrize("env_device", ["cuda:0", "cpu"])
     @pytest.mark.parametrize("storing_device", [None, "cuda:0", "cpu"])
@@ -2371,6 +2372,7 @@ class TestCollectorDevices:
                     assert u == i, i
                 mock_synchronize.assert_not_called()
 
+    @pytest.mark.gpu
     @pytest.mark.parametrize("device", ["cuda", "cpu"])
     @pytest.mark.parametrize("storing_device", ["cuda", "cpu"])
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device found")
@@ -3162,6 +3164,7 @@ class TestMultiKeyEnvsCollector:
         assert_allclose_td(c2.unsqueeze(0), d2)
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(
     not torch.cuda.is_available() and (not has_mps()),
     reason="No casting if no cuda",
@@ -3363,6 +3366,7 @@ class TestUpdateParams:
             col.shutdown()
             del col
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(
         not torch.cuda.is_available() or torch.cuda.device_count() < 3,
         reason="requires at least 3 CUDA devices",
