@@ -33,9 +33,11 @@ jobs:
         run: |
           pip install pytest tensordict
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -e . --no-build-isolation --no-deps
+          # Skip editable install - just add to PYTHONPATH for test collection
 
       - name: Validate test partitioning
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           set -e
 
