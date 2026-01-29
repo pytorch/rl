@@ -116,6 +116,7 @@ uv_pip_install \
   pytest-asyncio \
   pytest-isolate \
   pytest-xdist \
+  pytest-json-report \
   expecttest \
   "pybind11[global]>=2.13" \
   pyyaml \
@@ -308,9 +309,14 @@ run_distributed_tests() {
     echo "TORCHRL_TEST_SUITE=${TORCHRL_TEST_SUITE}: distributed tests require GPU (CU_VERSION != cpu)."
     return 1
   fi
+  # JSON report output for flaky test tracking
+  local json_report_dir="${RUNNER_ARTIFACT_DIR:-${root_dir}}"
+  local json_report_args="--json-report --json-report-file=${json_report_dir}/test-results-distributed.json --json-report-indent=2"
+  
   # Run both test_distributed.py and test_rb_distributed.py (both use torch.distributed)
   # Note: distributed tests always run on GPU, no need for GPU_MARKER_FILTER here
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_distributed.py test/test_rb_distributed.py \
+    ${json_report_args} \
     --instafail --durations 200 -vv --capture no \
     --timeout=120 --mp_fork_if_no_cuda
 }
@@ -328,6 +334,10 @@ run_non_distributed_tests() {
   local common_ignores="--ignore test/test_rlhf.py --ignore test/test_distributed.py --ignore test/test_rb_distributed.py --ignore test/llm --ignore test/test_setup.py"
   local common_args="--instafail --durations 200 -vv --capture no --timeout=120 --mp_fork_if_no_cuda"
   
+  # JSON report output for flaky test tracking
+  local json_report_dir="${RUNNER_ARTIFACT_DIR:-${root_dir}}"
+  local json_report_args="--json-report --json-report-file=${json_report_dir}/test-results-shard-${shard}.json --json-report-indent=2"
+  
   # pytest-xdist parallelism: use -n auto for shard 3 (fewer multiprocessing tests)
   # Set TORCHRL_XDIST=0 to disable parallel execution
   local xdist_args=""
@@ -340,12 +350,16 @@ run_non_distributed_tests() {
     1)
       echo "Running shard 1: test_transforms.py only"
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_transforms.py \
-        "${GPU_MARKER_FILTER[@]}" ${common_args}
+        "${GPU_MARKER_FILTER[@]}" \
+        ${json_report_args} \
+        ${common_args}
       ;;
     2)
       echo "Running shard 2: test_envs.py and test_collectors.py"
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_envs.py test/test_collectors.py \
-        "${GPU_MARKER_FILTER[@]}" ${common_args}
+        "${GPU_MARKER_FILTER[@]}" \
+        ${json_report_args} \
+        ${common_args}
       ;;
     3)
       echo "Running shard 3: All other tests"
@@ -355,13 +369,17 @@ run_non_distributed_tests() {
         --ignore test/test_envs.py \
         --ignore test/test_collectors.py \
         ${xdist_args} \
-        "${GPU_MARKER_FILTER[@]}" ${common_args}
+        "${GPU_MARKER_FILTER[@]}" \
+        ${json_report_args} \
+        ${common_args}
       ;;
     all|"")
       echo "Running all tests (no sharding)"
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
         ${common_ignores} \
-        "${GPU_MARKER_FILTER[@]}" ${common_args}
+        "${GPU_MARKER_FILTER[@]}" \
+        ${json_report_args} \
+        ${common_args}
       ;;
     *)
       echo "Unknown TORCHRL_TEST_SHARD='${shard}'. Expected: all|1|2|3."
@@ -397,6 +415,12 @@ fi
 
 coverage combine -q
 coverage xml -i
+
+# ==================================================================================== #
+# ================================ Upload test results for flaky tracking ============ #
+
+# Add metadata to test results and prepare for artifact upload
+python .github/unittest/helpers/upload_test_results.py || echo "Warning: Failed to process test results for flaky tracking"
 
 # ==================================================================================== #
 # ================================ Post-proc ========================================= #
