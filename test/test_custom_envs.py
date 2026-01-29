@@ -4,17 +4,18 @@
 # LICENSE file in the root directory of this source tree.
 
 import torch
+
 from torchrl.envs.custom.trading import FinancialRegimeEnv
 from torchrl.envs.utils import check_env_specs
 
 
-class TestFinancialRegimeEnv:
-    def test_specs(self):
+class TestCustomEnvs:
+    def test_financial_env_specs(self):
         """Check that the environment specs match TorchRL standards."""
         env = FinancialRegimeEnv()
         check_env_specs(env)
 
-    def test_trading_logic(self):
+    def test_financial_env_trading_logic(self):
         """Verify that Buy/Hold/Sell actions affect holdings and rewards correctly."""
         torch.manual_seed(0)
         env = FinancialRegimeEnv()
@@ -44,7 +45,7 @@ class TestFinancialRegimeEnv:
                 td["current_holdings"].item() is False
             ), "Failed to clear holdings on SELL"
 
-    def test_rollout(self):
+    def test_financial_env_rollout(self):
         """Test environment rollouts with different configurations."""
         torch.manual_seed(0)
         env = FinancialRegimeEnv()
@@ -62,7 +63,7 @@ class TestFinancialRegimeEnv:
         r = env.rollout(20, break_when_any_done=False)
         assert r.shape == torch.Size((20,))
 
-    def test_device_compatibility(self):
+    def test_financial_env_device(self):
         """Test environment works on different devices."""
         # Test CPU (always available)
         env_cpu = FinancialRegimeEnv(device="cpu")
