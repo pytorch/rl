@@ -206,7 +206,7 @@ class ChatEnv(EnvBase, metaclass=_ChatEnvMeta):
             ...     batch_size=(1,),
             ...     system_prompt="You are a helpful assistant.",
             ... )
-            >>> # Now tokens.full will be maintained automatically
+            >>> # Now tokens.prompt will be maintained automatically
         """
         return cls(tokenizer=tokenizer, with_tokenizer=True, **kwargs)
 

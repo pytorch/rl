@@ -3192,16 +3192,16 @@ class TestActorSharing:
                 pass
 
 
+@pytest.mark.skipif(not _has_transformers, reason="transformers not available")
 class TestPreferTokens:
-    """Tests for the token-first LLM wrapper API (prefer_tokens feature)."""
+    """Tests for the token-first LLM wrapper API (prefer_tokens feature).
 
-    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
-    def test_transformers_wrapper_prefer_tokens_explicit(self):
+    These tests use the shared transformers_instance fixture to avoid redundant model downloads.
+    """
+
+    def test_transformers_wrapper_prefer_tokens_explicit(self, transformers_instance):
         """Test that TransformersWrapper can be set with prefer_tokens=True."""
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-
-        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+        model, tokenizer = transformers_instance
 
         wrapper = TransformersWrapper(
             model,
@@ -3215,13 +3215,11 @@ class TestPreferTokens:
         # Verify prefer_tokens is True when explicitly set
         assert wrapper.prefer_tokens is True
 
-    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
-    def test_transformers_wrapper_prefer_tokens_with_chatenv(self):
+    def test_transformers_wrapper_prefer_tokens_with_chatenv(
+        self, transformers_instance
+    ):
         """Test that TransformersWrapper uses tokens from ChatEnv(with_tokenizer=True)."""
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-
-        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+        model, tokenizer = transformers_instance
 
         wrapper = TransformersWrapper(
             model,
@@ -3251,13 +3249,9 @@ class TestPreferTokens:
         assert ("text", "response") in output.keys(True, True)
         assert ("tokens", "full") in output.keys(True, True)  # Output has full tokens
 
-    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
-    def test_transformers_wrapper_prefer_tokens_false(self):
+    def test_transformers_wrapper_prefer_tokens_false(self, transformers_instance):
         """Test that TransformersWrapper ignores tokens when prefer_tokens=False."""
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-
-        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+        model, tokenizer = transformers_instance
 
         wrapper = TransformersWrapper(
             model,
@@ -3284,13 +3278,9 @@ class TestPreferTokens:
         output = wrapper(result)
         assert ("text", "response") in output.keys(True, True)
 
-    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
-    def test_get_new_version_preserves_prefer_tokens(self):
+    def test_get_new_version_preserves_prefer_tokens(self, transformers_instance):
         """Test that get_new_version preserves the prefer_tokens setting."""
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-
-        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+        model, tokenizer = transformers_instance
 
         # Create with prefer_tokens=False
         wrapper = TransformersWrapper(
@@ -3311,13 +3301,9 @@ class TestPreferTokens:
         new_wrapper2 = wrapper.get_new_version(prefer_tokens=True)
         assert new_wrapper2.prefer_tokens is True
 
-    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
-    def test_multi_turn_conversation_with_tokens(self):
+    def test_multi_turn_conversation_with_tokens(self, transformers_instance):
         """Test that tokens are maintained correctly across multiple turns."""
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-
-        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+        model, tokenizer = transformers_instance
 
         wrapper = TransformersWrapper(
             model,
@@ -3350,12 +3336,9 @@ class TestPreferTokens:
         # Tokens should have grown (we added more messages to the new prompt)
         assert tokens_after_step.numel() > tokens_after_reset.numel()
 
-    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
-    def test_token_prefix_stays_consistent(self):
+    def test_token_prefix_stays_consistent(self, transformers_instance):
         """Test that token prefix remains consistent across turns for KV cache."""
-        from transformers import AutoTokenizer
-
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+        _model, tokenizer = transformers_instance
 
         env = ChatEnv.with_tokenizer(
             tokenizer=tokenizer,
