@@ -15,6 +15,7 @@ on:
 permissions:
   contents: write
   actions: read
+  issues: write
 
 env:
   FLAKY_RUNS_TO_ANALYZE: ${{ inputs.num_runs || '30' }}
