@@ -9936,44 +9936,40 @@ class TestVecNormV2:
             env.close(raise_if_closed=False)
 
     @pytest.mark.parametrize("stateful", [True, False])
-    def test_inverse(self, stateful):
-        """Test that inverse denormalization recovers original data for stateful VecNormV2."""
+    def test_denorm(self, stateful):
+        """Test that denorm recovers original data for stateful VecNormV2."""
         torch.manual_seed(0)
+        # Use in_keys == out_keys, the realistic use case where original is overwritten
         vecnorm = VecNormV2(
             in_keys=["observation"],
-            out_keys=["observation_norm"],
             stateful=stateful,
         )
 
         if not stateful:
-            # Stateless mode should raise NotImplementedError for inverse
+            # Stateless mode should raise NotImplementedError for denorm
             td = TensorDict({"observation": torch.randn(10, 1)}, [10])
-            with pytest.raises(NotImplementedError):
-                vecnorm.inv(td.clone())
             with pytest.raises(NotImplementedError):
                 vecnorm.denorm(td.clone())
         else:
-            # Stateful mode: manually normalize and denormalize fixed data
-            td = TensorDict({"observation": torch.randn(10, 1)}, [10])
-            # Normalize using _step (as VecNormV2 is designed for TransformedEnv)
-            td_norm = td.clone()
-            vecnorm._step(
-                td_norm, td_norm
-            )  # Normalizes 'observation' to 'observation_norm'
+            # Stateful mode: normalize then denormalize
+            td_original = TensorDict({"observation": torch.randn(10, 1)}, [10])
+            td_norm = td_original.clone()
+            vecnorm._step(td_norm, td_norm)  # Normalizes 'observation' in-place
 
-            # Verify normalization happened
-            assert "observation_norm" in td_norm.keys()
-            assert not torch.allclose(td_norm["observation_norm"], td["observation"])
+            # Verify normalization happened (observation was modified)
+            assert not torch.allclose(
+                td_norm["observation"], td_original["observation"]
+            )
 
-            # Denormalize
-            td_inv = vecnorm.inv(td_norm.clone())
-            td_denorm = vecnorm.denorm(td_norm.clone())
-            # Check that denorm is equivalent to inv
-            assert_allclose_td(td_inv, td_denorm)
+            # Denormalize - should recover original
+            td_denorm = vecnorm.denorm(td_norm)
 
             # Check recovery of original data
             torch.testing.assert_close(
-                td_inv["observation"], td["observation"], rtol=1e-5, atol=1e-5
+                td_denorm["observation"],
+                td_original["observation"],
+                rtol=1e-5,
+                atol=1e-5,
             )
 
     def test_pickable(self):
@@ -10456,23 +10452,24 @@ class TestVecNorm:
         for key in sorted(transform.__dict__.keys()):
             assert isinstance(transform.__dict__[key], type(transform2.__dict__[key]))
 
-    def test_inverse(self):
-        """Test that inverse denormalization recovers original data for VecNorm (deprecated)."""
+    def test_denorm(self):
+        """Test that denorm recovers original data for VecNorm."""
         torch.manual_seed(0)
-        vecnorm = VecNorm(in_keys=["observation"], out_keys=["observation_norm"])
-        td = TensorDict({"observation": torch.randn(10, 1)}, [10])
-        td_norm = td.clone()
-        vecnorm._step(td_norm, td_norm)
+        # Use in_keys == out_keys, the realistic use case where original is overwritten
+        vecnorm = VecNorm(in_keys=["observation"])
+        td_original = TensorDict({"observation": torch.randn(10, 1)}, [10])
+        td_norm = td_original.clone()
+        vecnorm._step(td_norm, td_norm)  # Normalizes 'observation' in-place
 
-        # Verify normalization happened
-        assert "observation_norm" in td_norm.keys()
-        assert not torch.allclose(td_norm["observation_norm"], td["observation"])
+        # Verify normalization happened (observation was modified)
+        assert not torch.allclose(td_norm["observation"], td_original["observation"])
 
-        td_inv = vecnorm.inv(td_norm.clone())
-        td_denorm = vecnorm.denorm(td_norm.clone())
-        assert_allclose_td(td_inv, td_denorm)
+        # Denormalize - should recover original
+        td_denorm = vecnorm.denorm(td_norm)
+
+        # Check recovery of original data
         torch.testing.assert_close(
-            td_inv["observation"], td["observation"], rtol=1e-5, atol=1e-5
+            td_denorm["observation"], td_original["observation"], rtol=1e-5, atol=1e-5
         )
 
     def test_state_dict_vecnorm(self):

@@ -83,6 +83,7 @@ class VecNormV2(Transform):
         unfreeze(): Unfreezes the VecNorm, allowing updates to statistics.
         frozen_copy(): Returns a frozen copy of the VecNorm.
         clone(): Returns a clone of the VecNorm.
+        denorm(tensordict): Denormalizes data using the inverse of the normalization (stateful mode only).
         transform_observation_spec(observation_spec): Transforms the observation specification.
         transform_reward_spec(reward_spec, observation_spec): Transforms the reward specification.
         transform_output_spec(output_spec): Transforms the output specification.
@@ -216,6 +217,12 @@ class VecNormV2(Transform):
         ...     print("Remotely updated loc / scale", local_env.transform.loc["reward"], local_env.transform.scale["reward"])
         Remotely updated loc / scale tensor([-0.4307]) tensor([0.9613])
         ...     env.close()
+
+    To recover the original (denormalized) values from normalized data, use :meth:`~.denorm`:
+
+        >>> denormed = env_trsf.transform.denorm(r)
+
+    .. note:: The :meth:`~.denorm` method is only available in stateful mode.
 
     """
 
@@ -436,15 +443,50 @@ class VecNormV2(Transform):
             )
         return data
 
-    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Inverse call to denormalize the data using current loc and scale."""
+    def denorm(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Denormalize a tensordict using the inverse of the normalization transform.
+
+        Applies the inverse of the normalization: ``original = normalized * scale + loc``.
+
+        Reads normalized values from ``out_keys`` and writes denormalized values to ``in_keys``.
+
+        .. note:: This method is only available in stateful mode.
+
+        Args:
+            tensordict (TensorDictBase): the tensordict containing normalized values.
+
+        Returns:
+            A shallow copy of the tensordict with denormalized values written to ``in_keys``.
+
+        Raises:
+            NotImplementedError: if the transform is in stateless mode.
+            RuntimeError: if the transform has not been initialized (no data seen yet).
+
+        Examples:
+            >>> from torchrl.envs import GymEnv
+            >>> from torchrl.envs.transforms import VecNormV2
+            >>> env = GymEnv("Pendulum-v1")
+            >>> vecnorm = VecNormV2(
+            ...     in_keys=["observation"],
+            ...     out_keys=["observation_norm"],
+            ...     stateful=True,
+            ... )
+            >>> env = env.append_transform(vecnorm)
+            >>> # Collect some data to initialize statistics
+            >>> rollout = env.rollout(10)
+            >>> # Denormalize the normalized observations
+            >>> denormed = vecnorm.denorm(rollout)
+            >>> # denormed["observation"] now contains the original scale values
+
+        """
         if not self.stateful:
             raise NotImplementedError(
-                "Inverse not implemented for stateless VecNormV2."
+                "denorm is not implemented for stateless VecNormV2."
             )
         if self._loc is None:
-            raise RuntimeError("VecNormV2 must be initialized before calling inverse.")
+            raise RuntimeError("VecNormV2 must be initialized before calling denorm.")
 
+        tensordict = tensordict.copy()
         loc, scale = self._get_loc_scale()
         for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             if out_key not in tensordict.keys(include_nested=True):
@@ -454,10 +496,6 @@ class VecNormV2(Transform):
             original_value = value * scale.get(in_key) + loc.get(in_key)
             tensordict.set(in_key, original_value)
         return tensordict
-
-    def denorm(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Denormalize the tensordict using the inverse transform."""
-        return self.inv(tensordict)
 
     @staticmethod
     def _maybe_make_float(x):

@@ -6854,6 +6854,10 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
         >>> print((abs(tds.get(("next", "observation")).std(0)-1)<0.2).all())
         tensor(True)
 
+    To recover the original (denormalized) values from normalized data, use :meth:`~.denorm`:
+
+        >>> denormed = t.denorm(tds)
+
     """
 
     def __init__(
@@ -7071,11 +7075,38 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
         std = (_ssq / _count - mean.pow(2)).clamp_min(self.eps).sqrt()
         return (value - mean) / std.clamp_min(self.eps)
 
-    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Inverse call to denormalize the data using current loc and scale."""
-        if self._td is None:
-            raise RuntimeError("VecNorm must be initialized before calling inverse.")
+    def denorm(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Denormalize a tensordict using the inverse of the normalization transform.
 
+        Applies the inverse of the normalization: ``original = normalized * scale + loc``.
+
+        Reads normalized values from ``out_keys`` and writes denormalized values to ``in_keys``.
+
+        Args:
+            tensordict (TensorDictBase): the tensordict containing normalized values.
+
+        Returns:
+            A shallow copy of the tensordict with denormalized values written to ``in_keys``.
+
+        Raises:
+            RuntimeError: if the transform has not been initialized (no data seen yet).
+
+        Examples:
+            >>> from torchrl.envs import GymEnv, VecNorm
+            >>> env = GymEnv("Pendulum-v1")
+            >>> vecnorm = VecNorm(in_keys=["observation"], out_keys=["observation_norm"])
+            >>> env = env.append_transform(vecnorm)
+            >>> # Collect some data to initialize statistics
+            >>> rollout = env.rollout(10)
+            >>> # Denormalize the normalized observations
+            >>> denormed = vecnorm.denorm(rollout)
+            >>> # denormed["observation"] now contains the original scale values
+
+        """
+        if self._td is None:
+            raise RuntimeError("VecNorm must be initialized before calling denorm.")
+
+        tensordict = tensordict.copy()
         loc, scale = self._get_loc_scale()
         for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             if out_key not in tensordict.keys(include_nested=True):
@@ -7085,10 +7116,6 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
             original_value = value * scale.get(in_key) + loc.get(in_key)
             tensordict.set(in_key, original_value)
         return tensordict
-
-    def denorm(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Denormalize the tensordict using the inverse transform."""
-        return self.inv(tensordict)
 
     def to_observation_norm(self) -> Compose | ObservationNorm:
         """Converts VecNorm into an ObservationNorm class that can be used at inference time.
