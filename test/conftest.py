@@ -148,6 +148,9 @@ def pytest_runtest_setup(item):
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "slow: mark test as slow to run")
+    config.addinivalue_line(
+        "markers", "gpu: mark test as requiring a GPU (CUDA device)"
+    )
 
 
 def pytest_collection_modifyitems(config, items):
