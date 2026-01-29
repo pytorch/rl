@@ -217,6 +217,8 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
 
     """
 
+    cls_to_become = NoisyLinear
+
     def __init__(
         self,
         out_features: int,
@@ -226,8 +228,7 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
         std_init: float = 0.5,
         use_exploration_type: bool | None = None,
     ):
-        # Handle use_exploration_type deprecation before calling super().__init__
-        # to avoid duplicate warnings
+        # Handle use_exploration_type deprecation
         if use_exploration_type is None:
             warnings.warn(
                 "NoisyLazyLinear currently uses `self.training` to control noise. "
@@ -239,27 +240,26 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
                 FutureWarning,
                 stacklevel=2,
             )
-            self._use_exploration_type = False
+            _use_exploration_type = False
         else:
-            self._use_exploration_type = use_exploration_type
+            _use_exploration_type = use_exploration_type
 
-        # Call grandparent init to avoid NoisyLinear's warning
-        nn.Module.__init__(self)
-        self.in_features = 0
+        # Call super().__init__ with use_exploration_type to avoid duplicate warning
+        # This goes through LazyModuleMixin.__init__ which registers the forward pre-hook
+        factory_kwargs = {"device": device, "dtype": dtype}
+        super().__init__(
+            0, 0, False, device=device, use_exploration_type=_use_exploration_type
+        )
         self.out_features = out_features
         self.std_init = std_init
 
-        self.weight_mu = UninitializedParameter(device=device, dtype=dtype)
-        self.weight_sigma = UninitializedParameter(device=device, dtype=dtype)
-        self.register_buffer(
-            "weight_epsilon", UninitializedBuffer(device=device, dtype=dtype)
-        )
+        self.weight_mu = UninitializedParameter(**factory_kwargs)
+        self.weight_sigma = UninitializedParameter(**factory_kwargs)
+        self.register_buffer("weight_epsilon", UninitializedBuffer(**factory_kwargs))
         if bias:
-            self.bias_mu = UninitializedParameter(device=device, dtype=dtype)
-            self.bias_sigma = UninitializedParameter(device=device, dtype=dtype)
-            self.register_buffer(
-                "bias_epsilon", UninitializedBuffer(device=device, dtype=dtype)
-            )
+            self.bias_mu = UninitializedParameter(**factory_kwargs)
+            self.bias_sigma = UninitializedParameter(**factory_kwargs)
+            self.register_buffer("bias_epsilon", UninitializedBuffer(**factory_kwargs))
         else:
             self.bias_mu = None
         self.reset_parameters()
