@@ -7674,6 +7674,26 @@ class StepCounter(Transform):
         return truncated_keys
 
     @property
+    def all_truncated_keys(self) -> list[NestedKey]:
+        """Returns truncated keys for ALL reset keys (including nested ones).
+
+        Used for propagating truncated to nested agent-level keys in MARL envs.
+        """
+        all_truncated_keys = self.__dict__.get("_all_truncated_keys", None)
+        if all_truncated_keys is None:
+            all_truncated_keys = []
+            if self.parent is None:
+                return self.truncated_keys
+            for reset_key in self.parent.reset_keys:
+                if isinstance(reset_key, str):
+                    key = self.truncated_key
+                else:
+                    key = (*reset_key[:-1], self.truncated_key)
+                all_truncated_keys.append(key)
+        self.__dict__["_all_truncated_keys"] = all_truncated_keys
+        return all_truncated_keys
+
+    @property
     def done_keys(self) -> list[NestedKey]:
         done_keys = self.__dict__.get("_done_keys", None)
         if done_keys is None:
@@ -7687,6 +7707,26 @@ class StepCounter(Transform):
                 done_keys.append(key)
         self.__dict__["_done_keys"] = done_keys
         return done_keys
+
+    @property
+    def all_done_keys(self) -> list[NestedKey]:
+        """Returns done keys for ALL reset keys (including nested ones).
+
+        Used for propagating done to nested agent-level keys in MARL envs.
+        """
+        all_done_keys = self.__dict__.get("_all_done_keys", None)
+        if all_done_keys is None:
+            all_done_keys = []
+            if self.parent is None:
+                return self.done_keys
+            for reset_key in self.parent.reset_keys:
+                if isinstance(reset_key, str):
+                    key = "done"
+                else:
+                    key = (*reset_key[:-1], "done")
+                all_done_keys.append(key)
+        self.__dict__["_all_done_keys"] = all_done_keys
+        return all_done_keys
 
     @property
     def terminated_keys(self) -> list[NestedKey]:
@@ -7803,7 +7843,58 @@ class StepCounter(Transform):
                     done = truncated | done  # we assume no done after reset
                     next_tensordict.set(done_key, done)
                 next_tensordict.set(truncated_key, truncated)
+
+        # Propagate truncated/done to nested agent-level keys in MARL envs
+        # This ensures that when max_steps is reached, all agent truncated/done keys are updated
+        if self.max_steps is not None:
+            self._propagate_to_nested_keys(next_tensordict)
+
         return next_tensordict
+
+    def _propagate_to_nested_keys(self, next_tensordict: TensorDictBase) -> None:
+        """Propagate truncated and done values to nested agent-level keys.
+
+        In MARL envs, there may be nested agent-level truncated/done keys that
+        are children of the root truncated/done. When StepCounter sets truncated
+        at the root level, we need to propagate this to nested keys.
+        """
+        # Get the set of keys we already updated (filtered keys)
+        updated_truncated = set(self.truncated_keys)
+        updated_done = set(self.done_keys)
+
+        # Propagate truncated to nested keys
+        for nested_key in self.all_truncated_keys:
+            if nested_key in updated_truncated:
+                continue
+            # Find the parent truncated key that should be propagated
+            nested_truncated = next_tensordict.get(nested_key, None)
+            if nested_truncated is None:
+                continue
+            # Find a parent truncated key to propagate from
+            for parent_key in self.truncated_keys:
+                parent_truncated = next_tensordict.get(parent_key, None)
+                if parent_truncated is not None:
+                    # Expand parent truncated to match nested shape and apply OR
+                    expanded = parent_truncated.expand_as(nested_truncated)
+                    next_tensordict.set(nested_key, nested_truncated | expanded)
+                    break
+
+        # Propagate done to nested keys if update_done is True
+        if self.update_done:
+            for nested_key in self.all_done_keys:
+                if nested_key in updated_done:
+                    continue
+                nested_done = next_tensordict.get(nested_key, None)
+                if nested_done is None:
+                    continue
+                # Find a parent done key to propagate from
+                for parent_key in self.done_keys:
+                    parent_done = next_tensordict.get(parent_key, None)
+                    if parent_done is not None:
+                        # Expand parent done to match nested shape and apply OR
+                        expanded = parent_done.expand_as(nested_done)
+                        next_tensordict.set(nested_key, nested_done | expanded)
+                        break
 
     def transform_observation_spec(self, observation_spec: Composite) -> Composite:
         if not isinstance(observation_spec, Composite):
