@@ -597,6 +597,7 @@ class TestEnvBase:
         env.auto_specs_(policy, tensordict=td.copy(), observation_key=obs_vals)
         env.check_env_specs(tensordict=td.copy())
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device found.")
     @pytest.mark.parametrize("break_when_any_done", [True, False])
     def test_auto_cast_to_device(self, break_when_any_done):
@@ -1164,6 +1165,18 @@ class TestParallel:
         with set_auto_unwrap_transformed_env(False):
             yield
 
+    # Helper classes for test_parallel_env_chained_attr
+    class _NestedObject:
+        value = 42
+
+        def get_value(self):
+            return self.value
+
+    class _EnvWithNestedAttr(DiscreteActionVecMockEnv):
+        def __init__(self):
+            super().__init__()
+            self.nested = TestParallel._NestedObject()
+
     def test_create_env_fn(self, maybe_fork_ParallelEnv):
         def make_env():
             return GymEnv(PENDULUM_VERSIONED())
@@ -1526,6 +1539,7 @@ class TestParallel:
             # env_serial.close()
             env0.close(raise_if_closed=False)
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
     @pytest.mark.parametrize("heterogeneous", [False, True])
     def test_transform_env_transform_no_device(
@@ -1638,6 +1652,21 @@ class TestParallel:
         finally:
             env.close(raise_if_closed=False)
 
+    def test_parallel_env_chained_attr(self, maybe_fork_ParallelEnv):
+        """Test chained attribute access like env.nested.value works in ParallelEnv."""
+        env = maybe_fork_ParallelEnv(2, TestParallel._EnvWithNestedAttr)
+        try:
+            env.reset()
+            # Test chained attribute access
+            results = list(env.nested.value)
+            assert all(result == 42 for result in results)
+            # Test chained method access
+            results = list(env.nested.get_value())
+            assert all(result == 42 for result in results)
+        finally:
+            env.close(raise_if_closed=False)
+
+    @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda to test on")
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("frame_skip", [4])
@@ -1742,6 +1771,7 @@ class TestParallel:
             env_serial.close(raise_if_closed=False)
             env0.close(raise_if_closed=False)
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device detected")
     @pytest.mark.parametrize("frame_skip", [4])
@@ -2726,6 +2756,7 @@ def test_marl_group_type(group_type):
         check_marl_grouping(group_type.get_group_map(agent_names), agent_names)
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device")
 class TestConcurrentEnvs:
     """Concurrent parallel envs on multiple procs can interfere."""

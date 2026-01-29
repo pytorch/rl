@@ -53,6 +53,7 @@ jobs:
       repository: pytorch/rl
       docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       timeout: 120
+      upload-artifact: test-results-cpu-${{ matrix.python_version }}
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
@@ -91,6 +92,7 @@ jobs:
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 120
+      upload-artifact: test-results-gpu-shard-${{ matrix.shard }}
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
@@ -134,6 +136,7 @@ jobs:
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 120
+      upload-artifact: test-results-gpu-distributed
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
@@ -208,6 +211,7 @@ jobs:
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 120
+      upload-artifact: test-results-optdeps
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
@@ -245,6 +249,7 @@ jobs:
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 120
+      upload-artifact: test-results-stable-gpu-shard-${{ matrix.shard }}
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
@@ -290,6 +295,7 @@ jobs:
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 120
+      upload-artifact: test-results-stable-gpu-distributed
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
