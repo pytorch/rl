@@ -979,7 +979,9 @@ class TestNoisyLinear:
         from torchrl.modules.models.exploration import NoisyLinear
 
         in_features, out_features = 10, 5
-        layer = NoisyLinear(in_features, out_features, device=device)
+        layer = NoisyLinear(
+            in_features, out_features, device=device, use_exploration_type=True
+        )
 
         # Check that mu and sigma parameters exist
         assert hasattr(layer, "weight_mu")
@@ -1010,7 +1012,8 @@ class TestNoisyLinear:
         from torchrl.modules.models.exploration import NoisyLinear
 
         torch.manual_seed(0)
-        layer = NoisyLinear(10, 5, device=device)
+        # Use use_exploration_type=True to enable exploration_type-based control
+        layer = NoisyLinear(10, 5, device=device, use_exploration_type=True)
         x = torch.randn(3, 10, device=device)
 
         # Get outputs in RANDOM exploration mode (with noise)
@@ -1040,7 +1043,7 @@ class TestNoisyLinear:
         from torchrl.modules.models.exploration import NoisyLinear
 
         torch.manual_seed(0)
-        layer = NoisyLinear(10, 5, device=device)
+        layer = NoisyLinear(10, 5, device=device, use_exploration_type=True)
         x = torch.randn(3, 10, device=device)
 
         with set_exploration_type(ExplorationType.RANDOM):
@@ -1063,7 +1066,7 @@ class TestNoisyLinear:
         from torchrl.modules.models.exploration import NoisyLinear
 
         torch.manual_seed(0)
-        layer = NoisyLinear(10, 5, device=device)
+        layer = NoisyLinear(10, 5, device=device, use_exploration_type=True)
         x = torch.randn(3, 10, device=device)
 
         with set_exploration_type(ExplorationType.RANDOM):
@@ -1089,7 +1092,7 @@ class TestNoisyLinear:
         from torchrl.modules.models.exploration import NoisyLinear
 
         torch.manual_seed(0)
-        layer = NoisyLinear(10, 5, device=device)
+        layer = NoisyLinear(10, 5, device=device, use_exploration_type=True)
 
         # Get noise samples
         noise_samples = []
@@ -1116,7 +1119,7 @@ class TestNoisyLinear:
         from torchrl.modules.models.exploration import NoisyLinear
 
         torch.manual_seed(0)
-        layer = NoisyLinear(10, 5, device=device)
+        layer = NoisyLinear(10, 5, device=device, use_exploration_type=True)
 
         # RANDOM exploration mode - should include noise
         with set_exploration_type(ExplorationType.RANDOM):
@@ -1144,9 +1147,11 @@ class TestNoisyLinear:
 
         torch.manual_seed(0)
 
-        # Create a simple network with NoisyLinear
+        # Create a simple network with NoisyLinear using new behavior
         network = nn.Sequential(
-            nn.Linear(10, 20), nn.ReLU(), NoisyLinear(20, 5, device=device)
+            nn.Linear(10, 20),
+            nn.ReLU(),
+            NoisyLinear(20, 5, device=device, use_exploration_type=True),
         ).to(device)
 
         x = torch.randn(3, 10, device=device)
@@ -1175,11 +1180,11 @@ class TestNoisyLinear:
 
         torch.manual_seed(0)
 
-        # Create network with multiple NoisyLinear layers
+        # Create network with multiple NoisyLinear layers using new behavior
         network = nn.Sequential(
-            NoisyLinear(10, 20, device=device),
+            NoisyLinear(10, 20, device=device, use_exploration_type=True),
             nn.ReLU(),
-            NoisyLinear(20, 5, device=device),
+            NoisyLinear(20, 5, device=device, use_exploration_type=True),
         ).to(device)
 
         x = torch.randn(3, 10, device=device)
@@ -1210,7 +1215,7 @@ class TestNoisyLinear:
         from torchrl.modules.models.exploration import NoisyLinear
 
         torch.manual_seed(0)
-        layer = NoisyLinear(10, 5, device=device)
+        layer = NoisyLinear(10, 5, device=device, use_exploration_type=True)
 
         x = torch.randn(3, 10, device=device, requires_grad=True)
 
@@ -1242,7 +1247,7 @@ class TestNoisyLinear:
         from torchrl.modules.models.exploration import NoisyLinear
 
         torch.manual_seed(0)
-        layer = NoisyLinear(10, 5, device=device)
+        layer = NoisyLinear(10, 5, device=device, use_exploration_type=True)
 
         # Store initial sigma values
         initial_weight_sigma = layer.weight_sigma.clone()
@@ -1273,9 +1278,13 @@ class TestNoisyLinear:
 
         torch.manual_seed(0)
 
-        # Create layers with different std_init values
-        layer_small = NoisyLinear(10, 5, std_init=0.01, device=device)
-        layer_large = NoisyLinear(10, 5, std_init=1.0, device=device)
+        # Create layers with different std_init values using new behavior
+        layer_small = NoisyLinear(
+            10, 5, std_init=0.01, device=device, use_exploration_type=True
+        )
+        layer_large = NoisyLinear(
+            10, 5, std_init=1.0, device=device, use_exploration_type=True
+        )
 
         x = torch.randn(3, 10, device=device)
 
@@ -1310,7 +1319,7 @@ class TestNoisyLinear:
         from torchrl.modules.models.exploration import NoisyLinear
 
         torch.manual_seed(0)
-        layer = NoisyLinear(10, 5, device=device)
+        layer = NoisyLinear(10, 5, device=device, use_exploration_type=True)
 
         # Save and load
         with tempfile.NamedTemporaryFile(delete=False) as f:
@@ -1318,7 +1327,7 @@ class TestNoisyLinear:
         # File is now closed, so we can safely work with it on Windows
         try:
             torch.save(layer.state_dict(), filepath)
-            layer_loaded = NoisyLinear(10, 5, device=device)
+            layer_loaded = NoisyLinear(10, 5, device=device, use_exploration_type=True)
             layer_loaded.load_state_dict(torch.load(filepath))
         finally:
             os.unlink(filepath)
@@ -1328,3 +1337,64 @@ class TestNoisyLinear:
         assert torch.allclose(layer.weight_sigma, layer_loaded.weight_sigma, atol=1e-6)
         assert torch.allclose(layer.bias_mu, layer_loaded.bias_mu, atol=1e-6)
         assert torch.allclose(layer.bias_sigma, layer_loaded.bias_sigma, atol=1e-6)
+
+    def test_noisy_linear_legacy_behavior(self, device):
+        """Test that legacy behavior (using self.training) works with use_exploration_type=False."""
+        from torchrl.modules.models.exploration import NoisyLinear
+
+        torch.manual_seed(0)
+        # Silence the warning by explicitly opting out
+        layer = NoisyLinear(10, 5, device=device, use_exploration_type=False)
+        x = torch.randn(3, 10, device=device)
+
+        # Training mode - should use noise
+        layer.train()
+        y_train_1 = layer(x)
+        layer.reset_noise()
+        y_train_2 = layer(x)
+
+        # Eval mode - should not use noise
+        layer.eval()
+        y_eval_1 = layer(x)
+        layer.reset_noise()
+        y_eval_2 = layer(x)
+
+        # Training outputs should be different (noise is on)
+        assert not torch.allclose(y_train_1, y_train_2, atol=1e-6)
+
+        # Eval outputs should be identical (noise is off)
+        torch.testing.assert_close(y_eval_1, y_eval_2)
+
+    def test_noisy_linear_deprecation_warning(self, device):
+        """Test that FutureWarning is raised when use_exploration_type is None."""
+        import warnings
+
+        from torchrl.modules.models.exploration import NoisyLinear
+
+        # Should emit FutureWarning when use_exploration_type is not specified
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            layer = NoisyLinear(10, 5, device=device)
+
+            # Check that a FutureWarning was raised
+            assert len(w) == 1
+            assert issubclass(w[0].category, FutureWarning)
+            assert "exploration_type" in str(w[0].message)
+
+        # Should NOT emit warning when use_exploration_type is explicitly set
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            layer = NoisyLinear(10, 5, device=device, use_exploration_type=True)
+            # Filter to only FutureWarning about exploration_type
+            exploration_warnings = [
+                x for x in w if "exploration_type" in str(x.message)
+            ]
+            assert len(exploration_warnings) == 0
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            layer = NoisyLinear(10, 5, device=device, use_exploration_type=False)
+            exploration_warnings = [
+                x for x in w if "exploration_type" in str(x.message)
+            ]
+            assert len(exploration_warnings) == 0
