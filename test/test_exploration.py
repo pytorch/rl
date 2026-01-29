@@ -1004,51 +1004,53 @@ class TestNoisyLinear:
         assert (layer.bias_mu >= -mu_range).all()
         assert (layer.bias_mu <= mu_range).all()
 
-    def test_noisy_linear_training_vs_eval(self, device):
-        """Test that NoisyLinear behaves differently in training vs eval mode."""
+    def test_noisy_linear_exploration_modes(self, device):
+        """Test that NoisyLinear behaves differently based on exploration mode."""
+        from torchrl.envs.utils import ExplorationType, set_exploration_type
         from torchrl.modules.models.exploration import NoisyLinear
 
         torch.manual_seed(0)
         layer = NoisyLinear(10, 5, device=device)
         x = torch.randn(3, 10, device=device)
 
-        # Get outputs in training mode
-        layer.train()
-        y_train_1 = layer(x)
-        layer.reset_noise()  # Reset noise
-        y_train_2 = layer(x)
+        # Get outputs in RANDOM exploration mode (with noise)
+        with set_exploration_type(ExplorationType.RANDOM):
+            y_random_1 = layer(x)
+            layer.reset_noise()  # Reset noise
+            y_random_2 = layer(x)
 
-        # Get outputs in eval mode
-        layer.eval()
-        y_eval_1 = layer(x)
-        layer.reset_noise()  # Reset noise
-        y_eval_2 = layer(x)
+        # Get outputs in DETERMINISTIC mode (no noise)
+        with set_exploration_type(ExplorationType.DETERMINISTIC):
+            y_det_1 = layer(x)
+            layer.reset_noise()  # Reset noise
+            y_det_2 = layer(x)
 
-        # Training outputs should be different due to noise
-        assert not torch.allclose(y_train_1, y_train_2, atol=1e-6)
+        # Random mode outputs should be different due to noise
+        assert not torch.allclose(y_random_1, y_random_2, atol=1e-6)
 
-        # Eval outputs should be identical (no noise)
-        torch.testing.assert_close(y_eval_1, y_eval_2)
+        # Deterministic outputs should be identical (no noise)
+        torch.testing.assert_close(y_det_1, y_det_2)
 
-        # Training and eval outputs should be different
-        assert not torch.allclose(y_train_1, y_eval_1, atol=1e-6)
+        # Random and deterministic outputs should be different
+        assert not torch.allclose(y_random_1, y_det_1, atol=1e-6)
 
     def test_noise_consistency_within_episode(self, device):
         """Test that noise remains consistent within an episode (no reset)."""
+        from torchrl.envs.utils import ExplorationType, set_exploration_type
         from torchrl.modules.models.exploration import NoisyLinear
 
         torch.manual_seed(0)
         layer = NoisyLinear(10, 5, device=device)
-        layer.train()
         x = torch.randn(3, 10, device=device)
 
-        # First forward pass
-        y1 = layer(x)
+        with set_exploration_type(ExplorationType.RANDOM):
+            # First forward pass
+            y1 = layer(x)
 
-        # Multiple forward passes without resetting noise
-        y2 = layer(x)
-        y3 = layer(x)
-        y4 = layer(x)
+            # Multiple forward passes without resetting noise
+            y2 = layer(x)
+            y3 = layer(x)
+            y4 = layer(x)
 
         # All outputs should be identical (same noise)
         assert torch.allclose(y1, y2, atol=1e-6)
@@ -1057,23 +1059,24 @@ class TestNoisyLinear:
 
     def test_noise_change_after_reset(self, device):
         """Test that noise changes after reset_noise() is called."""
+        from torchrl.envs.utils import ExplorationType, set_exploration_type
         from torchrl.modules.models.exploration import NoisyLinear
 
         torch.manual_seed(0)
         layer = NoisyLinear(10, 5, device=device)
-        layer.train()
         x = torch.randn(3, 10, device=device)
 
-        # First episode
-        y1 = layer(x)
+        with set_exploration_type(ExplorationType.RANDOM):
+            # First episode
+            y1 = layer(x)
 
-        # Reset noise (simulating new episode)
-        layer.reset_noise()
-        y2 = layer(x)
+            # Reset noise (simulating new episode)
+            layer.reset_noise()
+            y2 = layer(x)
 
-        # Reset noise again
-        layer.reset_noise()
-        y3 = layer(x)
+            # Reset noise again
+            layer.reset_noise()
+            y3 = layer(x)
 
         # Outputs should be different after each reset
         assert not torch.allclose(y1, y2, atol=1e-6)
@@ -1082,19 +1085,20 @@ class TestNoisyLinear:
 
     def test_factorized_gaussian_noise(self, device):
         """Test that the noise follows factorized Gaussian distribution."""
+        from torchrl.envs.utils import ExplorationType, set_exploration_type
         from torchrl.modules.models.exploration import NoisyLinear
 
         torch.manual_seed(0)
         layer = NoisyLinear(10, 5, device=device)
-        layer.train()
 
         # Get noise samples
         noise_samples = []
-        for _ in range(1000):
-            layer.reset_noise()
-            # Extract the actual noise used
-            weight_noise = layer.weight - layer.weight_mu
-            noise_samples.append(weight_noise.flatten())
+        with set_exploration_type(ExplorationType.RANDOM):
+            for _ in range(1000):
+                layer.reset_noise()
+                # Extract the actual noise used
+                weight_noise = layer.weight - layer.weight_mu
+                noise_samples.append(weight_noise.flatten())
 
         noise_samples = torch.stack(noise_samples)
 
@@ -1107,33 +1111,35 @@ class TestNoisyLinear:
         assert 0.5 * expected_std < noise_std < 2.0 * expected_std
 
     def test_weight_property_behavior(self, device):
-        """Test that weight property returns correct values in train/eval modes."""
+        """Test that weight property returns correct values based on exploration mode."""
+        from torchrl.envs.utils import ExplorationType, set_exploration_type
         from torchrl.modules.models.exploration import NoisyLinear
 
         torch.manual_seed(0)
         layer = NoisyLinear(10, 5, device=device)
 
-        # Training mode
-        layer.train()
-        layer.reset_noise()
-        weight_train = layer.weight
-        bias_train = layer.bias
+        # RANDOM exploration mode - should include noise
+        with set_exploration_type(ExplorationType.RANDOM):
+            layer.reset_noise()
+            weight_random = layer.weight
+            bias_random = layer.bias
 
         # Should include noise
-        assert not torch.allclose(weight_train, layer.weight_mu, atol=1e-6)
-        assert not torch.allclose(bias_train, layer.bias_mu, atol=1e-6)
+        assert not torch.allclose(weight_random, layer.weight_mu, atol=1e-6)
+        assert not torch.allclose(bias_random, layer.bias_mu, atol=1e-6)
 
-        # Eval mode
-        layer.eval()
-        weight_eval = layer.weight
-        bias_eval = layer.bias
+        # DETERMINISTIC mode - should be exactly the mean weights
+        with set_exploration_type(ExplorationType.DETERMINISTIC):
+            weight_det = layer.weight
+            bias_det = layer.bias
 
         # Should be exactly the mean weights
-        assert torch.allclose(weight_eval, layer.weight_mu, atol=1e-6)
-        assert torch.allclose(bias_eval, layer.bias_mu, atol=1e-6)
+        assert torch.allclose(weight_det, layer.weight_mu, atol=1e-6)
+        assert torch.allclose(bias_det, layer.bias_mu, atol=1e-6)
 
     def test_noisy_linear_in_network(self, device):
         """Test NoisyLinear in a complete network setup."""
+        from torchrl.envs.utils import ExplorationType, set_exploration_type
         from torchrl.modules.models.exploration import NoisyLinear
 
         torch.manual_seed(0)
@@ -1145,25 +1151,26 @@ class TestNoisyLinear:
 
         x = torch.randn(3, 10, device=device)
 
-        # Training mode
-        network.train()
-        y_train_1 = network(x)
-        network[-1].reset_noise()  # Reset noise in NoisyLinear layer
-        y_train_2 = network(x)
+        # RANDOM exploration mode
+        with set_exploration_type(ExplorationType.RANDOM):
+            y_random_1 = network(x)
+            network[-1].reset_noise()  # Reset noise in NoisyLinear layer
+            y_random_2 = network(x)
 
-        # Eval mode
-        network.eval()
-        y_eval_1 = network(x)
-        y_eval_2 = network(x)
+        # DETERMINISTIC mode
+        with set_exploration_type(ExplorationType.DETERMINISTIC):
+            y_det_1 = network(x)
+            y_det_2 = network(x)
 
-        # Training outputs should be different
-        assert not torch.allclose(y_train_1, y_train_2, atol=1e-6)
+        # Random outputs should be different
+        assert not torch.allclose(y_random_1, y_random_2, atol=1e-6)
 
-        # Eval outputs should be identical
-        assert torch.allclose(y_eval_1, y_eval_2, atol=1e-6)
+        # Deterministic outputs should be identical
+        assert torch.allclose(y_det_1, y_det_2, atol=1e-6)
 
     def test_noise_reset_function(self, device):
         """Test the reset_noise utility function."""
+        from torchrl.envs.utils import ExplorationType, set_exploration_type
         from torchrl.modules.models.exploration import NoisyLinear, reset_noise
 
         torch.manual_seed(0)
@@ -1175,46 +1182,42 @@ class TestNoisyLinear:
             NoisyLinear(20, 5, device=device),
         ).to(device)
 
-        network.train()
         x = torch.randn(3, 10, device=device)
 
-        # First forward pass
-        network(x)
+        with set_exploration_type(ExplorationType.RANDOM):
+            # First forward pass
+            network(x)
 
-        # Reset noise using utility function
-        reset_noise(network)
-        network(x)
+            # Reset noise using utility function
+            reset_noise(network)
+            network(x)
 
-        # Outputs should be different (but might be the same if noise is very small)
-        # Let's check that at least one of the layers changed
-        changed = False
-        for module in network.modules():
-            if hasattr(module, "weight_mu"):
-                # Check if the actual weights changed
-                if not torch.allclose(module.weight, module.weight_mu, atol=1e-6):
-                    changed = True
-                    break
+            # Check that at least one of the layers has noise
+            changed = False
+            for module in network.modules():
+                if hasattr(module, "weight_mu"):
+                    # Check if the actual weights have noise
+                    if not torch.allclose(module.weight, module.weight_mu, atol=1e-6):
+                        changed = True
+                        break
 
-        # If no noise is present, the test should still pass
-        if not changed:
-            # Check that we're in eval mode or noise is very small
-            assert not network.training or all(
-                hasattr(m, "weight_sigma") and m.weight_sigma.max() < 1e-3
-                for m in network.modules()
-                if hasattr(m, "weight_sigma")
-            )
+        # In RANDOM mode, there should be noise
+        assert changed, "Expected noise to be present in RANDOM exploration mode"
 
     def test_noisy_linear_gradients(self, device):
         """Test that gradients flow through NoisyLinear parameters."""
+        from torchrl.envs.utils import ExplorationType, set_exploration_type
         from torchrl.modules.models.exploration import NoisyLinear
 
         torch.manual_seed(0)
         layer = NoisyLinear(10, 5, device=device)
-        layer.train()
 
         x = torch.randn(3, 10, device=device, requires_grad=True)
-        y = layer(x)
-        loss = y.sum()
+
+        # Gradients should flow in RANDOM mode
+        with set_exploration_type(ExplorationType.RANDOM):
+            y = layer(x)
+            loss = y.sum()
 
         # Backward pass
         loss.backward()
@@ -1235,11 +1238,11 @@ class TestNoisyLinear:
 
     def test_noisy_linear_parameter_learning(self, device):
         """Test that sigma parameters actually learn during training."""
+        from torchrl.envs.utils import ExplorationType, set_exploration_type
         from torchrl.modules.models.exploration import NoisyLinear
 
         torch.manual_seed(0)
         layer = NoisyLinear(10, 5, device=device)
-        layer.train()
 
         # Store initial sigma values
         initial_weight_sigma = layer.weight_sigma.clone()
@@ -1250,13 +1253,14 @@ class TestNoisyLinear:
         x = torch.randn(100, 10, device=device)
         target = torch.randn(100, 5, device=device)
 
-        for _ in range(10):
-            optimizer.zero_grad()
-            layer.reset_noise()  # Reset noise each iteration
-            y = layer(x)
-            loss = torch.nn.functional.mse_loss(y, target)
-            loss.backward()
-            optimizer.step()
+        with set_exploration_type(ExplorationType.RANDOM):
+            for _ in range(10):
+                optimizer.zero_grad()
+                layer.reset_noise()  # Reset noise each iteration
+                y = layer(x)
+                loss = torch.nn.functional.mse_loss(y, target)
+                loss.backward()
+                optimizer.step()
 
         # Check that sigma values have changed
         assert not torch.allclose(layer.weight_sigma, initial_weight_sigma, atol=1e-6)
@@ -1264,6 +1268,7 @@ class TestNoisyLinear:
 
     def test_noisy_linear_std_init_effect(self, device):
         """Test that different std_init values affect noise magnitude."""
+        from torchrl.envs.utils import ExplorationType, set_exploration_type
         from torchrl.modules.models.exploration import NoisyLinear
 
         torch.manual_seed(0)
@@ -1272,26 +1277,20 @@ class TestNoisyLinear:
         layer_small = NoisyLinear(10, 5, std_init=0.01, device=device)
         layer_large = NoisyLinear(10, 5, std_init=1.0, device=device)
 
-        layer_small.train()
-        layer_large.train()
-
         x = torch.randn(3, 10, device=device)
-
-        # Get outputs with different noise levels
-        layer_small.reset_noise()
-        layer_large.reset_noise()
 
         # Get multiple samples to measure noise variance
         noise_samples_small = []
         noise_samples_large = []
 
-        for _ in range(10):
-            layer_small.reset_noise()
-            layer_large.reset_noise()
-            y_small = layer_small(x)
-            y_large = layer_large(x)
-            noise_samples_small.append(y_small)
-            noise_samples_large.append(y_large)
+        with set_exploration_type(ExplorationType.RANDOM):
+            for _ in range(10):
+                layer_small.reset_noise()
+                layer_large.reset_noise()
+                y_small = layer_small(x)
+                y_large = layer_large(x)
+                noise_samples_small.append(y_small)
+                noise_samples_large.append(y_large)
 
         noise_samples_small = torch.stack(noise_samples_small)
         noise_samples_large = torch.stack(noise_samples_large)

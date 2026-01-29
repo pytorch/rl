@@ -36,6 +36,12 @@ class NoisyLinear(nn.Linear):
     with gradient descent along with any other remaining network weights. Factorized Gaussian
     noise is the type of noise usually employed.
 
+    .. note:: The noise is controlled by the exploration mode set via
+        :func:`~torchrl.envs.utils.set_exploration_type`. When exploration type is
+        :class:`~torchrl.envs.utils.ExplorationType.RANDOM`, noise is added to the weights.
+        When exploration type is :class:`~torchrl.envs.utils.ExplorationType.DETERMINISTIC`,
+        :class:`~torchrl.envs.utils.ExplorationType.MODE`, or
+        :class:`~torchrl.envs.utils.ExplorationType.MEAN`, only the mean weights are used.
 
     Args:
         in_features (int): input features dimension
@@ -47,7 +53,7 @@ class NoisyLinear(nn.Linear):
         dtype (torch.dtype, optional): dtype of the parameters.
             Defaults to ``None`` (default pytorch dtype)
         std_init (scalar, optional): initial value of the Gaussian standard deviation before optimization.
-            Defaults to ``0.1``
+            Defaults to ``0.5`` as per the original paper.
 
     """
 
@@ -58,7 +64,7 @@ class NoisyLinear(nn.Linear):
         bias: bool = True,
         device: DEVICE_TYPING | None = None,
         dtype: torch.dtype | None = None,
-        std_init: float = 0.1,
+        std_init: float = 0.5,
     ):
         nn.Module.__init__(self)
         self.in_features = int(in_features)
@@ -136,7 +142,7 @@ class NoisyLinear(nn.Linear):
 
     @property
     def weight(self) -> torch.Tensor:
-        if self.training:
+        if exploration_type() is ExplorationType.RANDOM:
             return self.weight_mu + self.weight_sigma * self.weight_epsilon
         else:
             return self.weight_mu
@@ -144,7 +150,7 @@ class NoisyLinear(nn.Linear):
     @property
     def bias(self) -> torch.Tensor | None:
         if self.bias_mu is not None:
-            if self.training:
+            if exploration_type() is ExplorationType.RANDOM:
                 return self.bias_mu + self.bias_sigma * self.bias_epsilon
             else:
                 return self.bias_mu
