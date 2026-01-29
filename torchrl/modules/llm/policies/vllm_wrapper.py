@@ -1005,34 +1005,35 @@ class vLLMWrapper(LLMWrapperBase):
 
         if existing_tokens is not None:
             # Use existing tokens directly - skip tokenization for KV cache consistency
-            if self.pad_output:
-                if isinstance(existing_tokens, list):
-                    # Convert list to padded tensor
-                    from torch.nn.utils.rnn import pad_sequence
-
-                    tokens_prompt_padded = pad_sequence(
-                        existing_tokens,
-                        batch_first=True,
-                        padding_value=self.padding_value,
-                        padding_side="left",
-                    )
-                else:
-                    tokens_prompt_padded = existing_tokens
+            # Handle different token storage formats:
+            # - list: from manual construction or as_list=True retrieval
+            # - nested tensor: from IncrementalTokenizer (torch.nested.as_nested_tensor)
+            # - regular tensor: padded tensor
+            if isinstance(existing_tokens, list):
+                tokens_list = existing_tokens
+            elif isinstance(existing_tokens, torch.Tensor) and existing_tokens.is_nested:
+                # Unbind nested tensor to get list of tensors
+                tokens_list = list(existing_tokens.unbind(0))
             else:
-                if isinstance(existing_tokens, list):
-                    tokens_prompt_unpadded = existing_tokens
-                else:
-                    # Convert tensor to list, removing padding
-                    tokens_prompt_unpadded = [
-                        tokens[tokens != self.padding_value]
-                        for tokens in existing_tokens
-                    ]
+                # Already a padded tensor - extract non-padded sequences
+                tokens_list = [
+                    tokens[tokens != self.padding_value]
+                    for tokens in existing_tokens
+                ]
+
+            if self.pad_output:
+                tokens_prompt_padded = pad_sequence(
+                    tokens_list,
+                    batch_first=True,
+                    padding_value=self.padding_value,
+                    padding_side="left",
+                )
+            else:
+                tokens_prompt_unpadded = tokens_list
 
             # Still need text_prompt for output, but we can derive it from tokens
             text_prompt = self.tokenizer.batch_decode(
-                tokens_prompt_unpadded
-                if tokens_prompt_unpadded
-                else [t[t != self.padding_value] for t in tokens_prompt_padded],
+                tokens_list,
                 skip_special_tokens=False,
             )
         else:

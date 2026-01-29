@@ -121,7 +121,7 @@ class ChatEnv(EnvBase, metaclass=_ChatEnvMeta):
         data_key (str, optional): The key of the data input to the env at reset time (from dataloader). Defaults to `"query"`.
         device (torch.device, optional): The device to use for computations. Defaults to `None`.
         with_tokenizer (bool, optional): If ``True``, the environment is automatically wrapped with
-            :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer` to maintain ``tokens.full`` synchronized
+            :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer` to maintain ``tokens.prompt`` synchronized
             with ``history.prompt``. This enables token-first inference in LLM wrappers with ``prefer_tokens=True``,
             ensuring KV cache consistency across multi-turn conversations. Requires ``tokenizer`` to be provided.
             Defaults to ``False``.
@@ -170,7 +170,7 @@ class ChatEnv(EnvBase, metaclass=_ChatEnvMeta):
         ...     system_prompt="You are a helpful assistant.",
         ...     with_tokenizer=True,  # Automatically wraps with IncrementalTokenizer
         ... )
-        >>> # Now tokens.full will be available and synchronized with history.prompt
+        >>> # Now tokens.prompt will be available and synchronized with history.prompt
 
     """
 

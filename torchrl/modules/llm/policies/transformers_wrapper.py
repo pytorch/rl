@@ -795,16 +795,26 @@ class TransformersWrapper(LLMWrapperBase):
 
         if existing_tokens is not None:
             # Use existing tokens directly - skip tokenization for KV cache consistency
+            # Handle different token storage formats:
+            # - list: from manual construction or as_list=True retrieval
+            # - nested tensor: from IncrementalTokenizer (torch.nested.as_nested_tensor)
+            # - regular tensor: padded tensor
             if isinstance(existing_tokens, list):
-                # Convert list to padded tensor
-                tokens_prompt_padded = pad_sequence(
-                    existing_tokens,
-                    batch_first=True,
-                    padding_value=self.padding_value,
-                    padding_side="left",
-                )
+                tokens_list = existing_tokens
+            elif isinstance(existing_tokens, torch.Tensor) and existing_tokens.is_nested:
+                # Unbind nested tensor to get list of tensors
+                tokens_list = list(existing_tokens.unbind(0))
             else:
-                tokens_prompt_padded = existing_tokens
+                # Already a padded tensor - extract non-padded sequences
+                tokens_list = [t[t != self.padding_value] for t in existing_tokens]
+
+            # Convert list to padded tensor for model input
+            tokens_prompt_padded = pad_sequence(
+                tokens_list,
+                batch_first=True,
+                padding_value=self.padding_value,
+                padding_side="left",
+            )
 
             if self._device is not None:
                 tokens_prompt_padded = tokens_prompt_padded.to(self._device)
@@ -815,7 +825,6 @@ class TransformersWrapper(LLMWrapperBase):
             ).long()
 
             # Still need text_prompt for output, but we can derive it from tokens
-            tokens_list = [t[t != self.padding_value] for t in tokens_prompt_padded]
             text_prompt = self.tokenizer.batch_decode(
                 tokens_list,
                 skip_special_tokens=False,

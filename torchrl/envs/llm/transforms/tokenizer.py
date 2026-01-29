@@ -368,7 +368,7 @@ class IncrementalTokenizer(Transform):
         >>> env = ChatEnv(batch_size=(1,), tokenizer=tokenizer)
         >>> env = TransformedEnv(env, IncrementalTokenizer(tokenizer))
         >>>
-        >>> # After reset and step, tokens.full will be maintained
+        >>> # After reset and step, tokens.prompt will be maintained
         >>> td = env.reset(TensorDict({"query": "Hello"}, batch_size=(1,)))
         >>> assert ("tokens", "prompt") in td.keys(True, True)
 
@@ -405,13 +405,6 @@ class IncrementalTokenizer(Transform):
         self.chat_template_name = chat_template_name
         self.chat_template = chat_template
         self.add_generation_prompt = add_generation_prompt
-
-        # Track the previous history length per batch element for incremental tokenization
-        # This is reset on each env.reset()
-        self._prev_history_len: int | None = None
-
-        # Track token counts for each history message to enable overlap strategy
-        self._prev_tokens_per_message: list[int] | None = None
 
     def _tokenize_history(
         self,
@@ -450,10 +443,6 @@ class IncrementalTokenizer(Transform):
         tokens_list = result.get("input_ids", as_list=True)
         return tokens_list
 
-    def _get_history_len(self, history: Any) -> int:
-        """Get the number of messages in history."""
-        return history.shape[-1]
-
     def _get_history(self, tensordict: TensorDictBase) -> Any | None:
         """Get history from tensordict, handling both nested keys and tensorclass access."""
         history_key = self.history_key
@@ -480,9 +469,6 @@ class IncrementalTokenizer(Transform):
 
         # Store tokens in tensordict - handle batched case
         self._set_tokens(tensordict_reset, tokens_list)
-
-        # Track history length for incremental tokenization
-        self._prev_history_len = self._get_history_len(history)
 
         return tensordict_reset
 
@@ -514,7 +500,6 @@ class IncrementalTokenizer(Transform):
 
         tokens_list = self._tokenize_history(history)
         self._set_tokens(next_tensordict, tokens_list)
-        self._prev_history_len = self._get_history_len(history)
 
         return next_tensordict
 
