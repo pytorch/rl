@@ -153,6 +153,10 @@ class TransformersWrapper(LLMWrapperBase):
         min_batch_size (int | None, optional): The minimum batch size to use for batching. See `Batching`_ below for more details.
         max_batch_size (int | None, optional): The maximum batch size to use for batching. See `Batching`_ below for more details.
         batching_timeout (float, optional): The timeout for batching. See `Batching`_ below for more details.
+        prefer_tokens (bool, optional): If ``True`` and ``tokens.prompt`` exists in the input tensordict,
+            use those tokens directly instead of re-tokenizing from history. This enables KV cache
+            consistency when used with :class:`~torchrl.envs.llm.ChatEnv` with ``with_tokenizer=True``
+            or :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer`. Defaults to ``False``.
 
     .. _Batching:
 
@@ -271,8 +275,10 @@ class TransformersWrapper(LLMWrapperBase):
         min_batch_size: int | None = None,
         max_batch_size: int | None = None,
         batching_timeout: float = 10.0,
+        prefer_tokens: bool = False,
     ):
         super().__init__()
+        self.prefer_tokens = prefer_tokens
 
         if batching and min_batch_size is None:
             min_batch_size = 1
@@ -634,6 +640,11 @@ class TransformersWrapper(LLMWrapperBase):
         elif hasattr(self, "log_probs_key"):
             constructor_kwargs["log_probs_key"] = self.log_probs_key
 
+        if "prefer_tokens" in kwargs:
+            constructor_kwargs["prefer_tokens"] = kwargs["prefer_tokens"]
+        elif hasattr(self, "prefer_tokens"):
+            constructor_kwargs["prefer_tokens"] = self.prefer_tokens
+
         # Create and return new instance
         return type(self)(**constructor_kwargs)
 
@@ -768,48 +779,104 @@ class TransformersWrapper(LLMWrapperBase):
                 f"Expected History object for '{self.input_key}', got {type(history)}"
             )
 
-        # Apply chat template
-        tokenizer_kwargs = {}
-        if self.chat_template_name is not None:
-            tokenizer_kwargs.setdefault("chat_template_name", self.chat_template_name)
-        if self.chat_template is not None:
-            tokenizer_kwargs.setdefault("chat_template", self.chat_template)
-        tokenizer_kwargs.setdefault("add_generation_prompt", True)
-        text_prompt = history.apply_chat_template(
-            tokenizer=self.tokenizer, **tokenizer_kwargs
-        )
-        if not isinstance(text_prompt, list):
-            raise ValueError(
-                f"Expected list of text for history input, got {type(text_prompt)}"
+        # Check for existing tokens when prefer_tokens=True
+        # This enables token-first inference for KV cache consistency
+        existing_tokens = None
+        if self.prefer_tokens:
+            # Primary: tokens.prompt (from IncrementalTokenizer)
+            existing_tokens = td.get((self.tokens_key, "prompt"), None)
+            if existing_tokens is None:
+                # Fallback: tokens.full (for backward compatibility)
+                existing_tokens = td.get((self.tokens_key, "full"), None)
+
+        tokens_prompt_padded = None
+        attention_mask_prompt_padded = None
+        response_struct = None
+
+        if existing_tokens is not None:
+            # Use existing tokens directly - skip tokenization for KV cache consistency
+            # Handle different token storage formats:
+            # - list: from manual construction or as_list=True retrieval
+            # - nested tensor: from IncrementalTokenizer (torch.nested.as_nested_tensor)
+            # - regular tensor: padded tensor
+            if isinstance(existing_tokens, list):
+                tokens_list = existing_tokens
+            elif (
+                isinstance(existing_tokens, torch.Tensor) and existing_tokens.is_nested
+            ):
+                # Unbind nested tensor to get list of tensors
+                tokens_list = list(existing_tokens.unbind(0))
+            else:
+                # Already a padded tensor - extract non-padded sequences
+                tokens_list = [t[t != self.padding_value] for t in existing_tokens]
+
+            # Convert list to padded tensor for model input
+            tokens_prompt_padded = pad_sequence(
+                tokens_list,
+                batch_first=True,
+                padding_value=self.padding_value,
+                padding_side="left",
             )
-        tokenizer_kwargs.setdefault("return_assistant_tokens_mask", False)
-        tokenizer_kwargs.setdefault("tokenize", True)
-        tokenizer_kwargs.setdefault("padding", False)
-        tokenizer_kwargs.setdefault("return_dict", True)
-        response_struct = history.apply_chat_template(
-            tokenizer=self.tokenizer, **tokenizer_kwargs
-        )
 
-        if self._device is not None:
-            response_struct = response_struct.to(self._device)
+            if self._device is not None:
+                tokens_prompt_padded = tokens_prompt_padded.to(self._device)
 
-        tokens_prompt_padded = response_struct.get(
-            "input_ids",
-            as_padded_tensor=True,
-            padding_value=self.padding_value,
-            padding_side="left",
-        )
-        attention_mask_prompt_padded = response_struct.get(
-            "attention_mask",
-            as_padded_tensor=True,
-            padding_value=0,
-            padding_side="left",
-        )
-
-        if attention_mask_prompt_padded is None:
+            # Create attention mask from tokens
             attention_mask_prompt_padded = (
-                tokens_prompt_padded != self.tokenizer.pad_token_id
+                tokens_prompt_padded != self.padding_value
+            ).long()
+
+            # Still need text_prompt for output, but we can derive it from tokens
+            text_prompt = self.tokenizer.batch_decode(
+                tokens_list,
+                skip_special_tokens=False,
             )
+        else:
+            # Fall back to tokenizing from history (original behavior)
+            # Apply chat template
+            tokenizer_kwargs = {}
+            if self.chat_template_name is not None:
+                tokenizer_kwargs.setdefault(
+                    "chat_template_name", self.chat_template_name
+                )
+            if self.chat_template is not None:
+                tokenizer_kwargs.setdefault("chat_template", self.chat_template)
+            tokenizer_kwargs.setdefault("add_generation_prompt", True)
+            text_prompt = history.apply_chat_template(
+                tokenizer=self.tokenizer, **tokenizer_kwargs
+            )
+            if not isinstance(text_prompt, list):
+                raise ValueError(
+                    f"Expected list of text for history input, got {type(text_prompt)}"
+                )
+            tokenizer_kwargs.setdefault("return_assistant_tokens_mask", False)
+            tokenizer_kwargs.setdefault("tokenize", True)
+            tokenizer_kwargs.setdefault("padding", False)
+            tokenizer_kwargs.setdefault("return_dict", True)
+            response_struct = history.apply_chat_template(
+                tokenizer=self.tokenizer, **tokenizer_kwargs
+            )
+
+            if self._device is not None:
+                response_struct = response_struct.to(self._device)
+
+            tokens_prompt_padded = response_struct.get(
+                "input_ids",
+                as_padded_tensor=True,
+                padding_value=self.padding_value,
+                padding_side="left",
+            )
+            attention_mask_prompt_padded = response_struct.get(
+                "attention_mask",
+                as_padded_tensor=True,
+                padding_value=0,
+                padding_side="left",
+            )
+
+            if attention_mask_prompt_padded is None:
+                attention_mask_prompt_padded = (
+                    tokens_prompt_padded != self.tokenizer.pad_token_id
+                )
 
         result = self._generate_from_tokens(
             tokens_prompt_padded, attention_mask_prompt_padded, cfg, out
@@ -823,10 +890,15 @@ class TransformersWrapper(LLMWrapperBase):
                 else tokens_prompt_padded.unsqueeze(1).repeat(1, self.num_samples, 1)
             )
         else:
-            tokens_prompt_unpadded = response_struct.get(
-                "input_ids",
-                as_nested_tensor=True,
-            )
+            if response_struct is not None:
+                tokens_prompt_unpadded = response_struct.get(
+                    "input_ids",
+                    as_nested_tensor=True,
+                )
+            else:
+                # When using existing tokens, convert padded back to nested tensor
+                tokens_list = [t[t != self.padding_value] for t in tokens_prompt_padded]
+                tokens_prompt_unpadded = torch.nested.as_nested_tensor(tokens_list)
             if not self.num_samples:
                 result[(self.tokens_key, "prompt")] = tokens_prompt_unpadded
             else:
