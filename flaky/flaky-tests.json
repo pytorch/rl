@@ -1,17 +1,90 @@
 {
-  "generated_at": "2026-01-29T11:04:43.413901+00:00",
+  "generated_at": "2026-01-29T13:07:20.752867+00:00",
   "analysis_period": {
-    "start": "2026-01-21",
+    "start": "2026-01-22",
     "end": "2026-01-29",
     "runs_analyzed": 150
   },
   "summary": {
-    "total_tests": 0,
-    "flaky_count": 0,
-    "new_flaky_count": 0,
+    "total_tests": 26744,
+    "flaky_count": 4,
+    "new_flaky_count": 4,
     "resolved_count": 0
   },
-  "flaky_tests": [],
+  "flaky_tests": [
+    {
+      "nodeid": "test/test_envs.py::TestMultiKeyEnvs::test_rollout[2-5-batch_size0-0]",
+      "executions": 20,
+      "failures": 2,
+      "failure_rate": 0.1,
+      "flaky_score": 0.08,
+      "passed": 18,
+      "failed": 2,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 0.014,
+      "recent_failures": [
+        "2026-01-29T11:26:59Z",
+        "2026-01-29T11:26:59Z"
+      ],
+      "first_seen_flaky": "2026-01-29T11:26:59Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_envs.py::TestMultiKeyEnvs::test_rollout[2-5-batch_size1-0]",
+      "executions": 20,
+      "failures": 2,
+      "failure_rate": 0.1,
+      "flaky_score": 0.08,
+      "passed": 18,
+      "failed": 2,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 0.015,
+      "recent_failures": [
+        "2026-01-29T11:26:59Z",
+        "2026-01-29T11:26:59Z"
+      ],
+      "first_seen_flaky": "2026-01-29T11:26:59Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_envs.py::TestMultiKeyEnvs::test_rollout[2-5-batch_size2-0]",
+      "executions": 20,
+      "failures": 2,
+      "failure_rate": 0.1,
+      "flaky_score": 0.08,
+      "passed": 18,
+      "failed": 2,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 0.015,
+      "recent_failures": [
+        "2026-01-29T11:26:59Z",
+        "2026-01-29T11:26:59Z"
+      ],
+      "first_seen_flaky": "2026-01-29T11:26:59Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_rb.py::TestLazyMemmapStorageCleanup::test_cleanup_registry",
+      "executions": 20,
+      "failures": 2,
+      "failure_rate": 0.1,
+      "flaky_score": 0.08,
+      "passed": 18,
+      "failed": 2,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 0.001,
+      "recent_failures": [
+        "2026-01-29T11:24:20Z",
+        "2026-01-29T11:24:20Z"
+      ],
+      "first_seen_flaky": "2026-01-29T11:24:20Z",
+      "is_new": true
+    }
+  ],
   "thresholds": {
     "min_failure_rate": 0.05,
     "max_failure_rate": 0.95,
