@@ -9935,6 +9935,38 @@ class TestVecNormV2:
         finally:
             env.close(raise_if_closed=False)
 
+    @pytest.mark.parametrize("stateful", [True, False])
+    def test_inverse(self, stateful):
+        """Test that inverse denormalization recovers original data for stateful VecNormV2."""
+        torch.manual_seed(0)
+        vecnorm = VecNormV2(
+            in_keys=["observation"],
+            out_keys=["observation_norm"],
+            stateful=stateful,
+        )
+        
+        if not stateful:
+            # Stateless mode should raise NotImplementedError for inverse
+            td = TensorDict({"observation": torch.randn(10, 1)}, [10])
+            with pytest.raises(NotImplementedError):
+                vecnorm.inv(td.clone())
+            with pytest.raises(NotImplementedError):
+                vecnorm.denorm(td.clone())
+        else:
+            # Stateful mode: manually normalize and denormalize fixed data
+            td = TensorDict({"observation": torch.randn(10, 1)}, [10])
+            # Normalize using _step (as VecNormV2 is designed for TransformedEnv)
+            td_norm = td.clone()
+            vecnorm._step(td_norm, td_norm)  # Normalizes 'observation' to 'observation_norm'
+            # Denormalize
+            td_inv = vecnorm.inv(td_norm.clone())
+            td_denorm = vecnorm.denorm(td_norm.clone())
+            # Check that denorm is equivalent to inv
+            assert_allclose_td(td_inv, td_denorm)
+            
+            # Check recovery of original data
+            torch.testing.assert_close(td_inv["observation"], td["observation"], rtol=1e-5, atol=1e-5)
+
     def test_pickable(self):
         transform = VecNorm(in_keys=["observation"], new_api=True)
         env = CountingEnv()
@@ -10414,6 +10446,18 @@ class TestVecNorm:
         assert transform.__dict__.keys() == transform2.__dict__.keys()
         for key in sorted(transform.__dict__.keys()):
             assert isinstance(transform.__dict__[key], type(transform2.__dict__[key]))
+
+    def test_inverse(self):
+        """Test that inverse denormalization recovers original data for VecNorm (deprecated)."""
+        torch.manual_seed(0)
+        vecnorm = VecNorm(in_keys=["observation"], out_keys=["observation_norm"])
+        td = TensorDict({"observation": torch.randn(10, 1)}, [10])
+        td_norm = td.clone()
+        vecnorm._step(td_norm, td_norm)
+        td_inv = vecnorm.inv(td_norm.clone())
+        td_denorm = vecnorm.denorm(td_norm.clone())
+        assert_allclose_td(td_inv, td_denorm)
+        torch.testing.assert_close(td_inv["observation"], td["observation"], rtol=1e-5, atol=1e-5)
 
     def test_state_dict_vecnorm(self):
         transform0 = Compose(
