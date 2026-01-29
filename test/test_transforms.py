@@ -9944,7 +9944,7 @@ class TestVecNormV2:
             out_keys=["observation_norm"],
             stateful=stateful,
         )
-        
+
         if not stateful:
             # Stateless mode should raise NotImplementedError for inverse
             td = TensorDict({"observation": torch.randn(10, 1)}, [10])
@@ -9957,15 +9957,24 @@ class TestVecNormV2:
             td = TensorDict({"observation": torch.randn(10, 1)}, [10])
             # Normalize using _step (as VecNormV2 is designed for TransformedEnv)
             td_norm = td.clone()
-            vecnorm._step(td_norm, td_norm)  # Normalizes 'observation' to 'observation_norm'
+            vecnorm._step(
+                td_norm, td_norm
+            )  # Normalizes 'observation' to 'observation_norm'
+
+            # Verify normalization happened
+            assert "observation_norm" in td_norm.keys()
+            assert not torch.allclose(td_norm["observation_norm"], td["observation"])
+
             # Denormalize
             td_inv = vecnorm.inv(td_norm.clone())
             td_denorm = vecnorm.denorm(td_norm.clone())
             # Check that denorm is equivalent to inv
             assert_allclose_td(td_inv, td_denorm)
-            
+
             # Check recovery of original data
-            torch.testing.assert_close(td_inv["observation"], td["observation"], rtol=1e-5, atol=1e-5)
+            torch.testing.assert_close(
+                td_inv["observation"], td["observation"], rtol=1e-5, atol=1e-5
+            )
 
     def test_pickable(self):
         transform = VecNorm(in_keys=["observation"], new_api=True)
@@ -10454,10 +10463,17 @@ class TestVecNorm:
         td = TensorDict({"observation": torch.randn(10, 1)}, [10])
         td_norm = td.clone()
         vecnorm._step(td_norm, td_norm)
+
+        # Verify normalization happened
+        assert "observation_norm" in td_norm.keys()
+        assert not torch.allclose(td_norm["observation_norm"], td["observation"])
+
         td_inv = vecnorm.inv(td_norm.clone())
         td_denorm = vecnorm.denorm(td_norm.clone())
         assert_allclose_td(td_inv, td_denorm)
-        torch.testing.assert_close(td_inv["observation"], td["observation"], rtol=1e-5, atol=1e-5)
+        torch.testing.assert_close(
+            td_inv["observation"], td["observation"], rtol=1e-5, atol=1e-5
+        )
 
     def test_state_dict_vecnorm(self):
         transform0 = Compose(

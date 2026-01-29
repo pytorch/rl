@@ -435,14 +435,16 @@ class VecNormV2(Transform):
                 lambda x: x.to(dtype) if not x.dtype.is_floating_point else x
             )
         return data
-    
+
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Inverse call to denormalize the data using current loc and scale."""
         if not self.stateful:
-            raise NotImplementedError("Inverse not implemented for stateless VecNormV2.")
+            raise NotImplementedError(
+                "Inverse not implemented for stateless VecNormV2."
+            )
         if self._loc is None:
             raise RuntimeError("VecNormV2 must be initialized before calling inverse.")
-        
+
         loc, scale = self._get_loc_scale()
         for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             if out_key not in tensordict.keys(include_nested=True):
@@ -452,7 +454,7 @@ class VecNormV2(Transform):
             original_value = value * scale.get(in_key) + loc.get(in_key)
             tensordict.set(in_key, original_value)
         return tensordict
-    
+
     def denorm(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Denormalize the tensordict using the inverse transform."""
         return self.inv(tensordict)

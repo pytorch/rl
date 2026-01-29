@@ -7070,12 +7070,12 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
         mean = _sum / _count
         std = (_ssq / _count - mean.pow(2)).clamp_min(self.eps).sqrt()
         return (value - mean) / std.clamp_min(self.eps)
-    
+
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Inverse call to denormalize the data using current loc and scale."""
         if self._td is None:
             raise RuntimeError("VecNorm must be initialized before calling inverse.")
-        
+
         loc, scale = self._get_loc_scale()
         for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             if out_key not in tensordict.keys(include_nested=True):
