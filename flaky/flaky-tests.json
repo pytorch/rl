@@ -1,45 +1,45 @@
 {
-  "generated_at": "2026-01-29T17:57:19.069613+00:00",
+  "generated_at": "2026-01-30T06:20:36.077661+00:00",
   "analysis_period": {
-    "start": "2026-01-22",
+    "start": "2026-01-23",
     "end": "2026-01-29",
     "runs_analyzed": 150
   },
   "summary": {
-    "total_tests": 26758,
-    "flaky_count": 5,
-    "new_flaky_count": 5,
+    "total_tests": 26761,
+    "flaky_count": 18,
+    "new_flaky_count": 18,
     "resolved_count": 0
   },
   "flaky_tests": [
     {
       "nodeid": "test/test_rb.py::TestLazyMemmapStorageCleanup::test_cleanup_registry",
-      "executions": 50,
-      "failures": 8,
-      "failure_rate": 0.16,
-      "flaky_score": 0.32,
-      "passed": 42,
-      "failed": 8,
+      "executions": 60,
+      "failures": 10,
+      "failure_rate": 0.1667,
+      "flaky_score": 0.3333,
+      "passed": 50,
+      "failed": 10,
       "error": 0,
       "reruns": 0,
       "avg_duration": 0.001,
       "recent_failures": [
-        "2026-01-29T13:05:54Z",
-        "2026-01-29T13:35:31Z",
         "2026-01-29T13:35:31Z",
         "2026-01-29T16:18:09Z",
-        "2026-01-29T16:18:09Z"
+        "2026-01-29T16:18:09Z",
+        "2026-01-29T18:37:13Z",
+        "2026-01-29T18:37:13Z"
       ],
       "first_seen_flaky": "2026-01-29T11:24:20Z",
       "is_new": true
     },
     {
       "nodeid": "test/test_envs.py::TestMultiKeyEnvs::test_rollout[2-5-batch_size0-0]",
-      "executions": 50,
+      "executions": 60,
       "failures": 4,
-      "failure_rate": 0.08,
-      "flaky_score": 0.128,
-      "passed": 46,
+      "failure_rate": 0.0667,
+      "flaky_score": 0.1067,
+      "passed": 56,
       "failed": 4,
       "error": 0,
       "reruns": 0,
@@ -55,11 +55,11 @@
     },
     {
       "nodeid": "test/test_envs.py::TestMultiKeyEnvs::test_rollout[2-5-batch_size1-0]",
-      "executions": 50,
+      "executions": 60,
       "failures": 4,
-      "failure_rate": 0.08,
-      "flaky_score": 0.128,
-      "passed": 46,
+      "failure_rate": 0.0667,
+      "flaky_score": 0.1067,
+      "passed": 56,
       "failed": 4,
       "error": 0,
       "reruns": 0,
@@ -75,11 +75,11 @@
     },
     {
       "nodeid": "test/test_envs.py::TestMultiKeyEnvs::test_rollout[2-5-batch_size2-0]",
-      "executions": 50,
+      "executions": 60,
       "failures": 4,
-      "failure_rate": 0.08,
-      "flaky_score": 0.128,
-      "passed": 46,
+      "failure_rate": 0.0667,
+      "flaky_score": 0.1067,
+      "passed": 56,
       "failed": 4,
       "error": 0,
       "reruns": 0,
@@ -94,12 +94,32 @@
       "is_new": true
     },
     {
-      "nodeid": "test/test_objectives.py::TestSAC::test_sac_prioritized_weights[2]",
-      "executions": 50,
+      "nodeid": "test/test_modules.py::TestMultiAgent::test_multiagent_cnn_lazy",
+      "executions": 60,
       "failures": 4,
-      "failure_rate": 0.08,
-      "flaky_score": 0.128,
-      "passed": 46,
+      "failure_rate": 0.0667,
+      "flaky_score": 0.1067,
+      "passed": 56,
+      "failed": 4,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 0.01,
+      "recent_failures": [
+        "2026-01-29T13:05:54Z",
+        "2026-01-29T13:05:54Z",
+        "2026-01-29T18:37:13Z",
+        "2026-01-29T18:37:13Z"
+      ],
+      "first_seen_flaky": "2026-01-29T13:05:54Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_objectives.py::TestSAC::test_sac_prioritized_weights[2]",
+      "executions": 60,
+      "failures": 4,
+      "failure_rate": 0.0667,
+      "flaky_score": 0.1067,
+      "passed": 56,
       "failed": 4,
       "error": 0,
       "reruns": 0,
@@ -111,6 +131,222 @@
         "2026-01-29T16:18:09Z"
       ],
       "first_seen_flaky": "2026-01-29T13:35:31Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[None-None-None]",
+      "executions": 24,
+      "failures": 2,
+      "failure_rate": 0.0833,
+      "flaky_score": 0.0667,
+      "passed": 22,
+      "failed": 2,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 1.479,
+      "recent_failures": [
+        "2026-01-29T18:37:13Z",
+        "2026-01-29T18:37:13Z"
+      ],
+      "first_seen_flaky": "2026-01-29T18:37:13Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[None-None-storage1]",
+      "executions": 24,
+      "failures": 2,
+      "failure_rate": 0.0833,
+      "flaky_score": 0.0667,
+      "passed": 22,
+      "failed": 2,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 1.475,
+      "recent_failures": [
+        "2026-01-29T18:37:13Z",
+        "2026-01-29T18:37:13Z"
+      ],
+      "first_seen_flaky": "2026-01-29T18:37:13Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[None-sampler1-None]",
+      "executions": 24,
+      "failures": 2,
+      "failure_rate": 0.0833,
+      "flaky_score": 0.0667,
+      "passed": 22,
+      "failed": 2,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 1.476,
+      "recent_failures": [
+        "2026-01-29T18:37:13Z",
+        "2026-01-29T18:37:13Z"
+      ],
+      "first_seen_flaky": "2026-01-29T18:37:13Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[None-sampler1-storage1]",
+      "executions": 24,
+      "failures": 2,
+      "failure_rate": 0.0833,
+      "flaky_score": 0.0667,
+      "passed": 22,
+      "failed": 2,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 1.471,
+      "recent_failures": [
+        "2026-01-29T18:37:13Z",
+        "2026-01-29T18:37:13Z"
+      ],
+      "first_seen_flaky": "2026-01-29T18:37:13Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[None-SamplerWithoutReplacement-None]",
+      "executions": 24,
+      "failures": 2,
+      "failure_rate": 0.0833,
+      "flaky_score": 0.0667,
+      "passed": 22,
+      "failed": 2,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 1.471,
+      "recent_failures": [
+        "2026-01-29T18:37:13Z",
+        "2026-01-29T18:37:13Z"
+      ],
+      "first_seen_flaky": "2026-01-29T18:37:13Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[None-SamplerWithoutReplacement-storage1]",
+      "executions": 24,
+      "failures": 2,
+      "failure_rate": 0.0833,
+      "flaky_score": 0.0667,
+      "passed": 22,
+      "failed": 2,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 1.47,
+      "recent_failures": [
+        "2026-01-29T18:37:13Z",
+        "2026-01-29T18:37:13Z"
+      ],
+      "first_seen_flaky": "2026-01-29T18:37:13Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[writer1-None-None]",
+      "executions": 24,
+      "failures": 2,
+      "failure_rate": 0.0833,
+      "flaky_score": 0.0667,
+      "passed": 22,
+      "failed": 2,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 1.475,
+      "recent_failures": [
+        "2026-01-29T18:37:13Z",
+        "2026-01-29T18:37:13Z"
+      ],
+      "first_seen_flaky": "2026-01-29T18:37:13Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[writer1-None-storage1]",
+      "executions": 24,
+      "failures": 2,
+      "failure_rate": 0.0833,
+      "flaky_score": 0.0667,
+      "passed": 22,
+      "failed": 2,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 1.474,
+      "recent_failures": [
+        "2026-01-29T18:37:13Z",
+        "2026-01-29T18:37:13Z"
+      ],
+      "first_seen_flaky": "2026-01-29T18:37:13Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[writer1-sampler1-None]",
+      "executions": 24,
+      "failures": 2,
+      "failure_rate": 0.0833,
+      "flaky_score": 0.0667,
+      "passed": 22,
+      "failed": 2,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 1.472,
+      "recent_failures": [
+        "2026-01-29T18:37:13Z",
+        "2026-01-29T18:37:13Z"
+      ],
+      "first_seen_flaky": "2026-01-29T18:37:13Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[writer1-sampler1-storage1]",
+      "executions": 24,
+      "failures": 2,
+      "failure_rate": 0.0833,
+      "flaky_score": 0.0667,
+      "passed": 22,
+      "failed": 2,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 1.471,
+      "recent_failures": [
+        "2026-01-29T18:37:13Z",
+        "2026-01-29T18:37:13Z"
+      ],
+      "first_seen_flaky": "2026-01-29T18:37:13Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[writer1-SamplerWithoutReplacement-None]",
+      "executions": 24,
+      "failures": 2,
+      "failure_rate": 0.0833,
+      "flaky_score": 0.0667,
+      "passed": 22,
+      "failed": 2,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 1.472,
+      "recent_failures": [
+        "2026-01-29T18:37:13Z",
+        "2026-01-29T18:37:13Z"
+      ],
+      "first_seen_flaky": "2026-01-29T18:37:13Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[writer1-SamplerWithoutReplacement-storage1]",
+      "executions": 24,
+      "failures": 2,
+      "failure_rate": 0.0833,
+      "flaky_score": 0.0667,
+      "passed": 22,
+      "failed": 2,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 1.47,
+      "recent_failures": [
+        "2026-01-29T18:37:13Z",
+        "2026-01-29T18:37:13Z"
+      ],
+      "first_seen_flaky": "2026-01-29T18:37:13Z",
       "is_new": true
     }
   ],
