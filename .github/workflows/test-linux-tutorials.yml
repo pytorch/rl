@@ -80,9 +80,9 @@ jobs:
         echo "::group::Install dependencies"
         python -m pip install --quiet \
           pytest pytest-timeout pytest-instafail pytest-json-report \
-          gymnasium"[atari,mujoco]" dm_control "mujoco<3.3.6" \
-          matplotlib tensorboard wandb tqdm hydra-core \
-          onnxruntime vmas
+          "gymnasium[atari,mujoco,classic-control]" dm_control "mujoco<3.3.6" \
+          matplotlib tensorboard wandb tqdm hydra-core pygame \
+          onnxruntime onnxscript vmas
         echo "::endgroup::"
 
         # ============================================
