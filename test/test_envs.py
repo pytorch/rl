@@ -3201,10 +3201,10 @@ class TestMultiKeyEnvs:
     @pytest.mark.parametrize("rollout_steps", [1, 5])
     @pytest.mark.parametrize("max_steps", [2, 5])
     def test_rollout(self, batch_size, rollout_steps, max_steps, seed):
+        torch.manual_seed(seed)
         env = MultiKeyCountingEnv(batch_size=batch_size, max_steps=max_steps)
         policy = MultiKeyCountingEnvPolicy(full_action_spec=env.full_action_spec)
         td = env.rollout(rollout_steps, policy=policy)
-        torch.manual_seed(seed)
         check_rollout_consistency_multikey_env(td, max_steps=max_steps)
 
     @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
