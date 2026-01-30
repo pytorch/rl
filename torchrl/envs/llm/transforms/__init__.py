@@ -10,6 +10,7 @@ from .dataloading import (
     DataLoadingPrimer,
     RayDataLoadingPrimer,
 )
+from .feedback import AddFeedbackContext, BuildTeacherContext
 from .format import TemplateTransform
 from .kl import KLComputation, KLRewardTransform, RetrieveKL, RetrieveLogProb
 from .policy_version import PolicyVersion
@@ -29,8 +30,10 @@ from .tools import (
 )
 
 __all__ = [
+    "AddFeedbackContext",
     "AddThinkingPrompt",
     "BrowserTransform",
+    "BuildTeacherContext",
     "DataLoadingPrimer",
     "ExecuteToolsInOrder",
     "IncrementalTokenizer",
