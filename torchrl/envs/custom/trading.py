@@ -317,6 +317,12 @@ class FinancialRegimeEnv(EnvBase):
 
         self.state_spec = self.observation_spec.clone()
 
+        self.done_spec = Composite(
+            done=Categorical(n=2, shape=(1,), dtype=torch.bool),
+            terminated=Categorical(n=2, shape=(1,), dtype=torch.bool),
+            truncated=Categorical(n=2, shape=(1,), dtype=torch.bool),
+        )
+
         self.action_spec = Categorical(
             n=3,
             shape=(1,),

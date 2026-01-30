@@ -2,11 +2,17 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
+import random
+
+import pytest
 import torch
+from tensordict import TensorDict
 
+from torchrl.envs import check_env_specs, LLMHashingEnv, PendulumEnv, TicTacToeEnv
 from torchrl.envs.custom.trading import FinancialRegimeEnv
-from torchrl.envs.utils import check_env_specs
+from torchrl.testing import get_default_devices
 
 
 class TestCustomEnvs:
@@ -63,6 +69,8 @@ class TestCustomEnvs:
         r = env.rollout(20, break_when_any_done=False)
         assert r.shape == torch.Size((20,))
 
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_financial_env_device(self):
         """Test environment works on different devices."""
         # Test CPU (always available)
@@ -79,3 +87,70 @@ class TestCustomEnvs:
             env_cuda = FinancialRegimeEnv(device="cuda:0")
             assert env_cuda.device.type == "cuda"
             check_env_specs(env_cuda)
+
+
+class TestTicTacToeEnv:
+    def test_tictactoe_env(self):
+        torch.manual_seed(0)
+        env = TicTacToeEnv()
+        check_env_specs(env)
+        for _ in range(10):
+            r = env.rollout(10)
+            assert r.shape[-1] < 10
+            r = env.rollout(10, tensordict=TensorDict(batch_size=[5]))
+            assert r.shape[-1] < 10
+        r = env.rollout(
+            100, tensordict=TensorDict(batch_size=[5]), break_when_any_done=False
+        )
+        assert r.shape == (5, 100)
+
+    def test_tictactoe_env_single(self):
+        torch.manual_seed(0)
+        env = TicTacToeEnv(single_player=True)
+        check_env_specs(env)
+        for _ in range(10):
+            r = env.rollout(10)
+            assert r.shape[-1] < 6
+            r = env.rollout(10, tensordict=TensorDict(batch_size=[5]))
+            assert r.shape[-1] < 6
+        r = env.rollout(
+            100, tensordict=TensorDict(batch_size=[5]), break_when_any_done=False
+        )
+        assert r.shape == (5, 100)
+
+
+class TestPendulum:
+    @pytest.mark.parametrize("device", [None, *get_default_devices()])
+    def test_pendulum_env(self, device):
+        env = PendulumEnv(device=device)
+        assert env.device == device
+        check_env_specs(env)
+
+        for _ in range(10):
+            r = env.rollout(10)
+            assert r.shape == torch.Size((10,))
+            r = env.rollout(10, tensordict=TensorDict(batch_size=[5], device=device))
+            assert r.shape == torch.Size((5, 10))
+
+    def test_llm_hashing_env(self):
+        vocab_size = 5
+
+        class Tokenizer:
+            def __call__(self, obj):
+                return torch.randint(vocab_size, (len(obj.split(" ")),)).tolist()
+
+            def decode(self, obj):
+                words = ["apple", "banana", "cherry", "date", "elderberry"]
+                return " ".join(random.choice(words) for _ in obj)
+
+            def batch_decode(self, obj):
+                return [self.decode(_obj) for _obj in obj]
+
+            def encode(self, obj):
+                return self(obj)
+
+        tokenizer = Tokenizer()
+        env = LLMHashingEnv(tokenizer=tokenizer, vocab_size=vocab_size)
+        td = env.make_tensordict("some sentence")
+        assert isinstance(td, TensorDict)
+        env.check_env_specs(tensordict=td)
