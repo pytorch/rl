@@ -42,16 +42,22 @@ Get commits from the last release:
 git log v0.11.0..HEAD --oneline --no-merges
 ```
 
-**Important: Exclude User-Facing Changes**
+**Important: Check Release Labels**
 
-PRs with the `user-facing` label should NOT be included in minor releases. These contain API changes, new features, or other changes that affect the public interface and should only be released in major versions.
+PRs are labeled to indicate their release eligibility:
+- `user-facing` - API changes, new features, or public interface changes. **Only include in major releases.**
+- `non-user-facing` - Internal changes, bug fixes, refactoring. **Safe for minor releases.**
 
-To check if a PR has the user-facing label:
+To filter PRs for a minor release:
 ```bash
+# Find PRs safe for minor release
+gh pr list --label "non-user-facing" --state merged --json number,title
+
+# Check if a specific PR is user-facing (exclude from minor)
 gh pr view <PR_NUMBER> --json labels --jq '.labels[].name' | grep -q "user-facing"
 ```
 
-If cherry-picking commits for a minor release, skip any commits associated with user-facing PRs.
+If cherry-picking commits for a minor release, only include commits from PRs labeled `non-user-facing`.
 
 ### Critical: Don't Miss ghstack Commits
 
