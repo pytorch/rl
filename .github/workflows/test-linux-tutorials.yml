@@ -50,7 +50,7 @@ jobs:
         # ============================================
         echo "::group::Setup Python environment"
         python -m pip install --upgrade pip --quiet
-        python -m pip install setuptools ninja packaging --quiet
+        python -m pip install setuptools ninja packaging "pybind11[global]" --quiet
 
         # Uninstall conflicting packages from Docker image
         python -m pip uninstall -y torch torchvision torchaudio gym 2>/dev/null || true
