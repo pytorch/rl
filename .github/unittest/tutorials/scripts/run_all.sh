@@ -96,7 +96,8 @@ uv pip install \
   "gymnasium[atari,mujoco]>=1.1.0" \
   tensorboard \
   matplotlib \
-  wandb
+  wandb \
+  onnxruntime
 
 # ============================================================================================ #
 # ================================ PyTorch & TorchRL ========================================= #
