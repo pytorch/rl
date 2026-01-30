@@ -8,6 +8,8 @@ Test runner for TorchRL tutorials.
 
 This module discovers and runs all tutorial .py files as individual pytest tests,
 enabling flaky test tracking through the JSON report output.
+
+Each tutorial runs in a subprocess with a 5-minute timeout.
 """
 
 import os
@@ -21,10 +23,9 @@ import pytest
 ROOT_DIR = Path(__file__).parents[4]
 TUTORIALS_DIR = ROOT_DIR / "tutorials" / "sphinx-tutorials"
 
-# Tutorials that should be skipped (e.g., require special dependencies or are too slow)
+# Tutorials that should be skipped (require special dependencies not installed)
 SKIP_TUTORIALS = {
-    # Add tutorial filenames here if they need to be skipped
-    # "llm_browser.py",  # Example: requires browser dependencies
+    "llm_browser.py",  # Requires transformers, browser dependencies
 }
 
 # Tutorials that require GPU
@@ -57,8 +58,7 @@ def get_tutorial_ids():
     return [p.stem for p in get_tutorial_files()]
 
 
-@pytest.fixture(scope="module")
-def check_gpu():
+def _has_gpu():
     """Check if GPU is available."""
     try:
         import torch
@@ -68,51 +68,66 @@ def check_gpu():
         return False
 
 
+HAS_GPU = _has_gpu()
+
+
 @pytest.mark.parametrize("tutorial_path", get_tutorial_files(), ids=get_tutorial_ids())
-def test_tutorial(tutorial_path: Path, check_gpu):
-    """Run a tutorial file and verify it completes without error."""
+def test_tutorial(tutorial_path: Path):
+    """Run a tutorial file and verify it completes without error.
+
+    Each tutorial runs in its own subprocess with a 5-minute timeout.
+    """
     tutorial_name = tutorial_path.name
 
     # Skip GPU tutorials if no GPU available
-    if tutorial_name in GPU_TUTORIALS and not check_gpu:
+    if tutorial_name in GPU_TUTORIALS and not HAS_GPU:
         pytest.skip(f"Skipping {tutorial_name}: requires GPU")
 
     # Set environment variables for the tutorial
     env = os.environ.copy()
-    env["MPLBACKEND"] = "Agg"  # Use non-interactive matplotlib backend
-    env["WANDB_MODE"] = "disabled"  # Disable wandb logging
-    env["CUDA_LAUNCH_BLOCKING"] = "1"  # Better error messages for CUDA
+    env["MPLBACKEND"] = "Agg"
+    env["WANDB_MODE"] = "disabled"
+    env["MUJOCO_GL"] = "egl"
+    env["PYOPENGL_PLATFORM"] = "egl"
+    env["SDL_VIDEODRIVER"] = "dummy"
 
-    # Run the tutorial as a subprocess
-    # We use compile + exec pattern similar to run_local.sh
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            f"""
+    # Run the tutorial as a subprocess with timeout
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                f"""
 import sys
+import warnings
+warnings.filterwarnings('ignore')
 with open('{tutorial_path}') as f:
     source = f.read()
 code = compile(source, '{tutorial_path}', 'exec')
 exec(code)
 """,
-        ],
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=1800,  # 30 minute timeout per tutorial
-        cwd=str(ROOT_DIR),
-    )
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=300,  # 5-minute timeout per tutorial
+            cwd=str(ROOT_DIR),
+        )
+    except subprocess.TimeoutExpired:
+        pytest.fail(f"Tutorial {tutorial_name} timed out after 5 minutes")
 
-    # Check for failure
+    # Check for failure - keep output concise
     if result.returncode != 0:
+        # Truncate output to last 50 lines for readability
+        stderr_lines = result.stderr.strip().split("\n")
+        stderr_tail = (
+            "\n".join(stderr_lines[-50:]) if len(stderr_lines) > 50 else result.stderr
+        )
         pytest.fail(
-            f"Tutorial {tutorial_name} failed with exit code {result.returncode}\n"
-            f"STDOUT:\n{result.stdout}\n"
-            f"STDERR:\n{result.stderr}"
+            f"Tutorial {tutorial_name} failed (exit code {result.returncode})\n"
+            f"STDERR (last 50 lines):\n{stderr_tail}"
         )
 
 
 if __name__ == "__main__":
-    # Allow running this file directly for debugging
     pytest.main([__file__, "-v", "--tb=short"])

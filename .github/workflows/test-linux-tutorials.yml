@@ -10,12 +10,7 @@ on:
       - release/*
   workflow_dispatch:
 
-env:
-  CHANNEL: "nightly"
-
 concurrency:
-  # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
-  # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
   cancel-in-progress: true
 
@@ -27,40 +22,98 @@ jobs:
   tests:
     strategy:
       matrix:
-        python_version: ["3.10"]
-        cuda_arch_version: ["13.0"]
+        python_version: ["3.12"]
+        cuda_arch_version: ["12.8"]
       fail-fast: false
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'tutorials') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
-      docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
-      gpu-arch-type: cuda
-      gpu-arch-version: ${{ matrix.cuda_arch_version }}
+      # Use same PyTorch image as docs.yml for consistency
+      docker-image: pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel
       timeout: 120
       script: |
-        # Set env vars from matrix
-        export PYTHON_VERSION=${{ matrix.python_version }}
-        export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
-        export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
+        set -e
 
+        # ============================================
+        # System dependencies (minimal output)
+        # ============================================
+        echo "::group::Install system dependencies"
+        apt-get update -qq
+        apt-get install -y -qq libglfw3 libglfw3-dev libgl1-mesa-glx libgl1-mesa-dev \
+          libegl1-mesa-dev freeglut3-dev libglu1-mesa libegl1 mesa-utils xvfb git cmake > /dev/null
+        echo "::endgroup::"
+
+        # ============================================
+        # Python setup
+        # ============================================
+        echo "::group::Setup Python environment"
+        python -m pip install --upgrade pip --quiet
+        python -m pip install setuptools ninja packaging --quiet
+
+        # Uninstall conflicting packages from Docker image
+        python -m pip uninstall -y torch torchvision torchaudio gym 2>/dev/null || true
+        echo "::endgroup::"
+
+        # ============================================
+        # Install PyTorch
+        # ============================================
+        echo "::group::Install PyTorch"
         ref_name="${GITHUB_REF_NAME:-}"
         if [[ -z "${ref_name}" && -n "${GITHUB_REF:-}" ]]; then
           ref_name="${GITHUB_REF#refs/heads/}"
         fi
 
         if [[ "${ref_name}" == release/* ]]; then
-          export RELEASE=1
-          export TORCH_VERSION=stable
+          python -m pip install torch torchvision --quiet
+          python -m pip install tensordict --quiet
         else
-          export RELEASE=0
-          export TORCH_VERSION=nightly
+          python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu --quiet
+          python -m pip install git+https://github.com/pytorch/tensordict.git --quiet
         fi
+        echo "::endgroup::"
 
-        echo "PYTHON_VERSION: $PYTHON_VERSION"
-        echo "CU_VERSION: $CU_VERSION"
-        export TD_GET_DEFAULTS_TO_NONE=1
+        # ============================================
+        # Install tutorial dependencies
+        # ============================================
+        echo "::group::Install dependencies"
+        python -m pip install --quiet \
+          pytest pytest-timeout pytest-instafail pytest-json-report \
+          gymnasium"[atari,mujoco]" dm_control "mujoco<3.3.6" \
+          matplotlib tensorboard wandb tqdm hydra-core \
+          onnxruntime vmas
+        echo "::endgroup::"
 
-        ## setup_env.sh
-        bash .github/unittest/tutorials/scripts/run_all.sh
+        # ============================================
+        # Install TorchRL
+        # ============================================
+        echo "::group::Install TorchRL"
+        python -m pip install -e . --no-build-isolation --quiet
+        echo "::endgroup::"
+
+        # ============================================
+        # Verify installation
+        # ============================================
+        echo "::group::Verify installation"
+        python -c "import torch; print(f'PyTorch: {torch.__version__}')"
+        python -c "import torchrl; print(f'TorchRL: {torchrl.__version__}')"
+        python -c "import tensordict; print(f'TensorDict: {tensordict.__version__}')"
+        echo "::endgroup::"
+
+        # ============================================
+        # Run tutorials
+        # ============================================
+        export MPLBACKEND=Agg
+        export WANDB_MODE=disabled
+        export MUJOCO_GL=egl
+        export PYOPENGL_PLATFORM=egl
+        export SDL_VIDEODRIVER=dummy
+
+        python -m pytest .github/unittest/tutorials/scripts/test_tutorials.py \
+          --timeout=300 \
+          -p no:randomly \
+          --instafail \
+          --tb=short \
+          -v \
+          --json-report --json-report-file="${RUNNER_ARTIFACT_DIR:-./}/test-results-tutorials.json"
