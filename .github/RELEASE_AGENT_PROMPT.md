@@ -42,22 +42,30 @@ Get commits from the last release:
 git log v0.11.0..HEAD --oneline --no-merges
 ```
 
-**Important: Check Release Labels**
+**Important: PR Selection for Minor Releases**
 
-PRs are labeled to indicate their release eligibility:
-- `user-facing` - API changes, new features, or public interface changes. **Only include in major releases.**
-- `non-user-facing` - Internal changes, bug fixes, refactoring. **Safe for minor releases.**
+When selecting PRs for a minor release, follow this decision flow:
 
-To filter PRs for a minor release:
+1. **If labeled `user-facing`** → **Exclude** (only for major releases)
+2. **If labeled `non-user-facing` or `Suitable for minor`** → **Include**
+3. **If neither label is present** → **Assess yourself** based on the changes
+
+Labels:
+- `user-facing` - API changes, new features, or public interface changes
+- `non-user-facing` - Internal changes, bug fixes, refactoring
+- `Suitable for minor` - Explicitly marked as safe for minor releases
+
+To filter PRs:
 ```bash
-# Find PRs safe for minor release
+# Find PRs explicitly safe for minor release
 gh pr list --label "non-user-facing" --state merged --json number,title
+gh pr list --label "Suitable for minor" --state merged --json number,title
 
-# Check if a specific PR is user-facing (exclude from minor)
-gh pr view <PR_NUMBER> --json labels --jq '.labels[].name' | grep -q "user-facing"
+# Check labels on a specific PR
+gh pr view <PR_NUMBER> --json labels --jq '.labels[].name'
 ```
 
-If cherry-picking commits for a minor release, only include commits from PRs labeled `non-user-facing`.
+For unlabeled PRs, review the changes and determine if they affect the public API or just internal implementation.
 
 ### Critical: Don't Miss ghstack Commits
 
