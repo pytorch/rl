@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import math
+import warnings
 from dataclasses import dataclass
 from functools import wraps
 
@@ -274,6 +275,7 @@ class CrossQLoss(LossModule):
         separate_losses: bool = False,
         reduction: str | None = None,
         deactivate_vmap: bool = False,
+        scalar_output_mode: str | None = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -348,6 +350,23 @@ class CrossQLoss(LossModule):
         self._action_spec = action_spec
         self._make_vmap()
         self.reduction = reduction
+
+        # Handle scalar_output_mode for reduction="none"
+        if reduction == "none" and scalar_output_mode is None:
+            warnings.warn(
+                "CrossQLoss with reduction='none' cannot include scalar values (alpha, entropy) "
+                "in the output TensorDict without changing their shape. These values will be "
+                "excluded from the output. You can access them via `loss_module._alpha` and "
+                "compute entropy from the log_prob in the actor loss metadata. "
+                "To suppress this warning, pass `scalar_output_mode='exclude'` to the constructor. "
+                "Alternatively, pass `scalar_output_mode='non_tensor'` to include them as non-tensor data. "
+                "This is a known limitation we're working on improving.",
+                category=UserWarning,
+                stacklevel=2,
+            )
+            scalar_output_mode = "exclude"
+        self.scalar_output_mode = scalar_output_mode
+
         # init target entropy
         self.maybe_init_target_entropy()
 
@@ -553,12 +572,21 @@ class CrossQLoss(LossModule):
             "loss_actor": loss_actor,
             "loss_qvalue": loss_qvalue,
             "loss_alpha": loss_alpha,
-            "alpha": self._alpha,
-            "entropy": entropy.detach().mean(),
             **metadata_actor,
             **value_metadata,
         }
-        td_out = TensorDict(out)
+
+        # Handle batch_size and scalar values (alpha, entropy) based on reduction mode
+        if self.reduction == "none":
+            batch_size = tensordict.batch_size
+            td_out = TensorDict(out, batch_size=batch_size)
+            if self.scalar_output_mode == "non_tensor":
+                td_out.set_non_tensor("alpha", self._alpha)
+                td_out.set_non_tensor("entropy", entropy.detach().mean())
+        else:
+            out["alpha"] = self._alpha
+            out["entropy"] = entropy.detach().mean()
+            td_out = TensorDict(out)
         self._clear_weakrefs(
             tensordict,
             td_out,

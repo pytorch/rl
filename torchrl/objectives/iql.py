@@ -274,6 +274,7 @@ class IQLLoss(LossModule):
         separate_losses: bool = False,
         reduction: str | None = None,
         deactivate_vmap: bool = False,
+        scalar_output_mode: str | None = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -281,6 +282,7 @@ class IQLLoss(LossModule):
             reduction = "mean"
         super().__init__()
         self._set_deprecated_ctor_keys(priority=priority_key)
+        self._scalar_output_mode = scalar_output_mode
 
         self.deactivate_vmap = deactivate_vmap
 
@@ -330,6 +332,22 @@ class IQLLoss(LossModule):
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self._make_vmap()
         self.reduction = reduction
+
+        # Handle scalar_output_mode for reduction="none"
+        scalar_output_mode = self._scalar_output_mode
+        if reduction == "none" and scalar_output_mode is None:
+            warnings.warn(
+                "IQLLoss with reduction='none' cannot include scalar values (entropy) "
+                "in the output TensorDict without changing their shape. These values will be "
+                "excluded from the output. You can compute entropy from the log_prob. "
+                "To suppress this warning, pass `scalar_output_mode='exclude'` to the constructor. "
+                "Alternatively, pass `scalar_output_mode='non_tensor'` to include them as non-tensor data. "
+                "This is a known limitation we're working on improving.",
+                category=UserWarning,
+                stacklevel=2,
+            )
+            scalar_output_mode = "exclude"
+        self.scalar_output_mode = scalar_output_mode
 
     def _make_vmap(self):
         self._vmap_qvalue_networkN0 = _vmap_func(
@@ -406,9 +424,17 @@ class IQLLoss(LossModule):
             "loss_actor": loss_actor,
             "loss_qvalue": loss_qvalue,
             "loss_value": loss_value,
-            "entropy": entropy.mean(),
         }
-        td_out = TensorDict(out)
+
+        # Handle batch_size and scalar values (entropy) based on reduction mode
+        if self.reduction == "none":
+            batch_size = tensordict.batch_size
+            td_out = TensorDict(out, batch_size=batch_size)
+            if self.scalar_output_mode == "non_tensor":
+                td_out.set_non_tensor("entropy", entropy.mean())
+        else:
+            out["entropy"] = entropy.mean()
+            td_out = TensorDict(out)
 
         self._clear_weakrefs(
             tensordict,
@@ -799,6 +825,7 @@ class DiscreteIQLLoss(IQLLoss):
         priority_key: str | None = None,
         separate_losses: bool = False,
         reduction: str | None = None,
+        scalar_output_mode: str | None = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -817,6 +844,7 @@ class DiscreteIQLLoss(IQLLoss):
             gamma=gamma,
             priority_key=priority_key,
             separate_losses=separate_losses,
+            scalar_output_mode=scalar_output_mode,
         )
         if action_space is None:
             warnings.warn(
@@ -827,6 +855,21 @@ class DiscreteIQLLoss(IQLLoss):
             action_space = "one-hot"
         self.action_space = _find_action_space(action_space)
         self.reduction = reduction
+
+        # Handle scalar_output_mode for reduction="none"
+        if reduction == "none" and scalar_output_mode is None:
+            warnings.warn(
+                "DiscreteIQLLoss with reduction='none' cannot include scalar values (entropy) "
+                "in the output TensorDict without changing their shape. These values will be "
+                "excluded from the output. You can compute entropy from the log_prob. "
+                "To suppress this warning, pass `scalar_output_mode='exclude'` to the constructor. "
+                "Alternatively, pass `scalar_output_mode='non_tensor'` to include them as non-tensor data. "
+                "This is a known limitation we're working on improving.",
+                category=UserWarning,
+                stacklevel=2,
+            )
+            scalar_output_mode = "exclude"
+        self.scalar_output_mode = scalar_output_mode
 
     def actor_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         # KL loss
