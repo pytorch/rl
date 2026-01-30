@@ -14825,6 +14825,7 @@ class TestDiscreteIQL(LossModuleTestBase):
             loss_function="l2",
             action_space="one-hot",
             reduction=reduction,
+            scalar_output_mode="exclude" if reduction == "none" else None,
         )
         loss_fn.make_value_estimator()
         with _check_td_steady(td), pytest.warns(
