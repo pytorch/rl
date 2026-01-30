@@ -23,15 +23,16 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.12"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["12.4"]
       fail-fast: false
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'tutorials') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
-      # Use same PyTorch image as docs.yml for consistency
       docker-image: pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel
+      gpu-arch-type: cuda
+      gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 120
       script: |
         set -e
@@ -57,7 +58,7 @@ jobs:
         echo "::endgroup::"
 
         # ============================================
-        # Install PyTorch
+        # Install PyTorch with CUDA support
         # ============================================
         echo "::group::Install PyTorch"
         ref_name="${GITHUB_REF_NAME:-}"
@@ -66,12 +67,19 @@ jobs:
         fi
 
         if [[ "${ref_name}" == release/* ]]; then
-          python -m pip install torch torchvision --quiet
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124 --quiet
           python -m pip install tensordict --quiet
         else
-          python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu --quiet
+          python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu124 --quiet
           python -m pip install git+https://github.com/pytorch/tensordict.git --quiet
         fi
+        echo "::endgroup::"
+
+        # ============================================
+        # Verify GPU availability
+        # ============================================
+        echo "::group::Verify GPU"
+        python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"None\"}')"
         echo "::endgroup::"
 
         # ============================================
