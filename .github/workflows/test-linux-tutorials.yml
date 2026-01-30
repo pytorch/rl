@@ -52,28 +52,16 @@ jobs:
         echo "::group::Setup Python environment"
         python -m pip install --upgrade pip --quiet
         python -m pip install setuptools ninja packaging "pybind11[global]" --quiet
-
-        # Uninstall conflicting packages from Docker image
-        python -m pip uninstall -y torch torchvision torchaudio gym 2>/dev/null || true
+        # Uninstall gym to avoid conflicts with gymnasium
+        python -m pip uninstall -y gym 2>/dev/null || true
         echo "::endgroup::"
 
         # ============================================
-        # Install PyTorch with CUDA support
+        # Install TensorDict (PyTorch already in Docker image)
         # ============================================
-        echo "::group::Install PyTorch"
-        ref_name="${GITHUB_REF_NAME:-}"
-        if [[ -z "${ref_name}" && -n "${GITHUB_REF:-}" ]]; then
-          ref_name="${GITHUB_REF#refs/heads/}"
-        fi
-
-        if [[ "${ref_name}" == release/* ]]; then
-          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124 --quiet
-          python -m pip install tensordict --quiet
-        else
-          # Install torch and torchvision together for version compatibility
-          python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu124 --quiet --no-cache-dir
-          python -m pip install git+https://github.com/pytorch/tensordict.git --quiet
-        fi
+        echo "::group::Install TensorDict"
+        # Docker image has PyTorch 2.5.1+cu124 pre-installed
+        python -m pip install tensordict --quiet
         echo "::endgroup::"
 
         # ============================================
