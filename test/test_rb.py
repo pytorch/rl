@@ -4728,14 +4728,15 @@ class TestLazyMemmapStorageCleanup:
         """Test that storages are registered for cleanup."""
         from torchrl.data.replay_buffers.storages import _MEMMAP_STORAGE_REGISTRY
 
-        initial_count = len(list(_MEMMAP_STORAGE_REGISTRY))
-
         storage = LazyMemmapStorage(100, auto_cleanup=True)
-        assert len(list(_MEMMAP_STORAGE_REGISTRY)) == initial_count + 1
+        # Check storage is in the registry (avoids race with GC on WeakSet)
+        assert storage in _MEMMAP_STORAGE_REGISTRY
 
         # Storage with auto_cleanup=False should not be registered
         storage2 = LazyMemmapStorage(100, auto_cleanup=False)
-        assert len(list(_MEMMAP_STORAGE_REGISTRY)) == initial_count + 1
+        assert storage2 not in _MEMMAP_STORAGE_REGISTRY
+        # Original storage should still be in the registry
+        assert storage in _MEMMAP_STORAGE_REGISTRY
 
         # Cleanup should still work
         storage.cleanup()
