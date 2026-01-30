@@ -20,7 +20,7 @@ permissions:
 env:
   FLAKY_RUNS_TO_ANALYZE: ${{ inputs.num_runs || '30' }}
   # Workflows to analyze for flaky tests
-  FLAKY_WORKFLOWS: 'test-linux.yml,test-linux-libs.yml,test-linux-habitat.yml,test-linux-llm.yml,test-linux-sota.yml'
+  FLAKY_WORKFLOWS: 'test-linux.yml,test-linux-libs.yml,test-linux-habitat.yml,test-linux-llm.yml,test-linux-sota.yml,test-linux-tutorials.yml'
 
 jobs:
   analyze-flaky-tests:

@@ -1,0 +1,66 @@
+name: Tutorials Tests on Linux
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  push:
+    branches:
+      - nightly
+      - main
+      - release/*
+  workflow_dispatch:
+
+env:
+  CHANNEL: "nightly"
+
+concurrency:
+  # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
+  # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  tests:
+    strategy:
+      matrix:
+        python_version: ["3.10"]
+        cuda_arch_version: ["13.0"]
+      fail-fast: false
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'tutorials') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    with:
+      runner: linux.g5.4xlarge.nvidia.gpu
+      repository: pytorch/rl
+      docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
+      gpu-arch-type: cuda
+      gpu-arch-version: ${{ matrix.cuda_arch_version }}
+      timeout: 120
+      script: |
+        # Set env vars from matrix
+        export PYTHON_VERSION=${{ matrix.python_version }}
+        export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
+        export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
+
+        ref_name="${GITHUB_REF_NAME:-}"
+        if [[ -z "${ref_name}" && -n "${GITHUB_REF:-}" ]]; then
+          ref_name="${GITHUB_REF#refs/heads/}"
+        fi
+
+        if [[ "${ref_name}" == release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        echo "PYTHON_VERSION: $PYTHON_VERSION"
+        echo "CU_VERSION: $CU_VERSION"
+        export TD_GET_DEFAULTS_TO_NONE=1
+
+        ## setup_env.sh
+        bash .github/unittest/tutorials/scripts/run_all.sh
