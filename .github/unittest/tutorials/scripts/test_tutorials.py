@@ -23,9 +23,10 @@ import pytest
 ROOT_DIR = Path(__file__).parents[4]
 TUTORIALS_DIR = ROOT_DIR / "tutorials" / "sphinx-tutorials"
 
-# Tutorials that should be skipped (require special dependencies not installed)
+# Tutorials that should be skipped
 SKIP_TUTORIALS = {
     "llm_browser.py",  # Requires transformers, browser dependencies
+    "export.py",  # Requires PyTorch 2.6+ for aoti_compile_and_package
 }
 
 # Tutorials that require GPU

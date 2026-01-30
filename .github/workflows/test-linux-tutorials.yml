@@ -78,7 +78,7 @@ jobs:
         python -m pip install --quiet \
           pytest pytest-timeout pytest-instafail pytest-json-report \
           "gymnasium[atari,mujoco,classic-control]" dm_control "mujoco<3.3.6" \
-          matplotlib tensorboard wandb tqdm hydra-core pygame av \
+          matplotlib tensorboard wandb tqdm hydra-core pygame "av<14" \
           onnxruntime onnxscript vmas
         echo "::endgroup::"
 
