@@ -2,6 +2,39 @@
 
 This guide provides step-by-step instructions for identifying, debugging, and fixing flaky tests in the TorchRL codebase.
 
+## Instructions for LLM Agents
+
+**Follow these rules exactly when fixing flaky tests:**
+
+### MUST DO
+1. Fix the underlying code/feature, not just the test
+2. Include the fix AND test validation in the SAME PR
+3. Use ghstack when fixing multiple flaky tests (one commit = one PR = one fix)
+4. Add the flaky validation block to `run_all.sh` to run the test 20 times
+5. Remove the validation block before the PR is merged
+6. Use `git rebase` to update commits, then run `ghstack` again
+
+### MUST NOT DO
+1. Never skip tests (`@pytest.mark.skip`) or xfail them (`@pytest.mark.xfail`)
+2. Never create a separate PR just for testing flaky tests
+3. Never merge test repetition code into main
+4. Never use `git merge` with ghstack - always use `git rebase`
+5. Never create a PR that only adds test repetition without the actual fix
+
+### Workflow Summary
+```
+1. Identify flaky test from dashboard/issue
+2. Find error message in CI logs
+3. Fix the underlying issue in the code
+4. Add validation block to run_all.sh (in same commit)
+5. Push and verify test passes 20 times
+6. Remove validation block (amend commit or rebase)
+7. Push clean commit and verify normal CI passes
+8. PR is ready for review/merge
+```
+
+---
+
 ## Overview
 
 A flaky test is one that fails intermittently without code changes. The TorchRL CI automatically tracks flaky tests using the [Flaky Test Dashboard](https://docs.pytorch.org/rl/flaky/). Tests are considered flaky if they have a failure rate between 5% and 95% with at least 2 failures across recent CI runs.
@@ -148,66 +181,95 @@ def reset_global_state():
     some_module.GLOBAL_VAR = original
 ```
 
-## Step 4: Open a PR with Test Repetition
+## Step 4: Create a PR with the Fix AND Test Validation
+
+### Critical Rules
+
+**DO:**
+- Include BOTH the fix AND the test validation in the SAME PR
+- Each PR fixes ONE flaky test (use ghstack for multiple fixes)
+- Add test repetition to validate your fix before the PR is merged
+- Remove the test repetition before the PR is merged
+
+**DO NOT:**
+- Create a separate PR just for testing flaky tests
+- Create a PR that only adds test repetition without the actual fix
+- Merge test repetition code into main
 
 ### Fixing Multiple Flaky Tests with ghstack
 
-When fixing multiple flaky tests, use [ghstack](https://github.com/ezyang/ghstack) to create one PR per fix. This keeps changes isolated and makes review easier:
+When fixing multiple flaky tests, use [ghstack](https://github.com/ezyang/ghstack) to create one PR per fix:
 
 ```bash
+# Start from a clean main
+git checkout main
+git pull origin main
+
 # Create one commit per fix with descriptive names
+git add <files for first fix>
 git commit -m "[BugFix] Fix race condition in LazyMemmapStorage cleanup"
+
+git add <files for second fix>
 git commit -m "[BugFix] Add proper synchronization to MultiKeyEnv rollout"
+
+git add <files for third fix>  
 git commit -m "[BugFix] Set random seed in SAC prioritized weights test"
 
 # Push all commits as separate stacked PRs
 ghstack
 ```
 
-Each commit becomes its own PR, allowing:
-- Independent review and CI runs for each fix
-- Easy bisection if one fix causes regressions
-- Parallel merging once each fix is verified
-
-### Validating Your Fix
-
-To validate your fix, you need to run the test multiple times. Since flaky tests fail intermittently, a single successful run doesn't prove the fix works.
-
-### Modify the Test Command (Recommended)
-
-Edit `.github/unittest/linux/scripts/run_all.sh` to run only the flaky test multiple times:
-
+**ghstack workflow for updates:**
 ```bash
-# Add this before or instead of the normal test run
-for i in {1..20}; do
-  echo "=== Run $i of 20 ==="
-  pytest test/test_file.py::TestClass::test_method -v || exit 1
-done
+# To update a commit after review feedback:
+git rebase -i origin/main
+# Edit the commit(s) you want to change
+# Save and exit
+
+# Push the updated stack
+ghstack
 ```
 
-Or use `pytest-repeat` (already installed):
+**Important ghstack rules:**
+- Never use `git merge` - always use `git rebase`
+- You can rebase on `origin/main` to pick up new changes
+- After editing commits, run `ghstack` again to update all PRs
+- Each commit becomes its own PR with independent CI
+
+### Adding Test Validation to Your PR
+
+In the SAME commit as your fix, add test repetition to `.github/unittest/linux/scripts/run_all.sh`. Use this template block (add it right before the `TORCHRL_TEST_SUITE=` line):
 
 ```bash
-pytest test/test_file.py::TestClass::test_method --count=20 -v
+# Flaky test validation: Run specific tests with repetition to verify fixes.
+# Set TORCHRL_VALIDATE_FLAKY=1 to enable.
+# IMPORTANT: Remove this block before merging!
+if [ "${TORCHRL_VALIDATE_FLAKY:-0}" = "1" ]; then
+  echo "=== Validating flaky test fixes with 20 repetitions ==="
+  
+  # Install pytest-repeat for test repetition
+  uv_pip_install pytest-repeat
+  
+  # Add your specific test here:
+  pytest test/test_file.py::TestClass::test_method --count=20 -v --timeout=120 || exit 1
+  
+  echo "=== Flaky test validation passed! ==="
+  exit 0
+fi
 ```
 
-### Example PR Modification
+**Then trigger CI with the environment variable:**
+- The CI will run with `TORCHRL_VALIDATE_FLAKY=1` when you push
+- To set this, you may need to temporarily add `TORCHRL_VALIDATE_FLAKY: "1"` to the workflow env section
 
-In your PR, temporarily modify the test script:
-
-```bash
-# In run_all.sh, replace the normal pytest call with:
-pytest test/test_envs.py::TestMyFlaky -v --count=20 --timeout=60
-```
-
-### Note on Separate CI Workflows
+### Why Not a Separate CI Workflow?
 
 Running flaky tests in a dedicated workflow can be faster, but has complications:
-- Need to match the original platform (Linux, macOS, Windows)
+- Need to match the original platform (Linux, macOS, Windows)  
 - Need to match GPU/CPU configuration
 - Some flaky tests fail due to test contamination (other tests running first), which a separate workflow won't catch
 
-For these reasons, running repeated tests in the existing workflow is usually more reliable.
+For these reasons, testing in the existing workflow (with the validation block) is more reliable.
 
 ## Step 5: Monitor the CI Run
 
@@ -265,12 +327,37 @@ If the test still fails during repeated runs:
 
 ## Step 7: Cleanup Before Merging
 
-Before your PR is ready to merge:
+Once the test passes 20 times in CI, you MUST clean up before the PR can be merged:
 
-1. **Remove test repetition**: Revert changes to `.github/unittest/linux/scripts/run_all.sh`
-2. **Remove temporary markers**: Remove any `@pytest.mark.flaky` decorators added during debugging
-3. **Update PR description**: Document what caused the flakiness and how you fixed it
-4. **Verify normal CI passes**: Ensure the full test suite still passes
+### Required Cleanup Steps
+
+1. **Remove the flaky validation block from `run_all.sh`**
+   - Delete the entire `if [ "${TORCHRL_VALIDATE_FLAKY:-0}" = "1" ]; then ... fi` block
+   - This code must NOT be merged into main
+
+2. **Remove any workflow env changes**
+   - If you added `TORCHRL_VALIDATE_FLAKY: "1"` to a workflow file, remove it
+
+3. **Update PR description**
+   - Document what caused the flakiness
+   - Explain how your fix resolves it
+
+4. **Push the cleaned commit and verify CI passes**
+   ```bash
+   # If using ghstack:
+   git rebase -i origin/main
+   # Edit the commit to remove validation code
+   ghstack
+   
+   # If using regular git:
+   git add .github/unittest/linux/scripts/run_all.sh
+   git commit --amend
+   git push --force-with-lease
+   ```
+
+5. **Verify normal CI passes**
+   - The full test suite must pass without the validation block
+   - The fixed test should now pass reliably as part of the normal test run
 
 ## Reference
 
