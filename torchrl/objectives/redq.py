@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import math
+import warnings
 from dataclasses import dataclass
 from numbers import Number
 
@@ -289,6 +290,7 @@ class REDQLoss(LossModule):
         separate_losses: bool = False,
         reduction: str | None = None,
         deactivate_vmap: bool = False,
+        scalar_output_mode: str | None = None,
     ):
         if reduction is None:
             reduction = "mean"
@@ -357,6 +359,23 @@ class REDQLoss(LossModule):
         self.gSDE = gSDE
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
+
+        # Handle scalar_output_mode for reduction="none"
+        if reduction == "none" and scalar_output_mode is None:
+            warnings.warn(
+                "REDQLoss with reduction='none' cannot include scalar values (alpha, entropy) "
+                "in the output TensorDict without changing their shape. These values will be "
+                "excluded from the output. You can access alpha via `loss_module.alpha` and "
+                "compute entropy from the sample log_prob. "
+                "To suppress this warning, pass `scalar_output_mode='exclude'` to the constructor. "
+                "Alternatively, pass `scalar_output_mode='non_tensor'` to include them as non-tensor data. "
+                "This is a known limitation we're working on improving.",
+                category=UserWarning,
+                stacklevel=2,
+            )
+            scalar_output_mode = "exclude"
+        self.scalar_output_mode = scalar_output_mode
+
         self._make_vmap()
 
     def _make_vmap(self):
@@ -593,25 +612,32 @@ class REDQLoss(LossModule):
             raise RuntimeError(
                 f"QVal and actor loss have different shape: {loss_qval.shape} and {loss_actor.shape}"
             )
-        td_out = TensorDict(
-            {
-                "loss_actor": loss_actor,
-                "loss_qvalue": loss_qval,
-                "loss_alpha": loss_alpha,
-                "alpha": self.alpha.detach(),
-                "entropy": -sample_log_prob.detach().mean(),
-                "state_action_value_actor": state_action_value_actor.detach(),
-                "action_log_prob_actor": action_log_prob_actor.detach(),
-                "next.state_value": next_state_value.detach(),
-                "target_value": target_value.detach(),
-            },
-            [],
-        )
-        td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction)
-            if name.startswith("loss_")
-            else value,
-        )
+        out = {
+            "loss_actor": loss_actor,
+            "loss_qvalue": loss_qval,
+            "loss_alpha": loss_alpha,
+            "state_action_value_actor": state_action_value_actor.detach(),
+            "action_log_prob_actor": action_log_prob_actor.detach(),
+            "next.state_value": next_state_value.detach(),
+            "target_value": target_value.detach(),
+        }
+
+        # Handle batch_size and scalar values (alpha, entropy) based on reduction mode
+        if self.reduction == "none":
+            batch_size = tensordict.batch_size
+            td_out = TensorDict(out, batch_size=batch_size)
+            if self.scalar_output_mode == "non_tensor":
+                td_out.set_non_tensor("alpha", self.alpha.detach())
+                td_out.set_non_tensor("entropy", -sample_log_prob.detach().mean())
+        else:
+            out["alpha"] = self.alpha.detach()
+            out["entropy"] = -sample_log_prob.detach().mean()
+            td_out = TensorDict(out, [])
+            td_out = td_out.named_apply(
+                lambda name, value: _reduce(value, reduction=self.reduction)
+                if name.startswith("loss_")
+                else value,
+            )
         self._clear_weakrefs(
             tensordict,
             td_out,
