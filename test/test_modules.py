@@ -1216,6 +1216,7 @@ class TestMultiAgent:
         centralized,
         share_params,
     ):
+        torch.manual_seed(42)
         actor_net = MultiAgentConvNet(
             in_features=4,
             num_cells=[5, 5],
