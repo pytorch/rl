@@ -269,23 +269,16 @@ fi
 # ================================ Run tests ========================================= #
 
 # Flaky test validation: Run flaky tests with repetition to verify fixes.
-# Set TORCHRL_VALIDATE_FLAKY=1 to enable (temporary, should be removed before merge).
+# Set TORCHRL_VALIDATE_FLAKY=1 to enable this mode.
+# Usage: Add pytest commands with --count=N to run tests multiple times.
 if [ "${TORCHRL_VALIDATE_FLAKY:-0}" = "1" ]; then
-  echo "=== Validating flaky test fixes with 20 repetitions ==="
+  echo "=== Validating flaky test fixes ==="
   
   # Install pytest-repeat for test repetition
   uv_pip_install pytest-repeat
   
-  # Run each flaky test 20 times
-  pytest test/test_rb.py::TestLazyMemmapStorageCleanup::test_cleanup_registry --count=20 -v || exit 1
-  pytest test/test_envs.py::TestMultiKeyEnvs::test_rollout --count=20 -v || exit 1
-  pytest test/test_modules.py::TestMultiAgent::test_multiagent_cnn_lazy --count=20 -v || exit 1
-  pytest test/test_modules.py::TestMultiAgent::test_multiagent_reset_cnn --count=20 -v || exit 1
-  pytest test/test_objectives.py::TestSAC::test_sac_prioritized_weights --count=20 -v || exit 1
-  # Ray tests need special handling (run on GPU only)
-  if [ "${CU_VERSION:-}" != cpu ]; then
-    pytest test/test_distributed.py::TestRayCollector::test_ray_replaybuffer --count=10 -v --timeout=300 || exit 1
-  fi
+  # Add flaky tests to validate here, e.g.:
+  # pytest test/test_example.py::TestClass::test_method --count=20 -v || exit 1
   
   echo "=== All flaky test validations passed! ==="
   exit 0
