@@ -70,7 +70,9 @@ jobs:
           python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124 --quiet
           python -m pip install tensordict --quiet
         else
-          python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu124 --quiet
+          # Install torch first, then torchvision with matching version
+          python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu124 --quiet
+          python -m pip install --pre torchvision --index-url https://download.pytorch.org/whl/nightly/cu124 --quiet
           python -m pip install git+https://github.com/pytorch/tensordict.git --quiet
         fi
         echo "::endgroup::"
