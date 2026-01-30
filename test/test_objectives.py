@@ -5393,6 +5393,7 @@ class TestSAC(LossModuleTestBase):
         """Test SAC with prioritized replay buffer weighted loss reduction."""
         if version != 2:
             pytest.skip("Test not implemented for version 1.")
+        torch.manual_seed(42)
         n_obs = 4
         n_act = 2
         batch_size = 32
