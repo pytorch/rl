@@ -5376,6 +5376,7 @@ class TestSAC(LossModuleTestBase):
             delay_value=False,
             reduction=reduction,
             action_spec=action_spec,
+            scalar_output_mode="exclude" if reduction == "none" else None,
         )
         loss_fn.make_value_estimator()
         loss = loss_fn(td)
@@ -6258,6 +6259,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             action_space="one-hot",
             delay_qvalue=False,
             reduction=reduction,
+            scalar_output_mode="exclude" if reduction == "none" else None,
         )
         loss_fn.make_value_estimator()
         loss = loss_fn(td)
@@ -7051,6 +7053,7 @@ class TestCrossQ(LossModuleTestBase):
             qvalue_network=qvalue,
             loss_function="l2",
             reduction=reduction,
+            scalar_output_mode="exclude" if reduction == "none" else None,
         )
         loss_fn.make_value_estimator()
         loss = loss_fn(td)
@@ -8042,6 +8045,7 @@ class TestREDQ(LossModuleTestBase):
                 loss_function="l2",
                 delay_qvalue=False,
                 reduction=reduction,
+                scalar_output_mode="exclude" if reduction == "none" else None,
             )
         loss_fn.make_value_estimator()
         loss = loss_fn(td)
@@ -8705,6 +8709,7 @@ class TestCQL(LossModuleTestBase):
             delay_actor=False,
             delay_qvalue=False,
             reduction=reduction,
+            scalar_output_mode="exclude" if reduction == "none" else None,
         )
         loss_fn.make_value_estimator()
         loss = loss_fn(td)
@@ -12676,7 +12681,11 @@ class TestOnlineDT(LossModuleTestBase):
         )
         td = self._create_mock_data_odt(device=device)
         actor = self._create_mock_actor(device=device)
-        loss_fn = OnlineDTLoss(actor, reduction=reduction)
+        loss_fn = OnlineDTLoss(
+            actor,
+            reduction=reduction,
+            scalar_output_mode="exclude" if reduction == "none" else None,
+        )
         loss = loss_fn(td)
         if reduction == "none":
             for key in loss.keys():
@@ -13982,6 +13991,7 @@ class TestIQL(LossModuleTestBase):
             value_network=value,
             loss_function="l2",
             reduction=reduction,
+            scalar_output_mode="exclude" if reduction == "none" else None,
         )
         loss_fn.make_value_estimator()
         with _check_td_steady(td), pytest.warns(
@@ -14814,6 +14824,7 @@ class TestDiscreteIQL(LossModuleTestBase):
             loss_function="l2",
             action_space="one-hot",
             reduction=reduction,
+            scalar_output_mode="exclude" if reduction == "none" else None,
         )
         loss_fn.make_value_estimator()
         with _check_td_steady(td), pytest.warns(
