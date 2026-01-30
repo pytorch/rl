@@ -280,6 +280,7 @@ if [ "${TORCHRL_VALIDATE_FLAKY:-0}" = "1" ]; then
   pytest test/test_rb.py::TestLazyMemmapStorageCleanup::test_cleanup_registry --count=20 -v || exit 1
   pytest test/test_envs.py::TestMultiKeyEnvs::test_rollout --count=20 -v || exit 1
   pytest test/test_modules.py::TestMultiAgent::test_multiagent_cnn_lazy --count=20 -v || exit 1
+  pytest test/test_modules.py::TestMultiAgent::test_multiagent_reset_cnn --count=20 -v || exit 1
   pytest test/test_objectives.py::TestSAC::test_sac_prioritized_weights --count=20 -v || exit 1
   # Ray tests need special handling (run on GPU only)
   if [ "${CU_VERSION:-}" != cpu ]; then
