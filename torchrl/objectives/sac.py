@@ -680,16 +680,26 @@ class SACLoss(LossModule):
                 f"Losses shape mismatch: {loss_actor.shape}, {loss_qvalue.shape} and {loss_value.shape}"
             )
         entropy = -metadata_actor["log_prob"]
+        # Preserve batch_size when reduction="none" to maintain [B, T] shape for memory models
+        if self.reduction == "none":
+            batch_size = tensordict.batch_size
+            # Expand scalar values to match batch_size for TensorDict compatibility
+            alpha = self._alpha.expand(batch_size)
+            entropy_out = entropy.detach().mean().expand(batch_size)
+        else:
+            batch_size = []
+            alpha = self._alpha
+            entropy_out = entropy.detach().mean()
         out = {
             "loss_actor": loss_actor,
             "loss_qvalue": loss_qvalue,
             "loss_alpha": loss_alpha,
-            "alpha": self._alpha,
-            "entropy": entropy.detach().mean(),
+            "alpha": alpha,
+            "entropy": entropy_out,
         }
         if self._version == 1:
             out["loss_value"] = loss_value
-        td_out = TensorDict(out)
+        td_out = TensorDict(out, batch_size=batch_size)
         self._clear_weakrefs(
             tensordict,
             td_out,
@@ -1326,14 +1336,24 @@ class DiscreteSACLoss(LossModule):
                 f"Losses shape mismatch: {loss_actor.shape}, and {loss_qvalue.shape}"
             )
         entropy = -metadata_actor["log_prob"]
+        # Preserve batch_size when reduction="none" to maintain [B, T] shape for memory models
+        if self.reduction == "none":
+            batch_size = tensordict.batch_size
+            # Expand scalar values to match batch_size for TensorDict compatibility
+            alpha = self._alpha.expand(batch_size)
+            entropy_out = entropy.detach().mean().expand(batch_size)
+        else:
+            batch_size = []
+            alpha = self._alpha
+            entropy_out = entropy.detach().mean()
         out = {
             "loss_actor": loss_actor,
             "loss_qvalue": loss_qvalue,
             "loss_alpha": loss_alpha,
-            "alpha": self._alpha,
-            "entropy": entropy.detach().mean(),
+            "alpha": alpha,
+            "entropy": entropy_out,
         }
-        td_out = TensorDict(out, [])
+        td_out = TensorDict(out, batch_size=batch_size)
         self._clear_weakrefs(
             tensordict,
             td_out,
