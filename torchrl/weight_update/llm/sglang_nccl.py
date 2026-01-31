@@ -380,7 +380,7 @@ class SGLangWeightSender:
         self._model_ref = None
         self._model_metadata = None
         self._transport = None
-        self._strategy = WeightStrategy.from_name(scheme.strategy_name)
+        self._strategy = WeightStrategy(extract_as=scheme.strategy_name)
 
     def register_model(self, model: Any) -> None:
         """Register the model for weight extraction.
