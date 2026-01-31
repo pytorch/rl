@@ -517,6 +517,8 @@ SFT
 
     SFTLoss
     SFTLossOutput
+    sft_loss
+    minor_sft_loss
 
 .. currentmodule:: torchrl.data.llm
 
@@ -525,3 +527,24 @@ SFT
     :template: rl_template.rst
 
     TopKRewardSelector
+
+DPO
+~~~
+
+.. currentmodule:: torchrl.objectives.llm
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    DPOLoss
+    DPOLossOutput
+    dpo_loss
+
+.. currentmodule:: torchrl.data.llm
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    AcceptanceRewardSelector
