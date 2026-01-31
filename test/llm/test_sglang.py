@@ -91,6 +91,9 @@ def sample_history():
 @pytest.mark.slow
 @pytest.mark.skipif(not _has_sglang, reason="sglang not available")
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+@pytest.mark.skip(
+    reason="SGLang server startup exceeds CI timeout (300s) due to model download and initialization time"
+)
 class TestAsyncSGLangIntegration:
     """Integration tests for AsyncSGLang with real models."""
 
@@ -166,6 +169,9 @@ class TestAsyncSGLangIntegration:
 @pytest.mark.skipif(not _has_sglang, reason="sglang not available")
 @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+@pytest.mark.skip(
+    reason="SGLang server startup exceeds CI timeout (300s) due to model download and initialization time"
+)
 class TestSGLangWrapper:
     """Tests for SGLangWrapper policy module."""
 
