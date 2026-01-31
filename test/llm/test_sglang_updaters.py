@@ -110,6 +110,9 @@ class TestSGLangWeightSyncScheme:
 @pytest.mark.skipif(not _has_sglang, reason="sglang not available")
 @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+@pytest.mark.skip(
+    reason="Model download from HuggingFace times out in CI - skipped to reduce CI time"
+)
 class TestSGLangWeightSender:
     """Tests for SGLangWeightSender."""
 
