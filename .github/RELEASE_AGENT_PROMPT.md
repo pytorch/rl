@@ -42,6 +42,31 @@ Get commits from the last release:
 git log v0.11.0..HEAD --oneline --no-merges
 ```
 
+**Important: PR Selection for Minor Releases**
+
+When selecting PRs for a minor release, follow this decision flow:
+
+1. **If labeled `user-facing`** → **Exclude** (only for major releases)
+2. **If labeled `non-user-facing` or `Suitable for minor`** → **Include**
+3. **If neither label is present** → **Assess yourself** based on the changes
+
+Labels:
+- `user-facing` - API changes, new features, or public interface changes
+- `non-user-facing` - Internal changes, bug fixes, refactoring
+- `Suitable for minor` - Explicitly marked as safe for minor releases
+
+To filter PRs:
+```bash
+# Find PRs explicitly safe for minor release
+gh pr list --label "non-user-facing" --state merged --json number,title
+gh pr list --label "Suitable for minor" --state merged --json number,title
+
+# Check labels on a specific PR
+gh pr view <PR_NUMBER> --json labels --jq '.labels[].name'
+```
+
+For unlabeled PRs, review the changes and determine if they affect the public API or just internal implementation.
+
 ### Critical: Don't Miss ghstack Commits
 
 **The biggest pitfall in release notes is only looking at commits with PR numbers.** Many of the most significant features are merged via ghstack and have NO PR number in the commit message. Always analyze both:
@@ -477,8 +502,10 @@ After completing all steps, provide this summary to the user:
 ## Version Naming Convention
 
 - **Major releases**: `v0.11.0`, `v0.12.0` - New features, may have breaking changes
-- **Minor/Patch releases**: `v0.11.1`, `v0.11.2` - Bug fixes, no new features
+- **Minor/Patch releases**: `v0.11.1`, `v0.11.2` - Bug fixes only, no new features or user-facing changes
 - **Release candidates**: `v0.11.0-rc1` - Pre-release testing
+
+**Note:** PRs labeled `user-facing` must only be included in major releases, never in minor/patch releases.
 
 ## TensorDict Version Compatibility
 

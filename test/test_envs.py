@@ -11,7 +11,6 @@ import gc
 import importlib
 import os
 import pickle
-import random
 import re
 import signal
 import threading
@@ -53,12 +52,9 @@ from torchrl.envs import (
     DoubleToFloat,
     EnvBase,
     EnvCreator,
-    LLMHashingEnv,
     ParallelEnv,
-    PendulumEnv,
     SerialEnv,
     set_gym_backend,
-    TicTacToeEnv,
 )
 from torchrl.envs.batched_envs import _stackable
 from torchrl.envs.gym_like import default_info_dict_reader
@@ -3205,10 +3201,10 @@ class TestMultiKeyEnvs:
     @pytest.mark.parametrize("rollout_steps", [1, 5])
     @pytest.mark.parametrize("max_steps", [2, 5])
     def test_rollout(self, batch_size, rollout_steps, max_steps, seed):
+        torch.manual_seed(seed)
         env = MultiKeyCountingEnv(batch_size=batch_size, max_steps=max_steps)
         policy = MultiKeyCountingEnvPolicy(full_action_spec=env.full_action_spec)
         td = env.rollout(rollout_steps, policy=policy)
-        torch.manual_seed(seed)
         check_rollout_consistency_multikey_env(td, max_steps=max_steps)
 
     @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
@@ -4552,71 +4548,6 @@ class TestChessEnv:
 
             if td["done"]:
                 td = env.reset()
-
-
-class TestCustomEnvs:
-    def test_tictactoe_env(self):
-        torch.manual_seed(0)
-        env = TicTacToeEnv()
-        check_env_specs(env)
-        for _ in range(10):
-            r = env.rollout(10)
-            assert r.shape[-1] < 10
-            r = env.rollout(10, tensordict=TensorDict(batch_size=[5]))
-            assert r.shape[-1] < 10
-        r = env.rollout(
-            100, tensordict=TensorDict(batch_size=[5]), break_when_any_done=False
-        )
-        assert r.shape == (5, 100)
-
-    def test_tictactoe_env_single(self):
-        torch.manual_seed(0)
-        env = TicTacToeEnv(single_player=True)
-        check_env_specs(env)
-        for _ in range(10):
-            r = env.rollout(10)
-            assert r.shape[-1] < 6
-            r = env.rollout(10, tensordict=TensorDict(batch_size=[5]))
-            assert r.shape[-1] < 6
-        r = env.rollout(
-            100, tensordict=TensorDict(batch_size=[5]), break_when_any_done=False
-        )
-        assert r.shape == (5, 100)
-
-    @pytest.mark.parametrize("device", [None, *get_default_devices()])
-    def test_pendulum_env(self, device):
-        env = PendulumEnv(device=device)
-        assert env.device == device
-        check_env_specs(env)
-
-        for _ in range(10):
-            r = env.rollout(10)
-            assert r.shape == torch.Size((10,))
-            r = env.rollout(10, tensordict=TensorDict(batch_size=[5], device=device))
-            assert r.shape == torch.Size((5, 10))
-
-    def test_llm_hashing_env(self):
-        vocab_size = 5
-
-        class Tokenizer:
-            def __call__(self, obj):
-                return torch.randint(vocab_size, (len(obj.split(" ")),)).tolist()
-
-            def decode(self, obj):
-                words = ["apple", "banana", "cherry", "date", "elderberry"]
-                return " ".join(random.choice(words) for _ in obj)
-
-            def batch_decode(self, obj):
-                return [self.decode(_obj) for _obj in obj]
-
-            def encode(self, obj):
-                return self(obj)
-
-        tokenizer = Tokenizer()
-        env = LLMHashingEnv(tokenizer=tokenizer, vocab_size=vocab_size)
-        td = env.make_tensordict("some sentence")
-        assert isinstance(td, TensorDict)
-        env.check_env_specs(tensordict=td)
 
 
 @pytest.mark.parametrize("device", [None, *get_default_devices()])

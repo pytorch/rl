@@ -1,0 +1,116 @@
+name: Tutorials Tests on Linux
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  push:
+    branches:
+      - nightly
+      - main
+      - release/*
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  tests:
+    strategy:
+      matrix:
+        python_version: ["3.12"]
+        cuda_arch_version: ["12.4"]
+      fail-fast: false
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'tutorials') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    with:
+      runner: linux.g5.4xlarge.nvidia.gpu
+      repository: pytorch/rl
+      docker-image: pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel
+      gpu-arch-type: cuda
+      gpu-arch-version: ${{ matrix.cuda_arch_version }}
+      timeout: 120
+      script: |
+        set -e
+
+        # ============================================
+        # System dependencies (minimal output)
+        # ============================================
+        echo "::group::Install system dependencies"
+        apt-get update -qq
+        apt-get install -y -qq libglfw3 libglfw3-dev libgl1-mesa-glx libgl1-mesa-dev \
+          libegl1-mesa-dev freeglut3-dev libglu1-mesa libegl1 mesa-utils xvfb git cmake > /dev/null
+        echo "::endgroup::"
+
+        # ============================================
+        # Python setup
+        # ============================================
+        echo "::group::Setup Python environment"
+        python -m pip install --upgrade pip --quiet
+        python -m pip install setuptools ninja packaging "pybind11[global]" --quiet
+        # Uninstall gym to avoid conflicts with gymnasium
+        python -m pip uninstall -y gym 2>/dev/null || true
+        echo "::endgroup::"
+
+        # ============================================
+        # Install TensorDict (PyTorch already in Docker image)
+        # ============================================
+        echo "::group::Install TensorDict"
+        # Docker image has PyTorch 2.5.1+cu124 pre-installed
+        python -m pip install tensordict --quiet
+        echo "::endgroup::"
+
+        # ============================================
+        # Verify GPU availability
+        # ============================================
+        echo "::group::Verify GPU"
+        python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"None\"}')"
+        echo "::endgroup::"
+
+        # ============================================
+        # Install tutorial dependencies
+        # ============================================
+        echo "::group::Install dependencies"
+        python -m pip install --quiet \
+          pytest pytest-timeout pytest-instafail pytest-json-report \
+          "gymnasium[atari,mujoco,classic-control]" dm_control "mujoco<3.3.6" \
+          matplotlib tensorboard wandb tqdm hydra-core pygame "av<14" \
+          onnxruntime onnxscript vmas
+        echo "::endgroup::"
+
+        # ============================================
+        # Install TorchRL
+        # ============================================
+        echo "::group::Install TorchRL"
+        python -m pip install -e . --no-build-isolation --quiet
+        echo "::endgroup::"
+
+        # ============================================
+        # Verify installation
+        # ============================================
+        echo "::group::Verify installation"
+        python -c "import torch; print(f'PyTorch: {torch.__version__}')"
+        python -c "import torchrl; print(f'TorchRL: {torchrl.__version__}')"
+        python -c "import tensordict; print(f'TensorDict: {tensordict.__version__}')"
+        echo "::endgroup::"
+
+        # ============================================
+        # Run tutorials
+        # ============================================
+        export MPLBACKEND=Agg
+        export WANDB_MODE=disabled
+        export MUJOCO_GL=egl
+        export PYOPENGL_PLATFORM=egl
+        export SDL_VIDEODRIVER=dummy
+
+        python -m pytest .github/unittest/tutorials/scripts/test_tutorials.py \
+          --timeout=300 \
+          -p no:randomly \
+          --instafail \
+          --tb=short \
+          -v \
+          --json-report --json-report-file="${RUNNER_ARTIFACT_DIR:-./}/test-results-tutorials.json"

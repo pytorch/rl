@@ -9935,6 +9935,43 @@ class TestVecNormV2:
         finally:
             env.close(raise_if_closed=False)
 
+    @pytest.mark.parametrize("stateful", [True, False])
+    def test_denorm(self, stateful):
+        """Test that denorm recovers original data for stateful VecNormV2."""
+        torch.manual_seed(0)
+        # Use in_keys == out_keys, the realistic use case where original is overwritten
+        vecnorm = VecNormV2(
+            in_keys=["observation"],
+            stateful=stateful,
+        )
+
+        if not stateful:
+            # Stateless mode should raise NotImplementedError for denorm
+            td = TensorDict({"observation": torch.randn(10, 1)}, [10])
+            with pytest.raises(NotImplementedError):
+                vecnorm.denorm(td.clone())
+        else:
+            # Stateful mode: normalize then denormalize
+            td_original = TensorDict({"observation": torch.randn(10, 1)}, [10])
+            td_norm = td_original.clone()
+            vecnorm._step(td_norm, td_norm)  # Normalizes 'observation' in-place
+
+            # Verify normalization happened (observation was modified)
+            assert not torch.allclose(
+                td_norm["observation"], td_original["observation"]
+            )
+
+            # Denormalize - should recover original
+            td_denorm = vecnorm.denorm(td_norm)
+
+            # Check recovery of original data
+            torch.testing.assert_close(
+                td_denorm["observation"],
+                td_original["observation"],
+                rtol=1e-5,
+                atol=1e-5,
+            )
+
     def test_pickable(self):
         transform = VecNorm(in_keys=["observation"], new_api=True)
         env = CountingEnv()
@@ -10414,6 +10451,26 @@ class TestVecNorm:
         assert transform.__dict__.keys() == transform2.__dict__.keys()
         for key in sorted(transform.__dict__.keys()):
             assert isinstance(transform.__dict__[key], type(transform2.__dict__[key]))
+
+    def test_denorm(self):
+        """Test that denorm recovers original data for VecNorm."""
+        torch.manual_seed(0)
+        # Use in_keys == out_keys, the realistic use case where original is overwritten
+        vecnorm = VecNorm(in_keys=["observation"])
+        td_original = TensorDict({"observation": torch.randn(10, 1)}, [10])
+        td_norm = td_original.clone()
+        vecnorm._step(td_norm, td_norm)  # Normalizes 'observation' in-place
+
+        # Verify normalization happened (observation was modified)
+        assert not torch.allclose(td_norm["observation"], td_original["observation"])
+
+        # Denormalize - should recover original
+        td_denorm = vecnorm.denorm(td_norm)
+
+        # Check recovery of original data
+        torch.testing.assert_close(
+            td_denorm["observation"], td_original["observation"], rtol=1e-5, atol=1e-5
+        )
 
     def test_state_dict_vecnorm(self):
         transform0 = Compose(
