@@ -169,10 +169,14 @@ def main(cfg: DictConfig):  # noqa: F821
     )
 
     # Create storage transform for extend-time processing (applied once per frame)
+    # When GPU is available, GPUImageTransform handles image processing in the env,
+    # so we skip the heavy CPU transforms in storage_transform
+    gpu_transforms = device.type == "cuda"
     storage_transform = make_storage_transform(
         pixel_obs=cfg.env.from_pixels,
         grayscale=cfg.env.grayscale,
         image_size=cfg.env.image_size,
+        gpu_transforms=gpu_transforms,
     )
 
     # Create policy version tracker for async collection

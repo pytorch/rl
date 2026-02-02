@@ -910,15 +910,32 @@ def make_storage_transform(
     pixel_obs=True,
     grayscale=True,
     image_size,
+    gpu_transforms=False,
 ):
     """Create transforms to be applied at extend-time (once per frame).
 
-    These heavy transforms (ToTensorImage, GrayScale, Resize) are applied once
-    when data is added to the buffer, rather than on every sample.
+    Args:
+        pixel_obs: Whether observations are pixel-based.
+        grayscale: Whether to convert to grayscale.
+        image_size: Target image size.
+        gpu_transforms: If True, skip heavy image transforms (ToTensorImage,
+            GrayScale, Resize) since they're already applied by GPUImageTransform
+            in the environment. Only ExcludeTransform is applied to filter keys.
     """
     if not pixel_obs:
         return None
 
+    # When GPU transforms are enabled, GPUImageTransform already processes
+    # pixels_int -> pixels with normalization, grayscale, and resize.
+    # We only need to filter out the intermediate pixels_int key.
+    if gpu_transforms:
+        storage_transforms = Compose(
+            # Just exclude pixels_int, keep everything else including processed pixels
+            ExcludeTransform("pixels_int", ("next", "pixels_int")),
+        )
+        return storage_transforms
+
+    # CPU fallback: apply heavy transforms at storage time
     storage_transforms = Compose(
         ExcludeTransform("pixels", ("next", "pixels"), inverse=True),
         ToTensorImage(
