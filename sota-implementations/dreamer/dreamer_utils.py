@@ -446,6 +446,8 @@ class GPUImageTransform(Transform):
 
     def transform_observation_spec(self, observation_spec):
         # Update the spec for the output key
+        # Note: Keep spec on CPU to match other specs in Composite
+        # The actual transform will put data on GPU, but spec device must be uniform
         from torchrl.data import Unbounded
 
         in_spec = observation_spec[self.in_key]
@@ -457,7 +459,10 @@ class GPUImageTransform(Transform):
             self.image_size,
             self.image_size,
         )
-        out_spec = Unbounded(shape=out_shape, dtype=torch.float32, device=self.device)
+        # Use in_spec.device to maintain device consistency in Composite
+        out_spec = Unbounded(
+            shape=out_shape, dtype=torch.float32, device=in_spec.device
+        )
         observation_spec[self.out_key] = out_spec
         return observation_spec
 
