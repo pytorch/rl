@@ -82,7 +82,10 @@ profiling:
   # Enable PyTorch profiling
   enabled: False
   # Total optim steps when profiling (overrides optimization.total_optim_steps)
-  total_optim_steps: 50
+  # When using distributed profiling (profiling.distributed.enabled=true), set this
+  # higher than PROF_ITERATIONS end value to allow prof to complete its window.
+  # e.g., if PROF_ITERATIONS=50-55, set total_optim_steps >= 60
+  total_optim_steps: 70
   # Skip the first N optim steps (no profiling at all)
   skip_first: 1
   # Warmup steps (profiler runs but data discarded for warmup)

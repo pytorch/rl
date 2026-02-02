@@ -259,6 +259,8 @@ class DreamerProfiler:
 
         Returns:
             True if profiling is complete and training should exit.
+            When distributed profiling is enabled, always returns False
+            to let prof control the training duration via PROF_ITERATIONS.
         """
         # Step the distributed prof handle (if enabled)
         # This signals the current iteration to workers for synchronized profiling
@@ -271,7 +273,7 @@ class DreamerProfiler:
         self.total_optim_steps += 1
         self._profiler.step()
 
-        # Check if we should stop profiling
+        # Check if we should stop the local profiler
         extra_skip = self._compile_warmup + 1 if self._compile_warmup else 0
         target_steps = (
             self.cfg.profiling.skip_first
@@ -279,9 +281,9 @@ class DreamerProfiler:
             + self.cfg.profiling.warmup_steps
             + self.cfg.profiling.active_steps
         )
-        if self.total_optim_steps >= target_steps:
+        if self.total_optim_steps >= target_steps and not self._stopped:
             torchrl_logger.info(
-                f"Profiling complete after {self.total_optim_steps} optim steps. "
+                f"Local profiling complete after {self.total_optim_steps} optim steps. "
                 f"Exporting trace to {self.cfg.profiling.trace_file}"
             )
             self._profiler.stop()
@@ -289,16 +291,28 @@ class DreamerProfiler:
             # Export trace if trace_file is set
             if self.cfg.profiling.trace_file:
                 self._profiler.export_chrome_trace(self.cfg.profiling.trace_file)
-            # Finish distributed profiling
-            if self._prof_handle is not None:
-                self._prof_handle.finish()
+
+            # When distributed profiling is enabled, don't exit - let prof control timing
+            if self._prof_enabled:
+                torchrl_logger.info(
+                    "Distributed profiling enabled - continuing training until PROF_ITERATIONS window completes"
+                )
+                return False
+
             return True
 
         return False
 
     def should_exit(self) -> bool:
-        """Check if training loop should exit due to profiling completion."""
+        """Check if training loop should exit due to profiling completion.
+
+        When distributed profiling is enabled, always returns False to let
+        prof control the training duration via PROF_ITERATIONS.
+        """
         if not self.enabled:
+            return False
+        # When distributed profiling is enabled, don't exit based on local profiler
+        if self._prof_enabled:
             return False
         extra_skip = self._compile_warmup + 1 if self._compile_warmup else 0
         target_steps = (
