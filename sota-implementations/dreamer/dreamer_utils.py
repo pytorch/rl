@@ -987,7 +987,7 @@ def make_replay_buffer(
         )
 
         replay_buffer = TensorDictReplayBuffer(
-            pin_memory=False,
+            pin_memory=True,  # Faster HtoD transfers (pageable -> pinned)
             prefetch=prefetch,
             storage=LazyMemmapStorage(
                 buffer_size,
