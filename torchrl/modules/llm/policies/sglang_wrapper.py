@@ -568,9 +568,29 @@ class SGLangWrapper(LLMWrapperBase):
                 torch.tensor(result.get("output_ids", []), dtype=torch.long)
             )
             # Extract log probs if available
+            # SGLang can return logprobs in different locations depending on version:
+            # - "meta_info.output_token_logprobs" (common location)
+            # - "output_token_logprobs" (top level)
+            # - "meta_info.logprobs" (alternate key)
             meta_info = result.get("meta_info", {})
-            if "logprobs" in meta_info:
-                log_probs_list.append(torch.tensor(meta_info["logprobs"]))
+            logprobs = None
+            if "output_token_logprobs" in meta_info:
+                logprobs = meta_info["output_token_logprobs"]
+            elif "output_token_logprobs" in result:
+                logprobs = result["output_token_logprobs"]
+            elif "logprobs" in meta_info:
+                logprobs = meta_info["logprobs"]
+
+            if logprobs is not None:
+                # SGLang returns list of (token_id, logprob) tuples or just logprobs
+                if isinstance(logprobs, list) and logprobs:
+                    if isinstance(logprobs[0], (list, tuple)):
+                        # Format: [(token_id, logprob), ...] - extract just logprobs
+                        logprobs = [
+                            lp[1] if isinstance(lp, (list, tuple)) else lp
+                            for lp in logprobs
+                        ]
+                log_probs_list.append(torch.tensor(logprobs, dtype=torch.float32))
             else:
                 log_probs_list.append(None)
 
@@ -613,20 +633,23 @@ class SGLangWrapper(LLMWrapperBase):
             chat_history = ChatHistory._from_tensordict(out.empty())
             chat_history.prompt = history
 
-            # Parse response text back to history
+            # Create response histories directly from response text
+            # SGLang returns raw text without chat template markers, so we create
+            # simple assistant History objects instead of trying to parse
             response_histories = []
             for resp_text in response_texts:
-                resp_history = History.from_text(
-                    [resp_text],
-                    chat_template_name=self.chat_template_name,
-                    tokenizer=self.tokenizer,
+                # Create a History object with a single assistant message
+                resp_history = History(
+                    role=["assistant"],
+                    content=[resp_text],
                 )
                 response_histories.append(resp_history)
 
             chat_history.response = lazy_stack(response_histories)
-            chat_history.full = history.extend(
-                chat_history.response, inplace=False, dim=-1
-            )
+            # Note: We don't compute full history here because extending History objects
+            # with different batch structures is complex. Users can construct full
+            # history by combining prompt and response if needed.
+            chat_history.full = None
             out.set(self.history_key, chat_history)
 
         return out
