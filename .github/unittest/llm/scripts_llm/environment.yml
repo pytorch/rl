@@ -23,6 +23,7 @@ dependencies:
     - scipy
     - hydra-core
     - transformers
+    - accelerate
     - datasets
     - vllm
     - sglang[all]
