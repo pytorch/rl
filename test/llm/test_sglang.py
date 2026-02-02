@@ -40,36 +40,47 @@ def tokenizer():
     return tokenizer
 
 
+# Maximum allowed time for SGLang server startup (seconds)
+# This should be achievable if the model is pre-downloaded and kernels are cached
+SGLANG_STARTUP_TIMEOUT = 60
+
+
 @pytest.fixture(scope="module")
 def sglang_service():
     """Create AsyncSGLang service for testing.
 
     This fixture launches a managed SGLang server for the test module.
+    The server should start within SGLANG_STARTUP_TIMEOUT seconds if the
+    environment is properly warmed (model downloaded, kernels compiled).
     """
     if not _has_sglang:
         pytest.skip("sglang not available")
     if not torch.cuda.is_available():
         pytest.skip("CUDA not available")
 
+    import time
+
     from torchrl.modules.llm.backends import AsyncSGLang
 
-    try:
-        service = AsyncSGLang.from_pretrained(
-            MODEL_NAME,
-            tp_size=1,
-            dp_size=1,
-            mem_fraction_static=0.3,  # Low memory for testing
-            timeout=600,  # Increased timeout for CI environments
-        )
-        yield service
-    except Exception as e:
-        pytest.skip(f"Failed to start SGLang server: {e}")
-    finally:
-        # Cleanup
-        try:
-            service.shutdown()
-        except Exception:
-            pass
+    start_time = time.time()
+    service = AsyncSGLang.from_pretrained(
+        MODEL_NAME,
+        tp_size=1,
+        dp_size=1,
+        mem_fraction_static=0.3,  # Low memory for testing
+        timeout=SGLANG_STARTUP_TIMEOUT,
+    )
+    startup_time = time.time() - start_time
+
+    # Log startup time for debugging
+    from torchrl._utils import logger as torchrl_logger
+
+    torchrl_logger.info(f"SGLang server started in {startup_time:.1f}s")
+
+    yield service
+
+    # Cleanup
+    service.shutdown()
 
 
 @pytest.fixture
@@ -90,11 +101,23 @@ def sample_history():
 
 @pytest.mark.gpu
 @pytest.mark.slow
-@pytest.mark.timeout(600)  # SGLang server startup can take up to 5+ minutes
 @pytest.mark.skipif(not _has_sglang, reason="sglang not available")
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
 class TestAsyncSGLangIntegration:
     """Integration tests for AsyncSGLang with real models."""
+
+    def test_server_starts_fast(self, sglang_service):
+        """Test that SGLang server starts within acceptable time.
+
+        If this test fails, it means the CI environment is not properly warmed:
+        - Model may not be pre-downloaded
+        - CUDA kernels may not be pre-compiled
+        - Check install.sh to ensure proper pre-warming
+        """
+        # If we got here, the fixture succeeded within SGLANG_STARTUP_TIMEOUT
+        # The server is running and ready
+        assert sglang_service is not None
+        assert sglang_service.server_url is not None
 
     def test_connect_to_server(self, sglang_service):
         """Test that AsyncSGLang service is connected and functional."""
@@ -208,8 +231,8 @@ class TestAsyncSGLangIntegration:
 
 
 @pytest.mark.gpu
+@pytest.mark.gpu
 @pytest.mark.slow
-@pytest.mark.timeout(600)  # SGLang server startup can take up to 5+ minutes
 @pytest.mark.skipif(not _has_sglang, reason="sglang not available")
 @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
