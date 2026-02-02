@@ -604,10 +604,63 @@ class SGLangWrapper(LLMWrapperBase):
 
         # Build Tokens output
         if self.return_tokens:
-            tokens_obj = Tokens._from_tensordict(out.empty())
-            if tokens_prompt is not None:
-                tokens_obj.prompt = tokens_prompt
-            tokens_obj.response = response_token_ids
+            if self.pad_output:
+                # Pad response tokens to same length for batching
+                from torch.nn.utils.rnn import pad_sequence
+
+                if response_token_ids:
+                    response_tokens_padded = pad_sequence(
+                        response_token_ids, batch_first=True, padding_value=0
+                    )
+                else:
+                    response_tokens_padded = None
+                tokens_obj = Tokens._from_tensordict(out.empty())
+                if tokens_prompt is not None:
+                    tokens_obj.prompt = tokens_prompt
+                    # Compute full tokens (prompt + response)
+                    if response_tokens_padded is not None:
+                        # Pad prompts to same length if needed
+                        if isinstance(tokens_prompt, list):
+                            # Convert to tensors if needed
+                            prompt_tensors = [
+                                t
+                                if isinstance(t, torch.Tensor)
+                                else torch.tensor(t, dtype=torch.long)
+                                for t in tokens_prompt
+                            ]
+                            tokens_prompt_padded = pad_sequence(
+                                prompt_tensors, batch_first=True, padding_value=0
+                            )
+                        else:
+                            tokens_prompt_padded = tokens_prompt
+                        tokens_obj.full = torch.cat(
+                            [tokens_prompt_padded, response_tokens_padded], dim=-1
+                        )
+                tokens_obj.response = response_tokens_padded
+            else:
+                # Use lazy stack to handle variable-length sequences
+                tokens_obj = Tokens._from_tensordict(
+                    TensorDict(batch_size=out.batch_size).to_lazystack(0)
+                )
+                if tokens_prompt is not None:
+                    tokens_obj.prompt = tokens_prompt
+                    # Compute full tokens as list of concatenated tensors
+                    if response_token_ids:
+                        full_tokens = []
+                        prompt_list = (
+                            tokens_prompt
+                            if isinstance(tokens_prompt, list)
+                            else [tokens_prompt[i] for i in range(len(tokens_prompt))]
+                        )
+                        for p, r in zip(prompt_list, response_token_ids):
+                            # Convert prompt to tensor if needed
+                            if isinstance(p, torch.Tensor):
+                                p_tensor = p.flatten()
+                            else:
+                                p_tensor = torch.tensor(p, dtype=torch.long)
+                            full_tokens.append(torch.cat([p_tensor, r], dim=0))
+                        tokens_obj.full = full_tokens
+                tokens_obj.response = response_token_ids
             tokens_obj.padded = MetaData(self.pad_output)
             out.set(self.tokens_key, tokens_obj)
 
