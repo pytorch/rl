@@ -261,6 +261,7 @@ class AsyncSGLang(RLSGLangEngine):
         return_logprobs: bool = False,
         return_text: bool = True,
         timeout: float | None = None,
+        **kwargs: Any,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """Generate text completions from text prompts or token IDs.
 
@@ -274,6 +275,8 @@ class AsyncSGLang(RLSGLangEngine):
             return_logprobs: Whether to return log probabilities
             return_text: Whether to return generated text
             timeout: Request timeout in seconds
+            **kwargs: Additional sampling parameters (temperature, max_new_tokens, etc.)
+                These are merged into sampling_params for convenience.
 
         Returns:
             dict or list[dict]: Generation results with 'text', 'output_ids', 'meta_info'
@@ -292,6 +295,9 @@ class AsyncSGLang(RLSGLangEngine):
             ...     sampling_params={"max_tokens": 50}
             ... )
             >>> print(result["output_ids"])
+
+            >>> # Using kwargs for sampling params
+            >>> result = service.generate("Hello", max_new_tokens=50, temperature=0.7)
         """
         # Validate inputs: must provide exactly one of prompts or input_ids
         if prompts is None and input_ids is None:
@@ -302,8 +308,14 @@ class AsyncSGLang(RLSGLangEngine):
         if sampling_params is None:
             sampling_params = {}
 
+        # Merge kwargs into sampling_params for convenience
+        # Handle common aliases like max_new_tokens -> max_tokens
+        merged_params = {**sampling_params, **kwargs}
+        if "max_new_tokens" in merged_params and "max_tokens" not in merged_params:
+            merged_params["max_tokens"] = merged_params.pop("max_new_tokens")
+
         # Convert to SGLang format
-        sglang_params = convert_sampling_params(**sampling_params)
+        sglang_params = convert_sampling_params(**merged_params)
         if return_logprobs:
             sglang_params["return_logprob"] = True
 
