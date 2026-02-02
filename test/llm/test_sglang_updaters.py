@@ -107,7 +107,6 @@ class TestSGLangWeightSyncScheme:
 
 
 @pytest.mark.gpu
-@pytest.mark.timeout(600)  # SGLang server startup can take up to 5+ minutes
 @pytest.mark.skipif(not _has_sglang, reason="sglang not available")
 @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")

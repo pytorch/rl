@@ -79,3 +79,55 @@ deno --version || echo "Warning: Deno not installed"
 # Pre-download models for LLM tests to avoid timeout during test execution
 printf "* Pre-downloading models for LLM tests\n"
 python -c "from transformers import AutoTokenizer, AutoModelForCausalLM; AutoTokenizer.from_pretrained('Qwen/Qwen2.5-0.5B'); AutoModelForCausalLM.from_pretrained('Qwen/Qwen2.5-0.5B')"
+
+# Pre-warm SGLang by launching a server once to compile CUDA kernels
+# This is critical for fast startup during tests
+printf "* Pre-warming SGLang server (compiling CUDA kernels)...\n"
+python -c "
+import subprocess
+import time
+import requests
+import sys
+
+# Start SGLang server in background
+print('Starting SGLang server for pre-warming...')
+proc = subprocess.Popen(
+    ['python3', '-m', 'sglang.launch_server',
+     '--model-path', 'Qwen/Qwen2.5-0.5B',
+     '--host', '127.0.0.1',
+     '--port', '39999',
+     '--tp-size', '1',
+     '--mem-fraction-static', '0.3'],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT
+)
+
+# Wait for server to be ready (up to 10 minutes for first-time kernel compilation)
+start = time.time()
+timeout = 600
+ready = False
+while time.time() - start < timeout:
+    try:
+        resp = requests.get('http://127.0.0.1:39999/health', timeout=5)
+        if resp.status_code == 200:
+            ready = True
+            break
+    except:
+        pass
+    time.sleep(2)
+
+elapsed = time.time() - start
+if ready:
+    print(f'SGLang server ready after {elapsed:.1f}s - kernels compiled and cached')
+else:
+    print(f'WARNING: SGLang server did not start within {timeout}s')
+    # Print server output for debugging
+    proc.terminate()
+    proc.wait(timeout=5)
+    sys.exit(1)
+
+# Shutdown server
+proc.terminate()
+proc.wait(timeout=10)
+print('SGLang pre-warming complete')
+"
