@@ -439,27 +439,35 @@ def make_environments(cfg, parallel_envs=1, logger=None):
         """Factory function for creating training environments.
 
         Note: This factory runs inside collector worker processes. We use
-        _default_device() which returns CUDA if available, enabling GPU-accelerated
-        image transforms (ToTensorImage, Resize) that are ~50-100x faster than CPU.
+        CUDA if available for GPU-accelerated image transforms (ToTensorImage,
+        Resize) which are ~50-100x faster than CPU. The cfg.env.device setting
+        is ignored in favor of auto-detecting CUDA availability.
         """
-        device = _default_device(cfg.env.device)
-        func = functools.partial(_make_env, cfg=cfg, device=device)
+        # Use CUDA for transforms if available, regardless of cfg.env.device
+        # This is critical: image transforms (Resize, ToTensorImage) are ~50-100x
+        # faster on GPU. DMControl/Gym render on CPU, but we move to GPU for transforms.
+        transform_device = _default_device(None)  # Returns CUDA if available
+        # Base env still uses cfg.env.device for compatibility
+        env_device = _default_device(cfg.env.device)
+        func = functools.partial(_make_env, cfg=cfg, device=env_device)
         train_env = ParallelEnv(
             parallel_envs,
             EnvCreator(func),
             serial_for_single=True,
         )
-        # Pass device to enable GPU-accelerated image transforms
-        train_env = transform_env(cfg, train_env, device=device)
+        # Pass transform_device to enable GPU-accelerated image transforms
+        train_env = transform_env(cfg, train_env, device=transform_device)
         train_env.set_seed(cfg.env.seed)
         return train_env
 
     # Create eval env directly (not a factory)
-    device = _default_device(cfg.env.device)
+    # Use CUDA for transforms if available, regardless of cfg.env.device
+    transform_device = _default_device(None)  # Returns CUDA if available
+    env_device = _default_device(cfg.env.device)
     func = functools.partial(
         _make_env,
         cfg=cfg,
-        device=device,
+        device=env_device,
         from_pixels=cfg.logger.video,
     )
     eval_env = ParallelEnv(
@@ -467,8 +475,8 @@ def make_environments(cfg, parallel_envs=1, logger=None):
         EnvCreator(func),
         serial_for_single=True,
     )
-    # Pass device to enable GPU-accelerated image transforms
-    eval_env = transform_env(cfg, eval_env, device=device)
+    # Pass transform_device to enable GPU-accelerated image transforms
+    eval_env = transform_env(cfg, eval_env, device=transform_device)
     eval_env.set_seed(cfg.env.seed + 1)
     if cfg.logger.video:
         eval_env.insert_transform(
