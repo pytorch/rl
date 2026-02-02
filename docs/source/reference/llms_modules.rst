@@ -18,8 +18,10 @@ Wrappers
     LLMWrapperBase
     TransformersWrapper
     vLLMWrapper
+    SGLangWrapper
     RemoteTransformersWrapper
     AsyncVLLM
+    AsyncSGLang
 
 Data Structure Classes
 ----------------------
