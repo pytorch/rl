@@ -16,6 +16,7 @@ import tqdm
 
 from dreamer_utils import (
     _default_device,
+    create_prof_handle,
     DreamerProfiler,
     dump_video,
     log_metrics,
@@ -32,6 +33,23 @@ from torch.amp import GradScaler
 from torch.autograd.profiler import record_function
 from torch.nn.utils import clip_grad_norm_
 from torchrl._utils import compile_with_warmup, logger as torchrl_logger, timeit
+
+# Distributed profiling with prof (only imported when enabled)
+try:
+    import prof
+
+    _PROF_AVAILABLE = True
+except ImportError:
+    _PROF_AVAILABLE = False
+
+
+def _prof_context(name: str):
+    """Return a prof.profile context manager if prof is available, else nullcontext."""
+    if _PROF_AVAILABLE:
+        return prof.profile(name)
+    return contextlib.nullcontext()
+
+
 from torchrl.envs.llm.transforms import PolicyVersion
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives.dreamer import (
@@ -79,6 +97,10 @@ def main(cfg: DictConfig):  # noqa: F821
         # This properly resolves interpolations like ${env.name} and uses the official wandb API
         if hasattr(logger, "log_hparams"):
             logger.log_hparams(cfg)
+
+    # Create prof handle early for distributed profiling (before collector creation)
+    # This allows the shm_name to be passed to collector workers
+    prof_handle = create_prof_handle(cfg)
 
     # make_environments returns (train_env_factory, test_env) for async collection
     train_env_factory, test_env = make_environments(
@@ -167,6 +189,7 @@ def main(cfg: DictConfig):  # noqa: F821
         replay_buffer=replay_buffer,
         storage_transform=storage_transform,
         track_policy_version=policy_version,
+        prof_shm_name=prof_handle.shm_name if prof_handle is not None else None,
     )
 
     # Enable collector worker profiling if configured
@@ -279,7 +302,9 @@ def main(cfg: DictConfig):  # noqa: F821
     t_log_start = time.time()
 
     # Profiling setup (encapsulated in helper class)
-    profiler = DreamerProfiler(cfg, device, pbar, compile_warmup=compile_warmup)
+    profiler = DreamerProfiler(
+        cfg, device, pbar, compile_warmup=compile_warmup, prof_handle=prof_handle
+    )
 
     # Start async collection - collector fills the buffer in background
     torchrl_logger.info("Starting async collection...")
@@ -338,97 +363,107 @@ def main(cfg: DictConfig):  # noqa: F821
             )
 
         # sample from replay buffer
-        with timeit("train/sample"), record_function("## train/sample ##"):
-            sampled_tensordict = replay_buffer.sample().reshape(-1, batch_length)
-            if profiling_enabled:
-                torch.cuda.synchronize()
+        with _prof_context("sample"):
+            with timeit("train/sample"), record_function("## train/sample ##"):
+                sampled_tensordict = replay_buffer.sample().reshape(-1, batch_length)
+                if profiling_enabled:
+                    torch.cuda.synchronize()
 
         # update world model
-        with timeit("train/world_model-forward"), record_function(
-            "## world_model/forward ##"
-        ):
-            # Mark step begin for CUDAGraph to prevent tensor overwrite issues
-            torch.compiler.cudagraph_mark_step_begin()
-            with torch.autocast(
-                device_type=device.type,
-                dtype=autocast_dtype,
-            ) if autocast_dtype else contextlib.nullcontext():
-                assert (
-                    sampled_tensordict.device.type == "cuda"
-                ), "sampled_tensordict should be on CUDA"
-                model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
-                loss_world_model = (
-                    model_loss_td["loss_model_kl"]
-                    + model_loss_td["loss_model_reco"]
-                    + model_loss_td["loss_model_reward"]
-                )
+        with _prof_context("world_model"):
+            with timeit("train/world_model-forward"), record_function(
+                "## world_model/forward ##"
+            ):
+                # Mark step begin for CUDAGraph to prevent tensor overwrite issues
+                torch.compiler.cudagraph_mark_step_begin()
+                with torch.autocast(
+                    device_type=device.type,
+                    dtype=autocast_dtype,
+                ) if autocast_dtype else contextlib.nullcontext():
+                    assert (
+                        sampled_tensordict.device.type == "cuda"
+                    ), "sampled_tensordict should be on CUDA"
+                    model_loss_td, sampled_tensordict = world_model_loss(
+                        sampled_tensordict
+                    )
+                    loss_world_model = (
+                        model_loss_td["loss_model_kl"]
+                        + model_loss_td["loss_model_reco"]
+                        + model_loss_td["loss_model_reward"]
+                    )
 
-        with timeit("train/world_model-backward"), record_function(
-            "## world_model/backward ##"
-        ):
-            world_model_opt.zero_grad()
-            if autocast_dtype:
-                scaler1.scale(loss_world_model).backward()
-                scaler1.unscale_(world_model_opt)
-            else:
-                loss_world_model.backward()
-            torchrl_logger.debug("world_model_loss backward OK")
-            world_model_grad = clip_grad_norm_(world_model.parameters(), grad_clip)
-            if autocast_dtype:
-                scaler1.step(world_model_opt)
-                scaler1.update()
-            else:
-                world_model_opt.step()
+            with timeit("train/world_model-backward"), record_function(
+                "## world_model/backward ##"
+            ):
+                world_model_opt.zero_grad()
+                if autocast_dtype:
+                    scaler1.scale(loss_world_model).backward()
+                    scaler1.unscale_(world_model_opt)
+                else:
+                    loss_world_model.backward()
+                torchrl_logger.debug("world_model_loss backward OK")
+                world_model_grad = clip_grad_norm_(world_model.parameters(), grad_clip)
+                if autocast_dtype:
+                    scaler1.step(world_model_opt)
+                    scaler1.update()
+                else:
+                    world_model_opt.step()
 
         # update actor network
-        with timeit("train/actor-forward"), record_function("## actor/forward ##"):
-            # Mark step begin for CUDAGraph to prevent tensor overwrite issues
-            torch.compiler.cudagraph_mark_step_begin()
-            with torch.autocast(
-                device_type=device.type, dtype=autocast_dtype
-            ) if autocast_dtype else contextlib.nullcontext():
-                actor_loss_td, sampled_tensordict = actor_loss(
-                    sampled_tensordict.reshape(-1)
-                )
+        with _prof_context("actor"):
+            with timeit("train/actor-forward"), record_function("## actor/forward ##"):
+                # Mark step begin for CUDAGraph to prevent tensor overwrite issues
+                torch.compiler.cudagraph_mark_step_begin()
+                with torch.autocast(
+                    device_type=device.type, dtype=autocast_dtype
+                ) if autocast_dtype else contextlib.nullcontext():
+                    actor_loss_td, sampled_tensordict = actor_loss(
+                        sampled_tensordict.reshape(-1)
+                    )
 
-        with timeit("train/actor-backward"), record_function("## actor/backward ##"):
-            actor_opt.zero_grad()
-            if autocast_dtype:
-                scaler2.scale(actor_loss_td["loss_actor"]).backward()
-                scaler2.unscale_(actor_opt)
-            else:
-                actor_loss_td["loss_actor"].backward()
-            torchrl_logger.debug("actor_loss backward OK")
-            actor_model_grad = clip_grad_norm_(actor_model.parameters(), grad_clip)
-            if autocast_dtype:
-                scaler2.step(actor_opt)
-                scaler2.update()
-            else:
-                actor_opt.step()
+            with timeit("train/actor-backward"), record_function(
+                "## actor/backward ##"
+            ):
+                actor_opt.zero_grad()
+                if autocast_dtype:
+                    scaler2.scale(actor_loss_td["loss_actor"]).backward()
+                    scaler2.unscale_(actor_opt)
+                else:
+                    actor_loss_td["loss_actor"].backward()
+                torchrl_logger.debug("actor_loss backward OK")
+                actor_model_grad = clip_grad_norm_(actor_model.parameters(), grad_clip)
+                if autocast_dtype:
+                    scaler2.step(actor_opt)
+                    scaler2.update()
+                else:
+                    actor_opt.step()
 
         # update value network
-        with timeit("train/value-forward"), record_function("## value/forward ##"):
-            # Mark step begin for CUDAGraph to prevent tensor overwrite issues
-            torch.compiler.cudagraph_mark_step_begin()
-            with torch.autocast(
-                device_type=device.type, dtype=autocast_dtype
-            ) if autocast_dtype else contextlib.nullcontext():
-                value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
+        with _prof_context("value"):
+            with timeit("train/value-forward"), record_function("## value/forward ##"):
+                # Mark step begin for CUDAGraph to prevent tensor overwrite issues
+                torch.compiler.cudagraph_mark_step_begin()
+                with torch.autocast(
+                    device_type=device.type, dtype=autocast_dtype
+                ) if autocast_dtype else contextlib.nullcontext():
+                    value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
 
-        with timeit("train/value-backward"), record_function("## value/backward ##"):
-            value_opt.zero_grad()
-            if autocast_dtype:
-                scaler3.scale(value_loss_td["loss_value"]).backward()
-                scaler3.unscale_(value_opt)
-            else:
-                value_loss_td["loss_value"].backward()
-            torchrl_logger.debug("value_loss backward OK")
-            critic_model_grad = clip_grad_norm_(value_model.parameters(), grad_clip)
-            if autocast_dtype:
-                scaler3.step(value_opt)
-                scaler3.update()
-            else:
-                value_opt.step()
+            with timeit("train/value-backward"), record_function(
+                "## value/backward ##"
+            ):
+                value_opt.zero_grad()
+                if autocast_dtype:
+                    scaler3.scale(value_loss_td["loss_value"]).backward()
+                    scaler3.unscale_(value_opt)
+                else:
+                    value_loss_td["loss_value"].backward()
+                torchrl_logger.debug("value_loss backward OK")
+                critic_model_grad = clip_grad_norm_(value_model.parameters(), grad_clip)
+                if autocast_dtype:
+                    scaler3.step(value_opt)
+                    scaler3.update()
+                else:
+                    value_opt.step()
 
         # Step profiler (returns True if profiling complete)
         if profiler.step():
@@ -519,19 +554,20 @@ def main(cfg: DictConfig):  # noqa: F821
             frames_at_log_start = collected_frames
 
             # Update policy weights in collector (for async collection)
-            with timeit("train/weight_update") as weight_update_timer:
-                torchrl_logger.debug(
-                    f"optim_step={optim_step}: Starting weight update..."
-                )
-                policy[1].step(frames_collected_this_interval)
-                collector.update_policy_weights_()
-                # Increment policy version after weight update
-                collector.increment_version()
-                torchrl_logger.debug(
-                    f"optim_step={optim_step}: Weight update completed in "
-                    f"{weight_update_timer.elapsed():.3f}s, "
-                    f"policy_version={policy_version.version}"
-                )
+            with _prof_context("weight_update"):
+                with timeit("train/weight_update") as weight_update_timer:
+                    torchrl_logger.debug(
+                        f"optim_step={optim_step}: Starting weight update..."
+                    )
+                    policy[1].step(frames_collected_this_interval)
+                    collector.update_policy_weights_()
+                    # Increment policy version after weight update
+                    collector.increment_version()
+                    torchrl_logger.debug(
+                        f"optim_step={optim_step}: Weight update completed in "
+                        f"{weight_update_timer.elapsed():.3f}s, "
+                        f"policy_version={policy_version.version}"
+                    )
 
         # Evaluation (every eval_every optimization steps)
         if (optim_step + 1) % eval_every == 0:
@@ -572,6 +608,9 @@ def main(cfg: DictConfig):  # noqa: F821
                     eval_metrics = {"eval/simulated_reward": eval_reward}
                     if logger is not None:
                         log_metrics(logger, eval_metrics, replay_buffer.write_count)
+
+    # Finish profiling and clean up resources
+    profiler.finish()
 
     if not test_env.is_closed:
         test_env.close()

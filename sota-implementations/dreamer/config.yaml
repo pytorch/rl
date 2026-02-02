@@ -116,3 +116,17 @@ profiling:
     trace_file: collector_trace_{worker_idx}.json
     # Override init_random_frames when collector profiling is enabled (0 = skip random frames phase)
     init_random_frames_override: 0
+
+  # Distributed profiling with the prof library
+  # This enables coordinated profiling across training and collector workers
+  # using shared memory signaling. Set environment variables to control behavior:
+  #   PROF_ENABLED=1           - Enable distributed profiling
+  #   PROF_ITERATIONS=50-55    - Which training steps to profile
+  #   PROF_OUTPUT_DIR=./traces - Where to save trace files
+  #   PROF_MODE=lite           - Only trace explicit regions (default)
+  distributed:
+    # Enable prof-based distributed profiling
+    enabled: False
+    # Backend for coordination: "shm" (shared memory) for subprocess collectors,
+    # "ray" for Ray actors (requires Ray-based collectors)
+    backend: shm
