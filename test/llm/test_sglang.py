@@ -59,6 +59,7 @@ def sglang_service():
             tp_size=1,
             dp_size=1,
             mem_fraction_static=0.3,  # Low memory for testing
+            timeout=600,  # Increased timeout for CI environments
         )
         yield service
     except Exception as e:
