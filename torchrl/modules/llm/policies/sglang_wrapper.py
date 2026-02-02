@@ -454,23 +454,27 @@ class SGLangWrapper(LLMWrapperBase):
         tensordict: TensorDictBase,
         out: TensorDictBase,
     ) -> TensorDictBase:
-        """Generate from tokens input mode."""
+        """Generate from tokens input mode.
+
+        Uses SGLang's native input_ids support for efficient token-based generation
+        without requiring text decoding/re-encoding.
+        """
         tokens_prompt = tensordict.get(self.input_key, as_list=True)
 
-        # Decode tokens to text for SGLang
-        if self.tokenizer is None:
-            raise ValueError("Tokenizer required for tokens input mode")
-
-        text_prompts = self.tokenizer.batch_decode(
-            tokens_prompt, skip_special_tokens=False
-        )
-
-        # Generate via SGLang
+        # Generate via SGLang using input_ids directly
         results = self.model.generate(
-            text_prompts,
+            input_ids=tokens_prompt,
             sampling_params=self.generate_kwargs,
             return_logprobs=self.return_log_probs,
         )
+
+        # Decode tokens to text for output processing (if text output needed)
+        if self.return_text and self.tokenizer is not None:
+            text_prompts = self.tokenizer.batch_decode(
+                tokens_prompt, skip_special_tokens=False
+            )
+        else:
+            text_prompts = [None] * len(tokens_prompt)
 
         return self._process_generation_results(
             results, text_prompts, out, tokens_prompt=tokens_prompt

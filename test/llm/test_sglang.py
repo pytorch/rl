@@ -158,6 +158,50 @@ class TestAsyncSGLangIntegration:
         assert isinstance(result, list)
         assert len(result) == 3
 
+    def test_generate_from_tokens(self, sglang_service, tokenizer):
+        """Test generation from token IDs instead of text."""
+        # Tokenize a prompt
+        prompt_text = "Hello, how are you?"
+        input_ids = tokenizer.encode(prompt_text)
+
+        # Generate using input_ids
+        result = sglang_service.generate(
+            input_ids=input_ids,
+            sampling_params={"max_new_tokens": 10, "temperature": 0.0},
+        )
+
+        assert isinstance(result, dict)
+        # Should have output_ids in the result
+        assert "output_ids" in result or "text" in result
+
+    def test_generate_from_tokens_batch(self, sglang_service, tokenizer):
+        """Test batch generation from token IDs."""
+        prompts = ["What is 1+1?", "What is 2+2?"]
+        input_ids_batch = [tokenizer.encode(p) for p in prompts]
+
+        result = sglang_service.generate(
+            input_ids=input_ids_batch,
+            sampling_params={"max_new_tokens": 10, "temperature": 0.0},
+        )
+
+        assert isinstance(result, list)
+        assert len(result) == 2
+
+    def test_generate_mutually_exclusive_inputs(self, sglang_service, tokenizer):
+        """Test that prompts and input_ids are mutually exclusive."""
+        input_ids = tokenizer.encode("Hello")
+
+        # Should raise when both are provided
+        with pytest.raises(ValueError, match="Cannot provide both"):
+            sglang_service.generate(
+                prompts="Hello",
+                input_ids=input_ids,
+            )
+
+        # Should raise when neither is provided
+        with pytest.raises(ValueError, match="Must provide either"):
+            sglang_service.generate()
+
     def test_flush_cache(self, sglang_service):
         """Test cache flushing."""
         success = sglang_service.flush_cache()
