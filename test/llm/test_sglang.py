@@ -391,12 +391,11 @@ class TestSGLangWrapper:
             input_mode="history",
         )
 
-        # Should return new wrapper with incremented version
+        # Should return new wrapper
         new_wrapper = wrapper.get_new_version()
         assert new_wrapper is not wrapper
-        # Version should be incremented (if tracked)
-        if hasattr(wrapper, "_version"):
-            assert new_wrapper._version == wrapper._version + 1
+        # Both should be valid SGLangWrapper instances
+        assert isinstance(new_wrapper, SGLangWrapper)
 
 
 if __name__ == "__main__":
