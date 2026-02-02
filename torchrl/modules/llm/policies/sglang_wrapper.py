@@ -87,6 +87,14 @@ class SGLangWrapper(LLMWrapperBase):
         masks_key (NestedKey | None, optional): Key for Masks output. Defaults to `"masks"`.
         log_probs_key (NestedKey | None, optional): Key for LogProbs output. Defaults to `"log_probs"`.
         history_key (NestedKey | None, optional): Key for ChatHistory output. Defaults to `"history"`.
+        batching (bool, optional): Whether to enable batching. Defaults to `False`.
+        min_batch_size (int | None, optional): Minimum batch size for batching.
+        max_batch_size (int | None, optional): Maximum batch size for batching.
+        batching_timeout (float, optional): Timeout for batching. Defaults to `10.0`.
+        prefer_tokens (bool, optional): If ``True`` and ``tokens.prompt`` exists in the input tensordict,
+            use those tokens directly instead of re-tokenizing from history. This enables KV cache
+            consistency when used with :class:`~torchrl.envs.llm.ChatEnv` with ``with_tokenizer=True``
+            or :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer`. Defaults to ``False``.
 
     Example:
         >>> from torchrl.modules.llm.backends.sglang import AsyncSGLang
@@ -139,8 +147,10 @@ class SGLangWrapper(LLMWrapperBase):
         min_batch_size: int | None = None,
         max_batch_size: int | None = None,
         batching_timeout: float = 10.0,
+        prefer_tokens: bool = False,
     ):
         super().__init__()
+        self.prefer_tokens = prefer_tokens
 
         _require_transformers()
 
@@ -394,7 +404,11 @@ class SGLangWrapper(LLMWrapperBase):
         tensordict: TensorDictBase,
         out: TensorDictBase,
     ) -> TensorDictBase:
-        """Generate from history input mode."""
+        """Generate from history input mode.
+
+        When prefer_tokens=True and tokens.prompt exists, uses those tokens directly
+        for KV cache consistency instead of re-tokenizing from history.
+        """
         from torchrl.data.llm import History
 
         history = tensordict.get(self.input_key)
@@ -403,24 +417,64 @@ class SGLangWrapper(LLMWrapperBase):
                 f"Expected History object for '{self.input_key}', got {type(history)}"
             )
 
-        # Apply chat template to get text prompts
-        tokenizer_kwargs = {}
-        if self.chat_template_name is not None:
-            tokenizer_kwargs["chat_template_name"] = self.chat_template_name
-        if self.chat_template is not None:
-            tokenizer_kwargs["chat_template"] = self.chat_template
-        tokenizer_kwargs["add_generation_prompt"] = True
+        # Check for existing tokens when prefer_tokens=True
+        # This enables token-first inference for KV cache consistency
+        existing_tokens = None
+        if self.prefer_tokens:
+            # Primary: tokens.prompt (from IncrementalTokenizer)
+            existing_tokens = tensordict.get((self.tokens_key, "prompt"), None)
+            if existing_tokens is None:
+                # Fallback: tokens.full (for backward compatibility)
+                existing_tokens = tensordict.get((self.tokens_key, "full"), None)
 
-        text_prompts = history.apply_chat_template(
-            tokenizer=self.tokenizer, **tokenizer_kwargs
-        )
+        if existing_tokens is not None:
+            # Use existing tokens directly - skip tokenization for KV cache consistency
+            # Handle different token storage formats
+            if isinstance(existing_tokens, list):
+                tokens_list = existing_tokens
+            elif (
+                isinstance(existing_tokens, torch.Tensor) and existing_tokens.is_nested
+            ):
+                # Unbind nested tensor to get list of tensors
+                tokens_list = list(existing_tokens.unbind(0))
+            else:
+                # Already a padded tensor - extract non-padded sequences
+                tokens_list = [
+                    tokens[tokens != self.tokenizer.pad_token_id].tolist()
+                    for tokens in existing_tokens
+                ]
 
-        # Generate via SGLang
-        results = self.model.generate(
-            text_prompts,
-            sampling_params=self.generate_kwargs,
-            return_logprobs=self.return_log_probs,
-        )
+            # Generate via SGLang using input_ids directly
+            results = self.model.generate(
+                input_ids=tokens_list,
+                sampling_params=self.generate_kwargs,
+                return_logprobs=self.return_log_probs,
+            )
+
+            # Still need text_prompts for output processing
+            text_prompts = self.tokenizer.batch_decode(
+                tokens_list, skip_special_tokens=False
+            )
+        else:
+            # Fall back to tokenizing from history (original behavior)
+            # Apply chat template to get text prompts
+            tokenizer_kwargs = {}
+            if self.chat_template_name is not None:
+                tokenizer_kwargs["chat_template_name"] = self.chat_template_name
+            if self.chat_template is not None:
+                tokenizer_kwargs["chat_template"] = self.chat_template
+            tokenizer_kwargs["add_generation_prompt"] = True
+
+            text_prompts = history.apply_chat_template(
+                tokenizer=self.tokenizer, **tokenizer_kwargs
+            )
+
+            # Generate via SGLang
+            results = self.model.generate(
+                text_prompts,
+                sampling_params=self.generate_kwargs,
+                return_logprobs=self.return_log_probs,
+            )
 
         # Process results
         return self._process_generation_results(
@@ -586,6 +640,7 @@ class SGLangWrapper(LLMWrapperBase):
             "tokens_key": kwargs.get("tokens_key", self.tokens_key),
             "masks_key": kwargs.get("masks_key", self.masks_key),
             "log_probs_key": kwargs.get("log_probs_key", self.log_probs_key),
+            "prefer_tokens": kwargs.get("prefer_tokens", self.prefer_tokens),
         }
         return type(self)(**constructor_kwargs)
 
