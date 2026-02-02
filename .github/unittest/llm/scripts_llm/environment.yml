@@ -25,5 +25,6 @@ dependencies:
     - transformers
     - datasets
     - vllm
+    - sglang[all]
     - mcp
     - langdetect
