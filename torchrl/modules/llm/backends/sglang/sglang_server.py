@@ -254,18 +254,23 @@ class AsyncSGLang(RLSGLangEngine):
 
     def generate(
         self,
-        prompts: str | list[str],
+        prompts: str | list[str] | None = None,
         sampling_params: dict[str, Any] | None = None,
         *,
+        input_ids: list[int] | list[list[int]] | None = None,
         return_logprobs: bool = False,
         return_text: bool = True,
         timeout: float | None = None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
-        """Generate text completions.
+        """Generate text completions from text prompts or token IDs.
+
+        You can provide either `prompts` (text) OR `input_ids` (tokens), but not both.
 
         Args:
-            prompts: Input prompt(s) for generation
+            prompts: Input text prompt(s) for generation. Mutually exclusive with input_ids.
             sampling_params: Sampling parameters (temperature, top_p, max_tokens, etc.)
+            input_ids: Input token ID(s) for generation. Can be a single list of ints
+                or a list of lists for batch generation. Mutually exclusive with prompts.
             return_logprobs: Whether to return log probabilities
             return_text: Whether to return generated text
             timeout: Request timeout in seconds
@@ -274,12 +279,26 @@ class AsyncSGLang(RLSGLangEngine):
             dict or list[dict]: Generation results with 'text', 'output_ids', 'meta_info'
 
         Example:
+            >>> # Generate from text
             >>> result = service.generate(
             ...     "What is the capital of France?",
             ...     {"temperature": 0.7, "max_tokens": 100}
             ... )
             >>> print(result["text"])
+
+            >>> # Generate from token IDs
+            >>> result = service.generate(
+            ...     input_ids=[1, 2, 3, 4],
+            ...     sampling_params={"max_tokens": 50}
+            ... )
+            >>> print(result["output_ids"])
         """
+        # Validate inputs: must provide exactly one of prompts or input_ids
+        if prompts is None and input_ids is None:
+            raise ValueError("Must provide either 'prompts' or 'input_ids'")
+        if prompts is not None and input_ids is not None:
+            raise ValueError("Cannot provide both 'prompts' and 'input_ids'")
+
         if sampling_params is None:
             sampling_params = {}
 
@@ -290,17 +309,36 @@ class AsyncSGLang(RLSGLangEngine):
 
         timeout = timeout or self._timeout
 
-        # Handle single prompt vs batch
-        single_prompt = isinstance(prompts, str)
-        if single_prompt:
-            prompts = [prompts]
+        # Determine if using text or token mode
+        use_tokens = input_ids is not None
+
+        if use_tokens:
+            # Handle single sequence vs batch for input_ids
+            single_input = isinstance(input_ids[0], int) if input_ids else False
+            if single_input:
+                inputs = [input_ids]
+            else:
+                inputs = input_ids
+        else:
+            # Handle single prompt vs batch for text
+            single_input = isinstance(prompts, str)
+            if single_input:
+                inputs = [prompts]
+            else:
+                inputs = prompts
 
         results = []
-        for prompt in prompts:
-            data = {
-                "text": prompt,
-                **sglang_params,
-            }
+        for inp in inputs:
+            if use_tokens:
+                data = {
+                    "input_ids": inp,
+                    **sglang_params,
+                }
+            else:
+                data = {
+                    "text": inp,
+                    **sglang_params,
+                }
 
             response = requests.post(
                 f"{self.server_url}/generate",
@@ -310,7 +348,7 @@ class AsyncSGLang(RLSGLangEngine):
             response.raise_for_status()
             results.append(response.json())
 
-        return results[0] if single_prompt else results
+        return results[0] if single_input else results
 
     def generate_batch(
         self,
