@@ -10,7 +10,7 @@ from contextlib import nullcontext
 
 import torch
 import torch.nn as nn
-from tensordict import NestedKey
+from tensordict import NestedKey, TensorDictBase
 from tensordict.nn import (
     InteractionType,
     ProbabilisticTensorDictModule,
@@ -50,6 +50,7 @@ from torchrl.envs import (
     StepCounter,
     TensorDictPrimer,
     ToTensorImage,
+    Transform,
     TransformedEnv,
 )
 from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
@@ -383,40 +384,122 @@ def _make_env(cfg, device, from_pixels=False):
     return env
 
 
+class GPUImageTransform(Transform):
+    """Composite transform that processes images on GPU for faster execution.
+
+    This transform:
+    1. Moves pixels_int to GPU
+    2. Runs ToTensorImage (permute + divide by 255)
+    3. Optionally runs GrayScale
+    4. Runs Resize
+    5. Keeps output on GPU for fast policy inference
+
+    This avoids device mismatch issues by not using DeviceCastTransform on the
+    full tensordict - only the pixel processing happens on GPU.
+    """
+
+    def __init__(
+        self,
+        device: torch.device,
+        image_size: int,
+        grayscale: bool = False,
+        in_key: str = "pixels_int",
+        out_key: str = "pixels",
+    ):
+        super().__init__(in_keys=[in_key], out_keys=[out_key])
+        self.device = device
+        self.image_size = image_size
+        self.grayscale = grayscale
+        self.in_key = in_key
+        self.out_key = out_key
+
+    def _apply_transform(self, pixels_int: torch.Tensor) -> torch.Tensor:
+        # Move to GPU
+        pixels = pixels_int.to(self.device)
+        # ToTensorImage: permute W x H x C -> C x W x H and normalize
+        pixels = pixels.permute(*list(range(pixels.ndimension() - 3)), -1, -3, -2)
+        pixels = pixels.float().div(255)
+        # GrayScale
+        if self.grayscale:
+            pixels = pixels.mean(dim=-3, keepdim=True)
+        # Resize using interpolate
+        if pixels.shape[-2:] != (self.image_size, self.image_size):
+            # Add batch dim if needed for interpolate
+            needs_squeeze = pixels.ndim == 3
+            if needs_squeeze:
+                pixels = pixels.unsqueeze(0)
+            pixels = torch.nn.functional.interpolate(
+                pixels,
+                size=(self.image_size, self.image_size),
+                mode="bilinear",
+                align_corners=False,
+                antialias=True,
+            )
+            if needs_squeeze:
+                pixels = pixels.squeeze(0)
+        return pixels
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._call(tensordict_reset)
+
+    def transform_observation_spec(self, observation_spec):
+        # Update the spec for the output key
+        from torchrl.data import Unbounded
+
+        in_spec = observation_spec[self.in_key]
+        # Output shape: (C, H, W) where C=1 if grayscale else 3
+        out_channels = 1 if self.grayscale else 3
+        out_shape = (
+            *in_spec.shape[:-3],
+            out_channels,
+            self.image_size,
+            self.image_size,
+        )
+        out_spec = Unbounded(shape=out_shape, dtype=torch.float32, device=self.device)
+        observation_spec[self.out_key] = out_spec
+        return observation_spec
+
+
 def transform_env(cfg, env, device=None):
     """Apply transforms to environment.
 
     Args:
         cfg: Config object
         env: The environment to transform
-        device: If specified and is a CUDA device, move pixel data to GPU before
-            image transforms. This enables GPU-accelerated image processing which
-            is ~50-100x faster than CPU for ToTensorImage/Resize operations.
+        device: If specified and is a CUDA device, use GPU-accelerated image
+            processing which is ~50-100x faster than CPU.
     """
     if not isinstance(env, TransformedEnv):
         env = TransformedEnv(env)
     if cfg.env.from_pixels:
-        # transforms pixel from 0-255 to 0-1 (uint8 to float32)
+        # Rename original pixels for processing
         env.append_transform(
             RenameTransform(in_keys=["pixels"], out_keys=["pixels_int"])
         )
 
-        # Move pixels to GPU before heavy transforms (ToTensorImage, GrayScale, Resize)
-        # This is critical for performance: these ops are ~50-100x faster on GPU
-        # DMControl/Gym render pixels on CPU, so we need explicit device transfer
+        # Use GPU-accelerated image processing if device is CUDA
         if device is not None and str(device).startswith("cuda"):
-            from torchrl.envs.transforms import DeviceCastTransform
-
-            env.append_transform(DeviceCastTransform(device=device))
-
-        env.append_transform(
-            ToTensorImage(from_int=True, in_keys=["pixels_int"], out_keys=["pixels"])
-        )
-        if cfg.env.grayscale:
-            env.append_transform(GrayScale())
-
-        image_size = cfg.env.image_size
-        env.append_transform(Resize(image_size, image_size))
+            env.append_transform(
+                GPUImageTransform(
+                    device=device,
+                    image_size=cfg.env.image_size,
+                    grayscale=cfg.env.grayscale,
+                    in_key="pixels_int",
+                    out_key="pixels",
+                )
+            )
+        else:
+            # CPU fallback: use standard transforms
+            env.append_transform(
+                ToTensorImage(
+                    from_int=True, in_keys=["pixels_int"], out_keys=["pixels"]
+                )
+            )
+            if cfg.env.grayscale:
+                env.append_transform(GrayScale())
+            env.append_transform(Resize(cfg.env.image_size, cfg.env.image_size))
 
     env.append_transform(DoubleToFloat())
     env.append_transform(RewardSum())
