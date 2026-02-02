@@ -492,7 +492,11 @@ class SGLangWrapper(LLMWrapperBase):
         if isinstance(text_prompts, str):
             text_prompts = [text_prompts]
         elif not isinstance(text_prompts, list):
-            text_prompts = list(text_prompts)
+            # Handle NonTensorStack and other non-list types
+            text_prompts = text_prompts.tolist()
+
+        # Ensure all elements are plain strings (not NonTensorData)
+        text_prompts = [str(p) if not isinstance(p, str) else p for p in text_prompts]
 
         # Generate via SGLang
         results = self.model.generate(
@@ -514,6 +518,16 @@ class SGLangWrapper(LLMWrapperBase):
         without requiring text decoding/re-encoding.
         """
         tokens_prompt = tensordict.get(self.input_key, as_list=True)
+
+        # Convert tensors to lists of ints for JSON serialization
+        if isinstance(tokens_prompt, torch.Tensor):
+            tokens_prompt = tokens_prompt.tolist()
+        elif isinstance(tokens_prompt, list):
+            # Each element might be a tensor
+            tokens_prompt = [
+                t.tolist() if isinstance(t, torch.Tensor) else list(t)
+                for t in tokens_prompt
+            ]
 
         # Generate via SGLang using input_ids directly
         results = self.model.generate(
