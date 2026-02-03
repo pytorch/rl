@@ -44,6 +44,8 @@ echo ""
 
 # Run dreamer with distributed profiling via prof
 # Use WANDB_MODE=disabled to avoid login requirement for profiling
+# MUJOCO_GL=egl for headless rendering on cluster
+MUJOCO_GL=egl \
 PROF_ENABLED=1 \
 PROF_ITERATIONS=50-55 \
 PROF_OUTPUT_DIR="$TRACE_DIR" \
