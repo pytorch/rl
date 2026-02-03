@@ -113,7 +113,7 @@ For detailed information on using `prof`, see the prof repository documentation.
 
 **Results**: No significant improvement observed. The bottleneck had already been addressed by the GPU transforms.
 
-### 3. Replay Buffer `stack_onto_` Optimization (✅ Implemented - Pending Benchmark)
+### 3. Replay Buffer `stack_onto_` Optimization (✅ Benchmarked)
 
 **Problem**: When writing a list of items to the replay buffer, two allocations occurred:
 1. `_flip_list()` calls `torch.stack(data)` creating an intermediate tensor
@@ -123,16 +123,24 @@ For detailed information on using `prof`, see the prof repository documentation.
 - `_can_stack_directly(cursor)`: Checks if cursor is contiguous (slice or consecutive tensor indices)
 - `_stack_into_storage(cursor, data)`: Stacks directly into storage slice using `torch.stack(..., out=...)`
 
+**Benchmark Results** (H200 GPU):
+
+| Items | Old (fallback) | New (direct) | Speedup |
+|-------|---------------|--------------|---------|
+| 8     | 0.191ms       | 0.016ms      | **12.1x** |
+| 16    | 0.082ms       | 0.017ms      | **4.9x** |
+| 32    | 0.099ms       | 0.019ms      | **5.1x** |
+| 64    | 0.134ms       | 0.024ms      | **5.5x** |
+| 128   | 0.238ms       | 0.035ms      | **6.9x** |
+
+TensorDict storage shows 1.3-1.5x speedup.
+
 **Key code changes**:
 - `torchrl/data/replay_buffers/storages.py`: Added helper methods and modified `set()` to use direct stacking
 - `test/test_rb.py`: Added `test_stack_onto_optimization` test
+- `scripts/benchmark_stack_onto.py`: Benchmark script
 
-**Expected Benefits**:
-- Eliminates intermediate allocation when writing contiguous indices
-- Reduces memory bandwidth usage
-- Should improve write performance for replay buffers
-
-**Status**: Implemented, unit tests added. Benchmarking pending.
+**Status**: ✅ Implemented, tested, and benchmarked. **5-12x faster** for contiguous writes!
 
 ---
 
@@ -335,7 +343,7 @@ steve scancel $JOBID
 | torch.compile (CUDA graphs) | ❌ Dead End | CUDA graph conflicts |
 | torch.compile mode+options fix | ✅ Fixed | Enables proper compilation |
 | Loss Compilation (no CUDA graphs) | ✅ **Verified** | **32% faster** train/sample (529ms → 358ms) |
-| stack_onto_ | ✅ Implemented | Pending benchmark |
+| stack_onto_ | ✅ **Benchmarked** | **5-12x faster** for contiguous writes |
 | Threaded sampling | 📋 Proposed | Medium potential |
 
 The GPU image transforms provided the largest single improvement, reducing the training sample time from 24.95s to 4.52s (5.5x speedup). 
