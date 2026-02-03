@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.envs.llm.transforms
-
-
-KLComputation
-=============
-
-.. autoclass:: KLComputation
-    :members:
-    :inherited-members:

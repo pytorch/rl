@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.envs.llm.transforms
-
-
-BrowserTransform
-================
-
-.. autoclass:: BrowserTransform
-    :members:
-    :inherited-members:

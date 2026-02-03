@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.transforms.VC1TransformConfig
-=================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
-
-.. autoclass:: VC1TransformConfig

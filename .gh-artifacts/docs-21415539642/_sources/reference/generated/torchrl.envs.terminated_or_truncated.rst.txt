@@ -1,7 +1,0 @@
-﻿.. currentmodule:: torchrl.envs
-
-
-terminated_or_truncated
-=======================
-
-.. autofunction:: terminated_or_truncated

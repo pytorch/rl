@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.services
-
-
-get_services
-============
-
-.. autoclass:: get_services
-    :members:
-    :inherited-members:

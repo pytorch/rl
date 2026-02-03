@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-MultiOneHot
-===========
-
-.. autoclass:: MultiOneHot
-    :members:
-    :inherited-members:
