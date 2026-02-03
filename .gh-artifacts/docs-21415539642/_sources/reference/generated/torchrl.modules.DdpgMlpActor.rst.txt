@@ -1,8 +1,0 @@
-﻿.. currentmodule:: torchrl.modules
-
-
-DdpgMlpActor
-============
-
-.. autoclass:: DdpgMlpActor
-    :members:

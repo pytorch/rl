@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-TensorDictReplayBuffer
-======================
-
-.. autoclass:: TensorDictReplayBuffer
-    :members:
-    :inherited-members:

@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.data.LazyTensorStorageConfig
-================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.data
-
-.. autoclass:: LazyTensorStorageConfig

@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.collectors.llm
-
-
-vLLMUpdaterV2
-=============
-
-.. autoclass:: vLLMUpdaterV2
-    :members:
-    :inherited-members:

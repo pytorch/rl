@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data.replay_buffers
-
-
-NestedStorageCheckpointer
-=========================
-
-.. autoclass:: NestedStorageCheckpointer
-    :members:
-    :inherited-members:

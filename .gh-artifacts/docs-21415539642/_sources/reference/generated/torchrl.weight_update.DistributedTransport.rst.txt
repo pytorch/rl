@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.weight_update
-
-
-DistributedTransport
-====================
-
-.. autoclass:: DistributedTransport
-    :members:
-    :inherited-members:

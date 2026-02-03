@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.weight_update
-
-
-RPCTransport
-============
-
-.. autoclass:: RPCTransport
-    :members:
-    :inherited-members:

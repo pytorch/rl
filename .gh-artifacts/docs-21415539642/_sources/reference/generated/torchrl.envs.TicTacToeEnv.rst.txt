@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.envs
-
-
-TicTacToeEnv
-============
-
-.. autoclass:: TicTacToeEnv
-    :members:
-    :inherited-members:
