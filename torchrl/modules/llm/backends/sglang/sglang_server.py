@@ -185,6 +185,55 @@ class AsyncSGLang(RLSGLangEngine):
         try:
             wait_for_server(self._server_url, timeout=self._timeout)
         except TimeoutError:
+            # Capture server output for debugging
+            if self._managed_process is not None:
+                # Check if process is still alive
+                poll_result = self._managed_process.poll()
+                if poll_result is not None:
+                    torchrl_logger.error(
+                        f"SGLang server process exited with code {poll_result}"
+                    )
+                else:
+                    torchrl_logger.error(
+                        "SGLang server process is still running but not responding"
+                    )
+
+                # Read any available output
+                try:
+                    import os
+
+                    # Don't block - just read what's available
+                    import select
+
+                    if self._managed_process.stdout:
+                        # Make stdout non-blocking
+                        fd = self._managed_process.stdout.fileno()
+                        # Read available output (up to 64KB)
+                        output = b""
+                        try:
+                            while True:
+                                ready, _, _ = select.select(
+                                    [self._managed_process.stdout], [], [], 0.1
+                                )
+                                if not ready:
+                                    break
+                                chunk = os.read(fd, 8192)
+                                if not chunk:
+                                    break
+                                output += chunk
+                                if len(output) > 65536:
+                                    break
+                        except Exception:
+                            pass
+
+                        if output:
+                            output_str = output.decode("utf-8", errors="replace")
+                            torchrl_logger.error(
+                                f"SGLang server output (last 10000 chars):\n{output_str[-10000:]}"
+                            )
+                except Exception as e:
+                    torchrl_logger.error(f"Failed to read server output: {e}")
+
             self.shutdown()
             raise
 

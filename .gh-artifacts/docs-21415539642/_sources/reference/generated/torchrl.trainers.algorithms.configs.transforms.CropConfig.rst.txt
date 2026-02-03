@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.transforms.CropConfig
+=========================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
+
+.. autoclass:: CropConfig

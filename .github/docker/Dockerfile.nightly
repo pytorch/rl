@@ -1,0 +1,70 @@
+# Nightly build image for TorchRL CI
+# This extends the base image with PyTorch nightly and test dependencies
+
+ARG CUDA_VERSION=12.4.0
+ARG PYTHON_VERSION=3.11
+ARG BASE_TAG=base-cuda12.4-py3.11
+
+# Use custom base image or build from scratch
+FROM ghcr.io/pytorch/torchrl-ci:${BASE_TAG}
+
+ARG PYTHON_VERSION
+ARG CUDA_VERSION
+ARG CU_VERSION=cu124
+
+# Create Python environment with uv
+WORKDIR /workspace
+RUN uv venv /opt/venv --python=${PYTHON_VERSION}
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install test dependencies (from pyproject.toml)
+RUN uv pip install \
+    # Core dependencies
+    numpy packaging cloudpickle pyvers \
+    # Build dependencies
+    setuptools wheel "pybind11[global]" ninja cmake \
+    # Test framework
+    hypothesis future pytest pytest-cov pytest-mock \
+    pytest-instafail pytest-rerunfailures pytest-timeout \
+    pytest-asyncio pytest-isolate expecttest pyyaml scipy \
+    psutil \
+    # RL dependencies
+    tqdm hydra-core tensorboard wandb mlflow \
+    # Environment libraries
+    "gymnasium[atari,mujoco]>=1.1" mo-gymnasium[mujoco] \
+    ale-py dm_control "mujoco<3.3.6" \
+    # ML utilities
+    transformers timm protobuf ray \
+    # Media
+    pygame "moviepy<2.0.0" "imageio==2.26.0" av \
+    # Other
+    pip coverage
+
+# Install PyTorch nightly
+RUN if [ "${CU_VERSION}" = "cpu" ]; then \
+        uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu; \
+    else \
+        uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/${CU_VERSION}; \
+    fi
+
+# Verify PyTorch installation
+RUN python -c "import torch; print(f'PyTorch {torch.__version__}')" && \
+    python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+
+# Install tensordict nightly (from git main branch)
+RUN uv pip install --no-deps git+https://github.com/pytorch/tensordict.git
+
+# Verify tensordict installation
+RUN python -c "import tensordict; print(f'tensordict {tensordict.__version__}')"
+
+# Set working directory for tests
+WORKDIR /workspace/rl
+
+# Add build date label for tracking
+ARG BUILD_DATE
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.description="TorchRL CI image with PyTorch nightly"
+LABEL org.opencontainers.image.source="https://github.com/pytorch/rl"
+
+CMD ["/bin/bash"]
+

@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.logging.LoggerConfig
+========================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.logging
+
+.. autoclass:: LoggerConfig
