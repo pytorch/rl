@@ -17,8 +17,8 @@ from torch import device as torch_device, dtype as torch_dtype
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.envs.llm import AddThinkingPrompt, GSM8KEnv, KLRewardTransform, RetrieveKL
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
-from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
-from torchrl.weight_update.llm import VLLMWeightSyncScheme
+from torchrl.modules.llm import SGLangWrapper, TransformersWrapper, vLLMWrapper
+from torchrl.weight_update.llm import SGLangWeightSyncScheme, VLLMWeightSyncScheme
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
 
@@ -183,27 +183,41 @@ def get_inference_model(
     devices: list[int] | None = None,
     make_ray_worker: bool = True,
     tokenizer: PreTrainedTokenizer | None = None,
-) -> vLLMWrapper:
-    """Creates the vLLM-based inference model for fast generation.
+) -> vLLMWrapper | SGLangWrapper:
+    """Creates the inference model for fast generation.
 
-    This function initializes a vLLM model server for efficient inference and wraps
-    it in a vLLMWrapper for policy inference. vLLM provides optimized generation
-    with better throughput than standard HuggingFace generation.
+    This function initializes a model server (vLLM or SGLang) for efficient inference
+    and wraps it in the appropriate wrapper for policy inference.
 
     Args:
         cfg (DictConfig): The hydra configuration object containing model settings.
-            Expected to have inference_model section with vLLM-specific parameters
-            like gpu_memory_utilization and generation settings.
+            Expected to have inference_model section with backend-specific parameters.
+            Set inference_model.backend to "vllm" or "sglang" to select the backend.
         devices (list[int], optional): The devices to use for the inference model. Default: `None`.
         make_ray_worker (bool, optional): Whether to make a ray worker. Default: `True`.
         tokenizer (PreTrainedTokenizer, optional): The tokenizer to use with the inference model. Default: `None`.
 
     Returns:
-        vLLMWrapper: The wrapped vLLM model ready for inference.
+        vLLMWrapper | SGLangWrapper: The wrapped model ready for inference.
 
     Raises:
-        AssertionError: If the vLLM server or model initialization fails
+        AssertionError: If the server or model initialization fails
     """
+    backend = getattr(cfg.inference_model, "backend", "vllm")
+
+    if backend == "sglang":
+        return _get_sglang_inference_model(cfg, devices, make_ray_worker, tokenizer)
+    else:
+        return _get_vllm_inference_model(cfg, devices, make_ray_worker, tokenizer)
+
+
+def _get_vllm_inference_model(
+    cfg: DictConfig,
+    devices: list[int] | None = None,
+    make_ray_worker: bool = True,
+    tokenizer: PreTrainedTokenizer | None = None,
+) -> vLLMWrapper:
+    """Creates the vLLM-based inference model."""
     from torchrl.modules.llm.backends.vllm import AsyncVLLM
 
     num_devices = cfg.inference_model.num_devices
@@ -261,6 +275,8 @@ def get_inference_model(
 
     # Handle FP32 output configuration
     if hasattr(cfg.inference_model, "enable_fp32_output"):
+        import os
+
         enable_fp32 = cfg.inference_model.enable_fp32_output
         if enable_fp32:
             os.environ["VLLM_ENABLE_FP32_OUTPUT"] = "1"
@@ -318,6 +334,85 @@ def get_inference_model(
         generate_kwargs={
             "max_tokens": cfg.inference_model.max_tokens,
             "include_stop_str_in_output": cfg.inference_model.include_stop_str_in_output,
+            "temperature": cfg.inference_model.temperature,
+            "top_p": cfg.inference_model.top_p,
+        },
+    )
+    assert policy.model is not None
+    return policy
+
+
+def _get_sglang_inference_model(
+    cfg: DictConfig,
+    devices: list[int] | None = None,
+    make_ray_worker: bool = True,
+    tokenizer: PreTrainedTokenizer | None = None,
+) -> SGLangWrapper:
+    """Creates the SGLang-based inference model."""
+    from torchrl.modules.llm.backends.sglang import AsyncSGLang
+
+    num_devices = cfg.inference_model.num_devices
+    if num_devices is None:
+        sglang_devices = devices if devices is not None else [1]
+        num_devices = len(sglang_devices)
+    else:
+        sglang_devices = None
+    torchrl_logger.info(
+        f"Creating AsyncSGLang inference model with num_devices={num_devices}, devices={sglang_devices}"
+    )
+
+    model_name = cfg.model.name
+
+    # Build parameters for AsyncSGLang
+    inference_params = {
+        "model_name": model_name,
+        "tp_size": num_devices,
+        "mem_fraction_static": getattr(
+            cfg.inference_model, "gpu_memory_utilization", 0.9
+        ),
+    }
+
+    # Handle torch_dtype
+    if hasattr(cfg.inference_model, "torch_dtype"):
+        dtype_str = cfg.inference_model.torch_dtype
+        if dtype_str is not None:
+            if isinstance(dtype_str, str):
+                inference_params["dtype"] = getattr(torch, dtype_str)
+            else:
+                inference_params["dtype"] = dtype_str
+
+    # Add optional SGLang parameters
+    optional_sglang_params = [
+        "trust_remote_code",
+        "dp_size",
+    ]
+
+    for param in optional_sglang_params:
+        if hasattr(cfg.inference_model, param):
+            value = getattr(cfg.inference_model, param)
+            if value is not None:
+                inference_params[param] = value
+
+    inference_server = AsyncSGLang.from_pretrained(**inference_params)
+    assert inference_server is not None
+
+    if tokenizer is None:
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        if tokenizer.pad_token == tokenizer.eos_token:
+            tokenizer.pad_token = "PAD"
+        tokenizer.padding_side = "left"
+
+    policy = SGLangWrapper(
+        inference_server,
+        input_mode="history",
+        chat_template_name="qwen",
+        return_log_probs=not cfg.env.reasoning,
+        tokenizer=tokenizer,
+        pad_output=False,
+        generate_kwargs={
+            "max_new_tokens": cfg.inference_model.max_tokens,
             "temperature": cfg.inference_model.temperature,
             "top_p": cfg.inference_model.top_p,
         },
@@ -557,22 +652,34 @@ def get_hf_model(
 
 
 def make_weight_sync_scheme(
-    vllm_engine,
-) -> VLLMWeightSyncScheme:
-    """Creates a vLLM weight synchronization scheme using NCCL collectives.
+    engine,
+    cfg: DictConfig,
+) -> VLLMWeightSyncScheme | SGLangWeightSyncScheme:
+    """Creates a weight synchronization scheme using NCCL collectives.
 
     This function creates a weight sync scheme that uses NCCL for high-performance
-    GPU-to-GPU weight transfers from the training model to vLLM inference workers.
+    GPU-to-GPU weight transfers from the training model to inference workers.
 
     Args:
-        vllm_engine: A vLLM engine implementing the RLvLLMEngine interface
-            (like RayLLMWorker, LocalLLMWrapper, or AsyncVLLM).
-            This is typically obtained from the inference policy's model attribute.
+        engine: An inference engine implementing the RLvLLMEngine or RLSGLangEngine
+            interface. This is typically obtained from the inference policy's model
+            attribute.
+        cfg: The hydra configuration object. Used to determine the backend type.
 
     Returns:
-        VLLMWeightSyncScheme: A weight sync scheme configured for the vLLM engine.
+        VLLMWeightSyncScheme | SGLangWeightSyncScheme: A weight sync scheme
+            configured for the inference engine.
     """
-    # Get configuration from the vLLM engine
+    backend = getattr(cfg.inference_model, "backend", "vllm")
+
+    if backend == "sglang":
+        return _make_sglang_weight_sync_scheme(engine)
+    else:
+        return _make_vllm_weight_sync_scheme(engine)
+
+
+def _make_vllm_weight_sync_scheme(vllm_engine) -> VLLMWeightSyncScheme:
+    """Creates a vLLM weight synchronization scheme."""
     tp_size = vllm_engine.get_tp_size()
     num_replicas = getattr(vllm_engine, "num_replicas", 1)
     master_address = vllm_engine.get_master_address()
@@ -590,6 +697,25 @@ def make_weight_sync_scheme(
         gpus_per_replica=tp_size,
         num_replicas=num_replicas,
         strategy="state_dict",
+    )
+
+
+def _make_sglang_weight_sync_scheme(sglang_engine) -> SGLangWeightSyncScheme:
+    """Creates an SGLang weight synchronization scheme."""
+    server_url = sglang_engine.server_url
+    tp_size = sglang_engine.get_tp_size()
+    dp_size = getattr(sglang_engine, "dp_size", 1)
+    num_gpus = tp_size * dp_size
+
+    torchrl_logger.info(
+        f"Creating SGLangWeightSyncScheme with server_url={server_url}, "
+        f"tp_size={tp_size}, dp_size={dp_size}, num_gpus={num_gpus}"
+    )
+
+    return SGLangWeightSyncScheme(
+        server_url=server_url,
+        num_gpus=num_gpus,
+        strategy_name="state_dict",
     )
 
 
