@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.transforms.DiscreteActionProjectionConfig
-=============================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
-
-.. autoclass:: DiscreteActionProjectionConfig

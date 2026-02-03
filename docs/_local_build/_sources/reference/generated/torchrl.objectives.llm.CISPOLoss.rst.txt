@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.objectives.llm
-
-
-CISPOLoss
-=========
-
-.. autoclass:: CISPOLoss
-    :members:
-    :inherited-members:

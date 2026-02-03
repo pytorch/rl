@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.transforms.R3MTransformConfig
-=================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
-
-.. autoclass:: R3MTransformConfig

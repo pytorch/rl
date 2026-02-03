@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.utils.AdagradConfig
-=======================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.utils
-
-.. autoclass:: AdagradConfig

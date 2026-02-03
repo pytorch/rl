@@ -1,7 +1,0 @@
-﻿.. currentmodule:: torchrl.envs
-
-
-JumanjiEnv
-==========
-
-.. autofunction:: JumanjiEnv

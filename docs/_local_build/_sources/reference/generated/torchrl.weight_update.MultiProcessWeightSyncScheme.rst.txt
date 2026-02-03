@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.weight_update
-
-
-MultiProcessWeightSyncScheme
-============================
-
-.. autoclass:: MultiProcessWeightSyncScheme
-    :members:
-    :inherited-members:

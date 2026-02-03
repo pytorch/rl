@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.trainers
-
-
-UpdateWeights
-=============
-
-.. autoclass:: UpdateWeights
-    :members:
-    :inherited-members:
