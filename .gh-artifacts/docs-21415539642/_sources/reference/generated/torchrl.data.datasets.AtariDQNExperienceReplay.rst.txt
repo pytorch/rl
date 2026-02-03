@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data.datasets
-
-
-AtariDQNExperienceReplay
-========================
-
-.. autoclass:: AtariDQNExperienceReplay
-    :members:
-    :inherited-members:

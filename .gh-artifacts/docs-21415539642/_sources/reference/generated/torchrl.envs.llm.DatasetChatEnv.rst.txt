@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.envs.llm
-
-
-DatasetChatEnv
-==============
-
-.. autoclass:: DatasetChatEnv
-    :members:
-    :inherited-members:

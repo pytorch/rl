@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.objectives.llm
-
-
-SFTLossOutput
-=============
-
-.. autoclass:: SFTLossOutput
-    :members:
-    :inherited-members:

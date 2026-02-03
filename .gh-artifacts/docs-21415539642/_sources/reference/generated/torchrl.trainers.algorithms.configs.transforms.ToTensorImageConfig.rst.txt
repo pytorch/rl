@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.transforms.ToTensorImageConfig
-==================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
-
-.. autoclass:: ToTensorImageConfig

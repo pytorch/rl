@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.trainers.algorithms
-
-
-PPOTrainer
-==========
-
-.. autoclass:: PPOTrainer
-    :members:
-    :inherited-members:

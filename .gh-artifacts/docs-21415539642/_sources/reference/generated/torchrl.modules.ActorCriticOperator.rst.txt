@@ -1,8 +1,0 @@
-﻿.. currentmodule:: torchrl.modules
-
-
-ActorCriticOperator
-===================
-
-.. autoclass:: ActorCriticOperator
-    :members:

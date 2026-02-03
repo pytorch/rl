@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.transforms.LineariseRewardsConfig
-=====================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
-
-.. autoclass:: LineariseRewardsConfig

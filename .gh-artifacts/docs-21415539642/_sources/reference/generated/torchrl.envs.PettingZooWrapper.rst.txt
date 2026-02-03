@@ -1,7 +1,0 @@
-﻿.. currentmodule:: torchrl.envs
-
-
-PettingZooWrapper
-=================
-
-.. autofunction:: PettingZooWrapper
