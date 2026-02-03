@@ -43,10 +43,12 @@ echo "  Output: $TRACE_DIR"
 echo ""
 
 # Run dreamer with distributed profiling
+# Use WANDB_MODE=disabled to avoid login requirement for profiling
 PROF_ENABLED=1 \
 PROF_ITERATIONS=50-55 \
 PROF_OUTPUT_DIR="$TRACE_DIR" \
 PROF_MODE=lite \
+WANDB_MODE=disabled \
 python sota-implementations/dreamer/dreamer.py \
   optimization.autocast=true \
   optimization.compile.enabled="$COMPILE_ENABLED" \
@@ -55,6 +57,7 @@ python sota-implementations/dreamer/dreamer.py \
   profiling.distributed.enabled=true \
   profiling.collector.enabled=false \
   logger.video=false \
+  logger.backend=csv \
 2>&1 | tee "${TRACE_DIR}/dreamer.log"
 
 echo ""
