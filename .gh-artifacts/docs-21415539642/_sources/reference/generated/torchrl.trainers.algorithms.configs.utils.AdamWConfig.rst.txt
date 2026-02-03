@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.utils.AdamWConfig
+=====================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.utils
+
+.. autoclass:: AdamWConfig

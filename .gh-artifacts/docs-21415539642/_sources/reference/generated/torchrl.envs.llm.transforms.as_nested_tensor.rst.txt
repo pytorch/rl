@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.envs.llm.transforms
+
+
+as_nested_tensor
+================
+
+.. autoclass:: as_nested_tensor
+    :members:
+    :inherited-members:

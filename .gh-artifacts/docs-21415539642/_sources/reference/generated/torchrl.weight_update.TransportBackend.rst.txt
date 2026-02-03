@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.weight_update
+
+
+TransportBackend
+================
+
+.. autoclass:: TransportBackend
+    :members:
+    :inherited-members:

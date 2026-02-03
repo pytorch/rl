@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data.replay_buffers
+
+
+LazyMemmapStorage
+=================
+
+.. autoclass:: LazyMemmapStorage
+    :members:
+    :inherited-members:
