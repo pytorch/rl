@@ -26,9 +26,8 @@ json_report_dir="${RUNNER_ARTIFACT_DIR:-${root_dir}}"
 json_report_args="--json-report --json-report-file=${json_report_dir}/test-results-sglang.json --json-report-indent=2"
 
 # Run only SGLang-related tests
-# - test_sglang.py: SGLang backend and wrapper tests
-# - test_sglang_updaters.py: SGLang weight synchronization tests
-pytest test/llm/test_sglang.py test/llm/test_sglang_updaters.py \
+# Uses glob pattern to pick up all sglang test files that exist
+pytest test/llm/test_sglang*.py \
     ${json_report_args} \
     -vvv \
     --instafail \
