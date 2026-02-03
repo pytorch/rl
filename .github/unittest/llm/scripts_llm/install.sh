@@ -80,7 +80,5 @@ deno --version || echo "Warning: Deno not installed"
 printf "* Pre-downloading models for LLM tests\n"
 python -c "from transformers import AutoTokenizer, AutoModelForCausalLM; AutoTokenizer.from_pretrained('Qwen/Qwen2.5-0.5B'); AutoModelForCausalLM.from_pretrained('Qwen/Qwen2.5-0.5B')"
 
-# Note: SGLang server startup compiles CUDA kernels on first run which takes 5-10 minutes.
-# For now, we don't pre-warm SGLang in CI. Tests that require SGLang server will fail
-# with a 60s timeout if the environment isn't properly cached.
-# TODO: Add proper SGLang pre-warming or use a pre-built Docker image with cached kernels.
+# Note: SGLang tests are run in a separate workflow (test-linux-llm-sglang.yml)
+# due to Triton version conflicts between vLLM and SGLang.
