@@ -26,6 +26,7 @@ dependencies:
     - accelerate
     - datasets
     - vllm
-    - sglang[all]
+    # Note: SGLang is installed in a separate workflow (test-linux-llm-sglang.yml)
+    # due to Triton version conflicts with vLLM
     - mcp
     - langdetect
