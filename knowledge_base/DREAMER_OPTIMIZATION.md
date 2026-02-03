@@ -114,37 +114,21 @@ For detailed information on using `prof`, see the prof repository documentation.
 
 **Results**: No significant improvement observed. The bottleneck had already been addressed by the GPU transforms.
 
-### 3. Replay Buffer `stack_onto_` Optimization (✅ Benchmarked + Enhanced)
+### 3. Replay Buffer `stack_onto_` Optimization (⚠️ Reverted)
 
 **Problem**: When writing rollout data to the replay buffer, two allocations occurred:
 1. Collector calls `torch.stack(tensordicts)` to create a stacked TensorDict
 2. Storage writes the stacked data to the buffer
 
-**Solution** (Phase 1 - list optimization):
-- Added `_can_stack_directly()` and `_stack_into_storage()` methods to `TensorStorage`
-- When writing a list of items to contiguous indices, stack directly into storage
+**Attempted solution**:
+- Add a direct-stacking path in `TensorStorage.set()` to avoid intermediate `torch.stack` allocations on contiguous writes.
+- (Later) extend to handle `LazyStackedTensorDict` writes.
 
-**Solution** (Phase 2 - collector integration):
-- Collector now uses `LazyStackedTensorDict.lazy_stack()` instead of `torch.stack()` when writing to replay buffer
-- Storage detects `LazyStackedTensorDict`, unbinds it, and uses `stack_onto_` to write directly
-- **Eliminates one memory allocation per rollout write**
+**Why reverted**:
+- The optimization proved brittle in real async Dreamer runs (sampling shape issues / integration problems).
+- Keeping correctness and stable semantics is higher priority than the micro-optimizations here.
 
-**Benchmark Results** (H200 GPU, list path):
-
-| Items | Old (fallback) | New (direct) | Speedup |
-|-------|---------------|--------------|---------|
-| 8     | 0.191ms       | 0.016ms      | **12.1x** |
-| 16    | 0.082ms       | 0.017ms      | **4.9x** |
-| 32    | 0.099ms       | 0.019ms      | **5.1x** |
-| 64    | 0.134ms       | 0.024ms      | **5.5x** |
-| 128   | 0.238ms       | 0.035ms      | **6.9x** |
-
-**Key code changes**:
-- `torchrl/data/replay_buffers/storages.py`: Added `LazyStackedTensorDict` detection in `set()`
-- `torchrl/collectors/_single.py`: Use `lazy_stack` when `extend_buffer=True`
-- `test/test_rb.py`: Added `test_lazy_stacked_tensordict_optimization` test
-
-**Status**: ✅ Implemented end-to-end from collector to storage!
+**Status**: Reverted for now (not mature yet). If revisited, it needs stronger invariants + end-to-end tests in Dreamer.
 
 ---
 
@@ -343,12 +327,21 @@ steve scancel $JOBID
 | Optimization | Status | Impact |
 |-------------|--------|--------|
 | GPU Image Transforms | ✅ Implemented | **5.5x faster** sampling |
+<<<<<<< HEAD
 | Prefetch | ✅ Enabled | **Sampling: 2.5ms** (was bottleneck, now negligible) |
 | Loss Compilation (no CUDA graphs) | ✅ **Verified** | **32% faster** train/sample |
 | stack_onto_ | ✅ **Benchmarked** | **5-12x faster** for contiguous writes |
 | SliceSampler use_gpu | ✅ Enabled | GPU-accelerated trajectory computation |
 | Pinned Memory | ❌ Removed | User requested removal (not needed with prefetch) |
 | torch.compile (CUDA graphs) | ❌ Dead End | CUDA graph conflicts |
+=======
+| Pinned Memory | ⚠️ Implemented | Minimal impact |
+| torch.compile (CUDA graphs) | ❌ Dead End | CUDA graph conflicts |
+| torch.compile mode+options fix | ✅ Fixed | Enables proper compilation |
+| Loss Compilation (no CUDA graphs) | ✅ **Verified** | **32% faster** train/sample (529ms → 358ms) |
+| stack_onto_ | ✅ Implemented | Pending benchmark |
+| Threaded sampling | 📋 Proposed | Medium potential |
+>>>>>>> parent of c1e0e244f (stack_onto_ benchmark results: 5-12x faster for contiguous writes)
 
 The GPU image transforms provided the largest single improvement, reducing the training sample time from 24.95s to 4.52s (5.5x speedup). 
 
