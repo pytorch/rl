@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+DTActor
+=======
+
+.. autoclass:: DTActor
+    :members:

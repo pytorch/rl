@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.transforms.ObservationNormConfig
+====================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
+
+.. autoclass:: ObservationNormConfig
