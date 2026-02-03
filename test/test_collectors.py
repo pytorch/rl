@@ -4102,6 +4102,62 @@ class TestCollectorRB:
         env.close()
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
+    @pytest.mark.parametrize("storage_type", [LazyTensorStorage, LazyMemmapStorage])
+    def test_collector_with_rb_parallel_env(self, storage_type, tmpdir):
+        """Test collector with replay buffer using parallel envs (2D storage).
+
+        With parallel environments, the storage is 2D [max_size, n_steps] and the
+        lazy stack has stack_dim=1. This tests the optimization handles this case.
+        """
+        from torchrl.envs import SerialEnv
+
+        n_envs = 4
+
+        def make_env():
+            return GymEnv(CARTPOLE_VERSIONED())
+
+        env = SerialEnv(n_envs, make_env)
+        env.set_seed(0)
+
+        if storage_type is LazyMemmapStorage:
+            storage = storage_type(1000, scratch_dir=tmpdir)
+        else:
+            storage = storage_type(1000)
+
+        rb = ReplayBuffer(storage=storage, batch_size=10)
+        collector = Collector(
+            env,
+            RandomPolicy(env.action_spec),
+            frames_per_batch=100,  # 100 frames = 25 steps per env
+            total_frames=200,
+            replay_buffer=rb,
+        )
+        torch.manual_seed(0)
+
+        collected_frames = 0
+        for data in collector:
+            # When replay buffer is used, collector yields None
+            assert data is None
+            collected_frames += 100
+
+        # With 2D storage [n_rows, n_steps], len(rb) returns n_rows
+        # Each batch adds n_envs rows, so 2 batches = 8 rows
+        assert len(rb) >= 8, f"Expected >= 8 rows in buffer, got {len(rb)}"
+
+        # Sample and verify data integrity
+        sample = rb.sample(4)
+        assert "observation" in sample.keys()
+        assert "action" in sample.keys()
+        assert "next" in sample.keys()
+
+        # Verify we can sample multiple times without issues
+        for _ in range(5):
+            sample = rb.sample(4)
+
+        collector.shutdown()
+        # env is already closed by collector.shutdown()
+
+    @pytest.mark.skipif(not _has_gym, reason="requires gym.")
     @pytest.mark.parametrize("extend_buffer", [False, True])
     @pytest.mark.parametrize("env_creator", [False, True])
     @pytest.mark.parametrize("storagetype", [LazyTensorStorage, LazyMemmapStorage])

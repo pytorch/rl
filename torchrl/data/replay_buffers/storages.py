@@ -1059,18 +1059,44 @@ class TensorStorage(Storage):
             try:
                 # Optimize lazy stack writes: write each tensordict directly to
                 # storage to avoid creating an intermediate contiguous copy.
-                if isinstance(data, LazyStackedTensorDict) and data.stack_dim == 0:
+                if isinstance(data, LazyStackedTensorDict):
+                    stack_dim = data.stack_dim
                     if isinstance(cursor, slice):
                         # For slices, storage[slice] returns a view - use _stack_onto_
-                        self._storage[cursor]._stack_onto_(list(data.unbind(0)), dim=0)
-                    else:
-                        # For non-contiguous indices, iterate and update each element
+                        self._storage[cursor]._stack_onto_(
+                            list(data.unbind(stack_dim)), dim=stack_dim
+                        )
+                    elif stack_dim == 0:
+                        # For non-contiguous indices with stack_dim=0, iterate and update
                         if isinstance(cursor, torch.Tensor):
                             indices = cursor.tolist()
                         else:
                             indices = cursor
                         for idx, src_td in zip(indices, data.tensordicts):
                             self._storage[idx].update_(src_td)
+                    else:
+                        # For stack_dim > 0 with tensor indices, check if contiguous
+                        if isinstance(cursor, torch.Tensor):
+                            sorted_indices, _ = torch.sort(cursor)
+                            expected = torch.arange(
+                                sorted_indices[0],
+                                sorted_indices[0] + len(cursor),
+                                device=cursor.device,
+                            )
+                            if torch.equal(sorted_indices, expected):
+                                # Contiguous range - convert to slice for view access
+                                equiv_slice = slice(
+                                    int(sorted_indices[0]), int(sorted_indices[-1]) + 1
+                                )
+                                self._storage[equiv_slice]._stack_onto_(
+                                    list(data.unbind(stack_dim)), dim=stack_dim
+                                )
+                            else:
+                                # Non-contiguous with stack_dim > 0, fall back to default
+                                self._storage[cursor] = data
+                        else:
+                            # Non-tensor cursor with stack_dim > 0, fall back to default
+                            self._storage[cursor] = data
                 else:
                     self._storage[cursor] = data
             except RuntimeError as e:
@@ -1145,22 +1171,44 @@ class TensorStorage(Storage):
         try:
             # Optimize lazy stack writes: write each tensordict directly to
             # storage to avoid creating an intermediate contiguous copy.
-            if (
-                is_tensor_collection(data)
-                and isinstance(data, LazyStackedTensorDict)
-                and data.stack_dim == 0
-            ):
+            if is_tensor_collection(data) and isinstance(data, LazyStackedTensorDict):
+                stack_dim = data.stack_dim
                 if isinstance(cursor, slice):
                     # For slices, storage[slice] returns a view - use _stack_onto_
-                    self._storage[cursor]._stack_onto_(list(data.unbind(0)), dim=0)
-                else:
-                    # For non-contiguous indices, iterate and update each element
+                    self._storage[cursor]._stack_onto_(
+                        list(data.unbind(stack_dim)), dim=stack_dim
+                    )
+                elif stack_dim == 0:
+                    # For non-contiguous indices with stack_dim=0, iterate and update
                     if isinstance(cursor, torch.Tensor):
                         indices = cursor.tolist()
                     else:
                         indices = cursor
                     for idx, src_td in zip(indices, data.tensordicts):
                         self._storage[idx].update_(src_td)
+                else:
+                    # For stack_dim > 0 with tensor indices, check if contiguous
+                    if isinstance(cursor, torch.Tensor):
+                        sorted_indices, _ = torch.sort(cursor)
+                        expected = torch.arange(
+                            sorted_indices[0],
+                            sorted_indices[0] + len(cursor),
+                            device=cursor.device,
+                        )
+                        if torch.equal(sorted_indices, expected):
+                            # Contiguous range - convert to slice for view access
+                            equiv_slice = slice(
+                                int(sorted_indices[0]), int(sorted_indices[-1]) + 1
+                            )
+                            self._storage[equiv_slice]._stack_onto_(
+                                list(data.unbind(stack_dim)), dim=stack_dim
+                            )
+                        else:
+                            # Non-contiguous with stack_dim > 0, fall back to default
+                            self._storage[cursor] = data
+                    else:
+                        # Non-tensor cursor with stack_dim > 0, fall back to default
+                        self._storage[cursor] = data
             else:
                 self._storage[cursor] = data
         except RuntimeError as e:

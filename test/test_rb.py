@@ -959,6 +959,60 @@ class TestStorages:
         assert torch.allclose(all_data["obs"], expected["obs"])
         assert torch.allclose(all_data["action"], expected["action"])
 
+    @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
+    def test_extend_lazystack_2d_storage(self, storage_type):
+        """Test lazy stack optimization for 2D storage (parallel envs).
+
+        When using parallel environments, the storage is 2D [max_size, n_steps]
+        and the lazy stack has stack_dim=1 (time dimension). This test verifies
+        the optimization handles this case correctly.
+        """
+        n_envs = 4
+        n_steps = 10
+        img_shape = (3, 32, 32)
+
+        # Create 2D storage - capacity is 100 * n_steps when ndim=2
+        storage = storage_type(100 * n_steps, ndim=2)
+
+        # Pre-initialize storage with correct shape by setting first element
+        init_td = TensorDict(
+            {"pixels": torch.zeros(n_steps, *img_shape)},
+            batch_size=[n_steps],
+        )
+        storage.set(0, init_td, set_cursor=False)
+
+        # Expand storage to full size
+        full_init = TensorDict(
+            {"pixels": torch.zeros(100, n_steps, *img_shape)},
+            batch_size=[100, n_steps],
+        )
+        storage.set(slice(0, 100), full_init, set_cursor=False)
+
+        # Create lazy stack simulating parallel env output
+        # stack_dim=1 means stacked along time dimension
+        time_tds = [
+            TensorDict(
+                {"pixels": torch.rand(n_envs, *img_shape)},
+                batch_size=[n_envs],
+            )
+            for _ in range(n_steps)
+        ]
+        lazy_td = LazyStackedTensorDict.lazy_stack(time_tds, dim=1)
+        assert lazy_td.stack_dim == 1
+        assert lazy_td.batch_size == torch.Size([n_envs, n_steps])
+
+        # Write using tensor indices (simulating circular buffer behavior)
+        cursor = torch.tensor([0, 1, 2, 3])
+        storage.set(cursor, lazy_td)
+
+        # Verify data integrity
+        for i in range(n_envs):
+            stored = storage[i]
+            expected = lazy_td[i].to_tensordict()
+            assert torch.allclose(
+                stored["pixels"], expected["pixels"]
+            ), f"Data mismatch for env {i}"
+
     @pytest.mark.parametrize("device_data", get_default_devices())
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
     @pytest.mark.parametrize("data_type", ["tensor", "tc", "td", "pytree"])
