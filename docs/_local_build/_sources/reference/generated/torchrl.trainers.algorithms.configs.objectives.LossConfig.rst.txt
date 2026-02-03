@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.objectives.LossConfig
-=========================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.objectives
-
-.. autoclass:: LossConfig

@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.envs.llm.transforms
-
-
-TemplateTransform
-=================
-
-.. autoclass:: TemplateTransform
-    :members:
-    :inherited-members:

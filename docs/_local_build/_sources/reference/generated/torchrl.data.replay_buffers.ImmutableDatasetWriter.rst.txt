@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data.replay_buffers
-
-
-ImmutableDatasetWriter
-======================
-
-.. autoclass:: ImmutableDatasetWriter
-    :members:
-    :inherited-members:

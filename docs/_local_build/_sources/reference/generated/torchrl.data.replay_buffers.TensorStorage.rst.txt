@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data.replay_buffers
-
-
-TensorStorage
-=============
-
-.. autoclass:: TensorStorage
-    :members:
-    :inherited-members:

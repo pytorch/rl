@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.logging.TensorboardLoggerConfig
-===================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.logging
-
-.. autoclass:: TensorboardLoggerConfig

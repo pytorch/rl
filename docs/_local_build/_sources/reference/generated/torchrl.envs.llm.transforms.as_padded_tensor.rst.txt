@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.envs.llm.transforms
-
-
-as_padded_tensor
-================
-
-.. autoclass:: as_padded_tensor
-    :members:
-    :inherited-members:

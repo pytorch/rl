@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.utils.LBFGSConfig
-=====================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.utils
-
-.. autoclass:: LBFGSConfig

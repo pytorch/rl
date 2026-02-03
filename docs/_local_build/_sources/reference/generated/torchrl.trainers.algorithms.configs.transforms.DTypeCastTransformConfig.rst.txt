@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.transforms.DTypeCastTransformConfig
-=======================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
-
-.. autoclass:: DTypeCastTransformConfig

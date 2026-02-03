@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig
-=============================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.data
-
-.. autoclass:: SliceSamplerWithoutReplacementConfig
