@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-Categorical
-===========
-
-.. autoclass:: Categorical
-    :members:
-    :inherited-members:

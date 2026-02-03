@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.weight_update
-
-
-RayWeightSyncScheme
-===================
-
-.. autoclass:: RayWeightSyncScheme
-    :members:
-    :inherited-members:

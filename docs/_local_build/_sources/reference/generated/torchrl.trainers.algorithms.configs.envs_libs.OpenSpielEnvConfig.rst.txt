@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.envs\_libs.OpenSpielEnvConfig
-=================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.envs_libs
-
-.. autoclass:: OpenSpielEnvConfig

@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.trainers
-
-
-BatchSubSampler
-===============
-
-.. autoclass:: BatchSubSampler
-    :members:
-    :inherited-members:
