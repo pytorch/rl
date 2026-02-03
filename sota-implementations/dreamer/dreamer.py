@@ -293,11 +293,19 @@ def main(cfg: DictConfig):  # noqa: F821
             )
         if "actor" in compile_losses:
             actor_loss = compile_with_warmup(
-                actor_loss, backend=backend, mode=mode, warmup=compile_warmup
+                actor_loss,
+                backend=backend,
+                mode=mode,
+                warmup=compile_warmup,
+                options={"triton.cudagraphs": False},  # Disable CUDA graphs
             )
         if "value" in compile_losses:
             value_loss = compile_with_warmup(
-                value_loss, backend=backend, mode=mode, warmup=compile_warmup
+                value_loss,
+                backend=backend,
+                mode=mode,
+                warmup=compile_warmup,
+                options={"triton.cudagraphs": False},  # Disable CUDA graphs
             )
     else:
         compile_warmup = 0
