@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.services
-
-
-ServiceBase
-===========
-
-.. autoclass:: ServiceBase
-    :members:
-    :inherited-members:

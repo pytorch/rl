@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.trainers
-
-
-TargetNetUpdaterHook
-====================
-
-.. autoclass:: TargetNetUpdaterHook
-    :members:
-    :inherited-members:

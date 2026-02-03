@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.envs.llm
-
-
-IFEvalScoreData
-===============
-
-.. autoclass:: IFEvalScoreData
-    :members:
-    :inherited-members:

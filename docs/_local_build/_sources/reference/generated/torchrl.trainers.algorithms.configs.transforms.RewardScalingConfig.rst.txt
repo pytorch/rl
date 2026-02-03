@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.transforms.RewardScalingConfig
-==================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
-
-.. autoclass:: RewardScalingConfig

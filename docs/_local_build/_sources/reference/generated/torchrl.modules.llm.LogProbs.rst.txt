@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.modules.llm
-
-
-LogProbs
-========
-
-.. autoclass:: LogProbs
-    :members:
-    :inherited-members:
