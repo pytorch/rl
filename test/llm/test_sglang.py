@@ -328,6 +328,7 @@ class TestSGLangWrapper:
             tokenizer=tokenizer,
             input_mode="tokens",
             generate=True,
+            pad_output=True,  # Required for batched token operations to stack properly
             generate_kwargs={"max_new_tokens": 10, "temperature": 0.0},
         )
 
