@@ -41,9 +41,9 @@ def tokenizer():
 
 
 # Maximum allowed time for SGLang server startup (seconds)
-# First-run CUDA kernel compilation can take 10-15 minutes on fresh CI environments.
-# We use a generous timeout to accommodate CI environments without pre-warming.
-SGLANG_STARTUP_TIMEOUT = 900
+# With --disable-cuda-graph, startup should be fast (< 2 minutes).
+# We use a generous timeout to accommodate model loading and initialization.
+SGLANG_STARTUP_TIMEOUT = 180
 
 
 @pytest.fixture(scope="module")
@@ -69,6 +69,7 @@ def sglang_service():
         tp_size=1,
         dp_size=1,
         mem_fraction_static=0.3,  # Low memory for testing
+        disable_cuda_graph=True,  # Skip CUDA graph compilation for faster startup
         timeout=SGLANG_STARTUP_TIMEOUT,
     )
     startup_time = time.time() - start_time
@@ -102,7 +103,7 @@ def sample_history():
 
 @pytest.mark.gpu
 @pytest.mark.slow
-@pytest.mark.timeout(1000)  # Allow 15+ minutes for first-run CUDA kernel compilation
+@pytest.mark.timeout(300)  # 5 minutes should be enough with --disable-cuda-graph
 @pytest.mark.skipif(not _has_sglang, reason="sglang not available")
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
 class TestAsyncSGLangIntegration:
@@ -233,7 +234,7 @@ class TestAsyncSGLangIntegration:
 @pytest.mark.gpu
 @pytest.mark.gpu
 @pytest.mark.slow
-@pytest.mark.timeout(1000)  # Allow 15+ minutes for first-run CUDA kernel compilation
+@pytest.mark.timeout(300)  # 5 minutes should be enough with --disable-cuda-graph
 @pytest.mark.skipif(not _has_sglang, reason="sglang not available")
 @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
