@@ -274,7 +274,11 @@ def main(cfg: DictConfig):  # noqa: F821
         compile_warmup = 3
         torchrl_logger.info(f"Compiling loss modules with warmup={compile_warmup}")
         backend = compile_cfg.backend
-        mode = compile_cfg.mode
+        cudagraphs = compile_cfg.cudagraphs
+
+        # Build compile options - disable CUDA graphs if configured (default)
+        # CUDA graphs conflict with dynamic RSSM rollout loop
+        compile_options = {"triton.cudagraphs": cudagraphs}
 
         # Note: We do NOT compile rssm_prior/rssm_posterior here because they are
         # shared with the policy used in the collector. Compiling them would cause
@@ -287,19 +291,17 @@ def main(cfg: DictConfig):  # noqa: F821
             world_model_loss = compile_with_warmup(
                 world_model_loss,
                 backend=backend,
-                mode=mode,
                 fullgraph=False,
                 warmup=compile_warmup,
+                options=compile_options,
             )
         if "actor" in compile_losses:
-            # Note: can't use both mode and options together in torch.compile
-            # Use options to disable CUDA graphs which cause issues with RSSM rollout
             actor_loss = compile_with_warmup(
                 actor_loss,
                 backend=backend,
                 fullgraph=False,
                 warmup=compile_warmup,
-                options={"triton.cudagraphs": False},  # Disable CUDA graphs
+                options=compile_options,
             )
         if "value" in compile_losses:
             value_loss = compile_with_warmup(
@@ -307,7 +309,7 @@ def main(cfg: DictConfig):  # noqa: F821
                 backend=backend,
                 fullgraph=False,
                 warmup=compile_warmup,
-                options={"triton.cudagraphs": False},  # Disable CUDA graphs
+                options=compile_options,
             )
     else:
         compile_warmup = 0
