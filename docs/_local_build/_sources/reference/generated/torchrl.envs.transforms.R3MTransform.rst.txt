@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms
+
+
+R3MTransform
+============
+
+.. autoclass:: R3MTransform
+    :members:

@@ -1,0 +1,19 @@
+# @package _global_
+defaults:
+  - grpo_gsm8k
+  - _self_
+
+# Override to disable KL to reference model
+train:
+  use_kl_to_ref: false
+  kl_to_ref_coeff: 0.0  # Set to 0 when not using ref model
+  kl_coef_in_loss: true  # Can still be true, but kl_to_ref_coeff will be 0
+
+# No need to configure ref_model when not using it
+ref_model:
+  num_devices: 0  # Will be ignored when use_kl_to_ref is false
+
+# Adjust ray configuration to not allocate ref model resources
+ray:
+  collector_config:
+    num_cpus: 12  # Reduced since no ref model

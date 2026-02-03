@@ -1,0 +1,1629 @@
+Using Python 3.12.3 environment at: torchrl
+Audited 1 package in 1ms
+Already up to date.
+Initializing submodules (this may take a while)...
+Synchronizing submodule url for 'android/libs/fbjni'
+Synchronizing submodule url for 'third_party/FP16'
+Synchronizing submodule url for 'third_party/FXdiv'
+Synchronizing submodule url for 'third_party/NNPACK'
+Synchronizing submodule url for 'third_party/NVTX'
+Synchronizing submodule url for 'third_party/VulkanMemoryAllocator'
+Synchronizing submodule url for 'third_party/XNNPACK'
+Synchronizing submodule url for 'third_party/aiter'
+Synchronizing submodule url for 'third_party/aiter/3rdparty/composable_kernel'
+Synchronizing submodule url for 'third_party/benchmark'
+Synchronizing submodule url for 'third_party/composable_kernel'
+Synchronizing submodule url for 'third_party/cpp-httplib'
+Synchronizing submodule url for 'third_party/cpuinfo'
+Synchronizing submodule url for 'third_party/cudnn_frontend'
+Synchronizing submodule url for 'third_party/cutlass'
+Synchronizing submodule url for 'third_party/fbgemm'
+Synchronizing submodule url for 'third_party/fbgemm/external/asmjit'
+Synchronizing submodule url for 'third_party/fbgemm/external/composable_kernel'
+Synchronizing submodule url for 'third_party/fbgemm/external/cpuinfo'
+Synchronizing submodule url for 'third_party/fbgemm/external/cutlass'
+Synchronizing submodule url for 'third_party/fbgemm/external/googletest'
+Synchronizing submodule url for 'third_party/fbgemm/external/hipify_torch'
+Synchronizing submodule url for 'third_party/fbgemm/external/json'
+Synchronizing submodule url for 'third_party/flash-attention'
+Synchronizing submodule url for 'third_party/flash-attention/csrc/composable_kernel'
+Synchronizing submodule url for 'third_party/flash-attention/csrc/cutlass'
+Synchronizing submodule url for 'third_party/flatbuffers'
+Synchronizing submodule url for 'third_party/fmt'
+Synchronizing submodule url for 'third_party/gemmlowp/gemmlowp'
+Synchronizing submodule url for 'third_party/gloo'
+Synchronizing submodule url for 'third_party/googletest'
+Synchronizing submodule url for 'third_party/ideep'
+Synchronizing submodule url for 'third_party/ideep/mkl-dnn'
+Synchronizing submodule url for 'third_party/ittapi'
+Synchronizing submodule url for 'third_party/kineto'
+Synchronizing submodule url for 'third_party/kineto/libkineto/third_party/dynolog'
+Synchronizing submodule url for 'third_party/kineto/libkineto/third_party/dynolog/third_party/DCGM'
+Synchronizing submodule url for 'third_party/kineto/libkineto/third_party/dynolog/third_party/cpr'
+Synchronizing submodule url for 'third_party/kineto/libkineto/third_party/dynolog/third_party/fmt'
+Synchronizing submodule url for 'third_party/kineto/libkineto/third_party/dynolog/third_party/gflags'
+Synchronizing submodule url for 'third_party/kineto/libkineto/third_party/dynolog/third_party/gflags/doc'
+Synchronizing submodule url for 'third_party/kineto/libkineto/third_party/dynolog/third_party/glog'
+Synchronizing submodule url for 'third_party/kineto/libkineto/third_party/dynolog/third_party/googletest'
+Synchronizing submodule url for 'third_party/kineto/libkineto/third_party/dynolog/third_party/json'
+Synchronizing submodule url for 'third_party/kineto/libkineto/third_party/dynolog/third_party/pfs'
+Synchronizing submodule url for 'third_party/kineto/libkineto/third_party/dynolog/third_party/prometheus-cpp'
+Synchronizing submodule url for 'third_party/kineto/libkineto/third_party/dynolog/third_party/prometheus-cpp/3rdparty/civetweb'
+Synchronizing submodule url for 'third_party/kineto/libkineto/third_party/dynolog/third_party/prometheus-cpp/3rdparty/googletest'
+Synchronizing submodule url for 'third_party/kineto/libkineto/third_party/fmt'
+Synchronizing submodule url for 'third_party/kineto/libkineto/third_party/googletest'
+Synchronizing submodule url for 'third_party/kleidiai'
+Synchronizing submodule url for 'third_party/mimalloc'
+Synchronizing submodule url for 'third_party/nlohmann'
+Synchronizing submodule url for 'third_party/onnx'
+Synchronizing submodule url for 'third_party/onnx/third_party/pybind11'
+Synchronizing submodule url for 'third_party/opentelemetry-cpp'
+Synchronizing submodule url for 'third_party/opentelemetry-cpp/third_party/benchmark'
+Synchronizing submodule url for 'third_party/opentelemetry-cpp/third_party/googletest'
+Synchronizing submodule url for 'third_party/opentelemetry-cpp/third_party/ms-gsl'
+Synchronizing submodule url for 'third_party/opentelemetry-cpp/third_party/nlohmann-json'
+Synchronizing submodule url for 'third_party/opentelemetry-cpp/third_party/opentelemetry-proto'
+Synchronizing submodule url for 'third_party/opentelemetry-cpp/third_party/opentracing-cpp'
+Synchronizing submodule url for 'third_party/opentelemetry-cpp/third_party/prometheus-cpp'
+Synchronizing submodule url for 'third_party/opentelemetry-cpp/third_party/prometheus-cpp/3rdparty/civetweb'
+Synchronizing submodule url for 'third_party/opentelemetry-cpp/third_party/prometheus-cpp/3rdparty/googletest'
+Synchronizing submodule url for 'third_party/opentelemetry-cpp/tools/vcpkg'
+Synchronizing submodule url for 'third_party/pocketfft'
+Synchronizing submodule url for 'third_party/protobuf'
+Synchronizing submodule url for 'third_party/protobuf/third_party/benchmark'
+Synchronizing submodule url for 'third_party/protobuf/third_party/googletest'
+Synchronizing submodule url for 'third_party/psimd'
+Synchronizing submodule url for 'third_party/pthreadpool'
+Synchronizing submodule url for 'third_party/pybind11'
+Synchronizing submodule url for 'third_party/python-peachpy'
+Synchronizing submodule url for 'third_party/sleef'
+Synchronizing submodule url for 'third_party/tensorpipe'
+Synchronizing submodule url for 'third_party/tensorpipe/third_party/googletest'
+Synchronizing submodule url for 'third_party/tensorpipe/third_party/libnop'
+Synchronizing submodule url for 'third_party/tensorpipe/third_party/libuv'
+Synchronizing submodule url for 'third_party/tensorpipe/third_party/pybind11'
+Synchronizing submodule url for 'third_party/tensorpipe/third_party/pybind11/tools/clang'
+Submodule path 'android/libs/fbjni': checked out '7e1e1fe3858c63c251c637ae41a20de425dde96f'
+Submodule path 'third_party/FP16': checked out '4dfe081cf6bcd15db339cf2680b9281b8451eeb3'
+Submodule path 'third_party/FXdiv': checked out 'b408327ac2a15ec3e43352421954f5b1967701d1'
+Submodule path 'third_party/NNPACK': checked out 'c07e3a0400713d546e0dea2d5466dd22ea389c73'
+Submodule path 'third_party/NVTX': checked out '3ebbc93ded7285963bff932c678fa367eb393ba6'
+Submodule path 'third_party/VulkanMemoryAllocator': checked out '1d8f600fd424278486eade7ed3e877c99f0846b1'
+Submodule path 'third_party/XNNPACK': checked out '51a0103656eff6fc9bfd39a4597923c4b542c883'
+Submodule path 'third_party/aiter': checked out '01aae101b9e5e94d6c16a9514c9fb8df99c93150'
+Submodule path 'third_party/aiter/3rdparty/composable_kernel': checked out 'cffe8fa2a442ac8e80dd236a1a5d24fe3d7e0cbf'
+Submodule path 'third_party/benchmark': checked out '299e5928955cc62af9968370293b916f5130916f'
+Submodule path 'third_party/composable_kernel': checked out '7fe50dc3da2069d6645d9deb8c017a876472a977'
+Submodule path 'third_party/cpp-httplib': checked out '5304464a53f793f8e3e4777ea5941d60cf8c91e3'
+Submodule path 'third_party/cpuinfo': checked out 'f858c30bcb16f8effd5ff46996f0514539e17abc'
+Submodule path 'third_party/cudnn_frontend': checked out '0258951d4d512f4714eb1574496f4d57669b1b93'
+Submodule path 'third_party/cutlass': checked out 'f88806b1e31dfa579842638740216dd41fc6c588'
+Submodule path 'third_party/fbgemm': checked out 'c246916f9e3804eacc3c95058e51cce02ae00fff'
+Submodule path 'third_party/fbgemm/external/asmjit': checked out 'a3199e8857792cd10b7589ff5d58343d2c9008ea'
+Submodule path 'third_party/fbgemm/external/composable_kernel': checked out '7fe50dc3da2069d6645d9deb8c017a876472a977'
+Submodule path 'third_party/fbgemm/external/cpuinfo': checked out '161a9ec374884f4b3e85725cb22e05f9458fdc93'
+Submodule path 'third_party/fbgemm/external/cutlass': checked out 'a54461186bc30c39bf89bc433f89198892ad9e5f'
+Submodule path 'third_party/fbgemm/external/googletest': checked out '52eb8108c5bdec04579160ae17225d66034bd723'
+Submodule path 'third_party/fbgemm/external/hipify_torch': checked out '63b6a7b541fa7f08f8475ca7d74054db36ff2691'
+Submodule path 'third_party/fbgemm/external/json': checked out '9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03'
+Submodule path 'third_party/flash-attention': checked out '979702c87a8713a8e0a5e9fee122b90d2ef13be5'
+Submodule path 'third_party/flash-attention/csrc/composable_kernel': checked out '888317e698e9803c62bd38568abc9e05d7709f33'
+Submodule path 'third_party/flash-attention/csrc/cutlass': checked out 'c506e16788cb08416a4a57e11a9067beeee29420'
+Submodule path 'third_party/flatbuffers': checked out 'a2cd1ea3b6d3fee220106b5fed3f7ce8da9eb757'
+Submodule path 'third_party/fmt': checked out '407c905e45ad75fc29bf0f9bb7c5c2fd3475976f'
+Submodule path 'third_party/gemmlowp/gemmlowp': checked out '3fb5c176c17c765a3492cd2f0321b0dab712f350'
+Submodule path 'third_party/gloo': checked out '3135b0b41b67dde590eef0938a0bf3d6238df5f7'
+Submodule path 'third_party/googletest': checked out '52eb8108c5bdec04579160ae17225d66034bd723'
+Submodule path 'third_party/ideep': checked out '719d8e6cd7f7a0e01b155657526d693acf97c2b3'
+Submodule path 'third_party/ideep/mkl-dnn': checked out '8d263e693366ef8db40acc569cc7d8edf644556d'
+Submodule path 'third_party/ittapi': checked out 'dec1d23ca65ab069d225dfe40dea14f455170959'
+Submodule path 'third_party/kineto': checked out '31f85df8fbd89c188f14ef10f1ec65379786b943'
+Submodule path 'third_party/kineto/libkineto/third_party/dynolog': checked out 'd2ffe0a4e3acace628db49974246b66fc3e85fb1'
+Submodule path 'third_party/kineto/libkineto/third_party/dynolog/third_party/DCGM': checked out 'ffde4e54bc7249a6039a5e6b45b395141e1217f9'
+Submodule path 'third_party/kineto/libkineto/third_party/dynolog/third_party/cpr': checked out '871ed52d350214a034f6ef8a3b8f51c5ce1bd400'
+Submodule path 'third_party/kineto/libkineto/third_party/dynolog/third_party/fmt': checked out 'cd4af11efc9c622896a3e4cb599fa28668ca3d05'
+Submodule path 'third_party/kineto/libkineto/third_party/dynolog/third_party/gflags': checked out 'e171aa2d15ed9eb17054558e0b3a6a413bb01067'
+Submodule path 'third_party/kineto/libkineto/third_party/dynolog/third_party/gflags/doc': checked out '8411df715cf522606e3b1aca386ddfc0b63d34b4'
+Submodule path 'third_party/kineto/libkineto/third_party/dynolog/third_party/glog': checked out 'b33e3bad4c46c8a6345525fd822af355e5ef9446'
+Submodule path 'third_party/kineto/libkineto/third_party/dynolog/third_party/googletest': checked out '52eb8108c5bdec04579160ae17225d66034bd723'
+Submodule path 'third_party/kineto/libkineto/third_party/dynolog/third_party/json': checked out '4f8fba14066156b73f1189a2b8bd568bde5284c5'
+Submodule path 'third_party/kineto/libkineto/third_party/dynolog/third_party/pfs': checked out 'f68a2fa8ea36c783bdd760371411fcb495aa3150'
+Submodule path 'third_party/kineto/libkineto/third_party/dynolog/third_party/prometheus-cpp': checked out 'b1234816facfdda29845c46696a02998a4af115a'
+Submodule path 'third_party/kineto/libkineto/third_party/dynolog/third_party/prometheus-cpp/3rdparty/civetweb': checked out 'd7ba35bbb649209c66e582d5a0244ba988a15159'
+Submodule path 'third_party/kineto/libkineto/third_party/dynolog/third_party/prometheus-cpp/3rdparty/googletest': checked out 'e2239ee6043f73722e7aa812a459f54a28552929'
+Submodule path 'third_party/kineto/libkineto/third_party/fmt': checked out '40626af88bd7df9a5fb80be7b25ac85b122d6c21'
+Submodule path 'third_party/kineto/libkineto/third_party/googletest': checked out '52eb8108c5bdec04579160ae17225d66034bd723'
+Submodule path 'third_party/kleidiai': checked out 'd7770c89632329a9914ef1a90289917597639cbe'
+Submodule path 'third_party/mimalloc': checked out 'fbd8b99c2b828428947d70fdc046bb55609be93e'
+Submodule path 'third_party/nlohmann': checked out '55f93686c01528224f448c19128836e7df245f72'
+Submodule path 'third_party/onnx': checked out 'e709452ef2bbc1d113faf678c24e6d3467696e83'
+Submodule path 'third_party/onnx/third_party/pybind11': checked out 'a2e59f0e7065404b44dfe92a28aca47ba1378dc4'
+Submodule path 'third_party/opentelemetry-cpp': checked out 'a799f4aed9c94b765dcdaabaeab7d5e7e2310878'
+Submodule path 'third_party/opentelemetry-cpp/third_party/benchmark': checked out 'd572f4777349d43653b21d6c2fc63020ab326db2'
+Submodule path 'third_party/opentelemetry-cpp/third_party/googletest': checked out 'b796f7d44681514f58a683a3a71ff17c94edb0c1'
+Submodule path 'third_party/opentelemetry-cpp/third_party/ms-gsl': checked out '6f4529395c5b7c2d661812257cd6780c67e54afa'
+Submodule path 'third_party/opentelemetry-cpp/third_party/nlohmann-json': checked out 'bc889afb4c5bf1c0d8ee29ef35eaaf4c8bef8a5d'
+Submodule path 'third_party/opentelemetry-cpp/third_party/opentelemetry-proto': checked out '4ca4f0335c63cda7ab31ea7ed70d6553aee14dce'
+Submodule path 'third_party/opentelemetry-cpp/third_party/opentracing-cpp': checked out '06b57f48ded1fa3bdd3d4346f6ef29e40e08eaf5'
+Submodule path 'third_party/opentelemetry-cpp/third_party/prometheus-cpp': checked out 'c9ffcdda9086ffd9e1283ea7a0276d831f3c8a8d'
+Submodule path 'third_party/opentelemetry-cpp/third_party/prometheus-cpp/3rdparty/civetweb': checked out 'eefb26f82b233268fc98577d265352720d477ba4'
+Submodule path 'third_party/opentelemetry-cpp/third_party/prometheus-cpp/3rdparty/googletest': checked out 'e2239ee6043f73722e7aa812a459f54a28552929'
+Submodule path 'third_party/opentelemetry-cpp/tools/vcpkg': checked out '8eb57355a4ffb410a2e94c07b4dca2dffbee8e50'
+Submodule path 'third_party/pocketfft': checked out '0fa0ef591e38c2758e3184c6c23e497b9f732ffa'
+Submodule path 'third_party/protobuf': checked out 'd1eca4e4b421cd2997495c4b4e65cea6be4e9b8a'
+Submodule path 'third_party/protobuf/third_party/benchmark': checked out '5b7683f49e1e9223cf9927b24f6fd3d6bd82e3f8'
+Submodule path 'third_party/protobuf/third_party/googletest': checked out '5ec7f0c4a113e2f18ac2c6cc7df51ad6afc24081'
+Submodule path 'third_party/psimd': checked out '072586a71b55b7f8c584153d223e95687148a900'
+Submodule path 'third_party/pthreadpool': checked out '4fe0e1e183925bf8cfa6aae24237e724a96479b8'
+Submodule path 'third_party/pybind11': checked out 'f5fbe867d2d26e4a0a9177a51f6e568868ad3dc8'
+Submodule path 'third_party/python-peachpy': checked out 'f45429b087dd7d5bc78bb40dc7cf06425c252d67'
+Submodule path 'third_party/sleef': checked out '5a1d179df9cf652951b59010a2d2075372d67f68'
+Submodule path 'third_party/tensorpipe': checked out '2b4cd91092d335a697416b2a3cb398283246849d'
+Submodule path 'third_party/tensorpipe/third_party/googletest': checked out 'aee0f9d9b5b87796ee8a0ab26b7587ec30e8858e'
+Submodule path 'third_party/tensorpipe/third_party/libnop': checked out '910b55815be16109f04f4180e9adee14fb4ce281'
+Submodule path 'third_party/tensorpipe/third_party/libuv': checked out '5152db2cbfeb5582e9c27c5ea1dba2cd9e10759b'
+Submodule path 'third_party/tensorpipe/third_party/pybind11': checked out 'a23996fce38ff6ccfbcdc09f1e63f2c4be5ea2ef'
+Submodule path 'third_party/tensorpipe/third_party/pybind11/tools/clang': checked out '6a00cbc4a9b8e68b71caf7f774b3f9c753ae84d5'
+Using Python 3.12.3 environment at: /root/torchrl
+Audited 1 package in 1ms
+Using Python 3.12.3 environment at: /root/torchrl
+Audited 11 packages in 1ms
+Using Python 3.12.3 environment at: /root/torchrl
+Audited 2 packages in 1ms
+Using Python 3.12.3 environment at: /root/torchrl
+Audited 1 package in 1ms
+cuDNN headers found at /usr/local/cuda/include/
+==========================================
+Building PyTorch from source...
+Using ccache: /usr/bin/ccache
+MAX_JOBS: 64
+CUDA_HOME: /usr/local/cuda
+==========================================
+DEBUG uv 0.9.22
+DEBUG Marking explicit source tree for reinstall: `/root/pytorch`
+DEBUG Acquired shared lock for `/root/.cache/uv`
+DEBUG Searching for default Python interpreter in virtual environments
+DEBUG Found `cpython-3.12.3-linux-x86_64-gnu` at `/root/torchrl/bin/python3` (active virtual environment)
+Using Python 3.12.3 environment at: /root/torchrl
+DEBUG Acquired exclusive lock for `/root/torchrl`
+DEBUG Using request timeout of 30s
+DEBUG Found PEP 621 metadata for /root/pytorch in `pyproject.toml` (torch)
+DEBUG No static `pyproject.toml` available for: torch @ file:///root/pytorch (DynamicField("dependencies"))
+DEBUG Acquired exclusive lock for `/root/.cache/uv/sdists-v9/editable/35d18fd71eb73e5e`
+DEBUG Computed cache info: Timestamp(SystemTime { tv_sec: 1768119219, tv_nsec: 52699564 }), None, None, {}, {"src": None}. Most recently modified: setup.py
+DEBUG Preparing metadata for: torch @ file:///root/pytorch
+DEBUG Assessing Python executable as base candidate: /usr/bin/python3.12
+DEBUG No workspace root found, using project root
+DEBUG Proceeding without build isolation
+DEBUG Locking the source tree for setuptools
+DEBUG Acquired exclusive lock for `/root/pytorch`
+DEBUG Calling `setuptools.build_meta.prepare_metadata_for_build_editable()`
+DEBUG Building wheel torch-2.11.0a0+git25bfb09
+DEBUG Found cmake (/root/torchrl/bin/cmake) version: 4.2.1 (>=3.27)
+DEBUG /root/torchrl/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:82: SetuptoolsDeprecationWarning: `project.license` as a TOML table is deprecated
+DEBUG !!
+DEBUG 
+DEBUG         ********************************************************************************
+DEBUG         Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+DEBUG 
+DEBUG         By 2026-Feb-18, you need to update your project and remove deprecated calls
+DEBUG         or your builds will no longer be supported.
+DEBUG 
+DEBUG         See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+DEBUG         ********************************************************************************
+DEBUG 
+DEBUG !!
+DEBUG   corresp(dist, value, root_dir)
+DEBUG running dist_info
+DEBUG creating /root/.cache/uv/builds-v0/.tmp4jRBQz/metadata_directory/torch.egg-info
+DEBUG writing /root/.cache/uv/builds-v0/.tmp4jRBQz/metadata_directory/torch.egg-info/PKG-INFO
+DEBUG writing dependency_links to /root/.cache/uv/builds-v0/.tmp4jRBQz/metadata_directory/torch.egg-info/dependency_links.txt
+DEBUG writing entry points to /root/.cache/uv/builds-v0/.tmp4jRBQz/metadata_directory/torch.egg-info/entry_points.txt
+DEBUG writing requirements to /root/.cache/uv/builds-v0/.tmp4jRBQz/metadata_directory/torch.egg-info/requires.txt
+DEBUG writing top-level names to /root/.cache/uv/builds-v0/.tmp4jRBQz/metadata_directory/torch.egg-info/top_level.txt
+DEBUG writing manifest file '/root/.cache/uv/builds-v0/.tmp4jRBQz/metadata_directory/torch.egg-info/SOURCES.txt'
+DEBUG reading manifest file '/root/.cache/uv/builds-v0/.tmp4jRBQz/metadata_directory/torch.egg-info/SOURCES.txt'
+DEBUG reading manifest template 'MANIFEST.in'
+DEBUG warning: no directories found matching 'ios'
+DEBUG no previously-included directories found matching '**/.gitlab'
+DEBUG warning: no previously-included files matching '*.o' found anywhere in distribution
+DEBUG warning: no previously-included files matching '*.obj' found anywhere in distribution
+DEBUG warning: no previously-included files matching '*.dylib' found anywhere in distribution
+DEBUG warning: no previously-included files matching '*.swp' found anywhere in distribution
+DEBUG warning: no previously-included files matching '*~' found anywhere in distribution
+DEBUG adding license file 'LICENSE'
+DEBUG adding license file 'NOTICE'
+DEBUG writing manifest file '/root/.cache/uv/builds-v0/.tmp4jRBQz/metadata_directory/torch.egg-info/SOURCES.txt'
+DEBUG creating '/root/.cache/uv/builds-v0/.tmp4jRBQz/metadata_directory/torch-2.11.0a0+git25bfb09.dist-info'
+DEBUG Released lock at `/tmp/uv-setuptools-14f683ff165d4f23.lock`
+DEBUG Prepared metadata for: torch @ file:///root/pytorch
+DEBUG No workspace root found, using project root
+DEBUG Released lock at `/root/.cache/uv/sdists-v9/editable/35d18fd71eb73e5e/.lock`
+DEBUG Solving with installed Python version: 3.12.3
+DEBUG Solving with target Python version: >=3.12.3
+DEBUG Adding direct dependency: torch*
+DEBUG Searching for a compatible version of torch @ file:///root/pytorch (*)
+DEBUG Adding transitive dependency for torch==2.11.0a0+git25bfb09: filelock*
+DEBUG Adding transitive dependency for torch==2.11.0a0+git25bfb09: typing-extensions>=4.10.0
+DEBUG Adding transitive dependency for torch==2.11.0a0+git25bfb09: setuptools{python_full_version >= '3.12'}*
+DEBUG Adding transitive dependency for torch==2.11.0a0+git25bfb09: sympy>=1.13.3
+DEBUG Adding transitive dependency for torch==2.11.0a0+git25bfb09: networkx>=2.5.1
+DEBUG Adding transitive dependency for torch==2.11.0a0+git25bfb09: jinja2*
+DEBUG Adding transitive dependency for torch==2.11.0a0+git25bfb09: fsspec>=0.8.5
+DEBUG Found stale response for: https://pypi.org/simple/filelock/
+DEBUG Sending revalidation request for: https://pypi.org/simple/filelock/
+DEBUG Found stale response for: https://pypi.org/simple/typing-extensions/
+DEBUG Sending revalidation request for: https://pypi.org/simple/typing-extensions/
+DEBUG Found stale response for: https://pypi.org/simple/sympy/
+DEBUG Sending revalidation request for: https://pypi.org/simple/sympy/
+DEBUG Found stale response for: https://pypi.org/simple/networkx/
+DEBUG Sending revalidation request for: https://pypi.org/simple/networkx/
+DEBUG Found stale response for: https://pypi.org/simple/jinja2/
+DEBUG Sending revalidation request for: https://pypi.org/simple/jinja2/
+DEBUG Found stale response for: https://pypi.org/simple/fsspec/
+DEBUG Sending revalidation request for: https://pypi.org/simple/fsspec/
+DEBUG Found stale response for: https://pypi.org/simple/setuptools/
+DEBUG Sending revalidation request for: https://pypi.org/simple/setuptools/
+DEBUG Found not-modified response for: https://pypi.org/simple/jinja2/
+DEBUG Found not-modified response for: https://pypi.org/simple/typing-extensions/
+DEBUG Found not-modified response for: https://pypi.org/simple/setuptools/
+DEBUG Found not-modified response for: https://pypi.org/simple/networkx/
+DEBUG Found not-modified response for: https://pypi.org/simple/fsspec/
+DEBUG Found not-modified response for: https://pypi.org/simple/sympy/
+DEBUG Found not-modified response for: https://pypi.org/simple/filelock/
+DEBUG Searching for a compatible version of filelock (*)
+DEBUG Selecting: filelock==3.20.3 [installed] (installed)
+DEBUG Searching for a compatible version of typing-extensions (>=4.10.0)
+DEBUG Selecting: typing-extensions==4.15.0 [installed] (installed)
+DEBUG Searching for a compatible version of setuptools{python_full_version >= '3.12'} (*)
+DEBUG Selecting: setuptools==80.9.0 [installed] (installed)
+DEBUG Adding transitive dependency for setuptools==80.9.0: setuptools==80.9.0
+DEBUG Adding transitive dependency for setuptools==80.9.0: setuptools{python_full_version >= '3.12'}==80.9.0
+DEBUG Searching for a compatible version of setuptools (==80.9.0)
+DEBUG Selecting: setuptools==80.9.0 [installed] (installed)
+DEBUG Searching for a compatible version of setuptools{python_full_version >= '3.12'} (==80.9.0)
+DEBUG Selecting: setuptools==80.9.0 [installed] (installed)
+DEBUG Searching for a compatible version of sympy (>=1.13.3)
+DEBUG Selecting: sympy==1.14.0 [installed] (installed)
+DEBUG Adding transitive dependency for sympy==1.14.0: mpmath>=1.1.0, <1.4
+DEBUG Searching for a compatible version of networkx (>=2.5.1)
+DEBUG Selecting: networkx==3.6.1 [installed] (installed)
+DEBUG Searching for a compatible version of jinja2 (*)
+DEBUG Selecting: jinja2==3.1.6 [installed] (installed)
+DEBUG Adding transitive dependency for jinja2==3.1.6: markupsafe>=2.0
+DEBUG Searching for a compatible version of fsspec (>=0.8.5)
+DEBUG Selecting: fsspec==2026.1.0 [installed] (installed)
+DEBUG Found stale response for: https://pypi.org/simple/mpmath/
+DEBUG Sending revalidation request for: https://pypi.org/simple/mpmath/
+DEBUG Found stale response for: https://pypi.org/simple/markupsafe/
+DEBUG Sending revalidation request for: https://pypi.org/simple/markupsafe/
+DEBUG Found not-modified response for: https://pypi.org/simple/mpmath/
+DEBUG Searching for a compatible version of mpmath (>=1.1.0, <1.4)
+DEBUG Selecting: mpmath==1.3.0 [installed] (installed)
+DEBUG Found not-modified response for: https://pypi.org/simple/markupsafe/
+DEBUG Searching for a compatible version of markupsafe (>=2.0)
+DEBUG Selecting: markupsafe==3.0.3 [installed] (installed)
+DEBUG Tried 10 versions: filelock 1, fsspec 1, jinja2 1, markupsafe 1, mpmath 1, networkx 1, setuptools 1, sympy 1, torch 1, typing-extensions 1
+DEBUG marker environment resolution took 0.104s
+Resolved 10 packages in 3.42s
+DEBUG Requirement already installed: sympy==1.14.0
+DEBUG Requirement already installed: markupsafe==3.0.3
+DEBUG Requirement already installed: jinja2==3.1.6
+DEBUG Requirement already installed: filelock==3.20.3
+DEBUG Requirement already installed: networkx==3.6.1
+DEBUG Requirement already installed: fsspec==2026.1.0
+DEBUG Requirement already installed: typing-extensions==4.15.0
+DEBUG Must revalidate requirement: torch
+DEBUG Requirement already installed: mpmath==1.3.0
+DEBUG Requirement already installed: setuptools==80.9.0
+DEBUG Unnecessary package: farama-notifications==0.0.4
+DEBUG Unnecessary package: absl-py==2.3.1
+DEBUG Unnecessary package: annotated-types==0.7.0
+DEBUG Unnecessary package: antlr4-python3-runtime==4.9.3
+DEBUG Unnecessary package: attrs==25.4.0
+DEBUG Unnecessary package: certifi==2026.1.4
+DEBUG Unnecessary package: cffi==2.0.0
+DEBUG Unnecessary package: charset-normalizer==3.4.4
+DEBUG Unnecessary package: click==8.3.1
+DEBUG Unnecessary package: cloudpickle==3.1.2
+DEBUG Unnecessary package: cmake==4.2.1
+DEBUG Unnecessary package: dataclasses==0.8
+DEBUG Unnecessary package: dm-control==1.0.36
+DEBUG Unnecessary package: dm-env==1.6
+DEBUG Unnecessary package: dm-tree==0.1.9
+DEBUG Unnecessary package: etils==1.13.0
+DEBUG Unnecessary package: future==1.0.0
+DEBUG Unnecessary package: gitdb==4.0.12
+DEBUG Unnecessary package: gitpython==3.1.46
+DEBUG Unnecessary package: glfw==2.10.0
+DEBUG Unnecessary package: gym==0.26.2
+DEBUG Unnecessary package: gym-notices==0.1.0
+DEBUG Unnecessary package: gymnasium==1.2.3
+DEBUG Unnecessary package: hydra-core==1.3.2
+DEBUG Unnecessary package: idna==3.11
+DEBUG Unnecessary package: importlib-metadata==8.7.1
+DEBUG Unnecessary package: importlib-resources==6.5.2
+DEBUG Unnecessary package: iniconfig==2.3.0
+DEBUG Unnecessary package: intel-cmplr-lib-ur==2025.3.1
+DEBUG Unnecessary package: intel-openmp==2025.3.1
+DEBUG Unnecessary package: jsonschema==4.26.0
+DEBUG Unnecessary package: jsonschema-specifications==2025.9.1
+DEBUG Unnecessary package: labmaze==1.0.6
+DEBUG Unnecessary package: lxml==6.0.2
+DEBUG Unnecessary package: mkl-include==2025.3.0
+DEBUG Unnecessary package: mkl-static==2025.3.0
+DEBUG Unnecessary package: msgpack==1.1.2
+DEBUG Unnecessary package: mujoco==3.4.0
+DEBUG Unnecessary package: ninja==1.13.0
+DEBUG Unnecessary package: numpy==2.4.1
+DEBUG Unnecessary package: nvidia-cublas-cu12==12.9.1.4
+DEBUG Unnecessary package: nvidia-cudnn-cu12==9.17.1.4
+DEBUG Unnecessary package: omegaconf==2.3.0
+DEBUG Unnecessary package: onemkl-license==2025.3.0
+DEBUG Unnecessary package: orjson==3.11.5
+DEBUG Unnecessary package: packaging==25.0
+DEBUG Unnecessary package: pillow==12.1.0
+DEBUG Unnecessary package: platformdirs==4.5.1
+DEBUG Unnecessary package: pluggy==1.6.0
+DEBUG Unnecessary package: protobuf==6.33.3
+DEBUG Unnecessary package: pybind11==3.0.1
+DEBUG Unnecessary package: pybind11-global==3.0.1
+DEBUG Unnecessary package: pycparser==2.23
+DEBUG Unnecessary package: pydantic==2.12.5
+DEBUG Unnecessary package: pydantic-core==2.41.5
+DEBUG Unnecessary package: pygments==2.19.2
+DEBUG Unnecessary package: pyopengl==3.1.10
+DEBUG Unnecessary package: pyparsing==3.3.1
+DEBUG Unnecessary package: pytest==9.0.2
+DEBUG Unnecessary package: pytest-random-order==1.2.0
+DEBUG Unnecessary package: pyvers==0.1.0
+DEBUG Unnecessary package: pyyaml==6.0.3
+DEBUG Unnecessary package: ray==2.53.0
+DEBUG Unnecessary package: referencing==0.37.0
+DEBUG Unnecessary package: requests==2.32.5
+DEBUG Unnecessary package: rpds-py==0.30.0
+DEBUG Unnecessary package: scipy==1.17.0
+DEBUG Unnecessary package: sentry-sdk==2.49.0
+DEBUG Unnecessary package: six==1.17.0
+DEBUG Unnecessary package: smmap==5.0.2
+DEBUG Unnecessary package: tbb==2022.3.0
+DEBUG Unnecessary package: tbb-devel==2022.3.0
+DEBUG Unnecessary package: tcmlib==1.4.1
+DEBUG Unnecessary package: tensordict==0.10.0+g5c415136 (from file:///root/tensordict)
+DEBUG Unnecessary package: torchrl==0.10.0+gd4e4cfbd8 (from file:///root/rl)
+DEBUG Unnecessary package: torchvision==0.25.0a0+1e53952 (from file:///root/vision)
+DEBUG Unnecessary package: tqdm==4.67.1
+DEBUG Unnecessary package: triton==3.5.1
+DEBUG Unnecessary package: typing-inspection==0.4.2
+DEBUG Unnecessary package: umf==1.0.2
+DEBUG Unnecessary package: urllib3==2.6.3
+DEBUG Unnecessary package: wandb==0.23.1
+DEBUG Unnecessary package: wrapt==2.0.1
+DEBUG Unnecessary package: zipp==3.23.0
+DEBUG Acquired exclusive lock for `/root/.cache/uv/sdists-v9/editable/35d18fd71eb73e5e`
+DEBUG Computed cache info: Timestamp(SystemTime { tv_sec: 1768119219, tv_nsec: 52699564 }), None, None, {}, {"src": None}. Most recently modified: setup.py
+   Building torch @ file:///root/pytorch
+DEBUG Building: torch @ file:///root/pytorch
+DEBUG Not using uv build backend direct build of `torch @ file:///root/pytorch`, pyproject.toml does not match: The value for `build_system.build-backend` should be `"uv_build"`, not `"setuptools.build_meta"`
+DEBUG Assessing Python executable as base candidate: /usr/bin/python3.12
+DEBUG Creating build environment for: torch @ file:///root/pytorch
+DEBUG Locking the source tree for setuptools
+DEBUG Acquired exclusive lock for `/root/pytorch`
+DEBUG Calling `setuptools.build_meta.build_editable("/root/.cache/uv/builds-v0/.tmpwiTuFZ", {}, "/root/.cache/uv/builds-v0/.tmp4jRBQz/metadata_directory/torch-2.11.0a0+git25bfb09.dist-info")`
+DEBUG Building wheel torch-2.11.0a0+git25bfb09
+DEBUG Found cmake (/root/torchrl/bin/cmake) version: 4.2.1 (>=3.27)
+DEBUG -- Building version 2.11.0a0+git25bfb09
+DEBUG cmake --build . --target install --config Release -j 64
+DEBUG [1/2] Regenerating version file...
+DEBUG [1/2] Install the project...
+DEBUG -- Install configuration: "Release"
+DEBUG /root/torchrl/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:82: SetuptoolsDeprecationWarning: `project.license` as a TOML table is deprecated
+DEBUG !!
+DEBUG 
+DEBUG         ********************************************************************************
+DEBUG         Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+DEBUG 
+DEBUG         By 2026-Feb-18, you need to update your project and remove deprecated calls
+DEBUG         or your builds will no longer be supported.
+DEBUG 
+DEBUG         See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+DEBUG         ********************************************************************************
+DEBUG 
+DEBUG !!
+DEBUG   corresp(dist, value, root_dir)
+DEBUG -- Checkout nccl release tag: v2.28.9-1
+DEBUG running editable_wheel
+DEBUG creating /root/.cache/uv/builds-v0/.tmpwiTuFZ/.tmp-p__rm816/torch.egg-info
+DEBUG writing /root/.cache/uv/builds-v0/.tmpwiTuFZ/.tmp-p__rm816/torch.egg-info/PKG-INFO
+DEBUG writing dependency_links to /root/.cache/uv/builds-v0/.tmpwiTuFZ/.tmp-p__rm816/torch.egg-info/dependency_links.txt
+DEBUG writing entry points to /root/.cache/uv/builds-v0/.tmpwiTuFZ/.tmp-p__rm816/torch.egg-info/entry_points.txt
+DEBUG writing requirements to /root/.cache/uv/builds-v0/.tmpwiTuFZ/.tmp-p__rm816/torch.egg-info/requires.txt
+DEBUG writing top-level names to /root/.cache/uv/builds-v0/.tmpwiTuFZ/.tmp-p__rm816/torch.egg-info/top_level.txt
+DEBUG writing manifest file '/root/.cache/uv/builds-v0/.tmpwiTuFZ/.tmp-p__rm816/torch.egg-info/SOURCES.txt'
+DEBUG reading manifest file '/root/.cache/uv/builds-v0/.tmpwiTuFZ/.tmp-p__rm816/torch.egg-info/SOURCES.txt'
+DEBUG reading manifest template 'MANIFEST.in'
+DEBUG warning: no directories found matching 'ios'
+DEBUG no previously-included directories found matching '**/.gitlab'
+DEBUG warning: no previously-included files matching '*.o' found anywhere in distribution
+DEBUG warning: no previously-included files matching '*.obj' found anywhere in distribution
+DEBUG warning: no previously-included files matching '*.dylib' found anywhere in distribution
+DEBUG warning: no previously-included files matching '*.swp' found anywhere in distribution
+DEBUG warning: no previously-included files matching '*~' found anywhere in distribution
+DEBUG adding license file 'LICENSE'
+DEBUG adding license file 'NOTICE'
+DEBUG writing manifest file '/root/.cache/uv/builds-v0/.tmpwiTuFZ/.tmp-p__rm816/torch.egg-info/SOURCES.txt'
+DEBUG creating '/root/.cache/uv/builds-v0/.tmpwiTuFZ/.tmp-p__rm816/torch-2.11.0a0+git25bfb09.dist-info'
+DEBUG creating /root/.cache/uv/builds-v0/.tmpwiTuFZ/.tmp-p__rm816/torch-2.11.0a0+git25bfb09.dist-info/WHEEL
+DEBUG running build_py
+DEBUG running build_ext
+DEBUG -- Building with NumPy bindings
+DEBUG -- Not using cuDNN
+DEBUG -- Detected CUDA at /usr/local/cuda
+DEBUG -- Not using XPU
+DEBUG -- Using MKLDNN
+DEBUG -- Not using Compute Library for the Arm architecture with MKLDNN
+DEBUG -- Not using CBLAS in MKLDNN
+DEBUG -- Building NCCL library
+DEBUG -- Building with distributed package: 
+DEBUG   -- USE_TENSORPIPE=True
+DEBUG   -- USE_GLOO=True
+DEBUG   -- USE_MPI=False
+DEBUG -- Using ITT
+DEBUG building 'torch._C' extension
+DEBUG creating /tmp/tmppnjy2jis.build-temp/torch/csrc
+DEBUG x86_64-linux-gnu-gcc -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -I/root/torchrl/include -I/usr/include/python3.12 -c torch/csrc/stub.c -o /tmp/tmppnjy2jis.build-temp/torch/csrc/stub.o -Wall -Wextra -Wno-strict-overflow -Wno-unused-parameter -Wno-missing-field-initializers -Wno-unknown-pragmas -fno-strict-aliasing
+DEBUG creating /tmp/tmpii8_g6z4.build-lib/torch
+DEBUG x86_64-linux-gnu-gcc -shared -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-Bsymbolic-functions -Wl,-z,relro -g -fwrapv -O2 /tmp/tmppnjy2jis.build-temp/torch/csrc/stub.o -L/root/pytorch/torch/lib -L/usr/lib/x86_64-linux-gnu -ltorch_python -o /tmp/tmpii8_g6z4.build-lib/torch/_C.cpython-312-x86_64-linux-gnu.so -Wl,-rpath,$ORIGIN/lib
+DEBUG copying /tmp/tmpii8_g6z4.build-lib/torch/_C.cpython-312-x86_64-linux-gnu.so -> torch
+DEBUG setup.py::get_outputs returning ['/tmp/tmpii8_g6z4.build-lib/torch/_C.cpython-312-x86_64-linux-gnu.so', '/tmp/tmpii8_g6z4.build-lib/caffe2']
+DEBUG Editable install will be performed using a meta path finder.
+DEBUG 
+DEBUG Options like `package-data`, `include/exclude-package-data` or
+DEBUG `packages.find.exclude/include` may have no effect.
+DEBUG 
+DEBUG adding '__editable___torch_2_11_0a0_git25bfb09_finder.py'
+DEBUG adding '__editable__.torch-2.11.0a0+git25bfb09.pth'
+DEBUG creating '/root/.cache/uv/builds-v0/.tmpwiTuFZ/.tmp-p__rm816/torch-2.11.0a0+git25bfb09-0.editable-cp312-cp312-linux_x86_64.whl' and adding '/tmp/tmp_u32lydmtorch-2.11.0a0+git25bfb09-0.editable-cp312-cp312-linux_x86_64.whl' to it
+DEBUG adding 'torch-2.11.0a0+git25bfb09.dist-info/licenses/LICENSE'
+DEBUG adding 'torch-2.11.0a0+git25bfb09.dist-info/licenses/NOTICE'
+DEBUG adding 'torch-2.11.0a0+git25bfb09.dist-info/METADATA'
+DEBUG adding 'torch-2.11.0a0+git25bfb09.dist-info/WHEEL'
+DEBUG adding 'torch-2.11.0a0+git25bfb09.dist-info/entry_points.txt'
+DEBUG adding 'torch-2.11.0a0+git25bfb09.dist-info/top_level.txt'
+DEBUG adding 'torch-2.11.0a0+git25bfb09.dist-info/RECORD'
+DEBUG /root/torchrl/lib/python3.12/site-packages/setuptools/command/editable_wheel.py:351: InformationOnly: Editable installation.
+DEBUG !!
+DEBUG 
+DEBUG         ********************************************************************************
+DEBUG         Please be careful with folders in your working directory with the same
+DEBUG         name as your package as they may take precedence during imports.
+DEBUG         ********************************************************************************
+DEBUG 
+DEBUG !!
+DEBUG   with strategy, WheelFile(wheel_path, "w") as wheel_obj:
+DEBUG Released lock at `/tmp/uv-setuptools-14f683ff165d4f23.lock`
+DEBUG Built `torch @ file:///root/pytorch` into `torch-2.11.0a0+git25bfb09-0.editable-cp312-cp312-linux_x86_64.whl`
+      Built torch @ file:///root/pytorch
+DEBUG Released lock at `/root/.cache/uv/sdists-v9/editable/35d18fd71eb73e5e/.lock`
+Prepared 1 package in 4.75s
+DEBUG Uninstalled torch (16 files, 2 directories)
+Uninstalled 1 package in 0.56ms
+Installed 1 package in 3ms
+ ~ torch==2.11.0a0+git25bfb09 (from file:///root/pytorch)
+DEBUG Released lock at `/root/torchrl/.lock`
+DEBUG Released lock at `/root/.cache/uv/.lock`
+Already on 'main'
+M	tensordict/_version.py
+Your branch is up to date with 'origin/main'.
+Already up to date.
+Already on 'fix-dreamer-2'
+Your branch is up to date with 'origin/fix-dreamer-2'.
+Already up to date.
+Using Python 3.12.3 environment at: /root/torchrl
+Audited 6 packages in 3ms
+Using Python 3.12.3 environment at: /root/torchrl
+Resolved 18 packages in 704ms
+   Building tensordict @ file:///root/tensordict
+      Built tensordict @ file:///root/tensordict
+Prepared 1 package in 4.81s
+Uninstalled 1 package in 0.43ms
+Installed 1 package in 1ms
+ ~ tensordict==0.10.0+g5c415136 (from file:///root/tensordict)
+Using Python 3.12.3 environment at: /root/torchrl
+Resolved 19 packages in 14.75s
+   Building torchrl @ file:///root/rl
+      Built torchrl @ file:///root/rl
+Prepared 1 package in 32.99s
+Uninstalled 1 package in 0.38ms
+Installed 1 package in 2ms
+ ~ torchrl==0.10.0+gd4e4cfbd8 (from file:///root/rl)
+Using Python 3.12.3 environment at: /root/torchrl
+Resolved 50 packages in 176ms
+Downloading imageio-ffmpeg (28.1MiB)
+Downloading pillow (6.3MiB)
+ Downloaded pillow
+ Downloaded imageio-ffmpeg
+Prepared 7 packages in 375ms
+Uninstalled 1 package in 4ms
+Installed 7 packages in 33ms
+ + decorator==5.2.1
+ + imageio==2.37.2
+ + imageio-ffmpeg==0.6.0
+ + moviepy==2.2.1
+ - pillow==12.1.0
+ + pillow==11.3.0
+ + proglog==0.1.12
+ + python-dotenv==1.2.1
+From https://github.com/pytorch/vision
+   7e81d3d7a4..af7ab4e25a  nightly    -> origin/nightly
+Already on 'main'
+Your branch is up to date with 'origin/main'.
+Already up to date.
+Using Python 3.12.3 environment at: /root/torchrl
+Audited 1 package in 1ms
+DEBUG uv 0.9.22
+DEBUG Marking explicit source tree for reinstall: `/root/vision`
+DEBUG Acquired shared lock for `/root/.cache/uv`
+DEBUG Searching for default Python interpreter in virtual environments
+DEBUG Found `cpython-3.12.3-linux-x86_64-gnu` at `/root/torchrl/bin/python3` (active virtual environment)
+Using Python 3.12.3 environment at: /root/torchrl
+DEBUG Acquired exclusive lock for `/root/torchrl`
+DEBUG Using request timeout of 30s
+DEBUG No static `pyproject.toml` available for: file:///root/vision (FieldNotFound("project"))
+DEBUG Acquired exclusive lock for `/root/.cache/uv/sdists-v9/editable/87dce9d665269d5d`
+DEBUG Computed cache info: Timestamp(SystemTime { tv_sec: 1768118690, tv_nsec: 447273929 }), None, None, {}, {"src": None}. Most recently modified: setup.py
+DEBUG Preparing metadata for: file:///root/vision
+DEBUG Assessing Python executable as base candidate: /usr/bin/python3.12
+DEBUG Proceeding without build isolation
+DEBUG Locking the source tree for setuptools
+DEBUG Acquired exclusive lock for `/root/vision`
+DEBUG Calling `setuptools.build_meta:__legacy__.prepare_metadata_for_build_editable()`
+DEBUG <string>:14: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+DEBUG <string>:210: UserWarning: libpng-config not found
+DEBUG <string>:320: UserWarning: Building torchvision without PNG support
+DEBUG <string>:335: UserWarning: Building torchvision without JPEG support
+DEBUG <string>:351: UserWarning: Building torchvision without WEBP support
+DEBUG Torchvision build configuration:
+DEBUG FORCE_CUDA = False
+DEBUG FORCE_MPS = False
+DEBUG DEBUG = False
+DEBUG USE_PNG = True
+DEBUG USE_JPEG = True
+DEBUG USE_WEBP = True
+DEBUG USE_NVJPEG = True
+DEBUG NVCC_FLAGS = None
+DEBUG USE_CPU_VIDEO_DECODER = False
+DEBUG USE_GPU_VIDEO_DECODER = False
+DEBUG TORCHVISION_INCLUDE = []
+DEBUG TORCHVISION_LIBRARY = []
+DEBUG IS_ROCM = False
+DEBUG BUILD_CUDA_SOURCES = True
+DEBUG Building wheel torchvision-0.25.0a0+1e53952
+DEBUG Building _C extension
+DEBUG Building image extension
+DEBUG Searching for jpeglib.h. Didn't find in TORCHVISION_INCLUDE.
+DEBUG Searching for jpeglib.h. Didn't find in BUILD_PREFIX.
+DEBUG Searching for jpeglib.h. Didn't find in CONDA_PREFIX.
+DEBUG Searching for jpeglib.h. Didn't find in /usr/include
+DEBUG Searching for jpeglib.h. Didn't find in /usr/local/include
+DEBUG Searching for webp/decode.h. Didn't find in TORCHVISION_INCLUDE.
+DEBUG Searching for webp/decode.h. Didn't find in BUILD_PREFIX.
+DEBUG Searching for webp/decode.h. Didn't find in CONDA_PREFIX.
+DEBUG Searching for webp/decode.h. Didn't find in /usr/include
+DEBUG Searching for webp/decode.h. Didn't find in /usr/local/include
+DEBUG Building torchvision with NVJPEG image support
+DEBUG Building video decoder extensions
+DEBUG Building without video decoders extensions. Couldn't find ffmpeg binary.
+DEBUG running dist_info
+DEBUG creating /root/.cache/uv/builds-v0/.tmpR6EISd/metadata_directory/torchvision.egg-info
+DEBUG writing /root/.cache/uv/builds-v0/.tmpR6EISd/metadata_directory/torchvision.egg-info/PKG-INFO
+DEBUG writing dependency_links to /root/.cache/uv/builds-v0/.tmpR6EISd/metadata_directory/torchvision.egg-info/dependency_links.txt
+DEBUG writing requirements to /root/.cache/uv/builds-v0/.tmpR6EISd/metadata_directory/torchvision.egg-info/requires.txt
+DEBUG writing top-level names to /root/.cache/uv/builds-v0/.tmpR6EISd/metadata_directory/torchvision.egg-info/top_level.txt
+DEBUG writing manifest file '/root/.cache/uv/builds-v0/.tmpR6EISd/metadata_directory/torchvision.egg-info/SOURCES.txt'
+DEBUG reading manifest file '/root/.cache/uv/builds-v0/.tmpR6EISd/metadata_directory/torchvision.egg-info/SOURCES.txt'
+DEBUG reading manifest template 'MANIFEST.in'
+DEBUG warning: no previously-included files matching '__pycache__' found under directory '*'
+DEBUG warning: no previously-included files matching '*.py[co]' found under directory '*'
+DEBUG adding license file 'LICENSE'
+DEBUG writing manifest file '/root/.cache/uv/builds-v0/.tmpR6EISd/metadata_directory/torchvision.egg-info/SOURCES.txt'
+DEBUG creating '/root/.cache/uv/builds-v0/.tmpR6EISd/metadata_directory/torchvision-0.25.0a0+1e53952.dist-info'
+DEBUG /root/torchrl/lib/python3.12/site-packages/setuptools/_distutils/cmd.py:135: SetuptoolsDeprecationWarning: bdist_wheel.universal is deprecated
+DEBUG !!
+DEBUG 
+DEBUG         ********************************************************************************
+DEBUG         With Python 2.7 end-of-life, support for building universal wheels
+DEBUG         (i.e., wheels that support both Python 2 and Python 3)
+DEBUG         is being obviated.
+DEBUG         Please discontinue using this option, or if you still need it,
+DEBUG         file an issue with pypa/setuptools describing your use case.
+DEBUG 
+DEBUG         This deprecation is overdue, please update your project and remove deprecated
+DEBUG         calls to avoid build errors in the future.
+DEBUG         ********************************************************************************
+DEBUG 
+DEBUG !!
+DEBUG   self.finalize_options()
+DEBUG Released lock at `/tmp/uv-setuptools-5a355effbbe8bea5.lock`
+DEBUG Prepared metadata for: file:///root/vision
+DEBUG Released lock at `/root/.cache/uv/sdists-v9/editable/87dce9d665269d5d/.lock`
+DEBUG Solving with installed Python version: 3.12.3
+DEBUG Solving with target Python version: >=3.12.3
+DEBUG Adding direct dependency: torchvision*
+DEBUG Searching for a compatible version of torchvision @ file:///root/vision (*)
+DEBUG Tried 1 versions: torchvision 1
+DEBUG marker environment resolution took 0.000s
+Resolved 1 package in 5.95s
+DEBUG Must revalidate requirement: torchvision
+DEBUG Unnecessary package: farama-notifications==0.0.4
+DEBUG Unnecessary package: absl-py==2.3.1
+DEBUG Unnecessary package: annotated-types==0.7.0
+DEBUG Unnecessary package: antlr4-python3-runtime==4.9.3
+DEBUG Unnecessary package: attrs==25.4.0
+DEBUG Unnecessary package: certifi==2026.1.4
+DEBUG Unnecessary package: cffi==2.0.0
+DEBUG Unnecessary package: charset-normalizer==3.4.4
+DEBUG Unnecessary package: click==8.3.1
+DEBUG Unnecessary package: cloudpickle==3.1.2
+DEBUG Unnecessary package: cmake==4.2.1
+DEBUG Unnecessary package: dataclasses==0.8
+DEBUG Unnecessary package: decorator==5.2.1
+DEBUG Unnecessary package: dm-control==1.0.36
+DEBUG Unnecessary package: dm-env==1.6
+DEBUG Unnecessary package: dm-tree==0.1.9
+DEBUG Unnecessary package: etils==1.13.0
+DEBUG Unnecessary package: filelock==3.20.3
+DEBUG Unnecessary package: fsspec==2026.1.0
+DEBUG Unnecessary package: future==1.0.0
+DEBUG Unnecessary package: gitdb==4.0.12
+DEBUG Unnecessary package: gitpython==3.1.46
+DEBUG Unnecessary package: glfw==2.10.0
+DEBUG Unnecessary package: gym==0.26.2
+DEBUG Unnecessary package: gym-notices==0.1.0
+DEBUG Unnecessary package: gymnasium==1.2.3
+DEBUG Unnecessary package: hydra-core==1.3.2
+DEBUG Unnecessary package: idna==3.11
+DEBUG Unnecessary package: imageio==2.37.2
+DEBUG Unnecessary package: imageio-ffmpeg==0.6.0
+DEBUG Unnecessary package: importlib-metadata==8.7.1
+DEBUG Unnecessary package: importlib-resources==6.5.2
+DEBUG Unnecessary package: iniconfig==2.3.0
+DEBUG Unnecessary package: intel-cmplr-lib-ur==2025.3.1
+DEBUG Unnecessary package: intel-openmp==2025.3.1
+DEBUG Unnecessary package: jinja2==3.1.6
+DEBUG Unnecessary package: jsonschema==4.26.0
+DEBUG Unnecessary package: jsonschema-specifications==2025.9.1
+DEBUG Unnecessary package: labmaze==1.0.6
+DEBUG Unnecessary package: lxml==6.0.2
+DEBUG Unnecessary package: markupsafe==3.0.3
+DEBUG Unnecessary package: mkl-include==2025.3.0
+DEBUG Unnecessary package: mkl-static==2025.3.0
+DEBUG Unnecessary package: moviepy==2.2.1
+DEBUG Unnecessary package: mpmath==1.3.0
+DEBUG Unnecessary package: msgpack==1.1.2
+DEBUG Unnecessary package: mujoco==3.4.0
+DEBUG Unnecessary package: networkx==3.6.1
+DEBUG Unnecessary package: ninja==1.13.0
+DEBUG Unnecessary package: numpy==2.4.1
+DEBUG Unnecessary package: nvidia-cublas-cu12==12.9.1.4
+DEBUG Unnecessary package: nvidia-cudnn-cu12==9.17.1.4
+DEBUG Unnecessary package: omegaconf==2.3.0
+DEBUG Unnecessary package: onemkl-license==2025.3.0
+DEBUG Unnecessary package: orjson==3.11.5
+DEBUG Unnecessary package: packaging==25.0
+DEBUG Unnecessary package: pillow==11.3.0
+DEBUG Unnecessary package: platformdirs==4.5.1
+DEBUG Unnecessary package: pluggy==1.6.0
+DEBUG Unnecessary package: proglog==0.1.12
+DEBUG Unnecessary package: protobuf==6.33.3
+DEBUG Unnecessary package: pybind11==3.0.1
+DEBUG Unnecessary package: pybind11-global==3.0.1
+DEBUG Unnecessary package: pycparser==2.23
+DEBUG Unnecessary package: pydantic==2.12.5
+DEBUG Unnecessary package: pydantic-core==2.41.5
+DEBUG Unnecessary package: pygments==2.19.2
+DEBUG Unnecessary package: pyopengl==3.1.10
+DEBUG Unnecessary package: pyparsing==3.3.1
+DEBUG Unnecessary package: pytest==9.0.2
+DEBUG Unnecessary package: pytest-random-order==1.2.0
+DEBUG Unnecessary package: python-dotenv==1.2.1
+DEBUG Unnecessary package: pyvers==0.1.0
+DEBUG Unnecessary package: pyyaml==6.0.3
+DEBUG Unnecessary package: ray==2.53.0
+DEBUG Unnecessary package: referencing==0.37.0
+DEBUG Unnecessary package: requests==2.32.5
+DEBUG Unnecessary package: rpds-py==0.30.0
+DEBUG Unnecessary package: scipy==1.17.0
+DEBUG Unnecessary package: sentry-sdk==2.49.0
+DEBUG Unnecessary package: setuptools==80.9.0
+DEBUG Unnecessary package: six==1.17.0
+DEBUG Unnecessary package: smmap==5.0.2
+DEBUG Unnecessary package: sympy==1.14.0
+DEBUG Unnecessary package: tbb==2022.3.0
+DEBUG Unnecessary package: tbb-devel==2022.3.0
+DEBUG Unnecessary package: tcmlib==1.4.1
+DEBUG Unnecessary package: tensordict==0.10.0+g5c415136 (from file:///root/tensordict)
+DEBUG Unnecessary package: torch==2.11.0a0+git25bfb09 (from file:///root/pytorch)
+DEBUG Unnecessary package: torchrl==0.10.0+gd4e4cfbd8 (from file:///root/rl)
+DEBUG Unnecessary package: tqdm==4.67.1
+DEBUG Unnecessary package: triton==3.5.1
+DEBUG Unnecessary package: typing-extensions==4.15.0
+DEBUG Unnecessary package: typing-inspection==0.4.2
+DEBUG Unnecessary package: umf==1.0.2
+DEBUG Unnecessary package: urllib3==2.6.3
+DEBUG Unnecessary package: wandb==0.23.1
+DEBUG Unnecessary package: wrapt==2.0.1
+DEBUG Unnecessary package: zipp==3.23.0
+DEBUG Acquired exclusive lock for `/root/.cache/uv/sdists-v9/editable/87dce9d665269d5d`
+DEBUG Computed cache info: Timestamp(SystemTime { tv_sec: 1768118690, tv_nsec: 447273929 }), None, None, {}, {"src": None}. Most recently modified: setup.py
+   Building torchvision @ file:///root/vision
+DEBUG Building: torchvision @ file:///root/vision
+DEBUG Not using uv build backend direct build of `torchvision @ file:///root/vision`, pyproject.toml does not match: The value for `build_system.build-backend` should be `"uv_build"`, not `""`
+DEBUG Assessing Python executable as base candidate: /usr/bin/python3.12
+DEBUG Creating build environment for: torchvision @ file:///root/vision
+DEBUG Locking the source tree for setuptools
+DEBUG Acquired exclusive lock for `/root/vision`
+DEBUG Calling `setuptools.build_meta:__legacy__.build_editable("/root/.cache/uv/builds-v0/.tmp1FTCaW", {}, "/root/.cache/uv/builds-v0/.tmpR6EISd/metadata_directory/torchvision-0.25.0a0+1e53952.dist-info")`
+DEBUG <string>:14: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+DEBUG <string>:210: UserWarning: libpng-config not found
+DEBUG <string>:320: UserWarning: Building torchvision without PNG support
+DEBUG <string>:335: UserWarning: Building torchvision without JPEG support
+DEBUG <string>:351: UserWarning: Building torchvision without WEBP support
+DEBUG Torchvision build configuration:
+DEBUG FORCE_CUDA = False
+DEBUG FORCE_MPS = False
+DEBUG DEBUG = False
+DEBUG USE_PNG = True
+DEBUG USE_JPEG = True
+DEBUG USE_WEBP = True
+DEBUG USE_NVJPEG = True
+DEBUG NVCC_FLAGS = None
+DEBUG USE_CPU_VIDEO_DECODER = False
+DEBUG USE_GPU_VIDEO_DECODER = False
+DEBUG TORCHVISION_INCLUDE = []
+DEBUG TORCHVISION_LIBRARY = []
+DEBUG IS_ROCM = False
+DEBUG BUILD_CUDA_SOURCES = True
+DEBUG Building wheel torchvision-0.25.0a0+1e53952
+DEBUG Building _C extension
+DEBUG Building image extension
+DEBUG Searching for jpeglib.h. Didn't find in TORCHVISION_INCLUDE.
+DEBUG Searching for jpeglib.h. Didn't find in BUILD_PREFIX.
+DEBUG Searching for jpeglib.h. Didn't find in CONDA_PREFIX.
+DEBUG Searching for jpeglib.h. Didn't find in /usr/include
+DEBUG Searching for jpeglib.h. Didn't find in /usr/local/include
+DEBUG Searching for webp/decode.h. Didn't find in TORCHVISION_INCLUDE.
+DEBUG Searching for webp/decode.h. Didn't find in BUILD_PREFIX.
+DEBUG Searching for webp/decode.h. Didn't find in CONDA_PREFIX.
+DEBUG Searching for webp/decode.h. Didn't find in /usr/include
+DEBUG Searching for webp/decode.h. Didn't find in /usr/local/include
+DEBUG Building torchvision with NVJPEG image support
+DEBUG Building video decoder extensions
+DEBUG Building without video decoders extensions. Couldn't find ffmpeg binary.
+DEBUG running editable_wheel
+DEBUG creating /root/.cache/uv/builds-v0/.tmp1FTCaW/.tmp-6u766abb/torchvision.egg-info
+DEBUG writing /root/.cache/uv/builds-v0/.tmp1FTCaW/.tmp-6u766abb/torchvision.egg-info/PKG-INFO
+DEBUG writing dependency_links to /root/.cache/uv/builds-v0/.tmp1FTCaW/.tmp-6u766abb/torchvision.egg-info/dependency_links.txt
+DEBUG writing requirements to /root/.cache/uv/builds-v0/.tmp1FTCaW/.tmp-6u766abb/torchvision.egg-info/requires.txt
+DEBUG writing top-level names to /root/.cache/uv/builds-v0/.tmp1FTCaW/.tmp-6u766abb/torchvision.egg-info/top_level.txt
+DEBUG writing manifest file '/root/.cache/uv/builds-v0/.tmp1FTCaW/.tmp-6u766abb/torchvision.egg-info/SOURCES.txt'
+DEBUG reading manifest file '/root/.cache/uv/builds-v0/.tmp1FTCaW/.tmp-6u766abb/torchvision.egg-info/SOURCES.txt'
+DEBUG reading manifest template 'MANIFEST.in'
+DEBUG warning: no previously-included files matching '__pycache__' found under directory '*'
+DEBUG warning: no previously-included files matching '*.py[co]' found under directory '*'
+DEBUG adding license file 'LICENSE'
+DEBUG writing manifest file '/root/.cache/uv/builds-v0/.tmp1FTCaW/.tmp-6u766abb/torchvision.egg-info/SOURCES.txt'
+DEBUG creating '/root/.cache/uv/builds-v0/.tmp1FTCaW/.tmp-6u766abb/torchvision-0.25.0a0+1e53952.dist-info'
+DEBUG /root/torchrl/lib/python3.12/site-packages/setuptools/_distutils/cmd.py:135: SetuptoolsDeprecationWarning: bdist_wheel.universal is deprecated
+DEBUG !!
+DEBUG 
+DEBUG         ********************************************************************************
+DEBUG         With Python 2.7 end-of-life, support for building universal wheels
+DEBUG         (i.e., wheels that support both Python 2 and Python 3)
+DEBUG         is being obviated.
+DEBUG         Please discontinue using this option, or if you still need it,
+DEBUG         file an issue with pypa/setuptools describing your use case.
+DEBUG 
+DEBUG         This deprecation is overdue, please update your project and remove deprecated
+DEBUG         calls to avoid build errors in the future.
+DEBUG         ********************************************************************************
+DEBUG 
+DEBUG !!
+DEBUG   self.finalize_options()
+DEBUG creating /root/.cache/uv/builds-v0/.tmp1FTCaW/.tmp-6u766abb/torchvision-0.25.0a0+1e53952.dist-info/WHEEL
+DEBUG running build_py
+DEBUG running build_ext
+DEBUG building 'torchvision._C' extension
+DEBUG creating /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autocast
+DEBUG creating /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autograd
+DEBUG creating /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cpu
+DEBUG creating /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cuda
+DEBUG creating /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/quantized/cpu
+DEBUG [1/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/vision.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/vision.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/vision.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG In file included from /root/vision/torchvision/csrc/vision.cpp:1:
+DEBUG /root/vision/torchvision/csrc/vision.h:10:24: warning: ‘_register_ops’ initialized and declared ‘extern’
+DEBUG    10 | extern "C" inline auto _register_ops = &cuda_version;
+DEBUG       |                        ^~~~~~~~~~~~~
+DEBUG [2/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/nms.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/nms.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/nms.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [3/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autocast/deform_conv2d_kernel.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/autocast/deform_conv2d_kernel.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autocast/deform_conv2d_kernel.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [4/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autocast/nms_kernel.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/autocast/nms_kernel.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autocast/nms_kernel.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [5/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autocast/ps_roi_align_kernel.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/autocast/ps_roi_align_kernel.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autocast/ps_roi_align_kernel.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [6/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autocast/ps_roi_pool_kernel.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/autocast/ps_roi_pool_kernel.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autocast/ps_roi_pool_kernel.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [7/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autocast/roi_align_kernel.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/autocast/roi_align_kernel.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autocast/roi_align_kernel.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [8/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autocast/roi_pool_kernel.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/autocast/roi_pool_kernel.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autocast/roi_pool_kernel.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [9/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autograd/deform_conv2d_kernel.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/autograd/deform_conv2d_kernel.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autograd/deform_conv2d_kernel.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [10/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autograd/ps_roi_align_kernel.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/autograd/ps_roi_align_kernel.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autograd/ps_roi_align_kernel.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [11/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autograd/ps_roi_pool_kernel.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/autograd/ps_roi_pool_kernel.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autograd/ps_roi_pool_kernel.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [12/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autograd/roi_align_kernel.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/autograd/roi_align_kernel.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autograd/roi_align_kernel.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [13/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autograd/roi_pool_kernel.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/autograd/roi_pool_kernel.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autograd/roi_pool_kernel.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [14/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cpu/deform_conv2d_kernel.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/cpu/deform_conv2d_kernel.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cpu/deform_conv2d_kernel.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [15/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cpu/nms_kernel.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/cpu/nms_kernel.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cpu/nms_kernel.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [16/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cpu/ps_roi_align_kernel.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/cpu/ps_roi_align_kernel.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cpu/ps_roi_align_kernel.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [17/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cpu/ps_roi_pool_kernel.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/cpu/ps_roi_pool_kernel.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cpu/ps_roi_pool_kernel.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [18/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cpu/roi_align_kernel.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/cpu/roi_align_kernel.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cpu/roi_align_kernel.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [19/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cpu/roi_pool_kernel.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/cpu/roi_pool_kernel.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cpu/roi_pool_kernel.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [20/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/deform_conv2d.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/deform_conv2d.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/deform_conv2d.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [21/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/ps_roi_align.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/ps_roi_align.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/ps_roi_align.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [22/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/ps_roi_pool.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/ps_roi_pool.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/ps_roi_pool.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [23/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/quantized/cpu/qnms_kernel.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/quantized/cpu/qnms_kernel.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/quantized/cpu/qnms_kernel.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [24/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/quantized/cpu/qroi_align_kernel.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/quantized/cpu/qroi_align_kernel.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/quantized/cpu/qroi_align_kernel.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [25/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/roi_align.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/roi_align.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/roi_align.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [26/32] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/roi_pool.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/roi_pool.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/roi_pool.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -std=c++17
+DEBUG [27/32] /usr/local/cuda/bin/nvcc -MD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cuda/ps_roi_pool_kernel.o.d -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/cuda/ps_roi_pool_kernel.cu -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cuda/ps_roi_pool_kernel.o -D__CUDA_NO_HALF_OPERATORS__ -D__CUDA_NO_HALF_CONVERSIONS__ -D__CUDA_NO_BFLOAT16_CONVERSIONS__ -D__CUDA_NO_HALF2_OPERATORS__ --expt-relaxed-constexpr --compiler-options ''"'"'-fPIC'"'"'' -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_89,code=sm_89 -gencode=arch=compute_90,code=sm_90 -std=c++17
+DEBUG [28/32] /usr/local/cuda/bin/nvcc -MD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cuda/roi_pool_kernel.o.d -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/cuda/roi_pool_kernel.cu -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cuda/roi_pool_kernel.o -D__CUDA_NO_HALF_OPERATORS__ -D__CUDA_NO_HALF_CONVERSIONS__ -D__CUDA_NO_BFLOAT16_CONVERSIONS__ -D__CUDA_NO_HALF2_OPERATORS__ --expt-relaxed-constexpr --compiler-options ''"'"'-fPIC'"'"'' -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_89,code=sm_89 -gencode=arch=compute_90,code=sm_90 -std=c++17
+DEBUG [29/32] /usr/local/cuda/bin/nvcc -MD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cuda/ps_roi_align_kernel.o.d -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/cuda/ps_roi_align_kernel.cu -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cuda/ps_roi_align_kernel.o -D__CUDA_NO_HALF_OPERATORS__ -D__CUDA_NO_HALF_CONVERSIONS__ -D__CUDA_NO_BFLOAT16_CONVERSIONS__ -D__CUDA_NO_HALF2_OPERATORS__ --expt-relaxed-constexpr --compiler-options ''"'"'-fPIC'"'"'' -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_89,code=sm_89 -gencode=arch=compute_90,code=sm_90 -std=c++17
+DEBUG [30/32] /usr/local/cuda/bin/nvcc -MD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cuda/roi_align_kernel.o.d -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/cuda/roi_align_kernel.cu -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cuda/roi_align_kernel.o -D__CUDA_NO_HALF_OPERATORS__ -D__CUDA_NO_HALF_CONVERSIONS__ -D__CUDA_NO_BFLOAT16_CONVERSIONS__ -D__CUDA_NO_HALF2_OPERATORS__ --expt-relaxed-constexpr --compiler-options ''"'"'-fPIC'"'"'' -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_89,code=sm_89 -gencode=arch=compute_90,code=sm_90 -std=c++17
+DEBUG [31/32] /usr/local/cuda/bin/nvcc -MD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cuda/nms_kernel.o.d -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/cuda/nms_kernel.cu -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cuda/nms_kernel.o -D__CUDA_NO_HALF_OPERATORS__ -D__CUDA_NO_HALF_CONVERSIONS__ -D__CUDA_NO_BFLOAT16_CONVERSIONS__ -D__CUDA_NO_HALF2_OPERATORS__ --expt-relaxed-constexpr --compiler-options ''"'"'-fPIC'"'"'' -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_89,code=sm_89 -gencode=arch=compute_90,code=sm_90 -std=c++17
+DEBUG [32/32] /usr/local/cuda/bin/nvcc -MD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cuda/deform_conv2d_kernel.o.d -DWITH_CUDA -I/root/vision/torchvision/csrc -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/ops/cuda/deform_conv2d_kernel.cu -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cuda/deform_conv2d_kernel.o -D__CUDA_NO_HALF_OPERATORS__ -D__CUDA_NO_HALF_CONVERSIONS__ -D__CUDA_NO_BFLOAT16_CONVERSIONS__ -D__CUDA_NO_HALF2_OPERATORS__ --expt-relaxed-constexpr --compiler-options ''"'"'-fPIC'"'"'' -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=_C -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_89,code=sm_89 -gencode=arch=compute_90,code=sm_90 -std=c++17
+DEBUG creating /tmp/tmp2r3crua3.build-lib/torchvision
+DEBUG x86_64-linux-gnu-g++ -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -shared -Wl,-O1 -Wl,-Bsymbolic-functions /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autocast/deform_conv2d_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autocast/nms_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autocast/ps_roi_align_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autocast/ps_roi_pool_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autocast/roi_align_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autocast/roi_pool_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autograd/deform_conv2d_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autograd/ps_roi_align_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autograd/ps_roi_pool_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autograd/roi_align_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/autograd/roi_pool_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cpu/deform_conv2d_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cpu/nms_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cpu/ps_roi_align_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cpu/ps_roi_pool_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cpu/roi_align_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cpu/roi_pool_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cuda/deform_conv2d_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cuda/nms_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cuda/ps_roi_align_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cuda/ps_roi_pool_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cuda/roi_align_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/cuda/roi_pool_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/deform_conv2d.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/nms.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/ps_roi_align.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/ps_roi_pool.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/quantized/cpu/qnms_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/quantized/cpu/qroi_align_kernel.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/roi_align.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/ops/roi_pool.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/vision.o -L/root/pytorch/torch/lib -L/usr/local/cuda/lib64 -L/usr/lib/x86_64-linux-gnu -lc10 -ltorch -ltorch_cpu -ltorch_python -lcudart -lc10_cuda -ltorch_cuda -o /tmp/tmp2r3crua3.build-lib/torchvision/_C.so
+DEBUG building 'torchvision.image' extension
+DEBUG creating /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image
+DEBUG creating /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu
+DEBUG creating /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/giflib
+DEBUG creating /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cuda
+DEBUG [1/17] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/common_jpeg.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -DNVJPEG_FOUND=1 -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/io/image/cpu/common_jpeg.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/common_jpeg.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=image -std=c++17
+DEBUG [2/17] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/giflib/gifalloc.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -DNVJPEG_FOUND=1 -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/io/image/cpu/giflib/gifalloc.c -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/giflib/gifalloc.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=image -std=c++17
+DEBUG [3/17] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/giflib/dgif_lib.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -DNVJPEG_FOUND=1 -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/io/image/cpu/giflib/dgif_lib.c -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/giflib/dgif_lib.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=image -std=c++17
+DEBUG [4/17] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/giflib/openbsd-reallocarray.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -DNVJPEG_FOUND=1 -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/io/image/cpu/giflib/openbsd-reallocarray.c -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/giflib/openbsd-reallocarray.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=image -std=c++17
+DEBUG [5/17] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/giflib/gif_hash.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -DNVJPEG_FOUND=1 -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/io/image/cpu/giflib/gif_hash.c -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/giflib/gif_hash.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=image -std=c++17
+DEBUG [6/17] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/encode_png.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -DNVJPEG_FOUND=1 -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/io/image/cpu/encode_png.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/encode_png.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=image -std=c++17
+DEBUG [7/17] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/common.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -DNVJPEG_FOUND=1 -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/io/image/common.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/common.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=image -std=c++17
+DEBUG [8/17] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/decode_gif.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -DNVJPEG_FOUND=1 -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/io/image/cpu/decode_gif.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/decode_gif.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=image -std=c++17
+DEBUG [9/17] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/decode_image.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -DNVJPEG_FOUND=1 -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/io/image/cpu/decode_image.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/decode_image.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=image -std=c++17
+DEBUG [10/17] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/decode_jpeg.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -DNVJPEG_FOUND=1 -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/io/image/cpu/decode_jpeg.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/decode_jpeg.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=image -std=c++17
+DEBUG [11/17] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/decode_png.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -DNVJPEG_FOUND=1 -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/io/image/cpu/decode_png.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/decode_png.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=image -std=c++17
+DEBUG [12/17] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/decode_webp.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -DNVJPEG_FOUND=1 -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/io/image/cpu/decode_webp.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/decode_webp.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=image -std=c++17
+DEBUG [13/17] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/encode_jpeg.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -DNVJPEG_FOUND=1 -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/io/image/cpu/encode_jpeg.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/encode_jpeg.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=image -std=c++17
+DEBUG [14/17] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/read_write_file.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -DNVJPEG_FOUND=1 -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/io/image/cpu/read_write_file.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/read_write_file.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=image -std=c++17
+DEBUG [15/17] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cuda/decode_jpegs_cuda.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -DNVJPEG_FOUND=1 -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/io/image/cuda/decode_jpegs_cuda.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cuda/decode_jpegs_cuda.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=image -std=c++17
+DEBUG [16/17] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cuda/encode_jpegs_cuda.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -DNVJPEG_FOUND=1 -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/io/image/cuda/encode_jpegs_cuda.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cuda/encode_jpegs_cuda.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=image -std=c++17
+DEBUG [17/17] c++ -MMD -MF /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/image.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DWITH_CUDA -DNVJPEG_FOUND=1 -I/root/pytorch/torch/include -I/root/pytorch/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/root/torchrl/include -I/usr/include/python3.12 -c -c /root/vision/torchvision/csrc/io/image/image.cpp -o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/image.o -g0 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=image -std=c++17
+DEBUG x86_64-linux-gnu-g++ -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -shared -Wl,-O1 -Wl,-Bsymbolic-functions /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/common.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/common_jpeg.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/decode_gif.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/decode_image.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/decode_jpeg.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/decode_png.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/decode_webp.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/encode_jpeg.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/encode_png.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/giflib/dgif_lib.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/giflib/gif_hash.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/giflib/gifalloc.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/giflib/openbsd-reallocarray.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cpu/read_write_file.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cuda/decode_jpegs_cuda.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/cuda/encode_jpegs_cuda.o /tmp/tmp3a8y19__.build-temp/root/vision/torchvision/csrc/io/image/image.o -L/root/pytorch/torch/lib -L/usr/local/cuda/lib64 -L/usr/lib/x86_64-linux-gnu -lnvjpeg -lc10 -ltorch -ltorch_cpu -ltorch_python -lcudart -lc10_cuda -ltorch_cuda -o /tmp/tmp2r3crua3.build-lib/torchvision/image.so
+DEBUG copying /tmp/tmp2r3crua3.build-lib/torchvision/_C.so -> torchvision
+DEBUG copying /tmp/tmp2r3crua3.build-lib/torchvision/image.so -> torchvision
+DEBUG Editable install will be performed using a meta path finder.
+DEBUG 
+DEBUG Options like `package-data`, `include/exclude-package-data` or
+DEBUG `packages.find.exclude/include` may have no effect.
+DEBUG 
+DEBUG adding '__editable___torchvision_0_25_0a0_1e53952_finder.py'
+DEBUG adding '__editable__.torchvision-0.25.0a0+1e53952.pth'
+DEBUG creating '/root/.cache/uv/builds-v0/.tmp1FTCaW/.tmp-6u766abb/torchvision-0.25.0a0+1e53952-0.editable-cp312-cp312-linux_x86_64.whl' and adding '/tmp/tmpbr1ae9wxtorchvision-0.25.0a0+1e53952-0.editable-cp312-cp312-linux_x86_64.whl' to it
+DEBUG adding 'torchvision-0.25.0a0+1e53952.dist-info/licenses/LICENSE'
+DEBUG adding 'torchvision-0.25.0a0+1e53952.dist-info/METADATA'
+DEBUG adding 'torchvision-0.25.0a0+1e53952.dist-info/WHEEL'
+DEBUG adding 'torchvision-0.25.0a0+1e53952.dist-info/top_level.txt'
+DEBUG adding 'torchvision-0.25.0a0+1e53952.dist-info/RECORD'
+DEBUG /root/torchrl/lib/python3.12/site-packages/setuptools/command/editable_wheel.py:351: InformationOnly: Editable installation.
+DEBUG !!
+DEBUG 
+DEBUG         ********************************************************************************
+DEBUG         Please be careful with folders in your working directory with the same
+DEBUG         name as your package as they may take precedence during imports.
+DEBUG         ********************************************************************************
+DEBUG 
+DEBUG !!
+DEBUG   with strategy, WheelFile(wheel_path, "w") as wheel_obj:
+DEBUG Released lock at `/tmp/uv-setuptools-5a355effbbe8bea5.lock`
+DEBUG Built `torchvision @ file:///root/vision` into `torchvision-0.25.0a0+1e53952-0.editable-cp312-cp312-linux_x86_64.whl`
+      Built torchvision @ file:///root/vision
+DEBUG Released lock at `/root/.cache/uv/sdists-v9/editable/87dce9d665269d5d/.lock`
+Prepared 1 package in 50.40s
+DEBUG Uninstalled torchvision (12 files, 2 directories)
+Uninstalled 1 package in 0.38ms
+Installed 1 package in 1ms
+ ~ torchvision==0.25.0a0+1e53952 (from file:///root/vision)
+DEBUG Released lock at `/root/torchrl/.lock`
+DEBUG Released lock at `/root/.cache/uv/.lock`
+Hit:1 https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/8.0 InRelease
+Hit:2 https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64  InRelease
+Get:3 http://security.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+Hit:4 http://archive.ubuntu.com/ubuntu noble InRelease
+Get:5 http://archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]
+Get:6 http://archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB]
+Get:7 http://archive.ubuntu.com/ubuntu noble-updates/universe amd64 Packages [1955 kB]
+Get:8 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [2137 kB]
+Fetched 4470 kB in 32s (141 kB/s)
+Reading package lists...
+W: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/InRelease: Key is stored in legacy trusted.gpg keyring (/etc/apt/trusted.gpg), see the DEPRECATION section in apt-key(8) for details.
+Reading package lists...
+Building dependency tree...
+Reading state information...
+libegl1 is already the newest version (1.7.0-1build1).
+libgl1 is already the newest version (1.7.0-1build1).
+libgles2 is already the newest version (1.7.0-1build1).
+libglvnd0 is already the newest version (1.7.0-1build1).
+0 upgraded, 0 newly installed, 0 to remove and 46 not upgraded.
+==========================================
+Setup complete!
+PyTorch build verification:
+PyTorch version: 2.11.0a0+git25bfb09
+CUDA available: True
+cuDNN is_available: False
+cuDNN enabled: True
+ERROR: cuDNN NOT AVAILABLE! Convolutions will use slow CPU fallback.
+This is likely because cuDNN was not installed before building PyTorch.
+NCCL available: True
+==========================================
+wandb: Appending key for api.wandb.ai to your netrc file: /root/.netrc
+wandb: W&B API key is configured. Use `wandb login --relogin` to force relogin
+/root/torchrl/lib/python3.12/site-packages/hydra/_internal/hydra.py:119: UserWarning: Future Hydra versions will no longer change working directory at job runtime by default.
+See https://hydra.cc/docs/1.2/upgrades/1.1_to_1.2/changes_to_job_working_dir/ for more information.
+  ret = run_job(
+wandb: Currently logged in as: vmoens to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.23.1
+wandb: Run data is saved locally in dreamer_logging/wandb/run-20260111_214930-c7v4mpso
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run Dreamer_cheetah-run-0_80c31f8a_26_01_11-21_49_29
+wandb: ⭐️ View project at https://wandb.ai/vmoens/dreamer-v1
+wandb: 🚀 View run at https://wandb.ai/vmoens/dreamer-v1/runs/c7v4mpso
+[2026-01-11 21:49:30,904][absl][INFO] - MUJOCO_GL=egl, attempting to import specified OpenGL backend.
+[2026-01-11 21:49:30,910][OpenGL.platform.ctypesloader][INFO] - Failed to load library ( 'libOpenGL.so.0' ): libOpenGL.so.0: cannot open shared object file: No such file or directory
+[2026-01-11 21:49:30,911][OpenGL.acceleratesupport][INFO] - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+[2026-01-11 21:49:30,919][OpenGL.platform.ctypesloader][INFO] - Failed to load library ( 'libOpenGL.so.0' ): libOpenGL.so.0: cannot open shared object file: No such file or directory
+[2026-01-11 21:49:30,969][OpenGL.platform.ctypesloader][INFO] - Failed to load library ( 'libOpenGL.so.0' ): libOpenGL.so.0: cannot open shared object file: No such file or directory
+[2026-01-11 21:49:30,971][absl][INFO] - MuJoCo library version is: 3.4.0
+[92m2026-01-11 21:49:37,591 [torchrl][INFO][0m    check_env_specs succeeded![92m [END][0m
+[92m2026-01-11 21:49:41,270 [torchrl][INFO][0m    check_env_specs succeeded![92m [END][0m
+[92m2026-01-11 21:49:41,615 [torchrl][INFO][0m    Switched RSSMPrior to Python-based GRU for torch.compile compatibility[92m [END][0m
+[92m2026-01-11 21:49:43,343 [torchrl][INFO][0m    check_env_specs succeeded![92m [END][0m
+[92m2026-01-11 21:49:43,384 [torchrl][INFO][0m    Allocated 7 collectors to devices: [cuda:1, cuda:2, cuda:3, cuda:4, cuda:5, cuda:6, cuda:7]. Training on cuda:0.[92m [END][0m
+Optim steps:   0%|          | 0/100000 [00:00<?, ?it/s][92m2026-01-11 21:50:18,425 [torchrl][INFO][0m    Compiling loss modules with warmup=3[92m [END][0m
+[92m2026-01-11 21:50:18,426 [torchrl][INFO][0m    Starting async collection...[92m [END][0m
+[92m2026-01-11 21:50:18,426 [torchrl][INFO][0m    Waiting for 10000 initial frames before training...[92m [END][0m
+[92m2026-01-11 21:50:33,295 [torchrl][INFO][0m    Initialized LazyMemmapStorage with torch.Size([125000, 8]) shape[92m [END][0m
+[92m2026-01-11 21:52:59,473 [torchrl][INFO][0m    Collected 10000 frames (random frames phase complete: 10000 frames). Starting training...[92m [END][0m
+[92m2026-01-11 21:52:59,474 [torchrl][INFO][0m    NOTE: From now on, collectors will use the policy instead of random actions. Policy outputs keys like 'encoded_latents', 'loc', 'scale' that weren't present during random collection.[92m [END][0m
+Optim steps:   0%|          | 1/100000 [02:41<4473:33:02, 161.05s/it]Optim steps:   0%|          | 2/100000 [03:09<2312:32:56, 83.25s/it] Optim steps:   0%|          | 3/100000 [03:23<1428:20:18, 51.42s/it]Optim steps:   0%|          | 4/100000 [03:31<956:06:10, 34.42s/it] Optim steps:   0%|          | 5/100000 [04:01<911:09:36, 32.80s/it]Optim steps:   0%|          | 6/100000 [04:08<669:00:06, 24.09s/it]Optim steps:   0%|          | 7/100000 [04:13<494:27:11, 17.80s/it]Optim steps:   0%|          | 8/100000 [04:18<382:59:56, 13.79s/it]Optim steps:   0%|          | 9/100000 [04:23<306:21:45, 11.03s/it]Optim steps:   0%|          | 10/100000 [04:28<254:11:41,  9.15s/it]Optim steps:   0%|          | 11/100000 [04:33<219:21:15,  7.90s/it]Optim steps:   0%|          | 12/100000 [04:38<194:49:20,  7.01s/it]Optim steps:   0%|          | 13/100000 [04:43<177:41:33,  6.40s/it]Optim steps:   0%|          | 14/100000 [04:48<166:42:49,  6.00s/it]Optim steps:   0%|          | 15/100000 [04:54<161:06:44,  5.80s/it]Optim steps:   0%|          | 16/100000 [04:59<154:14:33,  5.55s/it]Optim steps:   0%|          | 17/100000 [05:04<150:00:02,  5.40s/it]Optim steps:   0%|          | 18/100000 [05:09<145:46:40,  5.25s/it]Optim steps:   0%|          | 19/100000 [05:14<142:09:42,  5.12s/it]Optim steps:   0%|          | 20/100000 [05:19<142:37:35,  5.14s/it]Optim steps:   0%|          | 21/100000 [05:24<140:11:54,  5.05s/it]Optim steps:   0%|          | 22/100000 [05:29<140:12:16,  5.05s/it]Optim steps:   0%|          | 23/100000 [05:33<139:02:21,  5.01s/it]Optim steps:   0%|          | 24/100000 [05:38<138:49:29,  5.00s/it]Optim steps:   0%|          | 25/100000 [05:44<139:19:50,  5.02s/it]Optim steps:   0%|          | 26/100000 [05:49<139:05:27,  5.01s/it]Optim steps:   0%|          | 27/100000 [05:54<139:18:53,  5.02s/it]Optim steps:   0%|          | 28/100000 [05:59<139:35:21,  5.03s/it]Optim steps:   0%|          | 29/100000 [06:04<139:34:55,  5.03s/it]Optim steps:   0%|          | 30/100000 [06:08<138:16:33,  4.98s/it]Optim steps:   0%|          | 31/100000 [06:13<138:14:27,  4.98s/it]Optim steps:   0%|          | 32/100000 [06:19<139:22:35,  5.02s/it]Optim steps:   0%|          | 33/100000 [06:23<137:52:06,  4.96s/it]Optim steps:   0%|          | 34/100000 [06:28<138:44:08,  5.00s/it]Optim steps:   0%|          | 35/100000 [06:33<138:43:10,  5.00s/it]Optim steps:   0%|          | 36/100000 [06:39<139:03:11,  5.01s/it]Optim steps:   0%|          | 37/100000 [06:43<138:48:22,  5.00s/it]Optim steps:   0%|          | 38/100000 [06:49<140:17:48,  5.05s/it]Optim steps:   0%|          | 39/100000 [06:54<138:58:50,  5.01s/it]Optim steps:   0%|          | 40/100000 [06:58<137:56:36,  4.97s/it]Optim steps:   0%|          | 41/100000 [07:03<137:46:51,  4.96s/it]Optim steps:   0%|          | 42/100000 [07:09<139:01:12,  5.01s/it]Optim steps:   0%|          | 43/100000 [07:14<139:37:43,  5.03s/it]Optim steps:   0%|          | 44/100000 [07:19<140:00:39,  5.04s/it]Optim steps:   0%|          | 45/100000 [07:24<140:40:03,  5.07s/it]Optim steps:   0%|          | 46/100000 [07:29<139:28:27,  5.02s/it]Optim steps:   0%|          | 47/100000 [07:34<140:13:08,  5.05s/it]Optim steps:   0%|          | 48/100000 [07:39<141:35:33,  5.10s/it]Optim steps:   0%|          | 49/100000 [07:44<141:34:01,  5.10s/it]Optim steps:   0%|          | 50/100000 [07:49<140:18:53,  5.05s/it]Optim steps:   0%|          | 51/100000 [07:54<140:13:31,  5.05s/it]Optim steps:   0%|          | 52/100000 [07:59<140:35:47,  5.06s/it]Optim steps:   0%|          | 53/100000 [08:04<139:04:38,  5.01s/it]Optim steps:   0%|          | 54/100000 [08:09<138:44:08,  5.00s/it]Optim steps:   0%|          | 55/100000 [08:14<138:41:29,  5.00s/it]Optim steps:   0%|          | 56/100000 [08:19<139:32:41,  5.03s/it]Optim steps:   0%|          | 57/100000 [08:24<138:44:42,  5.00s/it]Optim steps:   0%|          | 58/100000 [08:29<139:48:45,  5.04s/it]Optim steps:   0%|          | 59/100000 [08:34<138:44:58,  5.00s/it]Optim steps:   0%|          | 60/100000 [08:39<138:22:18,  4.98s/it]Optim steps:   0%|          | 61/100000 [08:44<138:30:11,  4.99s/it]Optim steps:   0%|          | 62/100000 [08:49<139:33:06,  5.03s/it]Optim steps:   0%|          | 63/100000 [08:54<141:01:22,  5.08s/it]Optim steps:   0%|          | 64/100000 [08:59<139:26:15,  5.02s/it]Optim steps:   0%|          | 65/100000 [09:04<139:54:20,  5.04s/it]Optim steps:   0%|          | 66/100000 [09:09<139:37:59,  5.03s/it]Optim steps:   0%|          | 67/100000 [09:14<139:12:17,  5.01s/it]Optim steps:   0%|          | 68/100000 [09:20<140:57:22,  5.08s/it]Optim steps:   0%|          | 69/100000 [09:25<140:16:22,  5.05s/it]Optim steps:   0%|          | 70/100000 [09:30<139:19:38,  5.02s/it]Optim steps:   0%|          | 71/100000 [09:35<139:19:28,  5.02s/it]Optim steps:   0%|          | 72/100000 [09:39<138:05:42,  4.98s/it]Optim steps:   0%|          | 73/100000 [09:44<136:29:38,  4.92s/it]Optim steps:   0%|          | 74/100000 [09:49<139:00:00,  5.01s/it]Optim steps:   0%|          | 75/100000 [09:54<137:56:25,  4.97s/it]Optim steps:   0%|          | 76/100000 [09:59<138:03:03,  4.97s/it]Optim steps:   0%|          | 77/100000 [10:04<138:01:48,  4.97s/it]Optim steps:   0%|          | 78/100000 [10:09<137:34:44,  4.96s/it]Optim steps:   0%|          | 79/100000 [10:14<137:38:55,  4.96s/it]Optim steps:   0%|          | 80/100000 [10:19<138:23:56,  4.99s/it]Optim steps:   0%|          | 81/100000 [10:24<138:43:32,  5.00s/it]Optim steps:   0%|          | 82/100000 [10:29<139:53:46,  5.04s/it]Optim steps:   0%|          | 83/100000 [10:34<139:15:33,  5.02s/it]Optim steps:   0%|          | 84/100000 [10:39<138:24:39,  4.99s/it]Optim steps:   0%|          | 85/100000 [10:44<138:11:18,  4.98s/it]Optim steps:   0%|          | 86/100000 [10:50<141:42:07,  5.11s/it]Optim steps:   0%|          | 87/100000 [10:55<141:59:36,  5.12s/it]Optim steps:   0%|          | 88/100000 [11:00<141:48:40,  5.11s/it]Optim steps:   0%|          | 89/100000 [11:05<141:30:37,  5.10s/it]Optim steps:   0%|          | 90/100000 [11:10<141:11:47,  5.09s/it]Optim steps:   0%|          | 91/100000 [11:15<138:46:40,  5.00s/it]Optim steps:   0%|          | 92/100000 [11:20<138:36:17,  4.99s/it]Optim steps:   0%|          | 93/100000 [11:25<138:28:56,  4.99s/it]Optim steps:   0%|          | 94/100000 [11:30<138:46:08,  5.00s/it]Optim steps:   0%|          | 95/100000 [11:35<139:44:55,  5.04s/it]Optim steps:   0%|          | 96/100000 [11:40<141:12:23,  5.09s/it]Optim steps:   0%|          | 97/100000 [11:45<140:11:57,  5.05s/it]Optim steps:   0%|          | 98/100000 [11:50<139:29:26,  5.03s/it]Optim steps:   0%|          | 99/100000 [11:55<139:29:39,  5.03s/it]Optim steps:   0%|          | 100/100000 [12:00<138:44:49,  5.00s/it]Optim steps:   0%|          | 100/100000 [12:05<138:44:49,  5.00s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 101/100000 [12:06<148:48:13,  5.36s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 102/100000 [12:11<145:27:18,  5.24s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 103/100000 [12:16<142:58:23,  5.15s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 104/100000 [12:21<140:57:34,  5.08s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 105/100000 [12:26<139:16:59,  5.02s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 106/100000 [12:31<138:02:35,  4.97s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 107/100000 [12:35<136:05:37,  4.90s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 108/100000 [12:40<135:41:42,  4.89s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 109/100000 [12:45<136:11:44,  4.91s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 110/100000 [12:50<135:58:14,  4.90s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 111/100000 [12:55<137:03:21,  4.94s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 112/100000 [13:01<140:11:36,  5.05s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 113/100000 [13:06<141:52:36,  5.11s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 114/100000 [13:11<143:04:56,  5.16s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 115/100000 [13:16<140:37:50,  5.07s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 116/100000 [13:21<139:28:56,  5.03s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 117/100000 [13:26<137:51:40,  4.97s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 118/100000 [13:31<137:10:45,  4.94s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 119/100000 [13:36<137:41:44,  4.96s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 120/100000 [13:41<137:48:09,  4.97s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 121/100000 [13:45<137:29:27,  4.96s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 122/100000 [13:51<138:20:46,  4.99s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 123/100000 [13:55<138:16:18,  4.98s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 124/100000 [14:00<138:05:30,  4.98s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 125/100000 [14:05<137:56:34,  4.97s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 126/100000 [14:10<137:40:09,  4.96s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 127/100000 [14:15<137:25:56,  4.95s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 128/100000 [14:20<138:41:45,  5.00s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 129/100000 [14:25<139:07:32,  5.01s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 130/100000 [14:30<138:45:53,  5.00s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 131/100000 [14:35<138:42:34,  5.00s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 132/100000 [14:40<138:36:12,  5.00s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 133/100000 [14:45<137:34:03,  4.96s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 134/100000 [14:50<137:27:42,  4.96s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 135/100000 [14:55<138:16:56,  4.98s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 136/100000 [15:00<137:47:45,  4.97s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 137/100000 [15:05<139:38:31,  5.03s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 138/100000 [15:10<140:07:20,  5.05s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 139/100000 [15:15<139:09:30,  5.02s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 140/100000 [15:20<138:11:15,  4.98s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 141/100000 [15:25<139:23:40,  5.03s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 142/100000 [15:31<140:24:13,  5.06s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 143/100000 [15:36<139:42:10,  5.04s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 144/100000 [15:40<138:31:44,  4.99s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 145/100000 [15:45<138:47:49,  5.00s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 146/100000 [15:50<137:51:37,  4.97s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 147/100000 [15:55<137:20:47,  4.95s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 148/100000 [16:00<136:45:05,  4.93s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 149/100000 [16:05<137:20:59,  4.95s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 150/100000 [16:10<138:59:50,  5.01s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 151/100000 [16:15<139:59:36,  5.05s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 152/100000 [16:21<141:52:01,  5.11s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 153/100000 [16:26<141:14:11,  5.09s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 154/100000 [16:31<141:34:06,  5.10s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 155/100000 [16:36<139:50:24,  5.04s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 156/100000 [16:41<138:24:48,  4.99s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 157/100000 [16:46<138:37:19,  5.00s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 158/100000 [16:51<138:21:38,  4.99s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 159/100000 [16:55<137:04:37,  4.94s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 160/100000 [17:00<136:53:37,  4.94s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 161/100000 [17:05<137:00:35,  4.94s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 162/100000 [17:11<139:11:24,  5.02s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 163/100000 [17:15<137:59:55,  4.98s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 164/100000 [17:20<137:49:11,  4.97s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 165/100000 [17:25<136:56:26,  4.94s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 166/100000 [17:30<136:21:45,  4.92s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 167/100000 [17:35<136:17:12,  4.91s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 168/100000 [17:40<137:03:57,  4.94s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 169/100000 [17:45<137:17:21,  4.95s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 170/100000 [17:50<136:51:15,  4.94s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 171/100000 [17:55<136:35:55,  4.93s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 172/100000 [18:00<136:16:41,  4.91s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 173/100000 [18:05<138:07:45,  4.98s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 174/100000 [18:10<137:05:50,  4.94s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 175/100000 [18:15<138:40:53,  5.00s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 176/100000 [18:20<139:15:18,  5.02s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 177/100000 [18:25<138:19:57,  4.99s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 178/100000 [18:30<136:58:13,  4.94s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 179/100000 [18:35<138:46:28,  5.00s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 180/100000 [18:40<141:16:49,  5.10s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 181/100000 [18:45<142:04:23,  5.12s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 182/100000 [18:50<142:27:28,  5.14s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 183/100000 [18:56<142:10:30,  5.13s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 184/100000 [19:01<142:26:20,  5.14s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 185/100000 [19:06<140:25:31,  5.06s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 186/100000 [19:10<138:41:35,  5.00s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 187/100000 [19:16<140:18:47,  5.06s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 188/100000 [19:21<139:28:00,  5.03s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 189/100000 [19:25<137:39:57,  4.97s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 190/100000 [19:30<137:25:03,  4.96s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 191/100000 [19:35<136:32:51,  4.93s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 192/100000 [19:40<136:02:04,  4.91s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 193/100000 [19:45<138:05:17,  4.98s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 194/100000 [19:50<138:01:57,  4.98s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 195/100000 [19:55<138:19:09,  4.99s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 196/100000 [20:00<139:18:32,  5.02s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 197/100000 [20:06<142:06:49,  5.13s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 198/100000 [20:11<140:56:20,  5.08s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 199/100000 [20:16<139:18:33,  5.03s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 200/100000 [20:20<137:28:27,  4.96s/it, fps=48.4, frames=45125, opf=0.00, ops=0.1]Optim steps:   0%|          | 200/100000 [20:25<137:28:27,  4.96s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 201/100000 [20:26<145:48:38,  5.26s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 202/100000 [20:31<142:51:08,  5.15s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 203/100000 [20:36<140:21:19,  5.06s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 204/100000 [20:41<142:21:40,  5.14s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 205/100000 [20:46<141:45:06,  5.11s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 206/100000 [20:52<141:30:31,  5.10s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 207/100000 [20:56<138:37:38,  5.00s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 208/100000 [21:01<139:26:17,  5.03s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 209/100000 [21:06<138:15:31,  4.99s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 210/100000 [21:11<137:15:55,  4.95s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 211/100000 [21:16<139:41:31,  5.04s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 212/100000 [21:21<138:55:45,  5.01s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 213/100000 [21:26<139:08:45,  5.02s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 214/100000 [21:31<138:29:06,  5.00s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 215/100000 [21:37<140:28:45,  5.07s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 216/100000 [21:41<138:13:25,  4.99s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 217/100000 [21:46<138:38:41,  5.00s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 218/100000 [21:51<139:03:17,  5.02s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 219/100000 [21:56<137:24:47,  4.96s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 220/100000 [22:01<138:03:03,  4.98s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 221/100000 [22:06<138:59:47,  5.01s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 222/100000 [22:11<138:36:02,  5.00s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 223/100000 [22:16<137:13:26,  4.95s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 224/100000 [22:21<137:35:34,  4.96s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 225/100000 [22:26<138:40:11,  5.00s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 226/100000 [22:31<138:16:26,  4.99s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 227/100000 [22:36<137:32:47,  4.96s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 228/100000 [22:41<137:04:47,  4.95s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 229/100000 [22:46<138:11:41,  4.99s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 230/100000 [22:51<139:55:27,  5.05s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 231/100000 [22:56<139:02:48,  5.02s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 232/100000 [23:01<138:17:20,  4.99s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 233/100000 [23:06<137:16:54,  4.95s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 234/100000 [23:11<137:10:03,  4.95s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 235/100000 [23:16<137:07:31,  4.95s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 236/100000 [23:21<137:42:11,  4.97s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 237/100000 [23:26<137:00:15,  4.94s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 238/100000 [23:31<136:07:48,  4.91s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 239/100000 [23:36<136:24:48,  4.92s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 240/100000 [23:41<137:05:20,  4.95s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 241/100000 [23:46<136:29:14,  4.93s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 242/100000 [23:50<136:47:10,  4.94s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 243/100000 [23:56<137:26:15,  4.96s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 244/100000 [24:00<135:57:26,  4.91s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 245/100000 [24:05<136:48:11,  4.94s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 246/100000 [24:10<137:04:20,  4.95s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 247/100000 [24:15<135:56:07,  4.91s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 248/100000 [24:20<135:28:27,  4.89s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 249/100000 [24:25<138:24:06,  4.99s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 250/100000 [24:30<137:11:21,  4.95s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 251/100000 [24:35<136:51:12,  4.94s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 252/100000 [24:40<137:15:50,  4.95s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 253/100000 [24:45<137:42:25,  4.97s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 254/100000 [24:50<137:55:40,  4.98s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 255/100000 [24:55<138:07:33,  4.99s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 256/100000 [25:00<136:33:01,  4.93s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 257/100000 [25:05<136:34:04,  4.93s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 258/100000 [25:10<137:17:44,  4.96s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 259/100000 [25:15<137:18:55,  4.96s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 260/100000 [25:20<136:41:18,  4.93s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 261/100000 [25:25<140:55:14,  5.09s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 262/100000 [25:30<139:29:00,  5.03s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 263/100000 [25:35<138:21:42,  4.99s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 264/100000 [25:40<137:40:41,  4.97s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 265/100000 [25:45<137:07:34,  4.95s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 266/100000 [25:50<143:33:33,  5.18s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 267/100000 [25:55<141:29:40,  5.11s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 268/100000 [26:00<140:40:05,  5.08s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 269/100000 [26:06<142:12:27,  5.13s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 270/100000 [26:10<138:46:42,  5.01s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 271/100000 [26:15<140:31:36,  5.07s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 272/100000 [26:20<139:39:40,  5.04s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 273/100000 [26:25<138:41:31,  5.01s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 274/100000 [26:30<139:34:56,  5.04s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 275/100000 [26:35<139:17:23,  5.03s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 276/100000 [26:40<139:05:55,  5.02s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 277/100000 [26:46<139:25:05,  5.03s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 278/100000 [26:50<138:12:47,  4.99s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 279/100000 [26:55<137:18:09,  4.96s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 280/100000 [27:00<136:49:42,  4.94s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 281/100000 [27:05<138:06:12,  4.99s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 282/100000 [27:10<136:52:27,  4.94s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 283/100000 [27:15<136:51:04,  4.94s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 284/100000 [27:20<139:50:01,  5.05s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 285/100000 [27:25<139:16:35,  5.03s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 286/100000 [27:30<140:10:09,  5.06s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 287/100000 [27:35<138:57:39,  5.02s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 288/100000 [27:40<138:12:53,  4.99s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 289/100000 [27:45<137:33:43,  4.97s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 290/100000 [27:50<137:55:45,  4.98s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 291/100000 [27:55<137:19:43,  4.96s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 292/100000 [28:00<137:32:03,  4.97s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 293/100000 [28:05<136:35:50,  4.93s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 294/100000 [28:10<139:49:12,  5.05s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 295/100000 [28:15<140:27:35,  5.07s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 296/100000 [28:20<139:47:59,  5.05s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 297/100000 [28:25<139:33:19,  5.04s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 298/100000 [28:31<139:56:22,  5.05s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 299/100000 [28:35<139:02:17,  5.02s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 300/100000 [28:40<137:44:29,  4.97s/it, fps=64.2, frames=77250, opf=0.00, ops=0.2]Optim steps:   0%|          | 300/100000 [28:45<137:44:29,  4.97s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 301/100000 [28:46<146:18:03,  5.28s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 302/100000 [28:51<143:03:31,  5.17s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 303/100000 [28:56<139:19:21,  5.03s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 304/100000 [29:01<138:07:41,  4.99s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 305/100000 [29:06<136:03:58,  4.91s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 306/100000 [29:11<136:18:29,  4.92s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 307/100000 [29:16<136:55:49,  4.94s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 308/100000 [29:20<137:06:01,  4.95s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 309/100000 [29:25<136:31:43,  4.93s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 310/100000 [29:30<136:45:54,  4.94s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 311/100000 [29:35<135:50:26,  4.91s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 312/100000 [29:40<136:30:30,  4.93s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 313/100000 [29:45<136:07:11,  4.92s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 314/100000 [29:50<135:53:47,  4.91s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 315/100000 [29:55<135:11:33,  4.88s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 316/100000 [30:00<135:16:26,  4.89s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 317/100000 [30:05<136:14:57,  4.92s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 318/100000 [30:10<137:10:13,  4.95s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 319/100000 [30:15<137:00:09,  4.95s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 320/100000 [30:20<137:19:11,  4.96s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 321/100000 [30:25<137:10:35,  4.95s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Process SpawnProcess-10:5:
+Process SpawnProcess-10:6:
+Process SpawnProcess-10:4:
+Process SpawnProcess-10:3:
+Process SpawnProcess-10:7:
+Process SpawnProcess-10:1:
+Process SpawnProcess-10:2:
+Process SpawnProcess-10:8:
+Traceback (most recent call last):
+Traceback (most recent call last):
+Traceback (most recent call last):
+Traceback (most recent call last):
+Traceback (most recent call last):
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2540, in _run_worker_pipe_shared_mem
+    cmd, data = child_pipe.recv()
+                ^^^^^^^^^^^^^^^^^
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2540, in _run_worker_pipe_shared_mem
+    cmd, data = child_pipe.recv()
+                ^^^^^^^^^^^^^^^^^
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2540, in _run_worker_pipe_shared_mem
+    cmd, data = child_pipe.recv()
+                ^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 250, in recv
+    buf = self._recv_bytes()
+          ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 250, in recv
+    buf = self._recv_bytes()
+          ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+          ^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 250, in recv
+    buf = self._recv_bytes()
+          ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 399, in _recv
+    raise EOFError
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+          ^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+          ^^^^^^^^^^^^^
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2540, in _run_worker_pipe_shared_mem
+    cmd, data = child_pipe.recv()
+                ^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 399, in _recv
+    raise EOFError
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 399, in _recv
+    raise EOFError
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2540, in _run_worker_pipe_shared_mem
+    cmd, data = child_pipe.recv()
+                ^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 250, in recv
+    buf = self._recv_bytes()
+          ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+          ^^^^^^^^^^^^^
+EOFError
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 250, in recv
+    buf = self._recv_bytes()
+          ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 399, in _recv
+    raise EOFError
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+          ^^^^^^^^^^^^^
+EOFError
+EOFError
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 399, in _recv
+    raise EOFError
+EOFError
+EOFError
+
+The above exception was the direct cause of the following exception:
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+Traceback (most recent call last):
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+
+The above exception was the direct cause of the following exception:
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2540, in _run_worker_pipe_shared_mem
+    cmd, data = child_pipe.recv()
+                ^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 250, in recv
+    buf = self._recv_bytes()
+          ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+          ^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 399, in _recv
+    raise EOFError
+EOFError
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2540, in _run_worker_pipe_shared_mem
+    cmd, data = child_pipe.recv()
+                ^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 250, in recv
+    buf = self._recv_bytes()
+          ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+          ^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 399, in _recv
+    raise EOFError
+Traceback (most recent call last):
+EOFError
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2547, in _run_worker_pipe_shared_mem
+    raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2547, in _run_worker_pipe_shared_mem
+    raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+EOFError: proc 336894 failed, last command: step.
+EOFError: proc 336892 failed, last command: step.
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2547, in _run_worker_pipe_shared_mem
+    raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2547, in _run_worker_pipe_shared_mem
+    raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err
+EOFError: proc 336890 failed, last command: step.
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+EOFError: proc 336893 failed, last command: step.
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2547, in _run_worker_pipe_shared_mem
+    raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err
+EOFError: proc 336895 failed, last command: step.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2540, in _run_worker_pipe_shared_mem
+    cmd, data = child_pipe.recv()
+                ^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 250, in recv
+    buf = self._recv_bytes()
+          ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+          ^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 399, in _recv
+    raise EOFError
+EOFError
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2547, in _run_worker_pipe_shared_mem
+    raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err
+EOFError: proc 336896 failed, last command: step.
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2547, in _run_worker_pipe_shared_mem
+    raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err
+EOFError: proc 336891 failed, last command: step.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2547, in _run_worker_pipe_shared_mem
+    raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err
+EOFError: proc 336897 failed, last command: step.
+Optim steps:   0%|          | 322/100000 [30:29<137:06:43,  4.95s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 323/100000 [30:33<126:31:09,  4.57s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 324/100000 [30:37<119:04:17,  4.30s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 325/100000 [30:40<113:49:58,  4.11s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 326/100000 [30:44<110:09:18,  3.98s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 327/100000 [30:48<107:35:11,  3.89s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 328/100000 [30:51<105:44:58,  3.82s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 329/100000 [30:55<104:30:12,  3.77s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 330/100000 [30:59<103:36:00,  3.74s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 331/100000 [31:02<102:59:47,  3.72s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 332/100000 [31:06<102:35:52,  3.71s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 333/100000 [31:10<102:16:13,  3.69s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 334/100000 [31:14<102:01:37,  3.69s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 335/100000 [31:17<101:53:14,  3.68s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 336/100000 [31:21<101:44:49,  3.68s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Optim steps:   0%|          | 337/100000 [31:25<101:42:31,  3.67s/it, fps=64.5, frames=109500, opf=0.00, ops=0.2]Process SpawnProcess-13:8:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-13:2:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-13:6:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-13:4:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-13:5:
+Process SpawnProcess-13:1:
+Traceback (most recent call last):
+Process SpawnProcess-13:7:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-13:3:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-12:8:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-12:2:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-12:4:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-12:6:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-12:3:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-12:1:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-12:5:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+Process SpawnProcess-12:7:
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-9:3:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-9:5:
+Process SpawnProcess-9:4:
+Traceback (most recent call last):
+Traceback (most recent call last):
+Process SpawnProcess-9:2:
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Traceback (most recent call last):
+Process SpawnProcess-9:7:
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+Traceback (most recent call last):
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-9:6:
+Process SpawnProcess-9:8:
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-9:1:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-15:3:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-15:6:
+Process SpawnProcess-15:7:
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-15:5:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-15:2:
+Process SpawnProcess-15:1:
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-15:4:
+Process SpawnProcess-15:8:
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-11:7:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-11:6:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-11:3:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-11:5:
+Process SpawnProcess-11:4:
+Process SpawnProcess-11:2:
+Process SpawnProcess-11:8:
+Traceback (most recent call last):
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Traceback (most recent call last):
+Process SpawnProcess-11:1:
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-14:2:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-14:8:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-14:4:
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-14:6:
+Process SpawnProcess-14:1:
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+Process SpawnProcess-14:7:
+Process SpawnProcess-14:3:
+Process SpawnProcess-14:5:
+Traceback (most recent call last):
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+  File "/root/rl/torchrl/envs/batched_envs.py", line 2542, in _run_worker_pipe_shared_mem
+    raise TimeoutError(
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
+TimeoutError: Worker timed out after 10000.0s, increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.
