@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.transforms.VecNormV2Config
-==============================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
-
-.. autoclass:: VecNormV2Config

@@ -1,7 +1,0 @@
-﻿.. currentmodule:: torchrl.record.loggers.tensorboard
-
-
-TensorboardLogger
-=================
-
-.. autofunction:: TensorboardLogger

@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data.llm
-
-
-TopKRewardSelector
-==================
-
-.. autoclass:: TopKRewardSelector
-    :members:
-    :inherited-members:

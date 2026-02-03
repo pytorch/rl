@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.services
-
-
-RayService
-==========
-
-.. autoclass:: RayService
-    :members:
-    :inherited-members:
