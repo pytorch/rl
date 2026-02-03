@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import socket
+import subprocess
 import time
 from typing import Any
 
@@ -31,6 +32,7 @@ def wait_for_server(
     server_url: str,
     timeout: float = 300.0,
     check_interval: float = 1.0,
+    process: subprocess.Popen | None = None,
 ) -> bool:
     """Wait for an SGLang server to become ready.
 
@@ -38,18 +40,30 @@ def wait_for_server(
         server_url: Base URL of the SGLang server (e.g., "http://localhost:30000")
         timeout: Maximum time to wait in seconds
         check_interval: Time between health checks in seconds
+        process: Optional subprocess handle to check for early termination.
+            If the process dies before the server becomes ready, a RuntimeError
+            is raised immediately instead of waiting for the full timeout.
 
     Returns:
         bool: True if server is ready, False if timeout occurred
 
     Raises:
         TimeoutError: If the server does not become ready within the timeout
+        RuntimeError: If the subprocess dies before the server becomes ready
     """
     server_url = server_url.rstrip("/")
     health_url = f"{server_url}/health"
 
     start_time = time.time()
     while time.time() - start_time < timeout:
+        # Check if subprocess died
+        if process is not None:
+            poll_result = process.poll()
+            if poll_result is not None:
+                raise RuntimeError(
+                    f"SGLang server process died with exit code {poll_result}"
+                )
+
         try:
             response = requests.get(health_url, timeout=5.0)
             if response.status_code == 200:
