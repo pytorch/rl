@@ -35,11 +35,14 @@ optimization:
   lmbda: 0.95
   imagination_horizon: 15
   compile:
-    enabled: True
+    # Disabled by default - world_model has RSSM loop that causes CUDA graph issues
+    # Can enable with: optimization.compile.enabled=true 'optimization.compile.losses=[actor,value]'
+    enabled: False
     backend: inductor # or cudagraphs
-    mode: reduce-overhead
+    mode: default  # avoid reduce-overhead which uses CUDA graphs
     # Which losses to compile (subset of: world_model, actor, value)
-    losses: ["world_model", "actor", "value"]
+    # Note: world_model causes CUDA graph tensor overwrite errors due to RSSM loop
+    losses: ["actor", "value"]
   # Autocast options: false, true (=bfloat16), float16, bfloat16
   autocast: bfloat16
 
