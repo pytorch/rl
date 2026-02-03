@@ -15,6 +15,7 @@ Track all timing measurements here. Always add new entries at the top.
 
 | Date | Change | `## train/sample ##` | `Memcpy HtoD` | Training Step | Notes |
 |------|--------|---------------------|---------------|---------------|-------|
+| 2026-02-03 | **Prefetch enabled** | **2.5ms** | 1.27s | **~750ms/step** | **Sampling now negligible! ~1.3 UPS** |
 | 2026-02-03 | **torch.compile A/B** | **529ms → 358ms** | 1.25s | ~1.1s/step | **32% faster with compile! 14K Triton kernels** |
 | 2026-02-03 | Baseline (no compile) | 5.58s (12 calls) | 1.12s | ~1s/step | Fresh baseline for A/B testing |
 | 2026-02-03 | Compile fix: mode+options | - | - | - | Fixed torch.compile: can't use both mode and options |
@@ -342,21 +343,32 @@ steve scancel $JOBID
 | Optimization | Status | Impact |
 |-------------|--------|--------|
 | GPU Image Transforms | ✅ Implemented | **5.5x faster** sampling |
-| Pinned Memory | ⚠️ Implemented | Minimal impact |
-| torch.compile (CUDA graphs) | ❌ Dead End | CUDA graph conflicts |
-| torch.compile mode+options fix | ✅ Fixed | Enables proper compilation |
-| Loss Compilation (no CUDA graphs) | ✅ **Verified** | **32% faster** train/sample (529ms → 358ms) |
+| Prefetch | ✅ Enabled | **Sampling: 2.5ms** (was bottleneck, now negligible) |
+| Loss Compilation (no CUDA graphs) | ✅ **Verified** | **32% faster** train/sample |
 | stack_onto_ | ✅ **Benchmarked** | **5-12x faster** for contiguous writes |
-| Threaded sampling | 📋 Proposed | Medium potential |
+| SliceSampler use_gpu | ✅ Enabled | GPU-accelerated trajectory computation |
+| Pinned Memory | ❌ Removed | User requested removal (not needed with prefetch) |
+| torch.compile (CUDA graphs) | ❌ Dead End | CUDA graph conflicts |
 
 The GPU image transforms provided the largest single improvement, reducing the training sample time from 24.95s to 4.52s (5.5x speedup). 
 
 **Recent progress (2026-02-03)**:
+- ✅ **Prefetch enabled**: Sampling reduced to **2.5ms** (was a bottleneck, now negligible!)
+- ✅ **Throughput**: ~1.3-1.4 optimization steps/second with all optimizations
 - ✅ **torch.compile A/B test completed**: 32% faster train/sample (529ms → 358ms)
 - ✅ 14,232 Triton kernels confirmed - torch.compile is working!
 - ✅ Fixed torch.compile issue: can't use both `mode` and `options` together
 - ✅ Implemented stack_onto_ optimization for replay buffer (avoids intermediate allocation)
-- Baseline profiling: ~529ms train/sample avg, ~1.25s HtoD transfers
-- Compiled profiling: ~358ms train/sample avg, 14K Triton kernels
+- ✅ Removed `pin_memory` (per user request, not needed with prefetch)
+- ✅ Added `use_gpu=True` to SliceSampler for GPU-accelerated trajectory computation
 
-**Next priority**: Benchmark stack_onto_ optimization, explore further compile optimizations.
+**Training breakdown per step**:
+- `training/world_model`: ~593ms (forward: 92ms, backward: 410ms)
+- `training/actor`: ~111ms
+- `training/value`: ~7ms
+- `training/sample`: ~2.5ms (with prefetch)
+- **Total: ~711ms per optimization step**
+
+**Main bottleneck**: World model backward pass (410ms). Potential optimizations:
+- Explore scan-based RSSM implementations
+- Further torch.compile tuning for world_model_loss
