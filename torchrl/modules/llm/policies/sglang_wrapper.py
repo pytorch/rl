@@ -638,13 +638,21 @@ class SGLangWrapper(LLMWrapperBase):
                         )
                 tokens_obj.response = response_tokens_padded
             else:
-                # Use lazy stack to handle variable-length sequences
-                tokens_obj = Tokens._from_tensordict(
-                    TensorDict(batch_size=out.batch_size).to_lazystack(0)
-                )
+                # Use nested tensors to handle variable-length sequences
+                tokens_obj = Tokens._from_tensordict(out.empty())
                 if tokens_prompt is not None:
-                    tokens_obj.prompt = tokens_prompt
-                    # Compute full tokens as list of concatenated tensors
+                    # Convert prompt to nested tensor if it's a list of variable-length tensors
+                    if isinstance(tokens_prompt, list):
+                        prompt_tensors = [
+                            t.flatten()
+                            if isinstance(t, torch.Tensor)
+                            else torch.tensor(t, dtype=torch.long)
+                            for t in tokens_prompt
+                        ]
+                        tokens_obj.prompt = torch.nested.nested_tensor(prompt_tensors)
+                    else:
+                        tokens_obj.prompt = tokens_prompt
+                    # Compute full tokens as nested tensor of concatenated tensors
                     if response_token_ids:
                         full_tokens = []
                         prompt_list = (
@@ -659,8 +667,10 @@ class SGLangWrapper(LLMWrapperBase):
                             else:
                                 p_tensor = torch.tensor(p, dtype=torch.long)
                             full_tokens.append(torch.cat([p_tensor, r], dim=0))
-                        tokens_obj.full = full_tokens
-                tokens_obj.response = response_token_ids
+                        tokens_obj.full = torch.nested.nested_tensor(full_tokens)
+                # Convert response tokens to nested tensor
+                if response_token_ids:
+                    tokens_obj.response = torch.nested.nested_tensor(response_token_ids)
             tokens_obj.padded = MetaData(self.pad_output)
             out.set(self.tokens_key, tokens_obj)
 
