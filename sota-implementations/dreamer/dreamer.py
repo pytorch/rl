@@ -292,10 +292,12 @@ def main(cfg: DictConfig):  # noqa: F821
                 warmup=compile_warmup,
             )
         if "actor" in compile_losses:
+            # Note: can't use both mode and options together in torch.compile
+            # Use options to disable CUDA graphs which cause issues with RSSM rollout
             actor_loss = compile_with_warmup(
                 actor_loss,
                 backend=backend,
-                mode=mode,
+                fullgraph=False,
                 warmup=compile_warmup,
                 options={"triton.cudagraphs": False},  # Disable CUDA graphs
             )
@@ -303,7 +305,7 @@ def main(cfg: DictConfig):  # noqa: F821
             value_loss = compile_with_warmup(
                 value_loss,
                 backend=backend,
-                mode=mode,
+                fullgraph=False,
                 warmup=compile_warmup,
                 options={"triton.cudagraphs": False},  # Disable CUDA graphs
             )
