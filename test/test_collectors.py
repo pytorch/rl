@@ -4052,6 +4052,56 @@ class TestCollectorRB:
         assert assert_allclose_td(rbdata0, rbdata1)
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
+    @pytest.mark.parametrize("storage_type", [LazyTensorStorage, LazyMemmapStorage])
+    def test_collector_with_rb_uses_lazy_stack(self, storage_type, tmpdir):
+        """Test that collector uses lazy stack path when replay buffer is provided.
+
+        This tests the optimization where collectors create lazy stacks instead of
+        materializing data into a contiguous buffer, allowing the storage to stack
+        directly into its buffer without intermediate copies.
+        """
+        if storage_type is LazyMemmapStorage:
+            storage = storage_type(1000, scratch_dir=tmpdir)
+        else:
+            storage = storage_type(1000)
+
+        env = GymEnv(CARTPOLE_VERSIONED())
+        env.set_seed(0)
+        rb = ReplayBuffer(storage=storage, batch_size=10)
+        collector = Collector(
+            env,
+            RandomPolicy(env.action_spec),
+            frames_per_batch=50,
+            total_frames=200,
+            replay_buffer=rb,
+        )
+        torch.manual_seed(0)
+
+        collected_frames = 0
+        for data in collector:
+            # When replay buffer is used, collector yields None
+            assert data is None
+            collected_frames += 50
+
+        # Verify data was properly stored in the replay buffer
+        assert len(rb) == 200, f"Expected 200 frames in buffer, got {len(rb)}"
+
+        # Sample and verify data integrity
+        sample = rb.sample(10)
+        assert "observation" in sample.keys()
+        assert "action" in sample.keys()
+        assert "next" in sample.keys()
+        assert sample["observation"].shape[0] == 10
+
+        # Verify we can sample multiple times without issues
+        for _ in range(5):
+            sample = rb.sample(20)
+            assert sample["observation"].shape[0] == 20
+
+        collector.shutdown()
+        env.close()
+
+    @pytest.mark.skipif(not _has_gym, reason="requires gym.")
     @pytest.mark.parametrize("extend_buffer", [False, True])
     @pytest.mark.parametrize("env_creator", [False, True])
     @pytest.mark.parametrize("storagetype", [LazyTensorStorage, LazyMemmapStorage])

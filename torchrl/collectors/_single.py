@@ -1749,6 +1749,13 @@ class Collector(BaseCollector):
                                     self._final_rollout.ndim - 1,
                                     out=self._final_rollout[..., : t + 1],
                                 )
+                    elif (
+                        self.replay_buffer is not None
+                        and not self._ignore_rb
+                        and self.extend_buffer
+                    ):
+                        # Use lazy stack for direct storage write optimization
+                        result = LazyStackedTensorDict.lazy_stack(tensordicts, dim=-1)
                     else:
                         result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
                     break
@@ -1775,6 +1782,15 @@ class Collector(BaseCollector):
                     and not self.extend_buffer
                 ):
                     return
+                elif (
+                    self.replay_buffer is not None
+                    and not self._ignore_rb
+                    and self.extend_buffer
+                ):
+                    # Use lazy stack for direct storage write optimization.
+                    # This avoids creating an intermediate contiguous copy -
+                    # the storage will stack directly into its buffer.
+                    result = LazyStackedTensorDict.lazy_stack(tensordicts, dim=-1)
                 else:
                     result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
                     result.refine_names(..., "time")
