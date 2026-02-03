@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.modules.llm
-
-
-make_async_vllm_engine
-======================
-
-.. autoclass:: make_async_vllm_engine
-    :members:
-    :inherited-members:

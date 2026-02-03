@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.envs.llm.transforms
-
-
-ToolRegistry
-============
-
-.. autoclass:: ToolRegistry
-    :members:
-    :inherited-members:

@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig
-=================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.modules
-
-.. autoclass:: TanhNormalModelConfig

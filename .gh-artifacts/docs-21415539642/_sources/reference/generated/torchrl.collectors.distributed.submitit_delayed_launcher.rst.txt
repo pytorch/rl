@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.collectors.distributed
-
-
-submitit_delayed_launcher
-=========================
-
-.. autoclass:: submitit_delayed_launcher
-    :members:
-    :inherited-members:
