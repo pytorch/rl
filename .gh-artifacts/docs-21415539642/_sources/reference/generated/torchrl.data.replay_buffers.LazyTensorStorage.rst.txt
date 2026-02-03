@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data.replay_buffers
-
-
-LazyTensorStorage
-=================
-
-.. autoclass:: LazyTensorStorage
-    :members:
-    :inherited-members:

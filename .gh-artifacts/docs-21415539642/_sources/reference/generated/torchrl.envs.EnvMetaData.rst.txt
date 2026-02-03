@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.envs
-
-
-EnvMetaData
-===========
-
-.. autoclass:: EnvMetaData
-    :members:
-    :inherited-members:

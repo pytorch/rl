@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.transforms.ActionMaskConfig
-===============================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
-
-.. autoclass:: ActionMaskConfig

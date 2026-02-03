@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.envs.llm.transforms
-
-
-RetrieveLogProb
-===============
-
-.. autoclass:: RetrieveLogProb
-    :members:
-    :inherited-members:

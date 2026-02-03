@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.envs.llm.transforms
-
-
-ExecuteToolsInOrder
-===================
-
-.. autoclass:: ExecuteToolsInOrder
-    :members:
-    :inherited-members:

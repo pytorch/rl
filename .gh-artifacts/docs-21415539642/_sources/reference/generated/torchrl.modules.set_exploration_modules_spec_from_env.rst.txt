@@ -1,8 +1,0 @@
-﻿.. currentmodule:: torchrl.modules
-
-
-set_exploration_modules_spec_from_env
-=====================================
-
-.. autoclass:: set_exploration_modules_spec_from_env
-    :members:

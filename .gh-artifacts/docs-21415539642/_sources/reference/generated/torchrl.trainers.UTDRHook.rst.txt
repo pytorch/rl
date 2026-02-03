@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.trainers
-
-
-UTDRHook
-========
-
-.. autoclass:: UTDRHook
-    :members:
-    :inherited-members:

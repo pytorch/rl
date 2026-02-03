@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data.llm
-
-
-add_chat_template
-=================
-
-.. autoclass:: add_chat_template
-    :members:
-    :inherited-members:

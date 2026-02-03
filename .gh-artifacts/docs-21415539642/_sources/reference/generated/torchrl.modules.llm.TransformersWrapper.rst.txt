@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.modules.llm
-
-
-TransformersWrapper
-===================
-
-.. autoclass:: TransformersWrapper
-    :members:
-    :inherited-members:

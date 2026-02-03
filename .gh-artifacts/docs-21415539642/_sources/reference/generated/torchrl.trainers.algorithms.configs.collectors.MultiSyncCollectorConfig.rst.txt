@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.collectors.MultiSyncCollectorConfig
-=======================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.collectors
-
-.. autoclass:: MultiSyncCollectorConfig

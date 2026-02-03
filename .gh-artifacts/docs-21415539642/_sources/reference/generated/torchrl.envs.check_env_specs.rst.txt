@@ -1,7 +1,0 @@
-﻿.. currentmodule:: torchrl.envs
-
-
-check_env_specs
-===============
-
-.. autofunction:: check_env_specs

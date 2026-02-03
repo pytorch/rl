@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.transforms.RandomCropTensorDictConfig
-=========================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
-
-.. autoclass:: RandomCropTensorDictConfig
