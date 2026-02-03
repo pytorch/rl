@@ -1,8 +1,0 @@
-﻿.. currentmodule:: torchrl.modules
-
-
-OneHotCategorical
-=================
-
-.. autoclass:: OneHotCategorical
-    :members:

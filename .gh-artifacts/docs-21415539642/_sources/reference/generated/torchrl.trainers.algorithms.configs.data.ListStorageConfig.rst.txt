@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.data.ListStorageConfig
-==========================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.data
-
-.. autoclass:: ListStorageConfig

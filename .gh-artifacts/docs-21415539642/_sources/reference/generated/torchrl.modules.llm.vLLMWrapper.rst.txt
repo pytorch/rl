@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.modules.llm
-
-
-vLLMWrapper
-===========
-
-.. autoclass:: vLLMWrapper
-    :members:
-    :inherited-members:

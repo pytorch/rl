@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.transforms.TimerConfig
-==========================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
-
-.. autoclass:: TimerConfig

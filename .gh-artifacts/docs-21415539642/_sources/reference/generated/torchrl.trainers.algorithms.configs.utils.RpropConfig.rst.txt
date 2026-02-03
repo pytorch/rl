@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.utils.RpropConfig
-=====================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.utils
-
-.. autoclass:: RpropConfig

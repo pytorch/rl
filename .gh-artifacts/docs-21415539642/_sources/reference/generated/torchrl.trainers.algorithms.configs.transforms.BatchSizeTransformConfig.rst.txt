@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.transforms.BatchSizeTransformConfig
-=======================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
-
-.. autoclass:: BatchSizeTransformConfig

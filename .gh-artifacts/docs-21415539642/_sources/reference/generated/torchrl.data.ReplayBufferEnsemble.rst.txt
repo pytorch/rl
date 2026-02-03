@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-ReplayBufferEnsemble
-====================
-
-.. autoclass:: ReplayBufferEnsemble
-    :members:
-    :inherited-members:

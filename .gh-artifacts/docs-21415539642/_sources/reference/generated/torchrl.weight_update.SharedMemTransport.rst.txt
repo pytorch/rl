@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.weight_update
-
-
-SharedMemTransport
-==================
-
-.. autoclass:: SharedMemTransport
-    :members:
-    :inherited-members:
