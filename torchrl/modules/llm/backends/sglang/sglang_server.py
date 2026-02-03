@@ -13,7 +13,9 @@ NCCL for weight synchronization in RL training workflows.
 from __future__ import annotations
 
 import atexit
+import os
 import subprocess
+import tempfile
 import time
 from collections.abc import Iterator
 from typing import Any
@@ -97,6 +99,7 @@ class AsyncSGLang(RLSGLangEngine):
         self._server_kwargs = server_kwargs
 
         self._managed_process: subprocess.Popen | None = None
+        self._log_file_path: str | None = None
         self._server_info: dict[str, Any] | None = None
         self._model_info: dict[str, Any] | None = None
 
@@ -169,11 +172,23 @@ class AsyncSGLang(RLSGLangEngine):
 
         torchrl_logger.info(f"Launching SGLang server: {' '.join(cmd)}")
 
-        # Launch subprocess
+        # Create a temporary file for server output logging
+        # This provides better visibility than PIPE, especially in CI environments
+        log_file = tempfile.NamedTemporaryFile(
+            mode="w", suffix="_sglang.log", delete=False
+        )
+        self._log_file_path = log_file.name
+        torchrl_logger.info(f"SGLang server output logging to: {self._log_file_path}")
+
+        # Launch subprocess with output going to the log file
         self._managed_process = subprocess.Popen(
             cmd,
-            stdout=subprocess.PIPE,
+            stdout=log_file,
             stderr=subprocess.STDOUT,
+        )
+
+        torchrl_logger.info(
+            f"SGLang server launched with PID {self._managed_process.pid}"
         )
 
         self._server_url = f"http://{host}:{port}"
@@ -181,13 +196,33 @@ class AsyncSGLang(RLSGLangEngine):
         # Register cleanup handler
         atexit.register(self.shutdown)
 
-        # Wait for server to be ready
+        # Early crash detection: check if process is still alive after 2 seconds
+        time.sleep(2)
+        poll_result = self._managed_process.poll()
+        if poll_result is not None:
+            # Process crashed immediately - read log file and raise with output
+            with open(self._log_file_path) as f:
+                output = f.read()
+            raise RuntimeError(
+                f"SGLang server crashed immediately (exit={poll_result}):\n{output}"
+            )
+
+        # Wait for server to be ready, passing process handle for liveness checks
         try:
-            wait_for_server(self._server_url, timeout=self._timeout)
-        except TimeoutError:
+            wait_for_server(
+                self._server_url, timeout=self._timeout, process=self._managed_process
+            )
+        except (TimeoutError, RuntimeError):
             # Capture server output for debugging
+            if self._log_file_path and os.path.exists(self._log_file_path):
+                with open(self._log_file_path) as f:
+                    output = f.read()
+                # Log last 20KB of output
+                torchrl_logger.error(
+                    f"SGLang server output (last 20000 chars):\n{output[-20000:]}"
+                )
+
             if self._managed_process is not None:
-                # Check if process is still alive
                 poll_result = self._managed_process.poll()
                 if poll_result is not None:
                     torchrl_logger.error(
@@ -197,42 +232,6 @@ class AsyncSGLang(RLSGLangEngine):
                     torchrl_logger.error(
                         "SGLang server process is still running but not responding"
                     )
-
-                # Read any available output
-                try:
-                    import os
-
-                    # Don't block - just read what's available
-                    import select
-
-                    if self._managed_process.stdout:
-                        # Make stdout non-blocking
-                        fd = self._managed_process.stdout.fileno()
-                        # Read available output (up to 64KB)
-                        output = b""
-                        try:
-                            while True:
-                                ready, _, _ = select.select(
-                                    [self._managed_process.stdout], [], [], 0.1
-                                )
-                                if not ready:
-                                    break
-                                chunk = os.read(fd, 8192)
-                                if not chunk:
-                                    break
-                                output += chunk
-                                if len(output) > 65536:
-                                    break
-                        except Exception:
-                            pass
-
-                        if output:
-                            output_str = output.decode("utf-8", errors="replace")
-                            torchrl_logger.error(
-                                f"SGLang server output (last 10000 chars):\n{output_str[-10000:]}"
-                            )
-                except Exception as e:
-                    torchrl_logger.error(f"Failed to read server output: {e}")
 
             self.shutdown()
             raise
@@ -632,6 +631,14 @@ class AsyncSGLang(RLSGLangEngine):
                 self._managed_process.kill()
             self._managed_process = None
             torchrl_logger.info("SGLang server shutdown complete")
+
+        # Clean up the log file
+        if self._log_file_path is not None and os.path.exists(self._log_file_path):
+            try:
+                os.unlink(self._log_file_path)
+            except OSError:
+                pass  # Ignore cleanup errors
+            self._log_file_path = None
 
     def __del__(self) -> None:
         """Cleanup on deletion."""
