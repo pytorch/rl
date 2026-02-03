@@ -920,11 +920,10 @@ class TestStorages:
 
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
     def test_extend_lazystack_direct_write(self, storage_type):
-        """Test that lazy stack extends directly to storage without intermediate copy.
+        """Test that lazy stacks can be extended to storage correctly.
 
-        This tests the optimization where lazy stacks are stacked directly into
-        storage using torch.stack(..., out=storage[cursor]) instead of first
-        materializing the lazy stack and then copying to storage.
+        This tests that lazy stacks from collectors are properly stored in
+        replay buffers and that the data integrity is preserved.
         """
         rb = ReplayBuffer(
             storage=storage_type(100),
@@ -950,18 +949,15 @@ class TestStorages:
         assert sample["obs"].shape == (5, 4, 8)
         assert sample["action"].shape == (5, 2)
 
-        # Verify that data values are preserved
-        # Sample all items and check they match original data
-        all_data = rb.sample(10)
-        for i, td in enumerate(tensordicts):
-            # Find matching item in storage by checking values
-            found = False
-            for j in range(10):
-                if torch.allclose(all_data["obs"][j], td["obs"]):
-                    found = True
-                    assert torch.allclose(all_data["action"][j], td["action"])
-                    break
-            assert found, f"Could not find tensordict {i} in storage"
+        # Verify all data is accessible by reading the entire storage
+        all_data = rb[:]
+        assert all_data["obs"].shape == (10, 4, 8)
+        assert all_data["action"].shape == (10, 2)
+
+        # Verify data values are preserved (check against original stacked data)
+        expected = lazy_td.to_tensordict()
+        assert torch.allclose(all_data["obs"], expected["obs"])
+        assert torch.allclose(all_data["action"], expected["action"])
 
     @pytest.mark.parametrize("device_data", get_default_devices())
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])

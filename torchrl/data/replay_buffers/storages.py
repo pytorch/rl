@@ -1057,15 +1057,7 @@ class TensorStorage(Storage):
             if storage_keys is not None:
                 data = data.select(*storage_keys, strict=False)
             try:
-                # Optimize lazy stack writes: stack directly into storage slice
-                # to avoid intermediate contiguous copy
-                if isinstance(data, LazyStackedTensorDict):
-                    stack_dim = data.stack_dim
-                    torch.stack(
-                        data.unbind(stack_dim), dim=stack_dim, out=self._storage[cursor]
-                    )
-                else:
-                    self._storage[cursor] = data
+                self._storage[cursor] = data
             except RuntimeError as e:
                 if "locked" in str(e).lower():
                     # Provide informative error about key differences
@@ -1136,15 +1128,7 @@ class TensorStorage(Storage):
             if storage_keys is not None:
                 data = data.select(*storage_keys, strict=False)
         try:
-            # Optimize lazy stack writes: stack directly into storage slice
-            # to avoid intermediate contiguous copy
-            if isinstance(data, LazyStackedTensorDict):
-                stack_dim = data.stack_dim
-                torch.stack(
-                    data.unbind(stack_dim), dim=stack_dim, out=self._storage[cursor]
-                )
-            else:
-                self._storage[cursor] = data
+            self._storage[cursor] = data
         except RuntimeError as e:
             if "locked" in str(e).lower():
                 # Provide informative error about key differences
