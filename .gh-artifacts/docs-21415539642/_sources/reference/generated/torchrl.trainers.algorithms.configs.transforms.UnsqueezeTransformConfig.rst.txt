@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.transforms.UnsqueezeTransformConfig
+=======================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
+
+.. autoclass:: UnsqueezeTransformConfig

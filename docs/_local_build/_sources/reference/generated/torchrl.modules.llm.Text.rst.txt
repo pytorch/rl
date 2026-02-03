@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.modules.llm
+
+
+Text
+====
+
+.. autoclass:: Text
+    :members:
+    :inherited-members:

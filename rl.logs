@@ -1,0 +1,181 @@
+Running in --nightly mode: will use PyTorch nightly wheels instead of building from source
+Using Python 3.12.3 environment at: torchrl
+Audited 1 package in 1ms
+==========================================
+Installing PyTorch from nightly wheels...
+==========================================
+Using Python 3.12.3 environment at: torchrl
+Resolved 31 packages in 282ms
+Downloading numpy (15.6MiB)
+Downloading pillow (6.7MiB)
+ Downloaded pillow
+ Downloaded numpy
+Prepared 31 packages in 519ms
+Uninstalled 31 packages in 493ms
+Installed 31 packages in 477ms
+ ~ cuda-bindings==13.0.3
+ ~ cuda-pathfinder==1.2.2
+ - filelock==3.20.0
+ + filelock==3.20.3
+ - fsspec==2025.12.0
+ + fsspec==2026.1.0
+ ~ jinja2==3.1.6
+ ~ markupsafe==3.0.2
+ ~ mpmath==1.3.0
+ ~ networkx==3.6.1
+ - numpy==2.4.0rc1
+ + numpy==2.4.1
+ ~ nvidia-cublas==13.1.0.3
+ ~ nvidia-cuda-cupti==13.0.85
+ ~ nvidia-cuda-nvrtc==13.0.88
+ ~ nvidia-cuda-runtime==13.0.96
+ ~ nvidia-cudnn-cu13==9.15.1.9
+ ~ nvidia-cufft==12.0.0.61
+ ~ nvidia-cufile==1.15.1.6
+ ~ nvidia-curand==10.4.0.35
+ ~ nvidia-cusolver==12.0.4.66
+ ~ nvidia-cusparse==12.6.3.3
+ ~ nvidia-cusparselt-cu13==0.8.0
+ ~ nvidia-nccl-cu13==2.28.9
+ ~ nvidia-nvjitlink==13.0.88
+ ~ nvidia-nvshmem-cu13==3.4.5
+ ~ nvidia-nvtx==13.0.85
+ - pillow==11.3.0
+ + pillow==12.1.0
+ ~ setuptools==78.1.0
+ ~ sympy==1.14.0
+ ~ torch==2.11.0.dev20260112+cu130
+ ~ torchvision==0.25.0.dev20260112+cu130
+ ~ triton==3.6.0+git9844da95
+ ~ typing-extensions==4.15.0
+Using Python 3.12.3 environment at: torchrl
+Audited 1 package in 1ms
+Already on 'main'
+M	tensordict/_version.py
+Your branch is up to date with 'origin/main'.
+Already up to date.
+From https://github.com/pytorch/rl
+ * [new branch]          gh/vmoens/188/base -> origin/gh/vmoens/188/base
+ * [new branch]          gh/vmoens/188/head -> origin/gh/vmoens/188/head
+ * [new branch]          gh/vmoens/188/orig -> origin/gh/vmoens/188/orig
+ * [new branch]          gh/vmoens/189/base -> origin/gh/vmoens/189/base
+ * [new branch]          gh/vmoens/189/head -> origin/gh/vmoens/189/head
+ * [new branch]          gh/vmoens/189/orig -> origin/gh/vmoens/189/orig
+ * [new branch]          gh/vmoens/190/base -> origin/gh/vmoens/190/base
+ * [new branch]          gh/vmoens/190/head -> origin/gh/vmoens/190/head
+ * [new branch]          gh/vmoens/190/orig -> origin/gh/vmoens/190/orig
+ * [new branch]          gh/vmoens/191/base -> origin/gh/vmoens/191/base
+ * [new branch]          gh/vmoens/191/head -> origin/gh/vmoens/191/head
+ * [new branch]          gh/vmoens/191/orig -> origin/gh/vmoens/191/orig
+ * [new branch]          gh/vmoens/192/base -> origin/gh/vmoens/192/base
+ * [new branch]          gh/vmoens/192/head -> origin/gh/vmoens/192/head
+ * [new branch]          gh/vmoens/192/orig -> origin/gh/vmoens/192/orig
+ * [new branch]          gh/vmoens/193/base -> origin/gh/vmoens/193/base
+ * [new branch]          gh/vmoens/193/head -> origin/gh/vmoens/193/head
+ * [new branch]          gh/vmoens/193/orig -> origin/gh/vmoens/193/orig
+ * [new branch]          gh/vmoens/194/base -> origin/gh/vmoens/194/base
+ * [new branch]          gh/vmoens/194/head -> origin/gh/vmoens/194/head
+ * [new branch]          gh/vmoens/194/orig -> origin/gh/vmoens/194/orig
+ * [new branch]          gh/vmoens/195/base -> origin/gh/vmoens/195/base
+ * [new branch]          gh/vmoens/195/head -> origin/gh/vmoens/195/head
+ * [new branch]          gh/vmoens/195/orig -> origin/gh/vmoens/195/orig
+ * [new branch]          gh/vmoens/196/base -> origin/gh/vmoens/196/base
+ * [new branch]          gh/vmoens/196/head -> origin/gh/vmoens/196/head
+ * [new branch]          gh/vmoens/196/orig -> origin/gh/vmoens/196/orig
+ * [new branch]          gh/vmoens/197/base -> origin/gh/vmoens/197/base
+ * [new branch]          gh/vmoens/197/head -> origin/gh/vmoens/197/head
+ * [new branch]          gh/vmoens/197/orig -> origin/gh/vmoens/197/orig
+ * [new branch]          gh/vmoens/198/base -> origin/gh/vmoens/198/base
+ * [new branch]          gh/vmoens/198/head -> origin/gh/vmoens/198/head
+ * [new branch]          gh/vmoens/198/orig -> origin/gh/vmoens/198/orig
+Already on 'fix-dreamer-2'
+Your branch is up to date with 'origin/fix-dreamer-2'.
+Already up to date.
+Using Python 3.12.3 environment at: /root/torchrl
+Audited 6 packages in 3ms
+Using Python 3.12.3 environment at: /root/torchrl
+Resolved 36 packages in 790ms
+   Building tensordict @ file:///root/tensordict
+      Built tensordict @ file:///root/tensordict
+Prepared 1 package in 8.10s
+Uninstalled 1 package in 0.36ms
+Installed 1 package in 2ms
+ ~ tensordict==0.10.0+gf7f04d1c (from file:///root/tensordict)
+Using Python 3.12.3 environment at: /root/torchrl
+Resolved 37 packages in 11.06s
+   Building torchrl @ file:///root/rl
+      Built torchrl @ file:///root/rl
+Prepared 1 package in 31.49s
+Uninstalled 1 package in 0.36ms
+Installed 1 package in 3ms
+ ~ torchrl==0.10.0+ga800fb277 (from file:///root/rl)
+Using Python 3.12.3 environment at: /root/torchrl
+Resolved 50 packages in 244ms
+Uninstalled 1 package in 2ms
+Installed 1 package in 15ms
+ - pillow==12.1.0
+ + pillow==11.3.0
+Get:1 https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64  InRelease [1581 B]
+Hit:2 https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/8.0 InRelease
+Get:3 http://security.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+Hit:4 http://archive.ubuntu.com/ubuntu noble InRelease
+Get:5 https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64  Packages [1121 kB]
+Get:6 http://archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]
+Get:7 http://security.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [2919 kB]
+Get:8 http://archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB]
+Get:9 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [2141 kB]
+Get:10 http://security.ubuntu.com/ubuntu noble-security/main amd64 Packages [1769 kB]
+Get:11 http://archive.ubuntu.com/ubuntu noble-updates/universe amd64 Packages [1955 kB]
+Fetched 10.3 MB in 1s (7646 kB/s)
+Reading package lists...
+W: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/InRelease: Key is stored in legacy trusted.gpg keyring (/etc/apt/trusted.gpg), see the DEPRECATION section in apt-key(8) for details.
+Reading package lists...
+Building dependency tree...
+Reading state information...
+libegl1 is already the newest version (1.7.0-1build1).
+libgl1 is already the newest version (1.7.0-1build1).
+libgles2 is already the newest version (1.7.0-1build1).
+libglvnd0 is already the newest version (1.7.0-1build1).
+0 upgraded, 0 newly installed, 0 to remove and 54 not upgraded.
+==========================================
+Setup complete!
+PyTorch build verification:
+PyTorch version: 2.11.0.dev20260112+cu130
+CUDA available: True
+cuDNN is_available: True
+cuDNN enabled: True
+cuDNN version: 91501
+NCCL available: True
+Conv2d on CUDA: OK (should use cuDNN)
+==========================================
+wandb: Appending key for api.wandb.ai to your netrc file: /root/.netrc
+wandb: W&B API key is configured. Use `wandb login --relogin` to force relogin
+/root/torchrl/lib/python3.12/site-packages/hydra/_internal/hydra.py:119: UserWarning: Future Hydra versions will no longer change working directory at job runtime by default.
+See https://hydra.cc/docs/1.2/upgrades/1.1_to_1.2/changes_to_job_working_dir/ for more information.
+  ret = run_job(
+wandb: Currently logged in as: vmoens to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run togmt63u
+wandb: Tracking run with wandb version 0.23.1
+wandb: Run data is saved locally in dreamer_logging/wandb/run-20260113_014851-togmt63u
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run Dreamer_cheetah-run-0_89c25cfe_26_01_13-01_48_50
+wandb: ⭐️ View project at https://wandb.ai/vmoens/dreamer-v1
+wandb: 🚀 View run at https://wandb.ai/vmoens/dreamer-v1/runs/togmt63u
+[2026-01-13 01:48:52,788][absl][INFO] - MUJOCO_GL=egl, attempting to import specified OpenGL backend.
+[2026-01-13 01:48:52,793][OpenGL.platform.ctypesloader][INFO] - Failed to load library ( 'libOpenGL.so.0' ): libOpenGL.so.0: cannot open shared object file: No such file or directory
+[2026-01-13 01:48:52,794][OpenGL.acceleratesupport][INFO] - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+[2026-01-13 01:48:52,802][OpenGL.platform.ctypesloader][INFO] - Failed to load library ( 'libOpenGL.so.0' ): libOpenGL.so.0: cannot open shared object file: No such file or directory
+[2026-01-13 01:48:52,852][OpenGL.platform.ctypesloader][INFO] - Failed to load library ( 'libOpenGL.so.0' ): libOpenGL.so.0: cannot open shared object file: No such file or directory
+[2026-01-13 01:48:52,853][absl][INFO] - MuJoCo library version is: 3.4.0
+[92m2026-01-13 01:49:00,011 [torchrl][INFO][0m    check_env_specs succeeded![92m [END][0m
+[92m2026-01-13 01:49:01,212 [torchrl][INFO][0m    check_env_specs succeeded![92m [END][0m
+[92m2026-01-13 01:49:01,890 [torchrl][INFO][0m    check_env_specs succeeded![92m [END][0m
+[92m2026-01-13 01:49:01,939 [torchrl][INFO][0m    Allocated 7 collectors to devices: [cuda:1, cuda:2, cuda:3, cuda:4, cuda:5, cuda:6, cuda:7]. Training on cuda:0.[92m [END][0m
+[92m2026-01-13 01:49:35,311 [torchrl][INFO][0m    Enabling collector profiling: workers=[0], num_rollouts=5, warmup_rollouts=2, init_random_frames_override=0[92m [END][0m
+[92m2026-01-13 01:49:35,312 [torchrl][INFO][0m    Worker 0: Profiling started. Will profile rollouts 2 to 4.[92m [END][0m
+Optim steps:   0%|          | 0/50 [00:00<?, ?it/s][92m2026-01-13 01:49:35,314 [torchrl][INFO][0m    Profiling enabled: running 50 optim steps (skip_first=1, warmup=1, active=1)[92m [END][0m
+[92m2026-01-13 01:49:35,315 [torchrl][INFO][0m    Starting async collection...[92m [END][0m
+[92m2026-01-13 01:49:35,315 [torchrl][INFO][0m    Collector profiling: overriding init_random_frames to 0[92m [END][0m
+[92m2026-01-13 01:49:35,315 [torchrl][INFO][0m    Waiting for 0 initial frames before training...[92m [END][0m
+[92m2026-01-13 01:49:35,315 [torchrl][INFO][0m    Collected 0 frames (random frames phase complete: 0 frames). Starting training...[92m [END][0m
+[92m2026-01-13 01:49:35,315 [torchrl][INFO][0m    NOTE: From now on, collectors will use the policy instead of random actions. Policy outputs keys like 'encoded_latents', 'loc', 'scale' that weren't present during random collection.[92m [END][0m
