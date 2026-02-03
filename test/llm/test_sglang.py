@@ -41,9 +41,9 @@ def tokenizer():
 
 
 # Maximum allowed time for SGLang server startup (seconds)
-# First-run CUDA kernel compilation can take 5-10 minutes on fresh environments.
+# First-run CUDA kernel compilation can take 10-15 minutes on fresh CI environments.
 # We use a generous timeout to accommodate CI environments without pre-warming.
-SGLANG_STARTUP_TIMEOUT = 600
+SGLANG_STARTUP_TIMEOUT = 900
 
 
 @pytest.fixture(scope="module")
@@ -102,7 +102,7 @@ def sample_history():
 
 @pytest.mark.gpu
 @pytest.mark.slow
-@pytest.mark.timeout(700)  # Allow 10+ minutes for first-run CUDA kernel compilation
+@pytest.mark.timeout(1000)  # Allow 15+ minutes for first-run CUDA kernel compilation
 @pytest.mark.skipif(not _has_sglang, reason="sglang not available")
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
 class TestAsyncSGLangIntegration:
@@ -233,7 +233,7 @@ class TestAsyncSGLangIntegration:
 @pytest.mark.gpu
 @pytest.mark.gpu
 @pytest.mark.slow
-@pytest.mark.timeout(700)  # Allow 10+ minutes for first-run CUDA kernel compilation
+@pytest.mark.timeout(1000)  # Allow 15+ minutes for first-run CUDA kernel compilation
 @pytest.mark.skipif(not _has_sglang, reason="sglang not available")
 @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
