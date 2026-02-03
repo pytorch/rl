@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.envs.TransformedEnvConfig
-=============================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.envs
-
-.. autoclass:: TransformedEnvConfig

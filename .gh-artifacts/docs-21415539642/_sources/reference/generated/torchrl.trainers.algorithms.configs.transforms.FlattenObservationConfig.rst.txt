@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.transforms.FlattenObservationConfig
-=======================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
-
-.. autoclass:: FlattenObservationConfig

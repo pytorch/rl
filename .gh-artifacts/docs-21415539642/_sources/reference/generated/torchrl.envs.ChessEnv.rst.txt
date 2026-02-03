@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.envs
-
-
-ChessEnv
-========
-
-.. autoclass:: ChessEnv
-    :members:
-    :inherited-members:

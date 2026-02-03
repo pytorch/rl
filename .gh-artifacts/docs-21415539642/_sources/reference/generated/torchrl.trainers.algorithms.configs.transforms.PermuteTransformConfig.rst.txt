@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.transforms.PermuteTransformConfig
-=====================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
-
-.. autoclass:: PermuteTransformConfig

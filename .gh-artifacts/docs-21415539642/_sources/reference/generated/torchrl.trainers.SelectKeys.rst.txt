@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.trainers
-
-
-SelectKeys
-==========
-
-.. autoclass:: SelectKeys
-    :members:
-    :inherited-members:

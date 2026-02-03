@@ -1,7 +1,0 @@
-﻿.. currentmodule:: torchrl.envs
-
-
-gym_backend
-===========
-
-.. autofunction:: gym_backend
