@@ -191,33 +191,21 @@ class SGLangCollectiveTransport:
         # Step 2: Initialize trainer's NCCL communicator
         torch.cuda.set_device(self.device)
 
-        try:
-            from vllm.distributed.device_communicators.pynccl import PyNcclCommunicator
-            from vllm.distributed.utils import StatelessProcessGroup
+        # Use SGLang's native NCCL utilities (no vLLM dependency)
+        from sglang.srt.distributed.device_communicators.pynccl import (
+            PyNcclCommunicator,
+        )
+        from sglang.srt.distributed.utils import StatelessProcessGroup
 
-            pg = StatelessProcessGroup.create(
-                host=self.master_address,
-                port=self.master_port,
-                rank=0,
-                world_size=self.world_size,
-            )
-            self._comm_group = PyNcclCommunicator(
-                pg, device=torch.device(f"cuda:{self.device}")
-            )
-        except ImportError:
-            # Fallback to torch.distributed if vLLM not available
-            torchrl_logger.warning(
-                "vLLM not available, falling back to torch.distributed for NCCL init. "
-                "This may not be compatible with SGLang's NCCL implementation."
-            )
-            if not torch.distributed.is_initialized():
-                torch.distributed.init_process_group(
-                    backend="nccl",
-                    init_method=f"tcp://{self.master_address}:{self.master_port}",
-                    rank=0,
-                    world_size=self.world_size,
-                )
-            self._comm_group = torch.distributed.distributed_c10d._get_default_group()
+        pg = StatelessProcessGroup.create(
+            host=self.master_address,
+            port=self.master_port,
+            rank=0,
+            world_size=self.world_size,
+        )
+        self._comm_group = PyNcclCommunicator(
+            pg, device=torch.device(f"cuda:{self.device}")
+        )
 
         torchrl_logger.info("NCCL group initialized successfully")
 
