@@ -1230,6 +1230,55 @@ class TestStorages:
             assert torch.allclose(result3["a"], expected3["a"])
             assert torch.allclose(result3["b"], expected3["b"])
 
+    @pytest.mark.parametrize("storage_type", [LazyTensorStorage, TensorStorage])
+    def test_lazy_stacked_tensordict_optimization(self, storage_type):
+        """Test that LazyStackedTensorDict is handled efficiently by storage.
+
+        When a LazyStackedTensorDict is passed to storage.set(), it should
+        unbind the lazy stack and use stack_onto_ to write directly into
+        storage, avoiding the intermediate allocation from materializing
+        the lazy stack.
+        """
+        from tensordict import LazyStackedTensorDict
+
+        # Initialize storage
+        init_data = TensorDict(
+            {"obs": torch.randn(100, 5), "action": torch.randn(100, 2)}, [100]
+        )
+        storage = storage_type(init_data)
+
+        # Create a list of tensordicts (like collector would produce)
+        items = [
+            TensorDict({"obs": torch.randn(5), "action": torch.randn(2)}, [])
+            for _ in range(10)
+        ]
+
+        # Create a LazyStackedTensorDict (what collector will pass to buffer)
+        lazy_stack = LazyStackedTensorDict.lazy_stack(items, dim=0)
+        assert isinstance(lazy_stack, LazyStackedTensorDict)
+
+        # Write to storage - should detect lazy stack and use stack_onto_
+        storage.set(slice(10, 20), lazy_stack)
+
+        # Verify data was written correctly
+        expected = torch.stack(items)
+        result = storage.get(slice(10, 20))
+        assert torch.allclose(result["obs"], expected["obs"])
+        assert torch.allclose(result["action"], expected["action"])
+
+        # Test with tensor indices as well
+        items2 = [
+            TensorDict({"obs": torch.randn(5), "action": torch.randn(2)}, [])
+            for _ in range(10)
+        ]
+        lazy_stack2 = LazyStackedTensorDict.lazy_stack(items2, dim=0)
+        storage.set(torch.arange(30, 40), lazy_stack2)
+
+        expected2 = torch.stack(items2)
+        result2 = storage.get(torch.arange(30, 40))
+        assert torch.allclose(result2["obs"], expected2["obs"])
+        assert torch.allclose(result2["action"], expected2["action"])
+
     @pytest.mark.skipif(
         TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
     )
