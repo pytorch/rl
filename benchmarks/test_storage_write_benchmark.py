@@ -14,7 +14,10 @@ import pytest
 import torch
 
 from tensordict import LazyStackedTensorDict, TensorDict
-from torchrl.data import LazyTensorStorage
+from torchrl.collectors import SyncDataCollector
+from torchrl.data import Bounded, Composite, LazyTensorStorage, ReplayBuffer, Unbounded
+from torchrl.envs import EnvBase
+from torchrl.modules import RandomPolicy
 
 
 # Test configurations: (n_items, img_shape, description)
@@ -176,6 +179,120 @@ class TestStorageWriteBenchmark:
             storage.set(cursor, lazy)
 
         benchmark(lazystack_then_write)
+
+
+class _FastImageEnv(EnvBase):
+    """Fast env with image observations for benchmarking.
+
+    Uses pre-allocated tensors to minimize env step overhead.
+    """
+
+    def __init__(self, img_shape=(4, 84, 84), device=None):
+        super().__init__(device=device)
+        self.img_shape = img_shape
+        self._make_spec()
+        # Pre-allocate to minimize step overhead
+        self._obs = torch.rand(img_shape, device=device)
+
+    def _make_spec(self):
+        self.observation_spec = Composite(
+            pixels=Unbounded(shape=self.img_shape, dtype=torch.float32),
+        )
+        self.action_spec = Bounded(-1, 1, shape=(4,), dtype=torch.float32)
+        self.reward_spec = Unbounded(shape=(1,), dtype=torch.float32)
+        self.done_spec = Unbounded(shape=(1,), dtype=torch.bool)
+
+    def _reset(self, tensordict):
+        return TensorDict(
+            {
+                "pixels": self._obs.clone(),
+                "done": torch.zeros(1, dtype=torch.bool, device=self.device),
+                "terminated": torch.zeros(1, dtype=torch.bool, device=self.device),
+            },
+            batch_size=[],
+        )
+
+    def _step(self, tensordict):
+        return TensorDict(
+            {
+                "pixels": self._obs.clone(),
+                "reward": torch.ones(1, device=self.device),
+                "done": torch.zeros(1, dtype=torch.bool, device=self.device),
+                "terminated": torch.zeros(1, dtype=torch.bool, device=self.device),
+            },
+            batch_size=[],
+        )
+
+    def _set_seed(self, seed):
+        torch.manual_seed(seed)
+
+
+# Collector benchmark configurations: (frames_per_batch, img_shape, description)
+COLLECTOR_CONFIGS = [
+    (100, (4, 84, 84), "atari"),
+    (200, (4, 84, 84), "large_batch"),
+]
+
+
+class TestCollectorIntegrationBenchmark:
+    """Benchmarks for collector + replay buffer integration."""
+
+    @pytest.mark.parametrize("frames_per_batch,img_shape,desc", COLLECTOR_CONFIGS)
+    def test_collector_without_rb(self, benchmark, frames_per_batch, img_shape, desc):
+        """Benchmark collector without replay buffer (baseline).
+
+        The collector stacks frames into a contiguous buffer internally.
+        User then manually extends the replay buffer.
+        """
+        env = _FastImageEnv(img_shape=img_shape)
+        rb = ReplayBuffer(storage=LazyTensorStorage(frames_per_batch * 20))
+
+        collector = SyncDataCollector(
+            env,
+            RandomPolicy(env.action_spec),
+            frames_per_batch=frames_per_batch,
+            total_frames=-1,
+        )
+        collector_iter = iter(collector)
+
+        # Warmup - initialize storage
+        data = next(collector_iter)
+        rb.extend(data)
+
+        def collect_and_extend():
+            data = next(collector_iter)
+            rb.extend(data)
+
+        benchmark(collect_and_extend)
+        collector.shutdown()
+
+    @pytest.mark.parametrize("frames_per_batch,img_shape,desc", COLLECTOR_CONFIGS)
+    def test_collector_with_rb(self, benchmark, frames_per_batch, img_shape, desc):
+        """Benchmark collector with replay buffer attached (optimized path).
+
+        The collector uses lazy stacks and the storage writes directly
+        without intermediate contiguous allocation.
+        """
+        env = _FastImageEnv(img_shape=img_shape)
+        rb = ReplayBuffer(storage=LazyTensorStorage(frames_per_batch * 20))
+
+        collector = SyncDataCollector(
+            env,
+            RandomPolicy(env.action_spec),
+            frames_per_batch=frames_per_batch,
+            total_frames=-1,
+            replay_buffer=rb,
+        )
+        collector_iter = iter(collector)
+
+        # Warmup - initialize storage
+        next(collector_iter)
+
+        def collect_with_rb():
+            next(collector_iter)
+
+        benchmark(collect_with_rb)
+        collector.shutdown()
 
 
 if __name__ == "__main__":
