@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.envs.llm.transforms
-
-
-PolicyVersion
-=============
-
-.. autoclass:: PolicyVersion
-    :members:
-    :inherited-members:

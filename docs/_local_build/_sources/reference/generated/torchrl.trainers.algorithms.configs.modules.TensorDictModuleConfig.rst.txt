@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig
-==================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.modules
-
-.. autoclass:: TensorDictModuleConfig

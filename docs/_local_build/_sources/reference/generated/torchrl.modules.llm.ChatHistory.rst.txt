@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.modules.llm
-
-
-ChatHistory
-===========
-
-.. autoclass:: ChatHistory
-    :members:
-    :inherited-members:

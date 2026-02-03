@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.trainers.TrainerConfig
-==========================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.trainers
-
-.. autoclass:: TrainerConfig

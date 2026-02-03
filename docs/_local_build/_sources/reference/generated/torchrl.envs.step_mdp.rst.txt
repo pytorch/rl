@@ -1,7 +1,0 @@
-﻿.. currentmodule:: torchrl.envs
-
-
-step_mdp
-========
-
-.. autofunction:: step_mdp

@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.weight_update.llm
-
-
-VLLMDoubleBufferWeightSender
-============================
-
-.. autoclass:: VLLMDoubleBufferWeightSender
-    :members:
-    :inherited-members:

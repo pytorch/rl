@@ -1,8 +1,0 @@
-﻿.. currentmodule:: torchrl.modules
-
-
-ValueOperator
-=============
-
-.. autoclass:: ValueOperator
-    :members:

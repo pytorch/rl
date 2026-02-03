@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-PrioritizedReplayBuffer
-=======================
-
-.. autoclass:: PrioritizedReplayBuffer
-    :members:
-    :inherited-members:
