@@ -110,10 +110,10 @@ def train(
     if cfg.model.compile:
         loss_fn = torch.compile(loss_fn)
 
-    vllm_engine = inference_policy.model
+    inference_engine = inference_policy.model
 
     # Create weight sync scheme
-    weight_sync_scheme = make_weight_sync_scheme(vllm_engine=vllm_engine)
+    weight_sync_scheme = make_weight_sync_scheme(engine=inference_engine, cfg=cfg)
 
     # Set up weight sender
     torchrl_logger.info("Setting up weight synchronization scheme...")
@@ -123,7 +123,7 @@ def train(
     # Initialize collective group
     torchrl_logger.info("Initializing collective group...")
     metadata = get_model_metadata(policy_training)
-    sender.init_all_workers_group(metadata, vllm_engine=vllm_engine)
+    sender.init_all_workers_group(metadata, vllm_engine=inference_engine)
 
     # First weight update
     with timeit("update_policy_weights"):
