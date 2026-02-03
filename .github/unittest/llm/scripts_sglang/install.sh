@@ -96,10 +96,19 @@ python -c "import torchrl"
 printf "* Installing SGLang dependencies\n"
 uv pip install transformers accelerate datasets
 
+# Install system dependencies required by SGLang
+# libnuma is required by sgl_kernel
+printf "* Installing system dependencies for SGLang\n"
+apt-get update && apt-get install -y libnuma-dev
+
 # Install SGLang with all extras
 # Note: We do NOT install vLLM here to avoid Triton version conflicts
 printf "* Installing SGLang\n"
 uv pip install "sglang[all]"
+
+# Install sgl_kernel separately to ensure it's properly installed
+printf "* Installing sgl_kernel\n"
+uv pip install --upgrade sgl_kernel
 
 # Install MCP dependencies for tool execution tests
 printf "* Installing MCP dependencies (uvx, Deno)\n"
