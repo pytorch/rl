@@ -1079,23 +1079,6 @@ class TensorStorage(Storage):
         if set_cursor:
             self._last_cursor = cursor
 
-        # Handle LazyStackedTensorDict: unbind and stack directly into storage
-        # This avoids the intermediate allocation that would occur if we materialized
-        # the lazy stack first. The collector can pass lazy stacks to defer stacking
-        # until we write directly into the storage buffer.
-        if isinstance(data, LazyStackedTensorDict):
-            stack_dim = data.stack_dim
-            tensordicts = data.unbind(stack_dim)
-            if self._can_stack_directly(cursor):
-                if set_cursor:
-                    self._len = min(self._len + len(tensordicts), self.max_size)
-                try:
-                    self._stack_into_storage(cursor, tensordicts)
-                    return
-                except Exception:
-                    # Fall back to materializing the lazy stack
-                    data = data.contiguous()
-
         if isinstance(data, list):
             # Check if we can stack directly into storage (optimization)
             if self._can_stack_directly(cursor):
@@ -1164,19 +1147,6 @@ class TensorStorage(Storage):
     ):
         if set_cursor:
             self._last_cursor = cursor
-
-        # Handle LazyStackedTensorDict: unbind and stack directly into storage
-        if isinstance(data, LazyStackedTensorDict):
-            stack_dim = data.stack_dim
-            tensordicts = data.unbind(stack_dim)
-            if self._can_stack_directly(cursor):
-                if set_cursor:
-                    self._len = min(self._len + len(tensordicts), self.max_size)
-                try:
-                    self._stack_into_storage(cursor, tensordicts)
-                    return
-                except Exception:
-                    data = data.contiguous()
 
         if isinstance(data, list):
             # Check if we can stack directly into storage (optimization)
