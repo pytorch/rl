@@ -1,0 +1,23 @@
+# Specialized image for Habitat-sim tests
+# Habitat requires specific dependencies and potentially different CUDA version
+
+ARG CUDA_VERSION=12.1.1
+ARG PYTHON_VERSION=3.9
+ARG BASE_TAG=nightly-cuda12.1-py3.9
+
+FROM ghcr.io/pytorch/torchrl-ci:${BASE_TAG}
+
+# Install Habitat-specific dependencies
+RUN uv pip install \
+    habitat-sim \
+    habitat-lab \
+    # Additional habitat dependencies
+    && python -c "import habitat"
+
+# Pre-download Habitat test assets if needed
+# RUN python -c "import habitat_sim; habitat_sim.utils.data.download_test_data()"
+
+LABEL org.opencontainers.image.description="TorchRL CI image with Habitat support"
+
+CMD ["/bin/bash"]
+

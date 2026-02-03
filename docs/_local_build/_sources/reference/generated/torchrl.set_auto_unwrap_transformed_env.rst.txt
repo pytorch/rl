@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl
+
+
+set_auto_unwrap_transformed_env
+===============================
+
+.. autoclass:: set_auto_unwrap_transformed_env
+    :members:
+    :inherited-members:

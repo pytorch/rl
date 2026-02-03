@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.transforms.BurnInTransformConfig
+====================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
+
+.. autoclass:: BurnInTransformConfig
