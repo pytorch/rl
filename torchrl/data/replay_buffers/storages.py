@@ -1010,64 +1010,6 @@ class TensorStorage(Storage):
             numel = leaf.shape[:ndim].numel()
         self._len = min(self._len + numel, self.max_size)
 
-    def _can_stack_directly(self, cursor) -> bool:
-        """Check if cursor represents a contiguous region for direct stacking.
-
-        Returns True if we can use torch.stack(..., out=storage[cursor]) directly,
-        eliminating the intermediate allocation from _flip_list().
-
-        Args:
-            cursor: The index/slice to write to.
-
-        Returns:
-            bool: True if direct stacking is possible.
-        """
-        if not self.initialized:
-            return False
-        # Slices are always contiguous
-        if isinstance(cursor, slice):
-            return True
-        # Tensor indices: check if they form a contiguous range
-        if isinstance(cursor, torch.Tensor) and cursor.ndim == 1:
-            if cursor.numel() <= 1:
-                return False
-            # Check if indices are consecutive: [i, i+1, i+2, ...]
-            diffs = cursor[1:] - cursor[:-1]
-            return bool((diffs == 1).all())
-        return False
-
-    def _stack_into_storage(self, cursor, data: list):
-        """Stack list items directly into storage slice, avoiding intermediate allocation.
-
-        This is an optimization over _flip_list() which creates an intermediate tensor.
-        By stacking directly into the storage slice, we save one memory allocation and copy.
-
-        Args:
-            cursor: The index/slice to write to (must be contiguous).
-            data: A list of items to stack.
-        """
-        if is_tensor_collection(data[0]):
-            # TensorDict case: get the storage slice and stack each field directly
-            storage_slice = self._storage[cursor]
-            # Use update_ with stacked data - this handles nested keys
-            # We stack first (creating intermediate) but could optimize further
-            # by iterating leaves and using torch.stack(..., out=...)
-            stacked = torch.stack(data)
-            storage_slice.update_(stacked)
-        else:
-            # PyTree case: stack each leaf directly into storage
-            storage_slice = self._storage[cursor]
-            if isinstance(storage_slice, torch.Tensor):
-                # Simple tensor storage
-                torch.stack(data, out=storage_slice)
-            else:
-                # PyTree storage - iterate leaves
-                flat_storage = tree_flatten(storage_slice)[0]
-                flat_data = [tree_flatten(item)[0] for item in data]
-                for i, store_leaf in enumerate(flat_storage):
-                    leaves_to_stack = [fd[i] for fd in flat_data]
-                    torch.stack(leaves_to_stack, out=store_leaf)
-
     @implement_for("torch", "2.0", None, compilable=True)
     def set(
         self,
@@ -1080,20 +1022,7 @@ class TensorStorage(Storage):
             self._last_cursor = cursor
 
         if isinstance(data, list):
-            # Check if we can stack directly into storage (optimization)
-            if self._can_stack_directly(cursor):
-                # Update length first
-                if set_cursor:
-                    # For list data, compute length from first element
-                    self._len = min(self._len + len(data), self.max_size)
-                # Stack directly into storage slice - avoids intermediate allocation
-                try:
-                    self._stack_into_storage(cursor, data)
-                    return
-                except Exception:
-                    # Fall back to _flip_list if direct stacking fails
-                    pass
-            # Standard path: flip list to stacked tensor
+            # flip list
             try:
                 data = _flip_list(data)
             except Exception:
@@ -1149,18 +1078,7 @@ class TensorStorage(Storage):
             self._last_cursor = cursor
 
         if isinstance(data, list):
-            # Check if we can stack directly into storage (optimization)
-            if self._can_stack_directly(cursor):
-                # Update length first
-                if set_cursor:
-                    self._len = min(self._len + len(data), self.max_size)
-                # Stack directly into storage slice
-                try:
-                    self._stack_into_storage(cursor, data)
-                    return
-                except Exception:
-                    pass
-            # Standard path: flip list to stacked tensor
+            # flip list
             try:
                 data = _flip_list(data)
             except Exception:
