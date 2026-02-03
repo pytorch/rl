@@ -1,0 +1,51 @@
+# Base image for TorchRL CI
+# This includes system dependencies and Python environment setup
+# Build args allow customization for different CUDA/Python versions
+
+ARG CUDA_VERSION=12.4.0
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04
+
+# Avoid interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# System dependencies
+RUN apt-get update && apt-get upgrade -y && \
+    apt-get install -y \
+        vim git wget curl cmake \
+        # OpenGL and graphics dependencies
+        libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev \
+        libglvnd0 libgl1 libglx0 libegl1 libgles2 \
+        # X virtual framebuffer for headless rendering
+        xvfb \
+        # Build tools
+        g++ gcc \
+        # Networking tools
+        ca-certificates \
+        # Cleanup in same layer to reduce image size
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# NVIDIA EGL vendor configuration
+COPY 10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
+
+# Install uv package manager (faster than pip)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
+# Set git config for CI
+RUN git config --global --add safe.directory '*'
+
+# Environment variables for rendering
+ENV MUJOCO_GL=egl \
+    SDL_VIDEODRIVER=dummy \
+    PYOPENGL_PLATFORM=egl \
+    DISPLAY=:99 \
+    LAZY_LEGACY_OP=False \
+    RL_LOGGING_LEVEL=INFO \
+    TOKENIZERS_PARALLELISM=true \
+    MKL_THREADING_LAYER=GNU
+
+# Start Xvfb in the background by default
+# (Can be overridden in entrypoint if needed)
+CMD ["/bin/bash"]
+

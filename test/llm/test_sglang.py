@@ -43,7 +43,7 @@ def tokenizer():
 # Maximum allowed time for SGLang server startup (seconds)
 # With --disable-cuda-graph, startup should be fast (< 2 minutes).
 # We use a generous timeout to accommodate model loading and initialization.
-SGLANG_STARTUP_TIMEOUT = 180
+SGLANG_STARTUP_TIMEOUT = 300
 
 
 @pytest.fixture(scope="module")

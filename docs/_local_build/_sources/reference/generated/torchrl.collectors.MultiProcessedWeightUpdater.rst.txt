@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.collectors
+
+
+MultiProcessedWeightUpdater
+===========================
+
+.. autoclass:: MultiProcessedWeightUpdater
+    :members:
+    :inherited-members:

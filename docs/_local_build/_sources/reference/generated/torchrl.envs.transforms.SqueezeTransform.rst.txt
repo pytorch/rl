@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms
+
+
+SqueezeTransform
+================
+
+.. autoclass:: SqueezeTransform
+    :members:

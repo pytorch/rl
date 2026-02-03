@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.record
+
+
+TensorDictRecorder
+==================
+
+.. autofunction:: TensorDictRecorder
