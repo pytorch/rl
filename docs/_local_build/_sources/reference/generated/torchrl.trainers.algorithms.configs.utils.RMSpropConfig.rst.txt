@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.utils.RMSpropConfig
+=======================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.utils
+
+.. autoclass:: RMSpropConfig

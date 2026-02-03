@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.modules.llm
+
+
+RemoteTransformersWrapper
+=========================
+
+.. autoclass:: RemoteTransformersWrapper
+    :members:
+    :inherited-members:

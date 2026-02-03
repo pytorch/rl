@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.envs\_libs.VmasEnvConfig
+============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.envs_libs
+
+.. autoclass:: VmasEnvConfig
