@@ -42,7 +42,7 @@ echo "  PROF_ITERATIONS=50-55"
 echo "  Output: $TRACE_DIR"
 echo ""
 
-# Run dreamer with distributed profiling
+# Run dreamer with distributed profiling via prof
 # Use WANDB_MODE=disabled to avoid login requirement for profiling
 PROF_ENABLED=1 \
 PROF_ITERATIONS=50-55 \
