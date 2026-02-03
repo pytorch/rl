@@ -1,6 +1,0 @@
-# Don't copy unnecessary files into Docker context
-*.md
-build.sh
-.git
-.gitignore
-
