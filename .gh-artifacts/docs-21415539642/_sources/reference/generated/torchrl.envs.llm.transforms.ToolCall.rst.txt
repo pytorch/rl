@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.envs.llm.transforms
-
-
-ToolCall
-========
-
-.. autoclass:: ToolCall
-    :members:
-    :inherited-members:

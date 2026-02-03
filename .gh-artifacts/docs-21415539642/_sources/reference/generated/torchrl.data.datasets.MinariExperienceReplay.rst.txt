@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data.datasets
-
-
-MinariExperienceReplay
-======================
-
-.. autoclass:: MinariExperienceReplay
-    :members:
-    :inherited-members:

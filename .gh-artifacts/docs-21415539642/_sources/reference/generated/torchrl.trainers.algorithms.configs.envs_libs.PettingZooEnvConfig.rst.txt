@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.envs\_libs.PettingZooEnvConfig
-==================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.envs_libs
-
-.. autoclass:: PettingZooEnvConfig

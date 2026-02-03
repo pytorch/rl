@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.weight_update.llm
-
-
-VLLMWeightSender
-================
-
-.. autoclass:: VLLMWeightSender
-    :members:
-    :inherited-members:

@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.weight_update.llm
-
-
-get_model_metadata
-==================
-
-.. autoclass:: get_model_metadata
-    :members:
-    :inherited-members:

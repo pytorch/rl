@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data.replay_buffers
-
-
-CompressedListStorageCheckpointer
-=================================
-
-.. autoclass:: CompressedListStorageCheckpointer
-    :members:
-    :inherited-members:

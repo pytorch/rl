@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.trainers
-
-
-Trainer
-=======
-
-.. autoclass:: Trainer
-    :members:
-    :inherited-members:

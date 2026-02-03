@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.transforms.InitTrackerConfig
-================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
-
-.. autoclass:: InitTrackerConfig
