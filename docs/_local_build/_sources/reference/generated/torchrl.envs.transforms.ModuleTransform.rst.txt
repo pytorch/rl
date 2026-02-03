@@ -1,8 +1,0 @@
-﻿.. currentmodule:: torchrl.envs.transforms
-
-
-ModuleTransform
-===============
-
-.. autoclass:: ModuleTransform
-    :members:

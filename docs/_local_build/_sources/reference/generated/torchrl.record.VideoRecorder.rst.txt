@@ -1,7 +1,0 @@
-﻿.. currentmodule:: torchrl.record
-
-
-VideoRecorder
-=============
-
-.. autofunction:: VideoRecorder

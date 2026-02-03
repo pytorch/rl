@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.collectors.llm
-
-
-RayLLMCollector
-===============
-
-.. autoclass:: RayLLMCollector
-    :members:
-    :inherited-members:

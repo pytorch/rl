@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.envs
-
-
-PendulumEnv
-===========
-
-.. autoclass:: PendulumEnv
-    :members:
-    :inherited-members:

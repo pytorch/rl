@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.trainers
-
-
-ClearCudaCache
-==============
-
-.. autoclass:: ClearCudaCache
-    :members:
-    :inherited-members:

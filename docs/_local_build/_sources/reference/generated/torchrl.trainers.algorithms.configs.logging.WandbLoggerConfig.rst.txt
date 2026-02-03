@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.logging.WandbLoggerConfig
-=============================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.logging
-
-.. autoclass:: WandbLoggerConfig

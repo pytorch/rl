@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.collectors.distributed
-
-
-RPCDataCollector
-================
-
-.. autoclass:: RPCDataCollector
-    :members:
-    :inherited-members:

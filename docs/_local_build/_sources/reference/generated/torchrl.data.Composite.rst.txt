@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-Composite
-=========
-
-.. autoclass:: Composite
-    :members:
-    :inherited-members:

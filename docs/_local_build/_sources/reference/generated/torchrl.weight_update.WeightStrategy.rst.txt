@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.weight_update
-
-
-WeightStrategy
-==============
-
-.. autoclass:: WeightStrategy
-    :members:
-    :inherited-members:

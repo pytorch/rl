@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.transforms.AutoResetTransformConfig
-=======================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
-
-.. autoclass:: AutoResetTransformConfig

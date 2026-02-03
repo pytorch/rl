@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.envs.llm.transforms
-
-
-XMLBlockParser
-==============
-
-.. autoclass:: XMLBlockParser
-    :members:
-    :inherited-members:
