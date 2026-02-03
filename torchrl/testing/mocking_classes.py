@@ -2718,3 +2718,70 @@ class EnvThatErrorsBecauseOfStack(EnvBase):
 
     def _set_seed(self, seed: int | None) -> None:
         return 0
+
+
+class FastImageEnv(EnvBase):
+    """Fast environment with image observations for benchmarking.
+
+    This environment uses pre-allocated tensors to minimize step overhead,
+    making it ideal for benchmarking collector and storage performance.
+
+    Args:
+        img_shape: Shape of the image observation (C, H, W). Default: (4, 84, 84).
+        device: Device to create tensors on. Default: None (CPU).
+        batch_size: Batch size of the environment. Default: ().
+    """
+
+    def __init__(self, img_shape=(4, 84, 84), device=None, batch_size=()):
+        super().__init__(device=device, batch_size=batch_size)
+        self.img_shape = img_shape
+        self._make_spec()
+        # Pre-allocate to minimize step overhead
+        self._obs = torch.rand(*batch_size, *img_shape, device=device)
+
+    def _make_spec(self):
+        self.observation_spec = Composite(
+            pixels=Unbounded(
+                shape=(*self.batch_size, *self.img_shape), dtype=torch.float32
+            ),
+            shape=self.batch_size,
+        )
+        self.action_spec = Bounded(
+            -1, 1, shape=(*self.batch_size, 4), dtype=torch.float32
+        )
+        self.reward_spec = Unbounded(shape=(*self.batch_size, 1), dtype=torch.float32)
+        self.done_spec = Unbounded(shape=(*self.batch_size, 1), dtype=torch.bool)
+
+    def _reset(self, tensordict):
+        return TensorDict(
+            {
+                "pixels": self._obs.clone(),
+                "done": torch.zeros(
+                    *self.batch_size, 1, dtype=torch.bool, device=self.device
+                ),
+                "terminated": torch.zeros(
+                    *self.batch_size, 1, dtype=torch.bool, device=self.device
+                ),
+            },
+            batch_size=self.batch_size,
+        )
+
+    def _step(self, tensordict):
+        return TensorDict(
+            {
+                "pixels": self._obs.clone(),
+                "reward": torch.ones(
+                    *self.batch_size, 1, dtype=torch.float32, device=self.device
+                ),
+                "done": torch.zeros(
+                    *self.batch_size, 1, dtype=torch.bool, device=self.device
+                ),
+                "terminated": torch.zeros(
+                    *self.batch_size, 1, dtype=torch.bool, device=self.device
+                ),
+            },
+            batch_size=self.batch_size,
+        )
+
+    def _set_seed(self, seed):
+        torch.manual_seed(seed)
