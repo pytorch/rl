@@ -35,9 +35,8 @@ optimization:
   lmbda: 0.95
   imagination_horizon: 15
   compile:
-    # Disabled by default - world_model has RSSM loop that causes CUDA graph issues
-    # Can enable with: optimization.compile.enabled=true 'optimization.compile.losses=[actor,value]'
-    enabled: False
+    # Note: world_model has RSSM loop that can cause CUDA graph issues
+    enabled: True
     backend: inductor # or cudagraphs
     mode: default  # avoid reduce-overhead which uses CUDA graphs
     # Which losses to compile (subset of: world_model, actor, value)
