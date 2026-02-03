@@ -20,7 +20,9 @@ permissions:
   contents: read
 
 jobs:
-  unittests:
+  # Job 1: vLLM tests (uses conda + pip)
+  # Runs all LLM tests EXCEPT SGLang tests
+  unittests-vllm:
     if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && contains(join(github.event.pull_request.labels.*.name, ', '), 'llm/')) }}
     strategy:
       matrix:
@@ -30,8 +32,6 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "linux.g6.4xlarge.experimental.nvidia.gpu"
-      # gpu-arch-type: cuda
-      # gpu-arch-version: "11.7"
       docker-image: "pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel"
       timeout: 60
       script: |
@@ -55,3 +55,41 @@ jobs:
         bash .github/unittest/llm/scripts_llm/install.sh
         bash .github/unittest/llm/scripts_llm/run_test.sh
         bash .github/unittest/llm/scripts_llm/post_process.sh
+
+  # Job 2: SGLang tests (uses uv, separate from vLLM due to Triton version conflicts)
+  # SGLang requires a different Triton version than vLLM, so we run it in a separate job
+  unittests-sglang:
+    if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && contains(join(github.event.pull_request.labels.*.name, ', '), 'llm/')) }}
+    strategy:
+      matrix:
+        python_version: ["3.12"]
+        cuda_arch_version: ["12.9"]
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g6.4xlarge.experimental.nvidia.gpu"
+      docker-image: "pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel"
+      timeout: 60
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.12"
+        export CU_VERSION="cu129"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export TD_GET_DEFAULTS_TO_NONE=1
+
+        # Use SGLang-specific scripts that use uv and don't install vLLM
+        # This avoids Triton version conflicts between vLLM and SGLang
+        bash .github/unittest/llm/scripts_sglang/setup_env.sh
+        bash .github/unittest/llm/scripts_sglang/install.sh
+        bash .github/unittest/llm/scripts_sglang/run_test.sh
+        bash .github/unittest/llm/scripts_sglang/post_process.sh
