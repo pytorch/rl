@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.transforms.KLRewardTransformConfig
-======================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
-
-.. autoclass:: KLRewardTransformConfig

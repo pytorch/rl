@@ -1,8 +1,0 @@
-﻿.. currentmodule:: torchrl.objectives
-
-
-DiscreteIQLLoss
-===============
-
-.. autoclass:: DiscreteIQLLoss
-    :members:

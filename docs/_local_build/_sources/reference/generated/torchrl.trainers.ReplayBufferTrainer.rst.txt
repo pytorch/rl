@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.trainers
-
-
-ReplayBufferTrainer
-===================
-
-.. autoclass:: ReplayBufferTrainer
-    :members:
-    :inherited-members:

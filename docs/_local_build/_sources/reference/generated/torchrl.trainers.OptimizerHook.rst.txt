@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.trainers
-
-
-OptimizerHook
-=============
-
-.. autoclass:: OptimizerHook
-    :members:
-    :inherited-members:

@@ -1,7 +1,0 @@
-﻿.. currentmodule:: torchrl.record.loggers.wandb
-
-
-WandbLogger
-===========
-
-.. autofunction:: WandbLogger

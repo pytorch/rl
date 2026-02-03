@@ -1,8 +1,0 @@
-﻿.. currentmodule:: torchrl.objectives.value
-
-
-TD0Estimator
-============
-
-.. autoclass:: TD0Estimator
-    :members:
