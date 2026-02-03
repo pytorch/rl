@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.envs\_libs.SMACv2EnvConfig
-==============================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.envs_libs
-
-.. autoclass:: SMACv2EnvConfig

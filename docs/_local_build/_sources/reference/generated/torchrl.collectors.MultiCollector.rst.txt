@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.collectors
-
-
-MultiCollector
-==============
-
-.. autoclass:: MultiCollector
-    :members:
-    :inherited-members:

@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.trainers
-
-
-RewardNormalizer
-================
-
-.. autoclass:: RewardNormalizer
-    :members:
-    :inherited-members:

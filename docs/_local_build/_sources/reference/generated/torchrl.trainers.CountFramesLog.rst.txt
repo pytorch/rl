@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.trainers
-
-
-CountFramesLog
-==============
-
-.. autoclass:: CountFramesLog
-    :members:
-    :inherited-members:

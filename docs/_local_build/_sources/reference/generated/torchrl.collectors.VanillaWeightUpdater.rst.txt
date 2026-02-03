@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.collectors
-
-
-VanillaWeightUpdater
-====================
-
-.. autoclass:: VanillaWeightUpdater
-    :members:
-    :inherited-members:
