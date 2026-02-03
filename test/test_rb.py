@@ -1153,6 +1153,83 @@ class TestStorages:
         assert (rb[:, 10:20] == 0).all()
         assert len(rb) == 100
 
+    @pytest.mark.parametrize("storage_type", [LazyTensorStorage, TensorStorage])
+    @pytest.mark.parametrize("data_type", ["tensor", "tensordict"])
+    def test_stack_onto_optimization(self, storage_type, data_type):
+        """Test the stack_onto_ optimization that avoids intermediate allocations.
+
+        When writing a list of items to contiguous indices, the storage should
+        stack directly into the storage slice rather than creating an intermediate
+        stacked tensor.
+        """
+        if data_type == "tensor":
+            # Initialize storage with tensor data
+            init_data = torch.randn(100, 5)
+            storage = storage_type(init_data)
+            # Create list of items to write
+            items = [torch.randn(5) for _ in range(10)]
+        else:
+            # Initialize storage with tensordict data
+            init_data = TensorDict(
+                {"a": torch.randn(100, 5), "b": torch.randn(100, 3)}, [100]
+            )
+            storage = storage_type(init_data)
+            # Create list of items to write
+            items = [
+                TensorDict({"a": torch.randn(5), "b": torch.randn(3)}, [])
+                for _ in range(10)
+            ]
+
+        # Test with contiguous slice cursor
+        storage.set(slice(10, 20), items)
+        if data_type == "tensor":
+            # Verify data was written correctly
+            expected = torch.stack(items)
+            assert torch.allclose(storage.get(slice(10, 20)), expected)
+        else:
+            expected = torch.stack(items)
+            result = storage.get(slice(10, 20))
+            assert torch.allclose(result["a"], expected["a"])
+            assert torch.allclose(result["b"], expected["b"])
+
+        # Test with contiguous tensor indices
+        indices = torch.arange(30, 40)
+        if data_type == "tensor":
+            items2 = [torch.randn(5) for _ in range(10)]
+        else:
+            items2 = [
+                TensorDict({"a": torch.randn(5), "b": torch.randn(3)}, [])
+                for _ in range(10)
+            ]
+        storage.set(indices, items2)
+        if data_type == "tensor":
+            expected2 = torch.stack(items2)
+            assert torch.allclose(storage.get(indices), expected2)
+        else:
+            expected2 = torch.stack(items2)
+            result2 = storage.get(indices)
+            assert torch.allclose(result2["a"], expected2["a"])
+            assert torch.allclose(result2["b"], expected2["b"])
+
+        # Test with non-contiguous indices (should fall back to _flip_list)
+        non_contiguous = torch.tensor([50, 52, 54, 56, 58])  # gaps
+        if data_type == "tensor":
+            items3 = [torch.randn(5) for _ in range(5)]
+        else:
+            items3 = [
+                TensorDict({"a": torch.randn(5), "b": torch.randn(3)}, [])
+                for _ in range(5)
+            ]
+        storage.set(non_contiguous, items3)
+        if data_type == "tensor":
+            expected3 = torch.stack(items3)
+            assert torch.allclose(storage.get(non_contiguous), expected3)
+        else:
+            expected3 = torch.stack(items3)
+            result3 = storage.get(non_contiguous)
+            assert torch.allclose(result3["a"], expected3["a"])
+            assert torch.allclose(result3["b"], expected3["b"])
+
     @pytest.mark.skipif(
         TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
     )
