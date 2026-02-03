@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.data.TensorDictReplayBufferConfig
-=====================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.data
-
-.. autoclass:: TensorDictReplayBufferConfig

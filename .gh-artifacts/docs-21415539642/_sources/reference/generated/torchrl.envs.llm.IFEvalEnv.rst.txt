@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.envs.llm
-
-
-IFEvalEnv
-=========
-
-.. autoclass:: IFEvalEnv
-    :members:
-    :inherited-members:

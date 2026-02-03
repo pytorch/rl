@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.weight_update
-
-
-MPTransport
-===========
-
-.. autoclass:: MPTransport
-    :members:
-    :inherited-members:

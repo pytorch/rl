@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.weight_update
-
-
-SharedMemWeightSyncScheme
-=========================
-
-.. autoclass:: SharedMemWeightSyncScheme
-    :members:
-    :inherited-members:

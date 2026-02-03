@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.trainers
-
-
-LogScalar
-=========
-
-.. autoclass:: LogScalar
-    :members:
-    :inherited-members:
