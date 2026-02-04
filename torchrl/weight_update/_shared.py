@@ -61,20 +61,46 @@ class SharedMemTransport:
         return self._unique_weights
 
     def register_weights(
-        self, params_map: dict[int, mp.Queue], init_queues: dict[int, mp.Queue]
+        self,
+        params_map: dict[int, mp.Queue],
+        init_queues: dict[int, mp.Queue],
+        per_worker: bool = False,
     ) -> None:
-        """Initialize per-worker queues for shared memory buffer distribution."""
+        """Initialize per-worker queues for shared memory buffer distribution.
+
+        Args:
+            params_map: Mapping of worker_idx to weights TensorDict.
+            init_queues: Mapping of worker_idx to initialization queues.
+            per_worker: If True, each worker gets its own independent weight copy
+                (for distinct policy factories). If False, workers on the same
+                device share the same weight buffer (device-based deduplication).
+        """
         from torchrl.collectors.utils import _cast
 
         self._weight_queues = init_queues
         self._params_map = params_map
-        # Create set of the unique weights
-        self._unique_weights = []
-        for weights in params_map.values():
-            if id(weights) in [id(w) for w in self._unique_weights]:
-                continue
-            weights = weights.data.apply(_cast, weights)
-            self._unique_weights.append(weights)
+        self._per_worker = per_worker
+
+        if per_worker:
+            # Per-worker mode: each worker gets its own independent weight copy
+            # No deduplication - every worker has unique weights
+            self._unique_weights = []
+            self._worker_to_weights_idx = (
+                {}
+            )  # Maps worker_idx to index in _unique_weights
+            for worker_idx, weights in params_map.items():
+                weights = weights.data.apply(_cast, weights)
+                self._worker_to_weights_idx[worker_idx] = len(self._unique_weights)
+                self._unique_weights.append(weights)
+        else:
+            # Default mode: device-based deduplication
+            # Workers on the same device share the same weight buffer
+            self._unique_weights = []
+            for weights in params_map.values():
+                if id(weights) in [id(w) for w in self._unique_weights]:
+                    continue
+                weights = weights.data.apply(_cast, weights)
+                self._unique_weights.append(weights)
 
     def setup_connection_and_weights_on_sender(self) -> None:
         """Send shared memory buffer reference to workers via their per-worker queues.
@@ -124,40 +150,103 @@ class SharedMemTransport:
         received_weights = worker_queue.get(timeout=timeout)
         return received_weights
 
-    def send_weights(self, weights: Any) -> None:
+    def send_weights(
+        self,
+        weights: TensorDictBase | dict[int, TensorDictBase],
+        worker_ids: list[int] | None = None,
+    ) -> None:
         """Update weights in-place in shared memory.
 
         Args:
-            weights: New weights to send. Can be a TensorDictBase or dict.
+            weights: New weights to send. Can be:
+                - TensorDictBase: Same weights broadcast to all workers (or subset via worker_ids)
+                - dict[int, TensorDictBase]: Per-worker weights (keys are worker indices)
+            worker_ids: Which workers to update (None = all workers). Only used when
+                weights is a TensorDictBase (broadcast mode).
 
         Raises:
             ValueError: If weights type is unsupported.
         """
-        # Update shared memory in-place (workers see this automatically)
-        if isinstance(weights, dict):
-            weights = TensorDict(weights)
-        if not isinstance(weights, TensorDictBase):
-            raise ValueError(f"Unsupported weights type: {type(weights)=}")
-        # Unflatten if needed to match shared buffer structure
+        if self._unique_weights is None:
+            raise RuntimeError("Unique weights not set. Call register_weights() first.")
+
+        # Check if per-worker weights dict is provided
+        if isinstance(weights, dict) and all(
+            isinstance(k, int) for k in weights.keys()
+        ):
+            # Per-worker weights: dict[int, TensorDictBase]
+            if not getattr(self, "_per_worker", False):
+                raise ValueError(
+                    "Per-worker weights dict provided but register_weights() was not "
+                    "called with per_worker=True. Cannot update individual worker weights."
+                )
+            for worker_idx, worker_weights in weights.items():
+                if worker_idx not in self._worker_to_weights_idx:
+                    raise ValueError(f"Worker {worker_idx} not registered.")
+                self._update_single_worker(worker_idx, worker_weights)
+        else:
+            # Broadcast mode: same weights to all (or subset)
+            if isinstance(weights, dict):
+                weights = TensorDict(weights)
+            if not isinstance(weights, TensorDictBase):
+                raise ValueError(f"Unsupported weights type: {type(weights)=}")
+
+            # Unflatten if needed to match shared buffer structure
+            weights_to_update = weights
+            if any("." in key for key in weights.keys()):
+                weights_to_update = weights.unflatten_keys(".")
+
+            # Detach weights to allow in-place updates
+            weights_to_update = weights_to_update.detach()
+
+            if getattr(self, "_per_worker", False) and worker_ids is not None:
+                # Per-worker mode with specific worker_ids - update only those workers
+                for worker_idx in worker_ids:
+                    self._update_single_worker(worker_idx, weights_to_update)
+            else:
+                # Default: update all unique weight buffers
+                for buffer in self._unique_weights:
+                    if buffer.requires_grad:
+                        raise RuntimeError(
+                            "Gradients should not be required for shared memory buffers."
+                        )
+                    if weights_to_update.requires_grad:
+                        raise RuntimeError(
+                            "Gradients should not be required for weights."
+                        )
+                    buffer.update_(weights_to_update, non_blocking=True)
+
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+
+    def _update_single_worker(self, worker_idx: int, weights: TensorDictBase) -> None:
+        """Update weights for a single worker in per-worker mode.
+
+        Args:
+            worker_idx: The worker index.
+            weights: The weights to update.
+        """
+        if not hasattr(self, "_worker_to_weights_idx"):
+            raise RuntimeError("Per-worker mode not initialized.")
+
+        weights_idx = self._worker_to_weights_idx[worker_idx]
+        buffer = self._unique_weights[weights_idx]
+
+        # Unflatten if needed
         weights_to_update = weights
         if any("." in key for key in weights.keys()):
             weights_to_update = weights.unflatten_keys(".")
 
-        # Detach weights to allow in-place updates (gradients are not needed for weight sync)
         weights_to_update = weights_to_update.detach()
 
-        if self._unique_weights is None:
-            raise RuntimeError("Unique weights not set. Call register_weights() first.")
-        for buffer in self._unique_weights:
-            if buffer.requires_grad:
-                raise RuntimeError(
-                    "Gradients should not be required for shared memory buffers."
-                )
-            if weights_to_update.requires_grad:
-                raise RuntimeError("Gradients should not be required for weights.")
-            buffer.update_(weights_to_update, non_blocking=True)
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
+        if buffer.requires_grad:
+            raise RuntimeError(
+                "Gradients should not be required for shared memory buffers."
+            )
+        if weights_to_update.requires_grad:
+            raise RuntimeError("Gradients should not be required for weights.")
+
+        buffer.update_(weights_to_update, non_blocking=True)
 
     def receive_weights(
         self,
@@ -206,6 +295,10 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         strategy: The weight transmission strategy (default: "tensordict").
         sync: If True (default), send() blocks until receiver acknowledges.
             If False, send() returns immediately (use send_async/wait_async).
+        per_worker_weights: If True, each worker maintains independent weights
+            (for distinct policy factories). If False (default), workers on the
+            same device share the same weight buffer. This flag is auto-set to
+            True when distinct policy factories are detected.
 
     Example:
         >>> # Basic usage
@@ -217,9 +310,11 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         self,
         strategy: str = "tensordict",
         sync: bool = True,
+        per_worker_weights: bool = False,
     ):
         super().__init__(strategy)
         self.sync = sync
+        self.per_worker_weights = per_worker_weights
         # Create a single shared transport for all workers
         self.shared_transport = SharedMemTransport()
 
@@ -353,7 +448,9 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                 self._ack_queues[worker_idx] = ctx.Queue()
 
         # Set worker info in transport
-        self.shared_transport.register_weights(params_map, self._weight_init_queues)
+        self.shared_transport.register_weights(
+            params_map, self._weight_init_queues, per_worker=self.per_worker_weights
+        )
 
         # Store model_id and context on scheme
         self.model_id = model_id
@@ -426,8 +523,33 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
             model = _resolve_model(context, model_id)
             if model is None:
                 if model_id == "policy":
-                    # we need to get a copy of the weights from the factory
-                    model = context.policy_factory[0]()
+                    # Check if policy factories are uniform or distinct
+                    factories = context.policy_factory
+                    has_uniform_factories = all(f is factories[0] for f in factories)
+
+                    if has_uniform_factories:
+                        # Uniform factories - single model for all workers
+                        model = factories[0]()
+                    else:
+                        # Distinct factories - create per-worker weights directly
+                        params_map = {}
+                        for worker_idx, factory in enumerate(factories):
+                            if factory is not None:
+                                worker_model = factory()
+                                worker_weights = TensorDict.from_module(worker_model)
+                                worker_weights = worker_weights.data.apply(
+                                    _cast, worker_weights
+                                )
+                                # Move to appropriate device
+                                if devices and worker_idx < len(devices):
+                                    device = devices[worker_idx]
+                                    if device is not None:
+                                        worker_weights = worker_weights.to(device)
+                                worker_weights = worker_weights.share_memory_()
+                                params_map[worker_idx] = worker_weights
+                        # Set per_worker_weights flag on the scheme
+                        self.per_worker_weights = True
+                        return params_map
             weights = TensorDict.from_module(model)
         elif model is not None:
             if weights is not None:
@@ -694,18 +816,21 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
 
     def send(
         self,
-        weights: Any = None,
+        weights: TensorDictBase | dict[int, TensorDictBase] | None = None,
         worker_ids: int | list[int] | None = None,
     ) -> None:
         """Send weights via shared memory (in-place update).
 
         For SharedMemWeightSyncScheme:
-        1. prepare_weights() updates the shared memory buffer in-place
+        1. Updates the shared memory buffer(s) in-place
         2. _send_instruction() tells workers to apply the new weights
         3. If sync=True, waits for acknowledgments from all workers
 
         Args:
-            weights: Weights to send (can be None to extract from model).
+            weights: Weights to send. Can be:
+                - None: Extract weights from the model
+                - TensorDictBase: Same weights broadcast to all workers
+                - dict[int, TensorDictBase]: Per-worker weights (keys are worker indices)
             worker_ids: Which workers to notify (None = all workers).
         """
         if not self.initialized_on_sender:
@@ -713,20 +838,40 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         if not self.synchronized_on_sender:
             raise RuntimeError("Must be synchronized on sender before sending weights")
 
-        # prepare_weights updates the shared buffer in-place
-        self.prepare_weights(
-            weights=weights,
-            model_id=self._model_id,
-            strategy=self._strategy,
-            context=self.context,
+        # Check if per-worker weights dict is provided
+        is_per_worker_dict = (
+            isinstance(weights, dict)
+            and weights
+            and all(isinstance(k, int) for k in weights.keys())
         )
 
+        if is_per_worker_dict:
+            # Per-worker weights: update each worker's buffer directly
+            if not self.per_worker_weights:
+                raise ValueError(
+                    "Per-worker weights dict provided but scheme was not initialized "
+                    "with per_worker_weights=True (or auto-detected from distinct factories)."
+                )
+            # Update shared memory buffers for each worker
+            self.shared_transport.send_weights(weights, worker_ids=worker_ids)
+            # Determine which workers to notify
+            target_workers = list(weights.keys()) if worker_ids is None else worker_ids
+        else:
+            # Broadcast mode: prepare_weights updates the shared buffer in-place
+            self.prepare_weights(
+                weights=weights,
+                model_id=self._model_id,
+                strategy=self._strategy,
+                context=self.context,
+            )
+            target_workers = worker_ids
+
         # Send instruction to workers' background threads to apply the weights
-        self._send_instruction(instruction="receive", worker_ids=worker_ids)
+        self._send_instruction(instruction="receive", worker_ids=target_workers)
 
         # Wait for acknowledgments if in synchronous mode
         if self.sync:
-            self._wait_for_ack(worker_ids=worker_ids)
+            self._wait_for_ack(worker_ids=target_workers)
 
     @property
     def weights(self) -> Any | None:
