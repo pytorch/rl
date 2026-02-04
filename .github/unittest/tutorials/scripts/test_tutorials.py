@@ -38,6 +38,7 @@ GPU_TUTORIALS = {
     "multiagent_competitive_ddpg.py",
     "multiagent_ppo.py",
     "pendulum.py",
+    "torchrl_demo.py",
 }
 
 

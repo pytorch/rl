@@ -149,10 +149,9 @@ sphinx_gallery_conf = {
     "write_computation_times": True,
     # "compress_images": ("images", "thumbnails"),
     "reset_modules": (kill_procs, "matplotlib", "seaborn"),
-    # Exclude tutorials that require external services or heavily use shared memory
+    # Exclude tutorials that require external services
     # - llm_browser.py: Requires Playwright browser
-    # - torchrl_demo.py: Uses share_memory_() demos that fail when mp subsystem is corrupted
-    "ignore_pattern": r"llm_browser\.py|torchrl_demo\.py",
+    "ignore_pattern": r"llm_browser\.py",
 }
 
 napoleon_use_ivar = True
