@@ -12,13 +12,15 @@ Key Components
 --------------
 
 1. **Data Structures**: History class for conversation management, structured output classes
-2. **LLM Wrappers**: Unified interfaces for Transformers, vLLM, and AsyncVLLM  
+2. **LLM Wrappers**: Unified interfaces for Transformers, vLLM, SGLang, and async variants  
 3. **Environments**: ChatEnv, task-specific environments, and transforms
 4. **Collectors**: LLMCollector and RayLLMCollector for data collection
 5. **Objectives**: GRPOLoss, SFTLoss for training
 
 Quick Example
 -------------
+
+**Using vLLM backend:**
 
 .. code-block:: python
 
@@ -29,6 +31,26 @@ Quick Example
     # Create vLLM engine
     engine = AsyncVLLM.from_pretrained("Qwen/Qwen2.5-7B", num_replicas=2)
     policy = vLLMWrapper(engine, input_mode="history")
+    
+    # Create environment
+    env = ChatEnv(tokenizer=tokenizer)
+    
+    # Create collector
+    collector = LLMCollector(env, policy, dialog_turns_per_batch=256)
+
+**Using SGLang backend:**
+
+.. code-block:: python
+
+    from torchrl.modules.llm import SGLangWrapper, AsyncSGLang
+    from torchrl.envs.llm import ChatEnv
+    from torchrl.collectors.llm import LLMCollector
+    
+    # Create SGLang engine (connects to server or launches managed server)
+    engine = AsyncSGLang.from_pretrained("Qwen/Qwen2.5-7B", tp_size=2)
+    # Or connect to existing server:
+    # engine = AsyncSGLang.connect("http://localhost:30000")
+    policy = SGLangWrapper(engine, tokenizer=tokenizer, input_mode="history")
     
     # Create environment
     env = ChatEnv(tokenizer=tokenizer)
@@ -85,6 +107,10 @@ transform, or a boolean to the collector constructor.
     VLLMDoubleBufferWeightReceiver
     VLLMDoubleBufferTransport
     get_model_metadata
+    SGLangWeightSyncScheme
+    SGLangWeightSender
+    SGLangCollectiveTransport
+    get_sglang_model_metadata
 
 Legacy Weight Updaters (Deprecated)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -162,6 +188,63 @@ On each call to `step`, the environment:
 - Optionally, applies transforms to insert new user messages, tool calls, or other modifications to the conversation before the next LLM step to refine the prompt.
 
 This mechanism enables seamless multi-turn interactions and supports complex workflows such as tool use and reward shaping.
+
+Token-First API
+^^^^^^^^^^^^^^^
+
+For maximum reliability in multi-turn conversations, TorchRL provides a **token-first API** that maintains 
+pre-tokenized inputs throughout the conversation. This ensures KV cache prefix consistency and consistent 
+log-probabilities across turns, which is more robust than repeatedly detokenizing and re-tokenizing.
+
+**How it works:**
+
+1. Use ``ChatEnv`` with ``with_tokenizer=True`` to automatically wrap the environment with an 
+   :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer` transform
+2. Set ``prefer_tokens=True`` in the LLM wrapper to use pre-tokenized inputs when available
+
+.. code-block:: python
+
+    from torchrl.envs.llm import ChatEnv
+    from torchrl.modules.llm import TransformersWrapper
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+    model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+
+    # Create environment with automatic tokenization
+    env = ChatEnv(
+        tokenizer=tokenizer,
+        system_prompt="You are a helpful assistant.",
+        batch_size=[1],
+        with_tokenizer=True,  # Wraps with IncrementalTokenizer
+    )
+
+    # Create wrapper that uses pre-tokenized inputs
+    wrapper = TransformersWrapper(
+        model=model,
+        tokenizer=tokenizer,
+        input_mode="history",
+        prefer_tokens=True,  # Use tokens.prompt when available
+    )
+
+    # The environment maintains tokens.prompt in sync with history.prompt
+    td = env.reset()
+    assert ("tokens", "prompt") in td.keys(True, True)
+
+    # The wrapper uses these tokens directly, bypassing re-tokenization
+    td_out = wrapper(td)
+
+**Benefits:**
+
+- **KV cache consistency**: The token prefix stays exactly the same across turns
+- **Consistent log-probs**: No tokenization variations between forward passes
+- **Efficiency**: Avoids redundant tokenization work
+
+The :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer` transform automatically tokenizes 
+``history.prompt`` on each reset and step, storing the result in ``tokens.prompt``. The LLM wrappers 
+(:class:`~torchrl.modules.llm.TransformersWrapper` and :class:`~torchrl.modules.llm.vLLMWrapper`) 
+check for ``tokens.prompt`` when ``prefer_tokens=True`` and use it directly as input instead of 
+re-tokenizing from history.
 
 Task-Specific Environments
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -411,6 +494,7 @@ By following these design principles, reward transforms can be effectively integ
     AddThinkingPrompt
     BrowserTransform
     DataLoadingPrimer
+    IncrementalTokenizer
     KLComputation
     KLRewardTransform
     MCPToolTransform
@@ -431,7 +515,7 @@ Objectives
 LLM post-training requires specialized loss functions that are adapted to the unique characteristics of language models.
 
 GRPO, DAPO, CISPO
-^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~
 
 .. currentmodule:: torchrl.objectives.llm
 
@@ -449,7 +533,7 @@ GRPO, DAPO, CISPO
     MCAdvantage
 
 SFT
-^^^
+~~~
 
 .. currentmodule:: torchrl.objectives.llm
 

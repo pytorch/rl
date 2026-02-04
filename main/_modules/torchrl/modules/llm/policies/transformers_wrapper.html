@@ -144,6 +144,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
@@ -393,6 +394,10 @@
 <span class="sd">        min_batch_size (int | None, optional): The minimum batch size to use for batching. See `Batching`_ below for more details.</span>
 <span class="sd">        max_batch_size (int | None, optional): The maximum batch size to use for batching. See `Batching`_ below for more details.</span>
 <span class="sd">        batching_timeout (float, optional): The timeout for batching. See `Batching`_ below for more details.</span>
+<span class="sd">        prefer_tokens (bool, optional): If ``True`` and ``tokens.prompt`` exists in the input tensordict,</span>
+<span class="sd">            use those tokens directly instead of re-tokenizing from history. This enables KV cache</span>
+<span class="sd">            consistency when used with :class:`~torchrl.envs.llm.ChatEnv` with ``with_tokenizer=True``</span>
+<span class="sd">            or :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer`. Defaults to ``False``.</span>
 
 <span class="sd">    .. _Batching:</span>
 
@@ -511,8 +516,10 @@
         <span class="n">min_batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">max_batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">batching_timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">prefer_tokens</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prefer_tokens</span> <span class="o">=</span> <span class="n">prefer_tokens</span>
 
         <span class="k">if</span> <span class="n">batching</span> <span class="ow">and</span> <span class="n">min_batch_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">min_batch_size</span> <span class="o">=</span> <span class="mi">1</span>
@@ -876,6 +883,11 @@
         <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;log_probs_key&quot;</span><span class="p">):</span>
             <span class="n">constructor_kwargs</span><span class="p">[</span><span class="s2">&quot;log_probs_key&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_probs_key</span>
 
+        <span class="k">if</span> <span class="s2">&quot;prefer_tokens&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">constructor_kwargs</span><span class="p">[</span><span class="s2">&quot;prefer_tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;prefer_tokens&quot;</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;prefer_tokens&quot;</span><span class="p">):</span>
+            <span class="n">constructor_kwargs</span><span class="p">[</span><span class="s2">&quot;prefer_tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prefer_tokens</span>
+
         <span class="c1"># Create and return new instance</span>
         <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)(</span><span class="o">**</span><span class="n">constructor_kwargs</span><span class="p">)</span></div>
 
@@ -1014,48 +1026,104 @@
                 <span class="sa">f</span><span class="s2">&quot;Expected History object for &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">input_key</span><span class="si">}</span><span class="s2">&#39;, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">history</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
 
-        <span class="c1"># Apply chat template</span>
-        <span class="n">tokenizer_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;chat_template_name&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template_name</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;chat_template&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template</span><span class="p">)</span>
-        <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;add_generation_prompt&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
-        <span class="n">text_prompt</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
-            <span class="n">tokenizer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">,</span> <span class="o">**</span><span class="n">tokenizer_kwargs</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">text_prompt</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Expected list of text for history input, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">text_prompt</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="c1"># Check for existing tokens when prefer_tokens=True</span>
+        <span class="c1"># This enables token-first inference for KV cache consistency</span>
+        <span class="n">existing_tokens</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">prefer_tokens</span><span class="p">:</span>
+            <span class="c1"># Primary: tokens.prompt (from IncrementalTokenizer)</span>
+            <span class="n">existing_tokens</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">tokens_key</span><span class="p">,</span> <span class="s2">&quot;prompt&quot;</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">existing_tokens</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># Fallback: tokens.full (for backward compatibility)</span>
+                <span class="n">existing_tokens</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">tokens_key</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="n">tokens_prompt_padded</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">attention_mask_prompt_padded</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">response_struct</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="n">existing_tokens</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Use existing tokens directly - skip tokenization for KV cache consistency</span>
+            <span class="c1"># Handle different token storage formats:</span>
+            <span class="c1"># - list: from manual construction or as_list=True retrieval</span>
+            <span class="c1"># - nested tensor: from IncrementalTokenizer (torch.nested.as_nested_tensor)</span>
+            <span class="c1"># - regular tensor: padded tensor</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">existing_tokens</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                <span class="n">tokens_list</span> <span class="o">=</span> <span class="n">existing_tokens</span>
+            <span class="k">elif</span> <span class="p">(</span>
+                <span class="nb">isinstance</span><span class="p">(</span><span class="n">existing_tokens</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="ow">and</span> <span class="n">existing_tokens</span><span class="o">.</span><span class="n">is_nested</span>
+            <span class="p">):</span>
+                <span class="c1"># Unbind nested tensor to get list of tensors</span>
+                <span class="n">tokens_list</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">existing_tokens</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Already a padded tensor - extract non-padded sequences</span>
+                <span class="n">tokens_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span><span class="p">[</span><span class="n">t</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding_value</span><span class="p">]</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">existing_tokens</span><span class="p">]</span>
+
+            <span class="c1"># Convert list to padded tensor for model input</span>
+            <span class="n">tokens_prompt_padded</span> <span class="o">=</span> <span class="n">pad_sequence</span><span class="p">(</span>
+                <span class="n">tokens_list</span><span class="p">,</span>
+                <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">padding_value</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">padding_value</span><span class="p">,</span>
+                <span class="n">padding_side</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span>
             <span class="p">)</span>
-        <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;return_assistant_tokens_mask&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
-        <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;tokenize&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
-        <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;padding&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
-        <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;return_dict&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
-        <span class="n">response_struct</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
-            <span class="n">tokenizer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">,</span> <span class="o">**</span><span class="n">tokenizer_kwargs</span>
-        <span class="p">)</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">response_struct</span> <span class="o">=</span> <span class="n">response_struct</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_device</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">tokens_prompt_padded</span> <span class="o">=</span> <span class="n">tokens_prompt_padded</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_device</span><span class="p">)</span>
 
-        <span class="n">tokens_prompt_padded</span> <span class="o">=</span> <span class="n">response_struct</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="s2">&quot;input_ids&quot;</span><span class="p">,</span>
-            <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">padding_value</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">padding_value</span><span class="p">,</span>
-            <span class="n">padding_side</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">attention_mask_prompt_padded</span> <span class="o">=</span> <span class="n">response_struct</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="s2">&quot;attention_mask&quot;</span><span class="p">,</span>
-            <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">padding_value</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-            <span class="n">padding_side</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span>
-        <span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">attention_mask_prompt_padded</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Create attention mask from tokens</span>
             <span class="n">attention_mask_prompt_padded</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">tokens_prompt_padded</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">pad_token_id</span>
+                <span class="n">tokens_prompt_padded</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding_value</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+
+            <span class="c1"># Still need text_prompt for output, but we can derive it from tokens</span>
+            <span class="n">text_prompt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">batch_decode</span><span class="p">(</span>
+                <span class="n">tokens_list</span><span class="p">,</span>
+                <span class="n">skip_special_tokens</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
             <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Fall back to tokenizing from history (original behavior)</span>
+            <span class="c1"># Apply chat template</span>
+            <span class="n">tokenizer_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span>
+                    <span class="s2">&quot;chat_template_name&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template_name</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;chat_template&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template</span><span class="p">)</span>
+            <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;add_generation_prompt&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+            <span class="n">text_prompt</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
+                <span class="n">tokenizer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">,</span> <span class="o">**</span><span class="n">tokenizer_kwargs</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">text_prompt</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Expected list of text for history input, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">text_prompt</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+            <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;return_assistant_tokens_mask&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+            <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;tokenize&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+            <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;padding&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+            <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;return_dict&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+            <span class="n">response_struct</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
+                <span class="n">tokenizer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">,</span> <span class="o">**</span><span class="n">tokenizer_kwargs</span>
+            <span class="p">)</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">response_struct</span> <span class="o">=</span> <span class="n">response_struct</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_device</span><span class="p">)</span>
+
+            <span class="n">tokens_prompt_padded</span> <span class="o">=</span> <span class="n">response_struct</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="s2">&quot;input_ids&quot;</span><span class="p">,</span>
+                <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">padding_value</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">padding_value</span><span class="p">,</span>
+                <span class="n">padding_side</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">attention_mask_prompt_padded</span> <span class="o">=</span> <span class="n">response_struct</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="s2">&quot;attention_mask&quot;</span><span class="p">,</span>
+                <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">padding_value</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="n">padding_side</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">attention_mask_prompt_padded</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">attention_mask_prompt_padded</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">tokens_prompt_padded</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">pad_token_id</span>
+                <span class="p">)</span>
 
         <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_generate_from_tokens</span><span class="p">(</span>
             <span class="n">tokens_prompt_padded</span><span class="p">,</span> <span class="n">attention_mask_prompt_padded</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out</span>
@@ -1069,10 +1137,15 @@
                 <span class="k">else</span> <span class="n">tokens_prompt_padded</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">tokens_prompt_unpadded</span> <span class="o">=</span> <span class="n">response_struct</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="s2">&quot;input_ids&quot;</span><span class="p">,</span>
-                <span class="n">as_nested_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">response_struct</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">tokens_prompt_unpadded</span> <span class="o">=</span> <span class="n">response_struct</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                    <span class="s2">&quot;input_ids&quot;</span><span class="p">,</span>
+                    <span class="n">as_nested_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># When using existing tokens, convert padded back to nested tensor</span>
+                <span class="n">tokens_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span><span class="p">[</span><span class="n">t</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding_value</span><span class="p">]</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tokens_prompt_padded</span><span class="p">]</span>
+                <span class="n">tokens_prompt_unpadded</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nested</span><span class="o">.</span><span class="n">as_nested_tensor</span><span class="p">(</span><span class="n">tokens_list</span><span class="p">)</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span><span class="p">:</span>
                 <span class="n">result</span><span class="p">[(</span><span class="bp">self</span><span class="o">.</span><span class="n">tokens_key</span><span class="p">,</span> <span class="s2">&quot;prompt&quot;</span><span class="p">)]</span> <span class="o">=</span> <span class="n">tokens_prompt_unpadded</span>
             <span class="k">else</span><span class="p">:</span>

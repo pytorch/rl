@@ -145,6 +145,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
@@ -255,61 +256,64 @@
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.ExecuteToolsInOrder.html#torchrl.envs.llm.transforms.ExecuteToolsInOrder" title="torchrl.envs.llm.transforms.ExecuteToolsInOrder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ExecuteToolsInOrder</span></code></a>(registry, parser[, ...])</p></td>
 <td><p>A Transform that executes tools in the order they appear in LLM output.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.JSONCallParser.html#torchrl.envs.llm.transforms.JSONCallParser" title="torchrl.envs.llm.transforms.JSONCallParser"><code class="xref py py-obj docutils literal notranslate"><span class="pre">JSONCallParser</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.IncrementalTokenizer.html#torchrl.envs.llm.transforms.IncrementalTokenizer" title="torchrl.envs.llm.transforms.IncrementalTokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IncrementalTokenizer</span></code></a>(tokenizer, *[, ...])</p></td>
+<td><p>Maintains tokens synchronized with history for token-first LLM inference.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.JSONCallParser.html#torchrl.envs.llm.transforms.JSONCallParser" title="torchrl.envs.llm.transforms.JSONCallParser"><code class="xref py py-obj docutils literal notranslate"><span class="pre">JSONCallParser</span></code></a>()</p></td>
 <td><p>Parser for JSON-style function-calling responses.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.KLComputation.html#torchrl.envs.llm.transforms.KLComputation" title="torchrl.envs.llm.transforms.KLComputation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KLComputation</span></code></a>([gen_log_probs_full_key, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.KLComputation.html#torchrl.envs.llm.transforms.KLComputation" title="torchrl.envs.llm.transforms.KLComputation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KLComputation</span></code></a>([gen_log_probs_full_key, ...])</p></td>
 <td><p>A transform to compute KL divergence between two log-prob tensors and optionally add it to the reward.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform" title="torchrl.envs.llm.transforms.KLRewardTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KLRewardTransform</span></code></a>(*args[, use_ray_service])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform" title="torchrl.envs.llm.transforms.KLRewardTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KLRewardTransform</span></code></a>(*args[, use_ray_service])</p></td>
 <td><p>A legacy transform for computing KL divergence-based rewards.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform" title="torchrl.envs.llm.transforms.MCPToolTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MCPToolTransform</span></code></a>(servers[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform" title="torchrl.envs.llm.transforms.MCPToolTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MCPToolTransform</span></code></a>(servers[, ...])</p></td>
 <td><p>A transform that executes tools via the Model Context Protocol (MCP).</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion" title="torchrl.envs.llm.transforms.PolicyVersion"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a>(version_type, ] =)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion" title="torchrl.envs.llm.transforms.PolicyVersion"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a>(version_type, ] =)</p></td>
 <td><p>A transform that keeps track of the version of the policy.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PythonExecutorService.html#torchrl.envs.llm.transforms.PythonExecutorService" title="torchrl.envs.llm.transforms.PythonExecutorService"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PythonExecutorService</span></code></a>([pool_size, timeout])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PythonExecutorService.html#torchrl.envs.llm.transforms.PythonExecutorService" title="torchrl.envs.llm.transforms.PythonExecutorService"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PythonExecutorService</span></code></a>([pool_size, timeout])</p></td>
 <td><p>Ray actor that manages a pool of persistent Python interpreters.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter" title="torchrl.envs.llm.transforms.PythonInterpreter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PythonInterpreter</span></code></a>([tokenizer, tool_name, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter" title="torchrl.envs.llm.transforms.PythonInterpreter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PythonInterpreter</span></code></a>([tokenizer, tool_name, ...])</p></td>
 <td><p>A transform that executes Python code in the LLM response.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer" title="torchrl.envs.llm.transforms.RayDataLoadingPrimer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RayDataLoadingPrimer</span></code></a>(*[, dataloader, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer" title="torchrl.envs.llm.transforms.RayDataLoadingPrimer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RayDataLoadingPrimer</span></code></a>(*[, dataloader, ...])</p></td>
 <td><p>A <a class="reference internal" href="generated/torchrl.envs.llm.transforms.DataLoadingPrimer.html#torchrl.envs.llm.transforms.DataLoadingPrimer" title="torchrl.envs.llm.transforms.dataloading.DataLoadingPrimer"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoadingPrimer</span></code></a> that creates a single actor that can be shared by multiple environments.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.RetrieveKL.html#torchrl.envs.llm.transforms.RetrieveKL" title="torchrl.envs.llm.transforms.RetrieveKL"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RetrieveKL</span></code></a>(*args[, use_ray_service])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.RetrieveKL.html#torchrl.envs.llm.transforms.RetrieveKL" title="torchrl.envs.llm.transforms.RetrieveKL"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RetrieveKL</span></code></a>(*args[, use_ray_service])</p></td>
 <td><p>A transform to retrieve the KL divergence between two models' log-probabilities.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.RetrieveLogProb.html#torchrl.envs.llm.transforms.RetrieveLogProb" title="torchrl.envs.llm.transforms.RetrieveLogProb"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RetrieveLogProb</span></code></a>(model, *[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.RetrieveLogProb.html#torchrl.envs.llm.transforms.RetrieveLogProb" title="torchrl.envs.llm.transforms.RetrieveLogProb"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RetrieveLogProb</span></code></a>(model, *[, ...])</p></td>
 <td><p>A transform to retrieve log-probabilities from a model for KL divergence computation.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.SimpleToolTransform.html#torchrl.envs.llm.transforms.SimpleToolTransform" title="torchrl.envs.llm.transforms.SimpleToolTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SimpleToolTransform</span></code></a>(tools[, tool_schemas, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.SimpleToolTransform.html#torchrl.envs.llm.transforms.SimpleToolTransform" title="torchrl.envs.llm.transforms.SimpleToolTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SimpleToolTransform</span></code></a>(tools[, tool_schemas, ...])</p></td>
 <td><p>A simple transform that executes tools from a dictionary of callables.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform" title="torchrl.envs.llm.transforms.TemplateTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TemplateTransform</span></code></a>(tokenizer[, chat_template])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform" title="torchrl.envs.llm.transforms.TemplateTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TemplateTransform</span></code></a>(tokenizer[, chat_template])</p></td>
 <td><p>A transform that maps applies a chat template to an input string during the forward pass, and parses the strings to the template during backward.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.Tokenizer.html#torchrl.envs.llm.transforms.Tokenizer" title="torchrl.envs.llm.transforms.Tokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tokenizer</span></code></a>([in_keys, out_keys, in_keys_inv, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.Tokenizer.html#torchrl.envs.llm.transforms.Tokenizer" title="torchrl.envs.llm.transforms.Tokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tokenizer</span></code></a>([in_keys, out_keys, in_keys_inv, ...])</p></td>
 <td><p>Applies a tokenization operation on the specified inputs.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.ToolCall.html#torchrl.envs.llm.transforms.ToolCall" title="torchrl.envs.llm.transforms.ToolCall"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToolCall</span></code></a>(tool, args[, tag])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.ToolCall.html#torchrl.envs.llm.transforms.ToolCall" title="torchrl.envs.llm.transforms.ToolCall"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToolCall</span></code></a>(tool, args[, tag])</p></td>
 <td><p>Representation of a parsed tool call from LLM output.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.ToolRegistry.html#torchrl.envs.llm.transforms.ToolRegistry" title="torchrl.envs.llm.transforms.ToolRegistry"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToolRegistry</span></code></a>([services])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.ToolRegistry.html#torchrl.envs.llm.transforms.ToolRegistry" title="torchrl.envs.llm.transforms.ToolRegistry"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToolRegistry</span></code></a>([services])</p></td>
 <td><p>Registry for managing available tool services.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.ToolService.html#torchrl.envs.llm.transforms.ToolService" title="torchrl.envs.llm.transforms.ToolService"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToolService</span></code></a>(*args, **kwargs)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.ToolService.html#torchrl.envs.llm.transforms.ToolService" title="torchrl.envs.llm.transforms.ToolService"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToolService</span></code></a>(*args, **kwargs)</p></td>
 <td><p>Protocol for side-effecting service callable with structured IO.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.XMLBlockParser.html#torchrl.envs.llm.transforms.XMLBlockParser" title="torchrl.envs.llm.transforms.XMLBlockParser"><code class="xref py py-obj docutils literal notranslate"><span class="pre">XMLBlockParser</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.XMLBlockParser.html#torchrl.envs.llm.transforms.XMLBlockParser" title="torchrl.envs.llm.transforms.XMLBlockParser"><code class="xref py py-obj docutils literal notranslate"><span class="pre">XMLBlockParser</span></code></a>()</p></td>
 <td><p>Parser for XML-style tool blocks in LLM responses.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_nested_tensor.html#torchrl.envs.llm.transforms.as_nested_tensor" title="torchrl.envs.llm.transforms.as_nested_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_nested_tensor</span></code></a>(list_of_tensordicts)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_nested_tensor.html#torchrl.envs.llm.transforms.as_nested_tensor" title="torchrl.envs.llm.transforms.as_nested_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_nested_tensor</span></code></a>(list_of_tensordicts)</p></td>
 <td><p>Stacks a list of tensordicts into a single tensordict with nested tensors.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_padded_tensor.html#torchrl.envs.llm.transforms.as_padded_tensor" title="torchrl.envs.llm.transforms.as_padded_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_padded_tensor</span></code></a>(list_of_tensordicts[, dim, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_padded_tensor.html#torchrl.envs.llm.transforms.as_padded_tensor" title="torchrl.envs.llm.transforms.as_padded_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_padded_tensor</span></code></a>(list_of_tensordicts[, dim, ...])</p></td>
 <td><p>Stacks a list of tensordicts into a single tensordict with padded tensors.</p></td>
 </tr>
 </tbody>

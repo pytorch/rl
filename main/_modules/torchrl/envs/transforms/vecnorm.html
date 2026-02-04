@@ -144,6 +144,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
@@ -323,6 +324,7 @@
 <span class="sd">        unfreeze(): Unfreezes the VecNorm, allowing updates to statistics.</span>
 <span class="sd">        frozen_copy(): Returns a frozen copy of the VecNorm.</span>
 <span class="sd">        clone(): Returns a clone of the VecNorm.</span>
+<span class="sd">        denorm(tensordict): Denormalizes data using the inverse of the normalization (stateful mode only).</span>
 <span class="sd">        transform_observation_spec(observation_spec): Transforms the observation specification.</span>
 <span class="sd">        transform_reward_spec(reward_spec, observation_spec): Transforms the reward specification.</span>
 <span class="sd">        transform_output_spec(output_spec): Transforms the output specification.</span>
@@ -456,6 +458,12 @@
 <span class="sd">        ...     print(&quot;Remotely updated loc / scale&quot;, local_env.transform.loc[&quot;reward&quot;], local_env.transform.scale[&quot;reward&quot;])</span>
 <span class="sd">        Remotely updated loc / scale tensor([-0.4307]) tensor([0.9613])</span>
 <span class="sd">        ...     env.close()</span>
+
+<span class="sd">    To recover the original (denormalized) values from normalized data, use :meth:`~.denorm`:</span>
+
+<span class="sd">        &gt;&gt;&gt; denormed = env_trsf.transform.denorm(r)</span>
+
+<span class="sd">    .. note:: The :meth:`~.denorm` method is only available in stateful mode.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -687,6 +695,63 @@
                 <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">x</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">is_floating_point</span> <span class="k">else</span> <span class="n">x</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">data</span>
+
+<div class="viewcode-block" id="VecNormV2.denorm">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2.denorm">[docs]</a>
+    <span class="k">def</span> <span class="nf">denorm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Denormalize a tensordict using the inverse of the normalization transform.</span>
+
+<span class="sd">        Applies the inverse of the normalization: ``original = normalized * scale + loc``.</span>
+
+<span class="sd">        Reads normalized values from ``out_keys`` and writes denormalized values to ``in_keys``.</span>
+
+<span class="sd">        .. note:: This method is only available in stateful mode.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordict (TensorDictBase): the tensordict containing normalized values.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A shallow copy of the tensordict with denormalized values written to ``in_keys``.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            NotImplementedError: if the transform is in stateless mode.</span>
+<span class="sd">            RuntimeError: if the transform has not been initialized (no data seen yet).</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.envs import GymEnv</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.envs.transforms import VecNormV2</span>
+<span class="sd">            &gt;&gt;&gt; env = GymEnv(&quot;Pendulum-v1&quot;)</span>
+<span class="sd">            &gt;&gt;&gt; vecnorm = VecNormV2(</span>
+<span class="sd">            ...     in_keys=[&quot;observation&quot;],</span>
+<span class="sd">            ...     out_keys=[&quot;observation_norm&quot;],</span>
+<span class="sd">            ...     stateful=True,</span>
+<span class="sd">            ... )</span>
+<span class="sd">            &gt;&gt;&gt; env = env.append_transform(vecnorm)</span>
+<span class="sd">            &gt;&gt;&gt; # Collect some data to initialize statistics</span>
+<span class="sd">            &gt;&gt;&gt; rollout = env.rollout(10)</span>
+<span class="sd">            &gt;&gt;&gt; # Denormalize the normalized observations</span>
+<span class="sd">            &gt;&gt;&gt; denormed = vecnorm.denorm(rollout)</span>
+<span class="sd">            &gt;&gt;&gt; # denormed[&quot;observation&quot;] now contains the original scale values</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">stateful</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;denorm is not implemented for stateless VecNormV2.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loc</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;VecNormV2 must be initialized before calling denorm.&quot;</span><span class="p">)</span>
+
+        <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">loc</span><span class="p">,</span> <span class="n">scale</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_loc_scale</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">in_key</span><span class="p">,</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">out_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">out_key</span><span class="p">)</span>
+            <span class="c1"># Denormalize: value * scale + loc</span>
+            <span class="n">original_value</span> <span class="o">=</span> <span class="n">value</span> <span class="o">*</span> <span class="n">scale</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">in_key</span><span class="p">)</span> <span class="o">+</span> <span class="n">loc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">in_key</span><span class="p">)</span>
+            <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">in_key</span><span class="p">,</span> <span class="n">original_value</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict</span></div>
+
 
     <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">_maybe_make_float</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>

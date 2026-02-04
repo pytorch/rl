@@ -147,6 +147,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
@@ -337,6 +338,12 @@ this option is only supported in stateful mode (<cite>stateful=True</cite>). Def
 <dt class="sig sig-object py" id="torchrl.envs.transforms.VecNormV2.clone">
 <span class="sig-name descname"><span class="pre">clone</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2.clone"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.VecNormV2.clone" title="Link to this definition">¶</a></dt>
 <dd><p>Returns a clone of the VecNorm.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.envs.transforms.VecNormV2.denorm">
+<span class="sig-name descname"><span class="pre">denorm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2.denorm"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.VecNormV2.denorm" title="Link to this definition">¶</a></dt>
+<dd><p>Denormalizes data using the inverse of the normalization (stateful mode only).</p>
 </dd></dl>
 
 <dl class="py method">
@@ -534,24 +541,75 @@ These can be used to share the tensors across processes (this method is automati
 <span class="go">...     env.close()</span>
 </pre></div>
 </div>
+<p>To recover the original (denormalized) values from normalized data, use <a class="reference internal" href="#id0" title="torchrl.envs.transforms.VecNormV2.denorm"><code class="xref py py-meth docutils literal notranslate"><span class="pre">denorm()</span></code></a>:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">denormed</span> <span class="o">=</span> <span class="n">env_trsf</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">denorm</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The <a class="reference internal" href="#id0" title="torchrl.envs.transforms.VecNormV2.denorm"><code class="xref py py-meth docutils literal notranslate"><span class="pre">denorm()</span></code></a> method is only available in stateful mode.</p>
+</div>
 <dl class="py method">
 <dt class="sig sig-object py" id="id0">
-<span class="sig-name descname"><span class="pre">freeze</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrl.envs.transforms.VecNormV2" title="torchrl.envs.transforms.vecnorm.VecNormV2"><span class="pre">VecNormV2</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2.freeze"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id0" title="Link to this definition">¶</a></dt>
-<dd><p>Freezes the VecNorm, avoiding the stats to be updated when called.</p>
-<p>See <a class="reference internal" href="#id10" title="torchrl.envs.transforms.VecNormV2.unfreeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unfreeze()</span></code></a>.</p>
+<span class="sig-name descname"><span class="pre">denorm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.11)"><span class="pre">TensorDictBase</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.11)"><span class="pre">TensorDictBase</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2.denorm"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id0" title="Link to this definition">¶</a></dt>
+<dd><p>Denormalize a tensordict using the inverse of the normalization transform.</p>
+<p>Applies the inverse of the normalization: <code class="docutils literal notranslate"><span class="pre">original</span> <span class="pre">=</span> <span class="pre">normalized</span> <span class="pre">*</span> <span class="pre">scale</span> <span class="pre">+</span> <span class="pre">loc</span></code>.</p>
+<p>Reads normalized values from <code class="docutils literal notranslate"><span class="pre">out_keys</span></code> and writes denormalized values to <code class="docutils literal notranslate"><span class="pre">in_keys</span></code>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This method is only available in stateful mode.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tensordict</strong> (<em>TensorDictBase</em>) – the tensordict containing normalized values.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A shallow copy of the tensordict with denormalized values written to <code class="docutils literal notranslate"><span class="pre">in_keys</span></code>.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>NotImplementedError</strong> – if the transform is in stateless mode.</p></li>
+<li><p><strong>RuntimeError</strong> – if the transform has not been initialized (no data seen yet).</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">GymEnv</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs.transforms</span> <span class="kn">import</span> <span class="n">VecNormV2</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">vecnorm</span> <span class="o">=</span> <span class="n">VecNormV2</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation_norm&quot;</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">stateful</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">vecnorm</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Collect some data to initialize statistics</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rollout</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Denormalize the normalized observations</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">denormed</span> <span class="o">=</span> <span class="n">vecnorm</span><span class="o">.</span><span class="n">denorm</span><span class="p">(</span><span class="n">rollout</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># denormed[&quot;observation&quot;] now contains the original scale values</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="id1">
-<span class="sig-name descname"><span class="pre">frozen_copy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2.frozen_copy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id1" title="Link to this definition">¶</a></dt>
-<dd><p>Returns a copy of the Transform that keeps track of the stats but does not update them.</p>
+<span class="sig-name descname"><span class="pre">freeze</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrl.envs.transforms.VecNormV2" title="torchrl.envs.transforms.vecnorm.VecNormV2"><span class="pre">VecNormV2</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2.freeze"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id1" title="Link to this definition">¶</a></dt>
+<dd><p>Freezes the VecNorm, avoiding the stats to be updated when called.</p>
+<p>See <a class="reference internal" href="#id11" title="torchrl.envs.transforms.VecNormV2.unfreeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unfreeze()</span></code></a>.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="id2">
-<span class="sig-name descname"><span class="pre">get_extra_state</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">OrderedDict</span></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2.get_extra_state"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id2" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">frozen_copy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2.frozen_copy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id2" title="Link to this definition">¶</a></dt>
+<dd><p>Returns a copy of the Transform that keeps track of the stats but does not update them.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="id3">
+<span class="sig-name descname"><span class="pre">get_extra_state</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">OrderedDict</span></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2.get_extra_state"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id3" title="Link to this definition">¶</a></dt>
 <dd><p>Return any extra state to include in the module’s state_dict.</p>
-<p>Implement this and a corresponding <a class="reference internal" href="#id5" title="torchrl.envs.transforms.VecNormV2.set_extra_state"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_extra_state()</span></code></a> for your module
+<p>Implement this and a corresponding <a class="reference internal" href="#id6" title="torchrl.envs.transforms.VecNormV2.set_extra_state"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_extra_state()</span></code></a> for your module
 if you need to store extra state. This function is called when building the
 module’s <cite>state_dict()</cite>.</p>
 <p>Note that extra state should be picklable to ensure working serialization
@@ -569,24 +627,24 @@ their serialized pickled form changes.</p>
 </dd></dl>
 
 <dl class="py property">
-<dt class="sig sig-object py" id="id3">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">loc</span></span><a class="headerlink" href="#id3" title="Link to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id4">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">loc</span></span><a class="headerlink" href="#id4" title="Link to this definition">¶</a></dt>
 <dd><p>Returns a TensorDict with the loc to be used for an affine transform.</p>
 </dd></dl>
 
 <dl class="py property">
-<dt class="sig sig-object py" id="id4">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">scale</span></span><a class="headerlink" href="#id4" title="Link to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id5">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">scale</span></span><a class="headerlink" href="#id5" title="Link to this definition">¶</a></dt>
 <dd><p>Returns a TensorDict with the scale to be used for an affine transform.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="id5">
-<span class="sig-name descname"><span class="pre">set_extra_state</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">OrderedDict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2.set_extra_state"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id5" title="Link to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id6">
+<span class="sig-name descname"><span class="pre">set_extra_state</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">OrderedDict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2.set_extra_state"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id6" title="Link to this definition">¶</a></dt>
 <dd><p>Set extra state contained in the loaded <cite>state_dict</cite>.</p>
 <p>This function is called from <code class="xref py py-func docutils literal notranslate"><span class="pre">load_state_dict()</span></code> to handle any extra state
 found within the <cite>state_dict</cite>. Implement this function and a corresponding
-<a class="reference internal" href="#id2" title="torchrl.envs.transforms.VecNormV2.get_extra_state"><code class="xref py py-func docutils literal notranslate"><span class="pre">get_extra_state()</span></code></a> for your module if you need to store extra state within its
+<a class="reference internal" href="#id3" title="torchrl.envs.transforms.VecNormV2.get_extra_state"><code class="xref py py-func docutils literal notranslate"><span class="pre">get_extra_state()</span></code></a> for your module if you need to store extra state within its
 <cite>state_dict</cite>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -596,16 +654,16 @@ found within the <cite>state_dict</cite>. Implement this function and a correspo
 </dd></dl>
 
 <dl class="py property">
-<dt class="sig sig-object py" id="id6">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">standard_normal</span></span><a class="headerlink" href="#id6" title="Link to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id7">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">standard_normal</span></span><a class="headerlink" href="#id7" title="Link to this definition">¶</a></dt>
 <dd><p>Whether the affine transform given by <cite>loc</cite> and <cite>scale</cite> follows the standard normal equation.</p>
 <p>Similar to <code class="xref py py-class docutils literal notranslate"><span class="pre">ObservationNorm</span></code> standard_normal attribute.</p>
 <p>Always returns <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="id7">
-<span class="sig-name descname"><span class="pre">transform_observation_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">observation_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2.transform_observation_spec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id7" title="Link to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id8">
+<span class="sig-name descname"><span class="pre">transform_observation_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">observation_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2.transform_observation_spec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id8" title="Link to this definition">¶</a></dt>
 <dd><p>Transforms the observation spec such that the resulting spec matches transform mapping.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -618,11 +676,11 @@ found within the <cite>state_dict</cite>. Implement this function and a correspo
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="id8">
-<span class="sig-name descname"><span class="pre">transform_output_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2.transform_output_spec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id8" title="Link to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id9">
+<span class="sig-name descname"><span class="pre">transform_output_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2.transform_output_spec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id9" title="Link to this definition">¶</a></dt>
 <dd><p>Transforms the output spec such that the resulting spec matches transform mapping.</p>
 <p>This method should generally be left untouched. Changes should be implemented using
-<a class="reference internal" href="#id7" title="torchrl.envs.transforms.VecNormV2.transform_observation_spec"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transform_observation_spec()</span></code></a>, <a class="reference internal" href="#id9" title="torchrl.envs.transforms.VecNormV2.transform_reward_spec"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transform_reward_spec()</span></code></a> and <code class="xref py py-meth docutils literal notranslate"><span class="pre">transform_full_done_spec()</span></code>.
+<a class="reference internal" href="#id8" title="torchrl.envs.transforms.VecNormV2.transform_observation_spec"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transform_observation_spec()</span></code></a>, <a class="reference internal" href="#id10" title="torchrl.envs.transforms.VecNormV2.transform_reward_spec"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transform_reward_spec()</span></code></a> and <code class="xref py py-meth docutils literal notranslate"><span class="pre">transform_full_done_spec()</span></code>.
 :param output_spec: spec before the transform
 :type output_spec: TensorSpec</p>
 <dl class="field-list simple">
@@ -633,8 +691,8 @@ found within the <cite>state_dict</cite>. Implement this function and a correspo
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="id9">
-<span class="sig-name descname"><span class="pre">transform_reward_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">reward_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation_spec</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2.transform_reward_spec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id9" title="Link to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id10">
+<span class="sig-name descname"><span class="pre">transform_reward_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">reward_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation_spec</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2.transform_reward_spec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id10" title="Link to this definition">¶</a></dt>
 <dd><p>Transforms the reward spec such that the resulting spec matches transform mapping.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -647,10 +705,10 @@ found within the <cite>state_dict</cite>. Implement this function and a correspo
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="id10">
-<span class="sig-name descname"><span class="pre">unfreeze</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrl.envs.transforms.VecNormV2" title="torchrl.envs.transforms.vecnorm.VecNormV2"><span class="pre">VecNormV2</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2.unfreeze"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id10" title="Link to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id11">
+<span class="sig-name descname"><span class="pre">unfreeze</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrl.envs.transforms.VecNormV2" title="torchrl.envs.transforms.vecnorm.VecNormV2"><span class="pre">VecNormV2</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2.unfreeze"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id11" title="Link to this definition">¶</a></dt>
 <dd><p>Unfreezes the VecNorm.</p>
-<p>See <a class="reference internal" href="#id0" title="torchrl.envs.transforms.VecNormV2.freeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">freeze()</span></code></a>.</p>
+<p>See <a class="reference internal" href="#id1" title="torchrl.envs.transforms.VecNormV2.freeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">freeze()</span></code></a>.</p>
 </dd></dl>
 
 </dd></dl>
@@ -700,6 +758,7 @@ found within the <cite>state_dict</cite>. Implement this function and a correspo
 <li><a class="reference internal" href="#torchrl.envs.transforms.VecNormV2.unfreeze"><code class="docutils literal notranslate"><span class="pre">VecNormV2.unfreeze()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.transforms.VecNormV2.frozen_copy"><code class="docutils literal notranslate"><span class="pre">VecNormV2.frozen_copy()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.transforms.VecNormV2.clone"><code class="docutils literal notranslate"><span class="pre">VecNormV2.clone()</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.envs.transforms.VecNormV2.denorm"><code class="docutils literal notranslate"><span class="pre">VecNormV2.denorm()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.transforms.VecNormV2.transform_observation_spec"><code class="docutils literal notranslate"><span class="pre">VecNormV2.transform_observation_spec()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.transforms.VecNormV2.transform_reward_spec"><code class="docutils literal notranslate"><span class="pre">VecNormV2.transform_reward_spec()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.transforms.VecNormV2.transform_output_spec"><code class="docutils literal notranslate"><span class="pre">VecNormV2.transform_output_spec()</span></code></a></li>
@@ -709,17 +768,18 @@ found within the <cite>state_dict</cite>. Implement this function and a correspo
 <li><a class="reference internal" href="#torchrl.envs.transforms.VecNormV2.loc"><code class="docutils literal notranslate"><span class="pre">VecNormV2.loc()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.transforms.VecNormV2.scale"><code class="docutils literal notranslate"><span class="pre">VecNormV2.scale()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.transforms.VecNormV2.standard_normal"><code class="docutils literal notranslate"><span class="pre">VecNormV2.standard_normal()</span></code></a></li>
-<li><a class="reference internal" href="#id0"><code class="docutils literal notranslate"><span class="pre">VecNormV2.freeze()</span></code></a></li>
-<li><a class="reference internal" href="#id1"><code class="docutils literal notranslate"><span class="pre">VecNormV2.frozen_copy()</span></code></a></li>
-<li><a class="reference internal" href="#id2"><code class="docutils literal notranslate"><span class="pre">VecNormV2.get_extra_state()</span></code></a></li>
-<li><a class="reference internal" href="#id3"><code class="docutils literal notranslate"><span class="pre">VecNormV2.loc</span></code></a></li>
-<li><a class="reference internal" href="#id4"><code class="docutils literal notranslate"><span class="pre">VecNormV2.scale</span></code></a></li>
-<li><a class="reference internal" href="#id5"><code class="docutils literal notranslate"><span class="pre">VecNormV2.set_extra_state()</span></code></a></li>
-<li><a class="reference internal" href="#id6"><code class="docutils literal notranslate"><span class="pre">VecNormV2.standard_normal</span></code></a></li>
-<li><a class="reference internal" href="#id7"><code class="docutils literal notranslate"><span class="pre">VecNormV2.transform_observation_spec()</span></code></a></li>
-<li><a class="reference internal" href="#id8"><code class="docutils literal notranslate"><span class="pre">VecNormV2.transform_output_spec()</span></code></a></li>
-<li><a class="reference internal" href="#id9"><code class="docutils literal notranslate"><span class="pre">VecNormV2.transform_reward_spec()</span></code></a></li>
-<li><a class="reference internal" href="#id10"><code class="docutils literal notranslate"><span class="pre">VecNormV2.unfreeze()</span></code></a></li>
+<li><a class="reference internal" href="#id0"><code class="docutils literal notranslate"><span class="pre">VecNormV2.denorm()</span></code></a></li>
+<li><a class="reference internal" href="#id1"><code class="docutils literal notranslate"><span class="pre">VecNormV2.freeze()</span></code></a></li>
+<li><a class="reference internal" href="#id2"><code class="docutils literal notranslate"><span class="pre">VecNormV2.frozen_copy()</span></code></a></li>
+<li><a class="reference internal" href="#id3"><code class="docutils literal notranslate"><span class="pre">VecNormV2.get_extra_state()</span></code></a></li>
+<li><a class="reference internal" href="#id4"><code class="docutils literal notranslate"><span class="pre">VecNormV2.loc</span></code></a></li>
+<li><a class="reference internal" href="#id5"><code class="docutils literal notranslate"><span class="pre">VecNormV2.scale</span></code></a></li>
+<li><a class="reference internal" href="#id6"><code class="docutils literal notranslate"><span class="pre">VecNormV2.set_extra_state()</span></code></a></li>
+<li><a class="reference internal" href="#id7"><code class="docutils literal notranslate"><span class="pre">VecNormV2.standard_normal</span></code></a></li>
+<li><a class="reference internal" href="#id8"><code class="docutils literal notranslate"><span class="pre">VecNormV2.transform_observation_spec()</span></code></a></li>
+<li><a class="reference internal" href="#id9"><code class="docutils literal notranslate"><span class="pre">VecNormV2.transform_output_spec()</span></code></a></li>
+<li><a class="reference internal" href="#id10"><code class="docutils literal notranslate"><span class="pre">VecNormV2.transform_reward_spec()</span></code></a></li>
+<li><a class="reference internal" href="#id11"><code class="docutils literal notranslate"><span class="pre">VecNormV2.unfreeze()</span></code></a></li>
 </ul>
 </li>
 </ul>

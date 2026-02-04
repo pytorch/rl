@@ -147,6 +147,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
@@ -250,7 +251,7 @@ together to create a complete reinforcement learning pipeline for language model
 <h2>Key Components<a class="headerlink" href="#key-components" title="Link to this heading">¶</a></h2>
 <ol class="arabic simple">
 <li><p><strong>Data Structures</strong>: History class for conversation management, structured output classes</p></li>
-<li><p><strong>LLM Wrappers</strong>: Unified interfaces for Transformers, vLLM, and AsyncVLLM</p></li>
+<li><p><strong>LLM Wrappers</strong>: Unified interfaces for Transformers, vLLM, SGLang, and async variants</p></li>
 <li><p><strong>Environments</strong>: ChatEnv, task-specific environments, and transforms</p></li>
 <li><p><strong>Collectors</strong>: LLMCollector and RayLLMCollector for data collection</p></li>
 <li><p><strong>Objectives</strong>: GRPOLoss, SFTLoss for training</p></li>
@@ -258,6 +259,7 @@ together to create a complete reinforcement learning pipeline for language model
 </section>
 <section id="quick-example">
 <h2>Quick Example<a class="headerlink" href="#quick-example" title="Link to this heading">¶</a></h2>
+<p><strong>Using vLLM backend:</strong></p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.modules.llm</span> <span class="kn">import</span> <span class="n">vLLMWrapper</span><span class="p">,</span> <span class="n">AsyncVLLM</span>
 <span class="kn">from</span> <span class="nn">torchrl.envs.llm</span> <span class="kn">import</span> <span class="n">ChatEnv</span>
 <span class="kn">from</span> <span class="nn">torchrl.collectors.llm</span> <span class="kn">import</span> <span class="n">LLMCollector</span>
@@ -265,6 +267,24 @@ together to create a complete reinforcement learning pipeline for language model
 <span class="c1"># Create vLLM engine</span>
 <span class="n">engine</span> <span class="o">=</span> <span class="n">AsyncVLLM</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;Qwen/Qwen2.5-7B&quot;</span><span class="p">,</span> <span class="n">num_replicas</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 <span class="n">policy</span> <span class="o">=</span> <span class="n">vLLMWrapper</span><span class="p">(</span><span class="n">engine</span><span class="p">,</span> <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;history&quot;</span><span class="p">)</span>
+
+<span class="c1"># Create environment</span>
+<span class="n">env</span> <span class="o">=</span> <span class="n">ChatEnv</span><span class="p">(</span><span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">)</span>
+
+<span class="c1"># Create collector</span>
+<span class="n">collector</span> <span class="o">=</span> <span class="n">LLMCollector</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">dialog_turns_per_batch</span><span class="o">=</span><span class="mi">256</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>Using SGLang backend:</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.modules.llm</span> <span class="kn">import</span> <span class="n">SGLangWrapper</span><span class="p">,</span> <span class="n">AsyncSGLang</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.llm</span> <span class="kn">import</span> <span class="n">ChatEnv</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors.llm</span> <span class="kn">import</span> <span class="n">LLMCollector</span>
+
+<span class="c1"># Create SGLang engine (connects to server or launches managed server)</span>
+<span class="n">engine</span> <span class="o">=</span> <span class="n">AsyncSGLang</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;Qwen/Qwen2.5-7B&quot;</span><span class="p">,</span> <span class="n">tp_size</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="c1"># Or connect to existing server:</span>
+<span class="c1"># engine = AsyncSGLang.connect(&quot;http://localhost:30000&quot;)</span>
+<span class="n">policy</span> <span class="o">=</span> <span class="n">SGLangWrapper</span><span class="p">(</span><span class="n">engine</span><span class="p">,</span> <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span> <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;history&quot;</span><span class="p">)</span>
 
 <span class="c1"># Create environment</span>
 <span class="n">env</span> <span class="o">=</span> <span class="n">ChatEnv</span><span class="p">(</span><span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">)</span>
@@ -336,6 +356,18 @@ transform, or a boolean to the collector constructor.</p>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.weight_update.llm.get_model_metadata.html#torchrl.weight_update.llm.get_model_metadata" title="torchrl.weight_update.llm.get_model_metadata"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_model_metadata</span></code></a>(model)</p></td>
 <td><p>Extract model metadata from a model.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.weight_update.llm.SGLangWeightSyncScheme.html#torchrl.weight_update.llm.SGLangWeightSyncScheme" title="torchrl.weight_update.llm.SGLangWeightSyncScheme"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SGLangWeightSyncScheme</span></code></a>(server_url[, ...])</p></td>
+<td><p>Weight synchronization scheme for SGLang servers.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.weight_update.llm.SGLangWeightSender.html#torchrl.weight_update.llm.SGLangWeightSender" title="torchrl.weight_update.llm.SGLangWeightSender"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SGLangWeightSender</span></code></a>(scheme)</p></td>
+<td><p>Sends weights to SGLang workers using NCCL broadcast.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.weight_update.llm.SGLangCollectiveTransport.html#torchrl.weight_update.llm.SGLangCollectiveTransport" title="torchrl.weight_update.llm.SGLangCollectiveTransport"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SGLangCollectiveTransport</span></code></a>(server_url, ...[, ...])</p></td>
+<td><p>Transport for SGLang using NCCL collective communication.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.weight_update.llm.get_sglang_model_metadata.html#torchrl.weight_update.llm.get_sglang_model_metadata" title="torchrl.weight_update.llm.get_sglang_model_metadata"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_sglang_model_metadata</span></code></a>(model)</p></td>
+<td><p>Extract model parameter metadata for weight broadcasting.</p></td>
 </tr>
 </tbody>
 </table>
@@ -412,6 +444,60 @@ The environment handles the conversation state management while the wrapper hand
 </ul>
 <p>This mechanism enables seamless multi-turn interactions and supports complex workflows such as tool use and reward shaping.</p>
 </section>
+<section id="token-first-api">
+<h4>Token-First API<a class="headerlink" href="#token-first-api" title="Link to this heading">¶</a></h4>
+<p>For maximum reliability in multi-turn conversations, TorchRL provides a <strong>token-first API</strong> that maintains
+pre-tokenized inputs throughout the conversation. This ensures KV cache prefix consistency and consistent
+log-probabilities across turns, which is more robust than repeatedly detokenizing and re-tokenizing.</p>
+<p><strong>How it works:</strong></p>
+<ol class="arabic simple">
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">ChatEnv</span></code> with <code class="docutils literal notranslate"><span class="pre">with_tokenizer=True</span></code> to automatically wrap the environment with an
+<a class="reference internal" href="generated/torchrl.envs.llm.transforms.IncrementalTokenizer.html#torchrl.envs.llm.transforms.IncrementalTokenizer" title="torchrl.envs.llm.transforms.IncrementalTokenizer"><code class="xref py py-class docutils literal notranslate"><span class="pre">IncrementalTokenizer</span></code></a> transform</p></li>
+<li><p>Set <code class="docutils literal notranslate"><span class="pre">prefer_tokens=True</span></code> in the LLM wrapper to use pre-tokenized inputs when available</p></li>
+</ol>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.envs.llm</span> <span class="kn">import</span> <span class="n">ChatEnv</span>
+<span class="kn">from</span> <span class="nn">torchrl.modules.llm</span> <span class="kn">import</span> <span class="n">TransformersWrapper</span>
+<span class="kn">from</span> <span class="nn">transformers</span> <span class="kn">import</span> <span class="n">AutoTokenizer</span><span class="p">,</span> <span class="n">AutoModelForCausalLM</span>
+
+<span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;Qwen/Qwen2.5-0.5B-Instruct&quot;</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">AutoModelForCausalLM</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;Qwen/Qwen2.5-0.5B-Instruct&quot;</span><span class="p">)</span>
+
+<span class="c1"># Create environment with automatic tokenization</span>
+<span class="n">env</span> <span class="o">=</span> <span class="n">ChatEnv</span><span class="p">(</span>
+    <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
+    <span class="n">system_prompt</span><span class="o">=</span><span class="s2">&quot;You are a helpful assistant.&quot;</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+    <span class="n">with_tokenizer</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># Wraps with IncrementalTokenizer</span>
+<span class="p">)</span>
+
+<span class="c1"># Create wrapper that uses pre-tokenized inputs</span>
+<span class="n">wrapper</span> <span class="o">=</span> <span class="n">TransformersWrapper</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
+    <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;history&quot;</span><span class="p">,</span>
+    <span class="n">prefer_tokens</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># Use tokens.prompt when available</span>
+<span class="p">)</span>
+
+<span class="c1"># The environment maintains tokens.prompt in sync with history.prompt</span>
+<span class="n">td</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+<span class="k">assert</span> <span class="p">(</span><span class="s2">&quot;tokens&quot;</span><span class="p">,</span> <span class="s2">&quot;prompt&quot;</span><span class="p">)</span> <span class="ow">in</span> <span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># The wrapper uses these tokens directly, bypassing re-tokenization</span>
+<span class="n">td_out</span> <span class="o">=</span> <span class="n">wrapper</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>Benefits:</strong></p>
+<ul class="simple">
+<li><p><strong>KV cache consistency</strong>: The token prefix stays exactly the same across turns</p></li>
+<li><p><strong>Consistent log-probs</strong>: No tokenization variations between forward passes</p></li>
+<li><p><strong>Efficiency</strong>: Avoids redundant tokenization work</p></li>
+</ul>
+<p>The <a class="reference internal" href="generated/torchrl.envs.llm.transforms.IncrementalTokenizer.html#torchrl.envs.llm.transforms.IncrementalTokenizer" title="torchrl.envs.llm.transforms.IncrementalTokenizer"><code class="xref py py-class docutils literal notranslate"><span class="pre">IncrementalTokenizer</span></code></a> transform automatically tokenizes
+<code class="docutils literal notranslate"><span class="pre">history.prompt</span></code> on each reset and step, storing the result in <code class="docutils literal notranslate"><span class="pre">tokens.prompt</span></code>. The LLM wrappers
+(<a class="reference internal" href="generated/torchrl.modules.llm.TransformersWrapper.html#torchrl.modules.llm.TransformersWrapper" title="torchrl.modules.llm.TransformersWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">TransformersWrapper</span></code></a> and <a class="reference internal" href="generated/torchrl.modules.llm.vLLMWrapper.html#torchrl.modules.llm.vLLMWrapper" title="torchrl.modules.llm.vLLMWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">vLLMWrapper</span></code></a>)
+check for <code class="docutils literal notranslate"><span class="pre">tokens.prompt</span></code> when <code class="docutils literal notranslate"><span class="pre">prefer_tokens=True</span></code> and use it directly as input instead of
+re-tokenizing from history.</p>
+</section>
 </section>
 <section id="task-specific-environments">
 <h3>Task-Specific Environments<a class="headerlink" href="#task-specific-environments" title="Link to this heading">¶</a></h3>
@@ -421,7 +507,7 @@ The environment handles the conversation state management while the wrapper hand
 (plus an optional reward parsing transform) in a <code class="xref py py-class docutils literal notranslate"><span class="pre">TransformedEnv</span></code> class.</p>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.ChatEnv.html#torchrl.envs.llm.ChatEnv" title="torchrl.envs.llm.ChatEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChatEnv</span></code></a>(*args, **kwargs)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.ChatEnv.html#torchrl.envs.llm.ChatEnv" title="torchrl.envs.llm.ChatEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChatEnv</span></code></a>(*args[, with_tokenizer])</p></td>
 <td><p>A chat-based environment for LLMs, designed as a blank canvas for conversation and RL.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.DatasetChatEnv.html#torchrl.envs.llm.DatasetChatEnv" title="torchrl.envs.llm.DatasetChatEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DatasetChatEnv</span></code></a>(*args, **kwargs)</p></td>
@@ -655,43 +741,46 @@ For example, in the GSM8K reward parser:</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.DataLoadingPrimer.html#torchrl.envs.llm.transforms.DataLoadingPrimer" title="torchrl.envs.llm.transforms.DataLoadingPrimer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DataLoadingPrimer</span></code></a>(*args[, use_ray_service])</p></td>
 <td><p>A primer that loads data from a dataloader and converts it into a tensordict using <code class="docutils literal notranslate"><span class="pre">stack_method</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.KLComputation.html#torchrl.envs.llm.transforms.KLComputation" title="torchrl.envs.llm.transforms.KLComputation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KLComputation</span></code></a>([gen_log_probs_full_key, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.IncrementalTokenizer.html#torchrl.envs.llm.transforms.IncrementalTokenizer" title="torchrl.envs.llm.transforms.IncrementalTokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IncrementalTokenizer</span></code></a>(tokenizer, *[, ...])</p></td>
+<td><p>Maintains tokens synchronized with history for token-first LLM inference.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.KLComputation.html#torchrl.envs.llm.transforms.KLComputation" title="torchrl.envs.llm.transforms.KLComputation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KLComputation</span></code></a>([gen_log_probs_full_key, ...])</p></td>
 <td><p>A transform to compute KL divergence between two log-prob tensors and optionally add it to the reward.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform" title="torchrl.envs.llm.transforms.KLRewardTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KLRewardTransform</span></code></a>(*args[, use_ray_service])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform" title="torchrl.envs.llm.transforms.KLRewardTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KLRewardTransform</span></code></a>(*args[, use_ray_service])</p></td>
 <td><p>A legacy transform for computing KL divergence-based rewards.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform" title="torchrl.envs.llm.transforms.MCPToolTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MCPToolTransform</span></code></a>(servers[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform" title="torchrl.envs.llm.transforms.MCPToolTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MCPToolTransform</span></code></a>(servers[, ...])</p></td>
 <td><p>A transform that executes tools via the Model Context Protocol (MCP).</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion" title="torchrl.envs.llm.transforms.PolicyVersion"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a>(version_type, ] =)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion" title="torchrl.envs.llm.transforms.PolicyVersion"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a>(version_type, ] =)</p></td>
 <td><p>A transform that keeps track of the version of the policy.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PythonExecutorService.html#torchrl.envs.llm.transforms.PythonExecutorService" title="torchrl.envs.llm.transforms.PythonExecutorService"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PythonExecutorService</span></code></a>([pool_size, timeout])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PythonExecutorService.html#torchrl.envs.llm.transforms.PythonExecutorService" title="torchrl.envs.llm.transforms.PythonExecutorService"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PythonExecutorService</span></code></a>([pool_size, timeout])</p></td>
 <td><p>Ray actor that manages a pool of persistent Python interpreters.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter" title="torchrl.envs.llm.transforms.PythonInterpreter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PythonInterpreter</span></code></a>([tokenizer, tool_name, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter" title="torchrl.envs.llm.transforms.PythonInterpreter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PythonInterpreter</span></code></a>([tokenizer, tool_name, ...])</p></td>
 <td><p>A transform that executes Python code in the LLM response.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer" title="torchrl.envs.llm.transforms.RayDataLoadingPrimer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RayDataLoadingPrimer</span></code></a>(*[, dataloader, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer" title="torchrl.envs.llm.transforms.RayDataLoadingPrimer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RayDataLoadingPrimer</span></code></a>(*[, dataloader, ...])</p></td>
 <td><p>A <a class="reference internal" href="generated/torchrl.envs.llm.transforms.DataLoadingPrimer.html#torchrl.envs.llm.transforms.DataLoadingPrimer" title="torchrl.envs.llm.transforms.dataloading.DataLoadingPrimer"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoadingPrimer</span></code></a> that creates a single actor that can be shared by multiple environments.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.RetrieveKL.html#torchrl.envs.llm.transforms.RetrieveKL" title="torchrl.envs.llm.transforms.RetrieveKL"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RetrieveKL</span></code></a>(*args[, use_ray_service])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.RetrieveKL.html#torchrl.envs.llm.transforms.RetrieveKL" title="torchrl.envs.llm.transforms.RetrieveKL"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RetrieveKL</span></code></a>(*args[, use_ray_service])</p></td>
 <td><p>A transform to retrieve the KL divergence between two models' log-probabilities.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.RetrieveLogProb.html#torchrl.envs.llm.transforms.RetrieveLogProb" title="torchrl.envs.llm.transforms.RetrieveLogProb"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RetrieveLogProb</span></code></a>(model, *[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.RetrieveLogProb.html#torchrl.envs.llm.transforms.RetrieveLogProb" title="torchrl.envs.llm.transforms.RetrieveLogProb"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RetrieveLogProb</span></code></a>(model, *[, ...])</p></td>
 <td><p>A transform to retrieve log-probabilities from a model for KL divergence computation.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform" title="torchrl.envs.llm.transforms.TemplateTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TemplateTransform</span></code></a>(tokenizer[, chat_template])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform" title="torchrl.envs.llm.transforms.TemplateTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TemplateTransform</span></code></a>(tokenizer[, chat_template])</p></td>
 <td><p>A transform that maps applies a chat template to an input string during the forward pass, and parses the strings to the template during backward.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.Tokenizer.html#torchrl.envs.llm.transforms.Tokenizer" title="torchrl.envs.llm.transforms.Tokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tokenizer</span></code></a>([in_keys, out_keys, in_keys_inv, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.Tokenizer.html#torchrl.envs.llm.transforms.Tokenizer" title="torchrl.envs.llm.transforms.Tokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tokenizer</span></code></a>([in_keys, out_keys, in_keys_inv, ...])</p></td>
 <td><p>Applies a tokenization operation on the specified inputs.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_nested_tensor.html#torchrl.envs.llm.transforms.as_nested_tensor" title="torchrl.envs.llm.transforms.as_nested_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_nested_tensor</span></code></a>(list_of_tensordicts)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_nested_tensor.html#torchrl.envs.llm.transforms.as_nested_tensor" title="torchrl.envs.llm.transforms.as_nested_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_nested_tensor</span></code></a>(list_of_tensordicts)</p></td>
 <td><p>Stacks a list of tensordicts into a single tensordict with nested tensors.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_padded_tensor.html#torchrl.envs.llm.transforms.as_padded_tensor" title="torchrl.envs.llm.transforms.as_padded_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_padded_tensor</span></code></a>(list_of_tensordicts[, dim, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_padded_tensor.html#torchrl.envs.llm.transforms.as_padded_tensor" title="torchrl.envs.llm.transforms.as_padded_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_padded_tensor</span></code></a>(list_of_tensordicts[, dim, ...])</p></td>
 <td><p>Stacks a list of tensordicts into a single tensordict with padded tensors.</p></td>
 </tr>
 </tbody>
@@ -702,6 +791,8 @@ For example, in the GSM8K reward parser:</p>
 <section id="objectives">
 <h2>Objectives<a class="headerlink" href="#objectives" title="Link to this heading">¶</a></h2>
 <p>LLM post-training requires specialized loss functions that are adapted to the unique characteristics of language models.</p>
+<section id="grpo-dapo-cispo">
+<h3>GRPO, DAPO, CISPO<a class="headerlink" href="#grpo-dapo-cispo" title="Link to this heading">¶</a></h3>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.LLMLossOutput.html#torchrl.objectives.llm.LLMLossOutput" title="torchrl.objectives.llm.LLMLossOutput"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMLossOutput</span></code></a>(loss_objective, clip_fraction, ...)</p></td>
@@ -730,6 +821,9 @@ For example, in the GSM8K reward parser:</p>
 </tr>
 </tbody>
 </table>
+</section>
+<section id="sft">
+<h3>SFT<a class="headerlink" href="#sft" title="Link to this heading">¶</a></h3>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.SFTLoss.html#torchrl.objectives.llm.SFTLoss" title="torchrl.objectives.llm.SFTLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SFTLoss</span></code></a>(*args, **kwargs)</p></td>
@@ -747,6 +841,7 @@ For example, in the GSM8K reward parser:</p>
 </tr>
 </tbody>
 </table>
+</section>
 </section>
 </section>
 
@@ -800,6 +895,7 @@ For example, in the GSM8K reward parser:</p>
 <li><a class="reference internal" href="#core-functionality">Core Functionality</a></li>
 <li><a class="reference internal" href="#transform-based-architecture">Transform-Based Architecture</a></li>
 <li><a class="reference internal" href="#integration-with-llm-wrappers">Integration with LLM Wrappers</a></li>
+<li><a class="reference internal" href="#token-first-api">Token-First API</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#task-specific-environments">Task-Specific Environments</a></li>
@@ -810,6 +906,10 @@ For example, in the GSM8K reward parser:</p>
 </ul>
 </li>
 <li><a class="reference internal" href="#objectives">Objectives</a><ul>
+<li><a class="reference internal" href="#grpo-dapo-cispo">GRPO, DAPO, CISPO</a></li>
+<li><a class="reference internal" href="#sft">SFT</a><ul>
+</ul>
+</li>
 </ul>
 </li>
 </ul>

@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.weight_update.llm
+
+
+SGLangWeightSender
+==================
+
+.. autoclass:: SGLangWeightSender
+    :members:
+    :inherited-members:

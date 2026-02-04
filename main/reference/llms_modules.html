@@ -145,6 +145,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
@@ -255,11 +256,17 @@ input/output formats across training and inference pipelines.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.vLLMWrapper.html#torchrl.modules.llm.vLLMWrapper" title="torchrl.modules.llm.vLLMWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vLLMWrapper</span></code></a>(*args, **kwargs)</p></td>
 <td><p>A wrapper class for vLLM models, providing a consistent interface for text generation and log probability computation.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.RemoteTransformersWrapper.html#torchrl.modules.llm.RemoteTransformersWrapper" title="torchrl.modules.llm.RemoteTransformersWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RemoteTransformersWrapper</span></code></a>(model[, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.SGLangWrapper.html#torchrl.modules.llm.SGLangWrapper" title="torchrl.modules.llm.SGLangWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SGLangWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A wrapper class for SGLang models, providing a consistent interface for text generation.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.RemoteTransformersWrapper.html#torchrl.modules.llm.RemoteTransformersWrapper" title="torchrl.modules.llm.RemoteTransformersWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RemoteTransformersWrapper</span></code></a>(model[, ...])</p></td>
 <td><p>A remote Ray actor wrapper for TransformersWrapper that provides a simplified interface.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM" title="torchrl.modules.llm.AsyncVLLM"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AsyncVLLM</span></code></a>(engine_args[, num_replicas, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM" title="torchrl.modules.llm.AsyncVLLM"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AsyncVLLM</span></code></a>(engine_args[, num_replicas, ...])</p></td>
 <td><p>A service that manages multiple async vLLM engine actors for distributed inference.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.AsyncSGLang.html#torchrl.modules.llm.AsyncSGLang" title="torchrl.modules.llm.AsyncSGLang"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AsyncSGLang</span></code></a>([server_url, model_path, ...])</p></td>
+<td><p>Server-based SGLang inference service for TorchRL.</p></td>
 </tr>
 </tbody>
 </table>

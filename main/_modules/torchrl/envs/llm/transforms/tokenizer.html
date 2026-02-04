@@ -144,6 +144,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
@@ -244,6 +245,7 @@
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Sequence</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">NonTensorData</span><span class="p">,</span> <span class="n">NonTensorStack</span><span class="p">,</span> <span class="n">TensorDictBase</span>
@@ -254,6 +256,9 @@
 <span class="kn">from</span> <span class="nn">torchrl.data.tensor_specs</span> <span class="kn">import</span> <span class="n">Bounded</span><span class="p">,</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">TensorSpec</span>
 <span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">Transform</span><span class="p">,</span> <span class="n">UnaryTransform</span>
 <span class="kn">from</span> <span class="nn">torchrl.envs.transforms.utils</span> <span class="kn">import</span> <span class="n">_set_missing_tolerance</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">import</span> <span class="nn">transformers</span>
 
 
 <div class="viewcode-block" id="Tokenizer">
@@ -566,6 +571,217 @@
                     <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
                     <span class="n">dtype</span><span class="o">=</span><span class="n">attention_dtype</span><span class="p">,</span>
                 <span class="p">)</span>
+        <span class="k">return</span> <span class="n">observation_spec</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="IncrementalTokenizer">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.IncrementalTokenizer.html#torchrl.envs.llm.transforms.IncrementalTokenizer">[docs]</a>
+<span class="k">class</span> <span class="nc">IncrementalTokenizer</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Maintains tokens synchronized with history for token-first LLM inference.</span>
+
+<span class="sd">    This transform keeps ``tokens.prompt`` in sync with ``history.prompt``, enabling</span>
+<span class="sd">    LLM wrappers to use existing tokens directly instead of re-tokenizing. This</span>
+<span class="sd">    ensures KV cache consistency across multi-turn conversations.</span>
+
+<span class="sd">    **How it works:**</span>
+
+<span class="sd">    - **On reset**: Tokenizes ``history.prompt`` and stores in ``tokens.prompt``.</span>
+<span class="sd">    - **On step**: Reuses ``tokens.full`` from the LLM wrapper output as the new</span>
+<span class="sd">      ``tokens.prompt``. Since ``ChatEnv`` sets ``next.history.prompt = history.full``,</span>
+<span class="sd">      and the LLM wrapper already produced ``tokens.full`` (tokenized ``history.full``),</span>
+<span class="sd">      no re-tokenization is needed - we simply copy ``tokens.full`` to ``next.tokens.prompt``.</span>
+
+<span class="sd">    This approach is both efficient (avoids redundant tokenization) and ensures perfect</span>
+<span class="sd">    token consistency (the exact same tokens are reused).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        tokenizer (transformers.PreTrainedTokenizer): The tokenizer to use for encoding.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        history_key (NestedKey): Key for the history in the tensordict.</span>
+<span class="sd">            Defaults to ``(&quot;history&quot;, &quot;prompt&quot;)``.</span>
+<span class="sd">        tokens_key (NestedKey): Key for storing tokens in the tensordict.</span>
+<span class="sd">            Defaults to ``(&quot;tokens&quot;, &quot;prompt&quot;)``.</span>
+<span class="sd">        chat_template_name (str, optional): Name of the chat template to use.</span>
+<span class="sd">            Defaults to ``None`` (uses tokenizer&#39;s default).</span>
+<span class="sd">        chat_template (str, optional): Custom chat template string.</span>
+<span class="sd">            Defaults to ``None``.</span>
+<span class="sd">        add_generation_prompt (bool): Whether to add generation prompt when tokenizing.</span>
+<span class="sd">            Defaults to ``True``.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs.llm import ChatEnv</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs.llm.transforms import IncrementalTokenizer</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import TransformedEnv</span>
+<span class="sd">        &gt;&gt;&gt; from transformers import AutoTokenizer</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; tokenizer = AutoTokenizer.from_pretrained(&quot;Qwen/Qwen2.5-0.5B&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; env = ChatEnv(batch_size=(1,), tokenizer=tokenizer)</span>
+<span class="sd">        &gt;&gt;&gt; env = TransformedEnv(env, IncrementalTokenizer(tokenizer))</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # After reset and step, tokens.prompt will be maintained</span>
+<span class="sd">        &gt;&gt;&gt; td = env.reset(TensorDict({&quot;query&quot;: &quot;Hello&quot;}, batch_size=(1,)))</span>
+<span class="sd">        &gt;&gt;&gt; assert (&quot;tokens&quot;, &quot;prompt&quot;) in td.keys(True, True)</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        This transform is automatically added by :class:`~torchrl.envs.llm.ChatEnv`</span>
+<span class="sd">        when ``with_tokenizer=True`` is passed to the constructor.</span>
+
+<span class="sd">    .. warning::</span>
+<span class="sd">        **TODO**: Add validation that tokens match history (hash or length check).</span>
+<span class="sd">        For now, we trust that tokens are kept in sync. If you manually modify the</span>
+<span class="sd">        history, clear the tokens field to trigger re-tokenization.</span>
+
+<span class="sd">    See Also:</span>
+<span class="sd">        :class:`~torchrl.modules.llm.policies.vLLMWrapper`: Uses ``prefer_tokens=True``</span>
+<span class="sd">            to leverage tokens maintained by this transform.</span>
+<span class="sd">        :class:`~torchrl.modules.llm.policies.TransformersWrapper`: Uses ``prefer_tokens=True``</span>
+<span class="sd">            to leverage tokens maintained by this transform.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tokenizer</span><span class="p">:</span> <span class="n">transformers</span><span class="o">.</span><span class="n">PreTrainedTokenizer</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">history_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;prompt&quot;</span><span class="p">),</span>
+        <span class="n">tokens_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;tokens&quot;</span><span class="p">,</span> <span class="s2">&quot;prompt&quot;</span><span class="p">),</span>
+        <span class="n">chat_template_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">chat_template</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">add_generation_prompt</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">tokenizer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">history_key</span> <span class="o">=</span> <span class="n">history_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tokens_key</span> <span class="o">=</span> <span class="n">tokens_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">chat_template_name</span> <span class="o">=</span> <span class="n">chat_template_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">chat_template</span> <span class="o">=</span> <span class="n">chat_template</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_generation_prompt</span> <span class="o">=</span> <span class="n">add_generation_prompt</span>
+
+    <span class="k">def</span> <span class="nf">_tokenize_history</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">history</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>  <span class="c1"># History object</span>
+        <span class="n">add_generation_prompt</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Tokenize a history object and return list of token tensors.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            history: The History object to tokenize.</span>
+<span class="sd">            add_generation_prompt: Whether to add generation prompt. If None, uses</span>
+<span class="sd">                the instance&#39;s default.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            List of token tensors (one per batch element).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">add_generation_prompt</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">add_generation_prompt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">add_generation_prompt</span>
+
+        <span class="n">tokenizer_kwargs</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;tokenize&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;padding&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+            <span class="s2">&quot;return_dict&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;add_generation_prompt&quot;</span><span class="p">:</span> <span class="n">add_generation_prompt</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">tokenizer_kwargs</span><span class="p">[</span><span class="s2">&quot;chat_template_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template_name</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">tokenizer_kwargs</span><span class="p">[</span><span class="s2">&quot;chat_template&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template</span>
+
+        <span class="n">result</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
+            <span class="n">tokenizer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">tokenizer_kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># Get input_ids as list of tensors</span>
+        <span class="n">tokens_list</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;input_ids&quot;</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tokens_list</span>
+
+    <span class="k">def</span> <span class="nf">_get_history</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get history from tensordict, handling both nested keys and tensorclass access.&quot;&quot;&quot;</span>
+        <span class="n">history_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">history_key</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">history_key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">history_key</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="c1"># Try to access via tensorclass attribute pattern (e.g., tensordict[&quot;history&quot;].prompt)</span>
+            <span class="n">container_key</span><span class="p">,</span> <span class="n">attr_key</span> <span class="o">=</span> <span class="n">history_key</span>
+            <span class="n">container</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">container_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">container</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">container</span><span class="p">,</span> <span class="n">attr_key</span><span class="p">):</span>
+                <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">container</span><span class="p">,</span> <span class="n">attr_key</span><span class="p">)</span>
+        <span class="c1"># Fall back to regular nested key access</span>
+        <span class="k">return</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">history_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Tokenize full history on reset.&quot;&quot;&quot;</span>
+        <span class="n">history</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_history</span><span class="p">(</span><span class="n">tensordict_reset</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">history</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># No history to tokenize</span>
+            <span class="k">return</span> <span class="n">tensordict_reset</span>
+
+        <span class="c1"># Tokenize full history</span>
+        <span class="n">tokens_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tokenize_history</span><span class="p">(</span><span class="n">history</span><span class="p">)</span>
+
+        <span class="c1"># Store tokens in tensordict - handle batched case</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_tokens</span><span class="p">(</span><span class="n">tensordict_reset</span><span class="p">,</span> <span class="n">tokens_list</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">tensordict_reset</span>
+
+    <span class="k">def</span> <span class="nf">_step</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set tokens.prompt on step, reusing tokens.full when available.</span>
+
+<span class="sd">        The LLM wrapper produces tokens.full (tokenized history.full).</span>
+<span class="sd">        Since ChatEnv sets next.history.prompt = history.full, we can</span>
+<span class="sd">        directly use tokens.full as next.tokens.prompt without re-tokenization.</span>
+
+<span class="sd">        Falls back to tokenizing next.history.prompt if tokens.full is not available.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Try to reuse tokens.full from the action tensordict</span>
+        <span class="c1"># Since next.history.prompt = history.full, tokens.full is already the correct tokenization</span>
+        <span class="n">tokens_full_key</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tokens_key</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s2">&quot;full&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tokens_key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span>
+            <span class="k">else</span> <span class="s2">&quot;tokens_full&quot;</span>
+        <span class="p">)</span>
+        <span class="n">existing_tokens_full</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">tokens_full_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">existing_tokens_full</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Reuse tokens.full as the new tokens.prompt - no tokenization needed!</span>
+            <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tokens_key</span><span class="p">,</span> <span class="n">existing_tokens_full</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">next_tensordict</span>
+
+        <span class="c1"># Fallback: tokenize next.history.prompt if tokens.full was not available</span>
+        <span class="n">history</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_history</span><span class="p">(</span><span class="n">next_tensordict</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">history</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">next_tensordict</span>
+
+        <span class="n">tokens_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tokenize_history</span><span class="p">(</span><span class="n">history</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_tokens</span><span class="p">(</span><span class="n">next_tensordict</span><span class="p">,</span> <span class="n">tokens_list</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">next_tensordict</span>
+
+    <span class="k">def</span> <span class="nf">_set_tokens</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tokens_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set tokens in tensordict, handling variable-length tokens properly.</span>
+
+<span class="sd">        Uses nested tensors for storing variable-length token sequences,</span>
+<span class="sd">        which is compatible with as_list=True retrieval.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Store as nested tensor which handles variable-length sequences</span>
+        <span class="n">tokens_nested</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nested</span><span class="o">.</span><span class="n">as_nested_tensor</span><span class="p">(</span><span class="n">tokens_list</span><span class="p">)</span>
+        <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tokens_key</span><span class="p">,</span> <span class="n">tokens_nested</span><span class="p">)</span>
+
+<div class="viewcode-block" id="IncrementalTokenizer.transform_observation_spec">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.IncrementalTokenizer.html#torchrl.envs.llm.transforms.IncrementalTokenizer.transform_observation_spec">[docs]</a>
+    <span class="k">def</span> <span class="nf">transform_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add tokens spec to observation spec.&quot;&quot;&quot;</span>
+        <span class="n">new_shape</span> <span class="o">=</span> <span class="n">observation_spec</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,))</span>
+        <span class="n">observation_spec</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">tokens_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">vocab_size</span><span class="p">,</span>
+            <span class="n">shape</span><span class="o">=</span><span class="n">new_shape</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
+        <span class="p">)</span>
         <span class="k">return</span> <span class="n">observation_spec</span></div>
 </div>
 

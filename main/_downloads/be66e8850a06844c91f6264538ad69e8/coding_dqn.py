@@ -91,25 +91,13 @@ from tensordict.nn import TensorDictSequential
 
 warnings.filterwarnings("ignore")
 
+# Set multiprocessing start method to fork if not already set
+# This allows the tutorial to run as a script without if __name__ == "__main__"
 from torch import multiprocessing
 
-# TorchRL prefers spawn method, that restricts creation of  ``~torchrl.envs.ParallelEnv`` inside
-# `__main__` method call, but for the easy of reading the code switch to fork
-# which is also a default spawn method in Google's Colaboratory
-try:
-    is_sphinx = __sphinx_build__
-except NameError:
-    is_sphinx = False
-
-try:
-    multiprocessing.set_start_method(
-        "spawn" if is_sphinx else "fork", force=not is_sphinx
-    )
-    mp_context = "spawn" if is_sphinx else "fork"
-except RuntimeError:
-    # If we can't set the method globally we can still run the parallel env with "fork"
-    # This will fail on windows! Use "spawn" and put the script within `if __name__ == "__main__"`
-    mp_context = "spawn" if is_sphinx else "fork"
+if multiprocessing.get_start_method(allow_none=True) is None:
+    multiprocessing.set_start_method("fork")
+mp_context = multiprocessing.get_start_method()
 
 # sphinx_gallery_end_ignore
 import os

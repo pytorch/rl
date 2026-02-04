@@ -144,6 +144,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
@@ -1324,7 +1325,22 @@
             <span class="k">if</span> <span class="n">storage_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">storage_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
             <span class="k">try</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">cursor</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
+                <span class="c1"># Optimize lazy stack writes: write each tensordict directly to</span>
+                <span class="c1"># storage to avoid creating an intermediate contiguous copy.</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">LazyStackedTensorDict</span><span class="p">):</span>
+                    <span class="n">stack_dim</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">stack_dim</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cursor</span><span class="p">,</span> <span class="nb">slice</span><span class="p">):</span>
+                        <span class="c1"># For slices, storage[slice] typically returns a view.</span>
+                        <span class="c1"># Use _stack_onto_ to write directly without intermediate copy.</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">cursor</span><span class="p">]</span><span class="o">.</span><span class="n">_stack_onto_</span><span class="p">(</span>
+                            <span class="nb">list</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="n">stack_dim</span><span class="p">)),</span> <span class="n">dim</span><span class="o">=</span><span class="n">stack_dim</span>
+                        <span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="c1"># For tensor/sequence indices, use update_at_ which handles</span>
+                        <span class="c1"># lazy stacks efficiently in a single call.</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">update_at_</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">cursor</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">cursor</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
             <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
                 <span class="k">if</span> <span class="s2">&quot;locked&quot;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span>
                     <span class="c1"># Provide informative error about key differences</span>
@@ -1395,7 +1411,22 @@
             <span class="k">if</span> <span class="n">storage_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">storage_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">cursor</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
+            <span class="c1"># Optimize lazy stack writes: write each tensordict directly to</span>
+            <span class="c1"># storage to avoid creating an intermediate contiguous copy.</span>
+            <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">LazyStackedTensorDict</span><span class="p">):</span>
+                <span class="n">stack_dim</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">stack_dim</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cursor</span><span class="p">,</span> <span class="nb">slice</span><span class="p">):</span>
+                    <span class="c1"># For slices, storage[slice] typically returns a view.</span>
+                    <span class="c1"># Use _stack_onto_ to write directly without intermediate copy.</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">cursor</span><span class="p">]</span><span class="o">.</span><span class="n">_stack_onto_</span><span class="p">(</span>
+                        <span class="nb">list</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="n">stack_dim</span><span class="p">)),</span> <span class="n">dim</span><span class="o">=</span><span class="n">stack_dim</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># For tensor/sequence indices, use update_at_ which handles</span>
+                    <span class="c1"># lazy stacks efficiently in a single call.</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">update_at_</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">cursor</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">cursor</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
         <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
             <span class="k">if</span> <span class="s2">&quot;locked&quot;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span>
                 <span class="c1"># Provide informative error about key differences</span>

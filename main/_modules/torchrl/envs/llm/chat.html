@@ -144,6 +144,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
@@ -243,9 +244,7 @@
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">functools</span>
-
 <span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span>
-
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
@@ -255,7 +254,7 @@
 <span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">NonTensor</span>
 <span class="kn">from</span> <span class="nn">torchrl.data.llm.history</span> <span class="kn">import</span> <span class="n">History</span>
 <span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">EnvBase</span><span class="p">,</span> <span class="n">TransformedEnv</span>
-
+<span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">_EnvPostInit</span>
 <span class="kn">from</span> <span class="nn">torchrl.envs.llm.transforms.dataloading</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">DataLoadingPrimer</span><span class="p">,</span>
     <span class="n">RayDataLoadingPrimer</span><span class="p">,</span>
@@ -264,6 +263,25 @@
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">import</span> <span class="nn">transformers</span>
+
+
+<span class="k">class</span> <span class="nc">_ChatEnvMeta</span><span class="p">(</span><span class="n">_EnvPostInit</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Metaclass for ChatEnv that handles with_tokenizer wrapping.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">with_tokenizer</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="c1"># Create the instance using parent metaclass logic</span>
+        <span class="n">instance</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="c1"># Wrap with IncrementalTokenizer if requested</span>
+        <span class="k">if</span> <span class="n">with_tokenizer</span><span class="p">:</span>
+            <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tokenizer&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">tokenizer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;tokenizer must be provided when with_tokenizer=True&quot;</span><span class="p">)</span>
+            <span class="kn">from</span> <span class="nn">torchrl.envs.llm.transforms</span> <span class="kn">import</span> <span class="n">IncrementalTokenizer</span>
+
+            <span class="k">return</span> <span class="n">TransformedEnv</span><span class="p">(</span><span class="n">instance</span><span class="p">,</span> <span class="n">IncrementalTokenizer</span><span class="p">(</span><span class="n">tokenizer</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">instance</span>
 
 
 <span class="k">def</span> <span class="nf">_default_collate_fn</span><span class="p">(</span><span class="n">batch</span><span class="p">):</span>
@@ -280,7 +298,7 @@
 
 <div class="viewcode-block" id="ChatEnv">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.llm.ChatEnv.html#torchrl.envs.llm.ChatEnv">[docs]</a>
-<span class="k">class</span> <span class="nc">ChatEnv</span><span class="p">(</span><span class="n">EnvBase</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">ChatEnv</span><span class="p">(</span><span class="n">EnvBase</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_ChatEnvMeta</span><span class="p">):</span>
 <span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;A chat-based environment for LLMs, designed as a blank canvas for conversation and RL.</span>
 
 <span class="sd">    This environment is designed to work seamlessly with both :class:`~torchrl.modules.llm.policies.TransformersWrapper` and</span>
@@ -322,6 +340,7 @@
 <span class="sd">            - **Tool execution**: :class:`~torchrl.envs.llm.transforms.PythonInterpreter` for Python code execution</span>
 <span class="sd">            - **Data loading**: :class:`~torchrl.envs.llm.transforms.DataLoadingPrimer` for loading prompts from datasets</span>
 <span class="sd">            - **Thinking prompts**: :class:`~torchrl.envs.llm.transforms.AddThinkingPrompt` for chain-of-thought reasoning</span>
+<span class="sd">            - **Token maintenance**: :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer` for token-first inference</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        input_mode (Literal[&quot;history&quot;, &quot;text&quot;, &quot;tokens&quot;]): The mode of input to the environment.</span>
@@ -339,6 +358,11 @@
 <span class="sd">        policy_role (str, optional): The role of the policy/assistant. Defaults to `&quot;assistant&quot;`.</span>
 <span class="sd">        data_key (str, optional): The key of the data input to the env at reset time (from dataloader). Defaults to `&quot;query&quot;`.</span>
 <span class="sd">        device (torch.device, optional): The device to use for computations. Defaults to `None`.</span>
+<span class="sd">        with_tokenizer (bool, optional): If ``True``, the environment is automatically wrapped with</span>
+<span class="sd">            :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer` to maintain ``tokens.prompt`` synchronized</span>
+<span class="sd">            with ``history.prompt``. This enables token-first inference in LLM wrappers with ``prefer_tokens=True``,</span>
+<span class="sd">            ensuring KV cache consistency across multi-turn conversations. Requires ``tokenizer`` to be provided.</span>
+<span class="sd">            Defaults to ``False``.</span>
 
 <span class="sd">    Methods:</span>
 <span class="sd">        reset (TensorDict): Resets the state of the environment. A tensordict or equivalent with a `&quot;query&quot;` entry</span>
@@ -375,6 +399,16 @@
 <span class="sd">        ... }, batch_size=(1,))</span>
 <span class="sd">        &gt;&gt;&gt; next_obs = env.step(response_data)</span>
 <span class="sd">        &gt;&gt;&gt; print(next_obs[&quot;history&quot;].prompt)  # Full conversation history</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Create environment with token maintenance for KV cache consistency</span>
+<span class="sd">        &gt;&gt;&gt; from transformers import AutoTokenizer</span>
+<span class="sd">        &gt;&gt;&gt; tokenizer = AutoTokenizer.from_pretrained(&quot;Qwen/Qwen2.5-0.5B&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; env = ChatEnv(</span>
+<span class="sd">        ...     tokenizer=tokenizer,</span>
+<span class="sd">        ...     system_prompt=&quot;You are a helpful assistant.&quot;,</span>
+<span class="sd">        ...     with_tokenizer=True,  # Automatically wraps with IncrementalTokenizer</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; # Now tokens.prompt will be available and synchronized with history.prompt</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -384,6 +418,38 @@
     <span class="n">response_key</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;response&quot;</span><span class="p">)</span>
     <span class="c1"># Nested key corresponding to the data input to the env at reset time (from dataloader)</span>
     <span class="n">data_key</span> <span class="o">=</span> <span class="s2">&quot;query&quot;</span>
+
+<div class="viewcode-block" id="ChatEnv.with_tokenizer">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.llm.ChatEnv.html#torchrl.envs.llm.ChatEnv.with_tokenizer">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">with_tokenizer</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">tokenizer</span><span class="p">:</span> <span class="n">transformers</span><span class="o">.</span><span class="n">AutoTokenizer</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransformedEnv</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a ChatEnv wrapped with IncrementalTokenizer for token maintenance.</span>
+
+<span class="sd">        This is a convenience method equivalent to ``ChatEnv(..., with_tokenizer=True)``.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tokenizer: The tokenizer to use for tokenization.</span>
+<span class="sd">            **kwargs: Additional arguments passed to ChatEnv constructor.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            TransformedEnv: A ChatEnv wrapped with IncrementalTokenizer.</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            &gt;&gt;&gt; from transformers import AutoTokenizer</span>
+<span class="sd">            &gt;&gt;&gt; tokenizer = AutoTokenizer.from_pretrained(&quot;Qwen/Qwen2.5-0.5B&quot;)</span>
+<span class="sd">            &gt;&gt;&gt; env = ChatEnv.with_tokenizer(</span>
+<span class="sd">            ...     tokenizer=tokenizer,</span>
+<span class="sd">            ...     batch_size=(1,),</span>
+<span class="sd">            ...     system_prompt=&quot;You are a helpful assistant.&quot;,</span>
+<span class="sd">            ... )</span>
+<span class="sd">            &gt;&gt;&gt; # Now tokens.prompt will be maintained automatically</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span> <span class="n">with_tokenizer</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>

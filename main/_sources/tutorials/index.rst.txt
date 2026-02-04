@@ -168,6 +168,23 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Get started with reinforcement learning in PyTorch.">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_torchrl_demo_thumb.png
+    :alt:
+
+  :doc:`/tutorials/torchrl_demo`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Introduction to TorchRL</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
 
 .. only:: html
@@ -355,6 +372,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
    /tutorials/getting-started-1
    /tutorials/multi_task
    /tutorials/dqn_with_rnn
+   /tutorials/torchrl_demo
    /tutorials/export
    /tutorials/multiagent_ppo
    /tutorials/torchrl_envs

@@ -147,6 +147,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
@@ -316,6 +317,10 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <span class="go">tensor(True)</span>
 </pre></div>
 </div>
+<p>To recover the original (denormalized) values from normalized data, use <a class="reference internal" href="#torchrl.envs.transforms.VecNorm.denorm" title="torchrl.envs.transforms.VecNorm.denorm"><code class="xref py py-meth docutils literal notranslate"><span class="pre">denorm()</span></code></a>:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">denormed</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">denorm</span><span class="p">(</span><span class="n">tds</span><span class="p">)</span>
+</pre></div>
+</div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.transforms.VecNorm.build_td_for_shared_vecnorm">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">build_td_for_shared_vecnorm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.common.EnvBase"><span class="pre">EnvBase</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">memmap</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.11)"><span class="pre">TensorDictBase</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#VecNorm.build_td_for_shared_vecnorm"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.VecNorm.build_td_for_shared_vecnorm" title="Link to this definition">¶</a></dt>
@@ -347,6 +352,37 @@ will be placed in shared memory.</p></li>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># on workers</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">v</span> <span class="o">=</span> <span class="n">VecNorm</span><span class="p">(</span><span class="n">shared_td</span><span class="o">=</span><span class="n">queue</span><span class="o">.</span><span class="n">get</span><span class="p">())</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">TransformedEnv</span><span class="p">(</span><span class="n">make_env</span><span class="p">(),</span> <span class="n">v</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.envs.transforms.VecNorm.denorm">
+<span class="sig-name descname"><span class="pre">denorm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.11)"><span class="pre">TensorDictBase</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.11)"><span class="pre">TensorDictBase</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#VecNorm.denorm"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.VecNorm.denorm" title="Link to this definition">¶</a></dt>
+<dd><p>Denormalize a tensordict using the inverse of the normalization transform.</p>
+<p>Applies the inverse of the normalization: <code class="docutils literal notranslate"><span class="pre">original</span> <span class="pre">=</span> <span class="pre">normalized</span> <span class="pre">*</span> <span class="pre">scale</span> <span class="pre">+</span> <span class="pre">loc</span></code>.</p>
+<p>Reads normalized values from <code class="docutils literal notranslate"><span class="pre">out_keys</span></code> and writes denormalized values to <code class="docutils literal notranslate"><span class="pre">in_keys</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tensordict</strong> (<em>TensorDictBase</em>) – the tensordict containing normalized values.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A shallow copy of the tensordict with denormalized values written to <code class="docutils literal notranslate"><span class="pre">in_keys</span></code>.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>RuntimeError</strong> – if the transform has not been initialized (no data seen yet).</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">GymEnv</span><span class="p">,</span> <span class="n">VecNorm</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">vecnorm</span> <span class="o">=</span> <span class="n">VecNorm</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation_norm&quot;</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">vecnorm</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Collect some data to initialize statistics</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rollout</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Denormalize the normalized observations</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">denormed</span> <span class="o">=</span> <span class="n">vecnorm</span><span class="o">.</span><span class="n">denorm</span><span class="p">(</span><span class="n">rollout</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># denormed[&quot;observation&quot;] now contains the original scale values</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -545,6 +581,7 @@ API.</p>
 <li><a class="reference internal" href="#">VecNorm</a><ul>
 <li><a class="reference internal" href="#torchrl.envs.transforms.VecNorm"><code class="docutils literal notranslate"><span class="pre">VecNorm</span></code></a><ul>
 <li><a class="reference internal" href="#torchrl.envs.transforms.VecNorm.build_td_for_shared_vecnorm"><code class="docutils literal notranslate"><span class="pre">VecNorm.build_td_for_shared_vecnorm()</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.envs.transforms.VecNorm.denorm"><code class="docutils literal notranslate"><span class="pre">VecNorm.denorm()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.transforms.VecNorm.forward"><code class="docutils literal notranslate"><span class="pre">VecNorm.forward()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.transforms.VecNorm.freeze"><code class="docutils literal notranslate"><span class="pre">VecNorm.freeze()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.transforms.VecNorm.frozen_copy"><code class="docutils literal notranslate"><span class="pre">VecNorm.frozen_copy()</span></code></a></li>

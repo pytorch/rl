@@ -144,6 +144,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
@@ -274,6 +275,16 @@
 <span class="sd">    with gradient descent along with any other remaining network weights. Factorized Gaussian</span>
 <span class="sd">    noise is the type of noise usually employed.</span>
 
+<span class="sd">    .. note:: The noise is controlled by the exploration mode set via</span>
+<span class="sd">        :func:`~torchrl.envs.utils.set_exploration_type`. When exploration type is</span>
+<span class="sd">        :class:`~torchrl.envs.utils.ExplorationType.RANDOM`, noise is added to the weights.</span>
+<span class="sd">        When exploration type is :class:`~torchrl.envs.utils.ExplorationType.DETERMINISTIC`,</span>
+<span class="sd">        :class:`~torchrl.envs.utils.ExplorationType.MODE`, or</span>
+<span class="sd">        :class:`~torchrl.envs.utils.ExplorationType.MEAN`, only the mean weights are used.</span>
+
+<span class="sd">        This behavior is controlled by the ``use_exploration_type`` argument. When set to</span>
+<span class="sd">        ``True``, the exploration type is used. When set to ``False``, the legacy behavior</span>
+<span class="sd">        of using ``self.training`` (i.e., ``model.train()``/``model.eval()``) is used instead.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        in_features (int): input features dimension</span>
@@ -285,7 +296,13 @@
 <span class="sd">        dtype (torch.dtype, optional): dtype of the parameters.</span>
 <span class="sd">            Defaults to ``None`` (default pytorch dtype)</span>
 <span class="sd">        std_init (scalar, optional): initial value of the Gaussian standard deviation before optimization.</span>
-<span class="sd">            Defaults to ``0.1``</span>
+<span class="sd">            Defaults to ``0.5`` as per the original paper.</span>
+<span class="sd">        use_exploration_type (bool or None, optional): if ``True``, noise is controlled by</span>
+<span class="sd">            :func:`~torchrl.envs.utils.exploration_type`. If ``False``, noise is controlled</span>
+<span class="sd">            by ``self.training`` (legacy behavior). If ``None`` (default), uses the legacy</span>
+<span class="sd">            behavior but emits a ``FutureWarning`` that the default will change to ``True``</span>
+<span class="sd">            in v0.13. Pass ``True`` to opt into the new behavior, or ``False`` to silence</span>
+<span class="sd">            the warning and keep the legacy behavior.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -296,12 +313,29 @@
         <span class="n">bias</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">std_init</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">std_init</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">use_exploration_type</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">in_features</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">in_features</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">out_features</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">out_features</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">std_init</span> <span class="o">=</span> <span class="n">std_init</span>
+
+        <span class="c1"># Handle use_exploration_type deprecation</span>
+        <span class="k">if</span> <span class="n">use_exploration_type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;NoisyLinear currently uses `self.training` to control noise. &quot;</span>
+                <span class="s2">&quot;In v0.13, this will change to use `exploration_type()` from &quot;</span>
+                <span class="s2">&quot;torchrl.envs.utils for consistency with other exploration modules. &quot;</span>
+                <span class="s2">&quot;To opt into the new behavior now, pass `use_exploration_type=True`. &quot;</span>
+                <span class="s2">&quot;To silence this warning and keep the legacy behavior, pass &quot;</span>
+                <span class="s2">&quot;`use_exploration_type=False`.&quot;</span><span class="p">,</span>
+                <span class="ne">FutureWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_use_exploration_type</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_use_exploration_type</span> <span class="o">=</span> <span class="n">use_exploration_type</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">weight_mu</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span>
             <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span>
@@ -372,9 +406,16 @@
         <span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="o">*</span><span class="n">size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">weight_mu</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">x</span><span class="o">.</span><span class="n">sign</span><span class="p">()</span><span class="o">.</span><span class="n">mul_</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">sqrt_</span><span class="p">())</span>
 
+    <span class="k">def</span> <span class="nf">_should_use_noise</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Determine whether to add noise based on exploration type or training mode.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_exploration_type</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">exploration_type</span><span class="p">()</span> <span class="ow">is</span> <span class="n">ExplorationType</span><span class="o">.</span><span class="n">RANDOM</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span>
+
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">weight</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_should_use_noise</span><span class="p">():</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_mu</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_sigma</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_epsilon</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_mu</span>
@@ -382,7 +423,7 @@
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">bias</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_mu</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_should_use_noise</span><span class="p">():</span>
                 <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_mu</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_sigma</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_epsilon</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_mu</span>
@@ -407,9 +448,15 @@
 <span class="sd">        dtype (torch.dtype, optional): dtype of the parameters.</span>
 <span class="sd">            Defaults to the default PyTorch dtype.</span>
 <span class="sd">        std_init (scalar): initial value of the Gaussian standard deviation before optimization.</span>
-<span class="sd">            Defaults to 0.1</span>
+<span class="sd">            Defaults to ``0.5`` as per the original paper.</span>
+<span class="sd">        use_exploration_type (bool or None, optional): if ``True``, noise is controlled by</span>
+<span class="sd">            :func:`~torchrl.envs.utils.exploration_type`. If ``False``, noise is controlled</span>
+<span class="sd">            by ``self.training`` (legacy behavior). If ``None`` (default), uses the legacy</span>
+<span class="sd">            behavior but emits a ``FutureWarning``. See :class:`NoisyLinear` for details.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">cls_to_become</span> <span class="o">=</span> <span class="n">NoisyLinear</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -417,23 +464,41 @@
         <span class="n">bias</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">std_init</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">std_init</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">use_exploration_type</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="c1"># Handle use_exploration_type deprecation</span>
+        <span class="k">if</span> <span class="n">use_exploration_type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;NoisyLazyLinear currently uses `self.training` to control noise. &quot;</span>
+                <span class="s2">&quot;In v0.13, this will change to use `exploration_type()` from &quot;</span>
+                <span class="s2">&quot;torchrl.envs.utils for consistency with other exploration modules. &quot;</span>
+                <span class="s2">&quot;To opt into the new behavior now, pass `use_exploration_type=True`. &quot;</span>
+                <span class="s2">&quot;To silence this warning and keep the legacy behavior, pass &quot;</span>
+                <span class="s2">&quot;`use_exploration_type=False`.&quot;</span><span class="p">,</span>
+                <span class="ne">FutureWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">_use_exploration_type</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">_use_exploration_type</span> <span class="o">=</span> <span class="n">use_exploration_type</span>
+
+        <span class="c1"># Call super().__init__ with use_exploration_type to avoid duplicate warning</span>
+        <span class="c1"># This goes through LazyModuleMixin.__init__ which registers the forward pre-hook</span>
+        <span class="n">factory_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="n">device</span><span class="p">,</span> <span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="n">dtype</span><span class="p">}</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">use_exploration_type</span><span class="o">=</span><span class="n">_use_exploration_type</span>
+        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">out_features</span> <span class="o">=</span> <span class="n">out_features</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">std_init</span> <span class="o">=</span> <span class="n">std_init</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">weight_mu</span> <span class="o">=</span> <span class="n">UninitializedParameter</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">weight_sigma</span> <span class="o">=</span> <span class="n">UninitializedParameter</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
-            <span class="s2">&quot;weight_epsilon&quot;</span><span class="p">,</span> <span class="n">UninitializedBuffer</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
-        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_mu</span> <span class="o">=</span> <span class="n">UninitializedParameter</span><span class="p">(</span><span class="o">**</span><span class="n">factory_kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_sigma</span> <span class="o">=</span> <span class="n">UninitializedParameter</span><span class="p">(</span><span class="o">**</span><span class="n">factory_kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;weight_epsilon&quot;</span><span class="p">,</span> <span class="n">UninitializedBuffer</span><span class="p">(</span><span class="o">**</span><span class="n">factory_kwargs</span><span class="p">))</span>
         <span class="k">if</span> <span class="n">bias</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">bias_mu</span> <span class="o">=</span> <span class="n">UninitializedParameter</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">bias_sigma</span> <span class="o">=</span> <span class="n">UninitializedParameter</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
-                <span class="s2">&quot;bias_epsilon&quot;</span><span class="p">,</span> <span class="n">UninitializedBuffer</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
-            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bias_mu</span> <span class="o">=</span> <span class="n">UninitializedParameter</span><span class="p">(</span><span class="o">**</span><span class="n">factory_kwargs</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bias_sigma</span> <span class="o">=</span> <span class="n">UninitializedParameter</span><span class="p">(</span><span class="o">**</span><span class="n">factory_kwargs</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;bias_epsilon&quot;</span><span class="p">,</span> <span class="n">UninitializedBuffer</span><span class="p">(</span><span class="o">**</span><span class="n">factory_kwargs</span><span class="p">))</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">bias_mu</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">reset_parameters</span><span class="p">()</span>

@@ -147,6 +147,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
@@ -248,7 +249,7 @@
 <h1>ChatEnv<a class="headerlink" href="#chatenv" title="Link to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.envs.llm.ChatEnv">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.llm.</span></span><span class="sig-name descname"><span class="pre">ChatEnv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/llm/chat.html#ChatEnv"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.ChatEnv" title="Link to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.llm.</span></span><span class="sig-name descname"><span class="pre">ChatEnv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">with_tokenizer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/llm/chat.html#ChatEnv"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.ChatEnv" title="Link to this definition">¶</a></dt>
 <dd><p>A chat-based environment for LLMs, designed as a blank canvas for conversation and RL.</p>
 <p>This environment is designed to work seamlessly with both <code class="xref py py-class docutils literal notranslate"><span class="pre">TransformersWrapper</span></code> and
 <code class="xref py py-class docutils literal notranslate"><span class="pre">vLLMWrapper</span></code>. It provides the fundamental structure for managing conversation state
@@ -296,6 +297,7 @@ history, making it ideal for dialogue systems and reinforcement learning applica
 <li><p><strong>Tool execution</strong>: <a class="reference internal" href="torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter" title="torchrl.envs.llm.transforms.PythonInterpreter"><code class="xref py py-class docutils literal notranslate"><span class="pre">PythonInterpreter</span></code></a> for Python code execution</p></li>
 <li><p><strong>Data loading</strong>: <a class="reference internal" href="torchrl.envs.llm.transforms.DataLoadingPrimer.html#torchrl.envs.llm.transforms.DataLoadingPrimer" title="torchrl.envs.llm.transforms.DataLoadingPrimer"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoadingPrimer</span></code></a> for loading prompts from datasets</p></li>
 <li><p><strong>Thinking prompts</strong>: <a class="reference internal" href="torchrl.envs.llm.transforms.AddThinkingPrompt.html#torchrl.envs.llm.transforms.AddThinkingPrompt" title="torchrl.envs.llm.transforms.AddThinkingPrompt"><code class="xref py py-class docutils literal notranslate"><span class="pre">AddThinkingPrompt</span></code></a> for chain-of-thought reasoning</p></li>
+<li><p><strong>Token maintenance</strong>: <a class="reference internal" href="torchrl.envs.llm.transforms.IncrementalTokenizer.html#torchrl.envs.llm.transforms.IncrementalTokenizer" title="torchrl.envs.llm.transforms.IncrementalTokenizer"><code class="xref py py-class docutils literal notranslate"><span class="pre">IncrementalTokenizer</span></code></a> for token-first inference</p></li>
 </ul>
 </div></blockquote>
 </dd>
@@ -318,6 +320,11 @@ Defaults to <cite>None</cite>.</p></li>
 <li><p><strong>policy_role</strong> (<em>str</em><em>, </em><em>optional</em>) – The role of the policy/assistant. Defaults to <cite>“assistant”</cite>.</p></li>
 <li><p><strong>data_key</strong> (<em>str</em><em>, </em><em>optional</em>) – The key of the data input to the env at reset time (from dataloader). Defaults to <cite>“query”</cite>.</p></li>
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.10)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The device to use for computations. Defaults to <cite>None</cite>.</p></li>
+<li><p><strong>with_tokenizer</strong> (<em>bool</em><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the environment is automatically wrapped with
+<a class="reference internal" href="torchrl.envs.llm.transforms.IncrementalTokenizer.html#torchrl.envs.llm.transforms.IncrementalTokenizer" title="torchrl.envs.llm.transforms.IncrementalTokenizer"><code class="xref py py-class docutils literal notranslate"><span class="pre">IncrementalTokenizer</span></code></a> to maintain <code class="docutils literal notranslate"><span class="pre">tokens.prompt</span></code> synchronized
+with <code class="docutils literal notranslate"><span class="pre">history.prompt</span></code>. This enables token-first inference in LLM wrappers with <code class="docutils literal notranslate"><span class="pre">prefer_tokens=True</span></code>,
+ensuring KV cache consistency across multi-turn conversations. Requires <code class="docutils literal notranslate"><span class="pre">tokenizer</span></code> to be provided.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
@@ -366,6 +373,16 @@ The response key is defined as a class attribute <cite>response_key</cite>.</p>
 <span class="gp">... </span><span class="p">},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">next_obs</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">response_data</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">next_obs</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">prompt</span><span class="p">)</span>  <span class="c1"># Full conversation history</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create environment with token maintenance for KV cache consistency</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">transformers</span> <span class="kn">import</span> <span class="n">AutoTokenizer</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;Qwen/Qwen2.5-0.5B&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">ChatEnv</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">system_prompt</span><span class="o">=</span><span class="s2">&quot;You are a helpful assistant.&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">with_tokenizer</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># Automatically wraps with IncrementalTokenizer</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Now tokens.prompt will be available and synchronized with history.prompt</span>
 </pre></div>
 </div>
 <dl class="py property">
@@ -3327,6 +3344,38 @@ mode (<code class="docutils literal notranslate"><span class="pre">False</span><
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.envs.llm.ChatEnv.with_tokenizer">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">with_tokenizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tokenizer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">transformers.AutoTokenizer</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.envs.transforms.TransformedEnv.html#torchrl.envs.transforms.TransformedEnv" title="torchrl.envs.transforms.TransformedEnv"><span class="pre">TransformedEnv</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/llm/chat.html#ChatEnv.with_tokenizer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.ChatEnv.with_tokenizer" title="Link to this definition">¶</a></dt>
+<dd><p>Create a ChatEnv wrapped with IncrementalTokenizer for token maintenance.</p>
+<p>This is a convenience method equivalent to <code class="docutils literal notranslate"><span class="pre">ChatEnv(...,</span> <span class="pre">with_tokenizer=True)</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tokenizer</strong> – The tokenizer to use for tokenization.</p></li>
+<li><p><strong>**kwargs</strong> – Additional arguments passed to ChatEnv constructor.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A ChatEnv wrapped with IncrementalTokenizer.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="torchrl.envs.transforms.TransformedEnv.html#torchrl.envs.transforms.TransformedEnv" title="torchrl.envs.transforms.TransformedEnv">TransformedEnv</a></p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">transformers</span> <span class="kn">import</span> <span class="n">AutoTokenizer</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;Qwen/Qwen2.5-0.5B&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">ChatEnv</span><span class="o">.</span><span class="n">with_tokenizer</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span>
+<span class="gp">... </span>    <span class="n">system_prompt</span><span class="o">=</span><span class="s2">&quot;You are a helpful assistant.&quot;</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Now tokens.prompt will be maintained automatically</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.llm.ChatEnv.xpu">
 <span class="sig-name descname"><span class="pre">xpu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.10)"><span class="pre">device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#torchrl.envs.llm.ChatEnv.xpu" title="Link to this definition">¶</a></dt>
 <dd><p>Move all model parameters and buffers to the XPU.</p>
@@ -3521,6 +3570,7 @@ See <a class="reference external" href="https://docs.pytorch.org/docs/stable/gen
 <li><a class="reference internal" href="#torchrl.envs.llm.ChatEnv.to_empty"><code class="docutils literal notranslate"><span class="pre">ChatEnv.to_empty()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.llm.ChatEnv.train"><code class="docutils literal notranslate"><span class="pre">ChatEnv.train()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.llm.ChatEnv.type"><code class="docutils literal notranslate"><span class="pre">ChatEnv.type()</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.envs.llm.ChatEnv.with_tokenizer"><code class="docutils literal notranslate"><span class="pre">ChatEnv.with_tokenizer()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.llm.ChatEnv.xpu"><code class="docutils literal notranslate"><span class="pre">ChatEnv.xpu()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.envs.llm.ChatEnv.zero_grad"><code class="docutils literal notranslate"><span class="pre">ChatEnv.zero_grad()</span></code></a></li>
 </ul>

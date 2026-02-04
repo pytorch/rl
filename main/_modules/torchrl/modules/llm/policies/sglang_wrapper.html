@@ -1,0 +1,1297 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.modules.llm.policies.sglang_wrapper &mdash; torchrl main documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../../../_static/pytorch.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" /> 
+
+  
+  <script src="../../../../../_static/js/modernizr.min.js"></script>
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+  <div>
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.11.0) &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.modules.llm.policies.sglang_wrapper</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
+        </div>
+
+        <div class="pytorch-content-left">
+    
+    
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" class="pytorch-article">
+              
+  <h1>Source code for torchrl.modules.llm.policies.sglang_wrapper</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="sd">&quot;&quot;&quot;SGLang wrapper for TorchRL LLM policies.</span>
+
+<span class="sd">This module provides SGLangWrapper, a policy wrapper that interfaces with</span>
+<span class="sd">SGLang servers for text generation in RL training workflows.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">importlib.util</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">lazy_stack</span><span class="p">,</span>
+    <span class="n">LazyStackedTensorDict</span><span class="p">,</span>
+    <span class="n">MetaData</span><span class="p">,</span>
+    <span class="n">set_list_to_stack</span><span class="p">,</span>
+    <span class="n">TensorDict</span><span class="p">,</span>
+    <span class="n">TensorDictBase</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">tensordict.utils</span> <span class="kn">import</span> <span class="n">NestedKey</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.modules.llm.policies.common</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_batching</span><span class="p">,</span>
+    <span class="n">ChatHistory</span><span class="p">,</span>
+    <span class="n">LLMWrapperBase</span><span class="p">,</span>
+    <span class="n">LogProbs</span><span class="p">,</span>
+    <span class="n">Masks</span><span class="p">,</span>
+    <span class="n">Text</span><span class="p">,</span>
+    <span class="n">Tokens</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">_HAS_SGLANG</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;sglang&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<span class="n">_HAS_TRANSFORMERS</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;transformers&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">torchrl.modules.llm.backends.sglang</span> <span class="kn">import</span> <span class="n">AsyncSGLang</span>
+
+
+<span class="k">def</span> <span class="nf">_require_transformers</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">_HAS_TRANSFORMERS</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+            <span class="s2">&quot;transformers is required for SGLangWrapper. Please install it with `pip install transformers`.&quot;</span>
+        <span class="p">)</span>
+
+
+<div class="viewcode-block" id="SGLangWrapper">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.SGLangWrapper.html#torchrl.modules.llm.SGLangWrapper">[docs]</a>
+<span class="k">class</span> <span class="nc">SGLangWrapper</span><span class="p">(</span><span class="n">LLMWrapperBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A wrapper class for SGLang models, providing a consistent interface for text generation.</span>
+
+<span class="sd">    This class is a subclass of :class:`~torchrl.modules.llm.policies.LLMWrapperBase` and provides</span>
+<span class="sd">    a unified API for handling different input modalities (history, text, tokens) with consistent</span>
+<span class="sd">    output structure using :class:`~tensordict.TensorClass` objects.</span>
+
+<span class="sd">    The wrapper interfaces with SGLang servers via HTTP for generation and uses the same</span>
+<span class="sd">    output structures as vLLMWrapper for compatibility.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        model (AsyncSGLang | str): The SGLang backend to wrap.</span>
+<span class="sd">            - If a string URL, connects to an existing SGLang server</span>
+<span class="sd">            - If an AsyncSGLang instance, uses it directly</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        tokenizer (transformers.tokenization_utils.PreTrainedTokenizer | str | None, optional):</span>
+<span class="sd">            The tokenizer to use for encoding and decoding text. If `None`, attempts to load</span>
+<span class="sd">            from the model. Defaults to `None`.</span>
+<span class="sd">        input_mode (str, optional): The input modality to use. Must be one of `&quot;history&quot;`,</span>
+<span class="sd">            `&quot;text&quot;`, or `&quot;tokens&quot;`. Defaults to `&quot;history&quot;`.</span>
+<span class="sd">        input_key (str | None, optional): The key for the input data. If `None`, defaults based</span>
+<span class="sd">            on input_mode and generate flag.</span>
+<span class="sd">        generate (bool, optional): Whether to enable text generation. Defaults to `True`.</span>
+<span class="sd">        return_log_probs (bool, optional): Whether to return log probabilities. Defaults to `True`.</span>
+<span class="sd">        generate_kwargs (dict | None, optional): Additional arguments to pass to generation.</span>
+<span class="sd">            Supports standardized parameters like `max_new_tokens`, `temperature`, `top_p`, etc.</span>
+<span class="sd">        pad_output (bool, optional): Whether to pad output sequences. Defaults to `False`.</span>
+<span class="sd">        inplace (Literal[True, False, &quot;empty&quot;] | None, optional): In-place operation mode.</span>
+<span class="sd">        device (torch.device | None, optional): Device for computation.</span>
+<span class="sd">        num_samples (int | None, optional): Number of samples to generate.</span>
+<span class="sd">        chat_template_name (str | None, optional): Chat template name for history mode.</span>
+<span class="sd">        chat_template (str | None, optional): Custom chat template string.</span>
+<span class="sd">        text_key (NestedKey | None, optional): Key for Text output. Defaults to `&quot;text&quot;`.</span>
+<span class="sd">        tokens_key (NestedKey | None, optional): Key for Tokens output. Defaults to `&quot;tokens&quot;`.</span>
+<span class="sd">        masks_key (NestedKey | None, optional): Key for Masks output. Defaults to `&quot;masks&quot;`.</span>
+<span class="sd">        log_probs_key (NestedKey | None, optional): Key for LogProbs output. Defaults to `&quot;log_probs&quot;`.</span>
+<span class="sd">        history_key (NestedKey | None, optional): Key for ChatHistory output. Defaults to `&quot;history&quot;`.</span>
+<span class="sd">        batching (bool, optional): Whether to enable batching. Defaults to `False`.</span>
+<span class="sd">        min_batch_size (int | None, optional): Minimum batch size for batching.</span>
+<span class="sd">        max_batch_size (int | None, optional): Maximum batch size for batching.</span>
+<span class="sd">        batching_timeout (float, optional): Timeout for batching. Defaults to `10.0`.</span>
+<span class="sd">        prefer_tokens (bool, optional): If ``True`` and ``tokens.prompt`` exists in the input tensordict,</span>
+<span class="sd">            use those tokens directly instead of re-tokenizing from history. This enables KV cache</span>
+<span class="sd">            consistency when used with :class:`~torchrl.envs.llm.ChatEnv` with ``with_tokenizer=True``</span>
+<span class="sd">            or :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer`. Defaults to ``False``.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules.llm.backends.sglang import AsyncSGLang</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules.llm.policies import SGLangWrapper</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Connect to existing server</span>
+<span class="sd">        &gt;&gt;&gt; backend = AsyncSGLang.connect(&quot;http://localhost:30000&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; wrapper = SGLangWrapper(backend, input_mode=&quot;text&quot;, generate=True)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Or launch managed server</span>
+<span class="sd">        &gt;&gt;&gt; backend = AsyncSGLang.from_pretrained(&quot;Qwen/Qwen2.5-3B&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; wrapper = SGLangWrapper(backend, input_mode=&quot;history&quot;)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Generate text</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict</span>
+<span class="sd">        &gt;&gt;&gt; td = TensorDict({&quot;text&quot;: {&quot;prompt&quot;: [&quot;Hello, how are you?&quot;]}}, batch_size=[1])</span>
+<span class="sd">        &gt;&gt;&gt; result = wrapper(td)</span>
+<span class="sd">        &gt;&gt;&gt; print(result[&quot;text&quot;][&quot;response&quot;])</span>
+
+<span class="sd">    .. seealso::</span>
+<span class="sd">        - :class:`~torchrl.modules.llm.policies.LLMWrapperBase`</span>
+<span class="sd">        - :class:`~torchrl.modules.llm.policies.vLLMWrapper`</span>
+<span class="sd">        - :class:`~torchrl.modules.llm.backends.sglang.AsyncSGLang`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">AsyncSGLang</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">tokenizer</span><span class="p">:</span> <span class="nb">callable</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">input_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;history&quot;</span><span class="p">,</span>
+        <span class="n">input_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">generate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">generate_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tokenizer_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">pad_output</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">inplace</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;empty&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">layout</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">layout</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">chat_template_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">chat_template</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">return_log_probs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">history_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;history&quot;</span><span class="p">,</span>
+        <span class="n">text_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span>
+        <span class="n">tokens_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;tokens&quot;</span><span class="p">,</span>
+        <span class="n">masks_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;masks&quot;</span><span class="p">,</span>
+        <span class="n">log_probs_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;log_probs&quot;</span><span class="p">,</span>
+        <span class="n">batching</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">min_batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">max_batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">batching_timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">prefer_tokens</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prefer_tokens</span> <span class="o">=</span> <span class="n">prefer_tokens</span>
+
+        <span class="n">_require_transformers</span><span class="p">()</span>
+
+        <span class="c1"># Handle model initialization</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="c1"># Assume it&#39;s a server URL</span>
+            <span class="kn">from</span> <span class="nn">torchrl.modules.llm.backends.sglang</span> <span class="kn">import</span> <span class="n">AsyncSGLang</span>
+
+            <span class="n">model</span> <span class="o">=</span> <span class="n">AsyncSGLang</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+
+        <span class="c1"># Validate input_mode</span>
+        <span class="k">if</span> <span class="n">input_mode</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;tokens&quot;</span><span class="p">]:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;input_mode must be one of &#39;history&#39;, &#39;text&#39;, &#39;tokens&#39;. Got &#39;</span><span class="si">{</span><span class="n">input_mode</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span> <span class="o">=</span> <span class="n">input_mode</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">generate</span> <span class="o">=</span> <span class="n">generate</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span> <span class="o">=</span> <span class="n">pad_output</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="o">=</span> <span class="n">device</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">layout</span> <span class="o">=</span> <span class="n">layout</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">pad_output</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span> <span class="o">=</span> <span class="n">num_samples</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">chat_template_name</span> <span class="o">=</span> <span class="n">chat_template_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">chat_template</span> <span class="o">=</span> <span class="n">chat_template</span>
+
+        <span class="c1"># Batching setup</span>
+        <span class="k">if</span> <span class="n">batching</span> <span class="ow">and</span> <span class="n">min_batch_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">min_batch_size</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">elif</span> <span class="p">(</span><span class="n">min_batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">max_batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span>
+            <span class="n">batching</span> <span class="ow">is</span> <span class="kc">False</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;min_batch_size and max_batch_size must be None if batching is False.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_min_batch_size</span> <span class="o">=</span> <span class="n">min_batch_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_batch_size</span> <span class="o">=</span> <span class="n">max_batch_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_batching_timeout</span> <span class="o">=</span> <span class="n">batching_timeout</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_batch_queue</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_futures</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">batching</span><span class="p">:</span>
+            <span class="kn">import</span> <span class="nn">threading</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_batching_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_batching_lock</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># Return flags</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">return_history</span> <span class="o">=</span> <span class="n">input_mode</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;history&quot;</span><span class="p">,)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">return_text</span> <span class="o">=</span> <span class="n">input_mode</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;history&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">return_tokens</span> <span class="o">=</span> <span class="n">input_mode</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;tokens&quot;</span><span class="p">,</span> <span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">return_masks</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="k">if</span> <span class="n">return_log_probs</span> <span class="ow">is</span> <span class="kc">False</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">generate</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;return_log_probs must be True when generate=False.&quot;</span><span class="p">)</span>
+        <span class="n">return_log_probs</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="kc">True</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">return_log_probs</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">generate</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="ow">not</span> <span class="n">generate</span><span class="p">)</span>
+            <span class="k">else</span> <span class="nb">bool</span><span class="p">(</span><span class="n">return_log_probs</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">return_log_probs</span> <span class="o">=</span> <span class="n">return_log_probs</span>
+
+        <span class="c1"># Output keys</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">history_key</span> <span class="o">=</span> <span class="n">history_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_probs_key</span> <span class="o">=</span> <span class="n">log_probs_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">masks_key</span> <span class="o">=</span> <span class="n">masks_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">text_key</span> <span class="o">=</span> <span class="n">text_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tokens_key</span> <span class="o">=</span> <span class="n">tokens_key</span>
+
+        <span class="c1"># Set input keys based on mode and generate parameter</span>
+        <span class="k">if</span> <span class="n">input_mode</span> <span class="o">==</span> <span class="s2">&quot;history&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="p">[(</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;prompt&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">input_key</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">input_key</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">generate</span>
+                <span class="k">else</span> <span class="p">[(</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">input_key</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">input_key</span><span class="p">]</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">input_mode</span> <span class="o">==</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="p">[(</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;prompt&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">input_key</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">input_key</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">generate</span>
+                <span class="k">else</span> <span class="p">[(</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">input_key</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">input_key</span><span class="p">]</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">input_mode</span> <span class="o">==</span> <span class="s2">&quot;tokens&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="p">[(</span><span class="s2">&quot;tokens&quot;</span><span class="p">,</span> <span class="s2">&quot;prompt&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">input_key</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">input_key</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">generate</span>
+                <span class="k">else</span> <span class="p">[(</span><span class="s2">&quot;tokens&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">input_key</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">input_key</span><span class="p">]</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="c1"># Set output keys</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_text</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">text_key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_masks</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">masks_key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_tokens</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tokens_key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_log_probs</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_probs_key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_history</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">history_key</span><span class="p">)</span>
+
+        <span class="c1"># Tokenizer setup</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tokenizer</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="kn">from</span> <span class="nn">transformers</span> <span class="kn">import</span> <span class="n">AutoTokenizer</span>
+
+            <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">tokenizer</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">tokenizer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Try to get from model info</span>
+            <span class="n">model_path</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;_model_path&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">model_path</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="kn">from</span> <span class="nn">transformers</span> <span class="kn">import</span> <span class="n">AutoTokenizer</span>
+
+                    <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">model_path</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not load tokenizer from </span><span class="si">{</span><span class="n">model_path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">tokenizer</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">,</span> <span class="s2">&quot;pad_token&quot;</span><span class="p">)</span>
+                <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">pad_token</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">pad_token</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">eos_token</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">padding_value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">pad_token</span><span class="p">)[</span><span class="s2">&quot;input_ids&quot;</span><span class="p">][</span>
+                <span class="mi">0</span>
+            <span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">padding_value</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># Tokenizer kwargs</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">tokenizer_kwargs</span><span class="p">:</span>
+            <span class="n">tokenizer_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;return_attention_mask&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;padding&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">)</span>
+        <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;padding_side&quot;</span><span class="p">,</span> <span class="s2">&quot;left&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer_kwargs</span> <span class="o">=</span> <span class="n">tokenizer_kwargs</span>
+
+        <span class="c1"># Generation kwargs - standardize and convert to SGLang format</span>
+        <span class="k">if</span> <span class="n">generate_kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">generate_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">generate_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">generate_kwargs</span><span class="p">)</span>
+
+        <span class="n">generate_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_standardize_generate_kwargs</span><span class="p">(</span><span class="n">generate_kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">generate_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_to_sglang_params</span><span class="p">(</span><span class="n">generate_kwargs</span><span class="p">)</span>
+
+        <span class="c1"># Inplace handling</span>
+        <span class="k">if</span> <span class="n">num_samples</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">num_samples</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">inplace</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="s2">&quot;empty&quot;</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;inplace must be False (or None) when generating more than one sample.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">inplace</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">elif</span> <span class="n">inplace</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">inplace</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span> <span class="o">=</span> <span class="n">inplace</span>
+
+    <span class="k">def</span> <span class="nf">_convert_to_sglang_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">generate_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert standardized parameters to SGLang format.&quot;&quot;&quot;</span>
+        <span class="n">sglang_params</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="n">param_mapping</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;max_new_tokens&quot;</span><span class="p">:</span> <span class="s2">&quot;max_new_tokens&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="s2">&quot;temperature&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;top_p&quot;</span><span class="p">:</span> <span class="s2">&quot;top_p&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;top_k&quot;</span><span class="p">:</span> <span class="s2">&quot;top_k&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;repetition_penalty&quot;</span><span class="p">:</span> <span class="s2">&quot;repetition_penalty&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;stop_sequences&quot;</span><span class="p">:</span> <span class="s2">&quot;stop&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;frequency_penalty&quot;</span><span class="p">:</span> <span class="s2">&quot;frequency_penalty&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;presence_penalty&quot;</span><span class="p">:</span> <span class="s2">&quot;presence_penalty&quot;</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="k">for</span> <span class="n">std_name</span><span class="p">,</span> <span class="n">sglang_name</span> <span class="ow">in</span> <span class="n">param_mapping</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">std_name</span> <span class="ow">in</span> <span class="n">generate_kwargs</span><span class="p">:</span>
+                <span class="n">sglang_params</span><span class="p">[</span><span class="n">sglang_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">generate_kwargs</span><span class="p">[</span><span class="n">std_name</span><span class="p">]</span>
+
+        <span class="c1"># Handle do_sample</span>
+        <span class="k">if</span> <span class="n">generate_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;do_sample&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+            <span class="n">sglang_params</span><span class="p">[</span><span class="s2">&quot;temperature&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+        <span class="k">return</span> <span class="n">sglang_params</span>
+
+<div class="viewcode-block" id="SGLangWrapper.forward">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.SGLangWrapper.html#torchrl.modules.llm.SGLangWrapper.forward">[docs]</a>
+    <span class="nd">@set_list_to_stack</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+    <span class="nd">@_batching</span>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">tensordict_out</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">logits_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Forward pass for the SGLang policy.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordict: Input tensordict containing prompts</span>
+<span class="sd">            tensordict_out: Optional output tensordict</span>
+<span class="sd">            logits_only: Whether to return only logits (not supported for SGLang)</span>
+<span class="sd">            **kwargs: Additional generation parameters</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            TensorDictBase with generation results</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tensordict_orig</span> <span class="o">=</span> <span class="n">tensordict</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">lazy_stack</span><span class="p">([</span><span class="n">tensordict</span><span class="p">]),</span> <span class="n">logits_only</span><span class="o">=</span><span class="n">logits_only</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">logits_only</span><span class="o">=</span><span class="n">logits_only</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span>
+                <span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">LazyStackedTensorDict</span><span class="p">):</span>
+            <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">to_lazystack</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="c1"># Prepare output</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">tensordict</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">tensordict</span><span class="o">.</span><span class="n">batch_size</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">to_lazystack</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span> <span class="o">==</span> <span class="s2">&quot;history&quot;</span><span class="p">:</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_generate_from_history</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span> <span class="o">==</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_generate_from_text</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span> <span class="o">==</span> <span class="s2">&quot;tokens&quot;</span><span class="p">:</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_generate_from_tokens</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+
+        <span class="c1"># Handle inplace</span>
+        <span class="k">if</span> <span class="n">tensordict_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="n">tensordict_out</span> <span class="o">=</span> <span class="n">tensordict_orig</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+                <span class="n">tensordict_out</span> <span class="o">=</span> <span class="n">out</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span> <span class="o">==</span> <span class="s2">&quot;empty&quot;</span><span class="p">:</span>
+                <span class="n">tensordict_out</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">tensordict_out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">tensordict_out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">out</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">tensordict_out</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">result</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">keys_to_update</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">out</span>
+
+        <span class="k">return</span> <span class="n">result</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_generate_from_history</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="n">out</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate from history input mode.</span>
+
+<span class="sd">        When prefer_tokens=True and tokens.prompt exists, uses those tokens directly</span>
+<span class="sd">        for KV cache consistency instead of re-tokenizing from history.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">torchrl.data.llm</span> <span class="kn">import</span> <span class="n">History</span>
+
+        <span class="n">history</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">history</span><span class="p">,</span> <span class="n">History</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Expected History object for &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">input_key</span><span class="si">}</span><span class="s2">&#39;, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">history</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Check for existing tokens when prefer_tokens=True</span>
+        <span class="c1"># This enables token-first inference for KV cache consistency</span>
+        <span class="n">existing_tokens</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">prefer_tokens</span><span class="p">:</span>
+            <span class="c1"># Primary: tokens.prompt (from IncrementalTokenizer)</span>
+            <span class="n">existing_tokens</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">tokens_key</span><span class="p">,</span> <span class="s2">&quot;prompt&quot;</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">existing_tokens</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># Fallback: tokens.full (for backward compatibility)</span>
+                <span class="n">existing_tokens</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">tokens_key</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">existing_tokens</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Use existing tokens directly - skip tokenization for KV cache consistency</span>
+            <span class="c1"># Handle different token storage formats</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">existing_tokens</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                <span class="n">tokens_list</span> <span class="o">=</span> <span class="n">existing_tokens</span>
+            <span class="k">elif</span> <span class="p">(</span>
+                <span class="nb">isinstance</span><span class="p">(</span><span class="n">existing_tokens</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="ow">and</span> <span class="n">existing_tokens</span><span class="o">.</span><span class="n">is_nested</span>
+            <span class="p">):</span>
+                <span class="c1"># Unbind nested tensor to get list of tensors</span>
+                <span class="n">tokens_list</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">existing_tokens</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Already a padded tensor - extract non-padded sequences</span>
+                <span class="n">tokens_list</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">tokens</span><span class="p">[</span><span class="n">tokens</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">pad_token_id</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+                    <span class="k">for</span> <span class="n">tokens</span> <span class="ow">in</span> <span class="n">existing_tokens</span>
+                <span class="p">]</span>
+
+            <span class="c1"># Generate via SGLang using input_ids directly</span>
+            <span class="n">results</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
+                <span class="n">input_ids</span><span class="o">=</span><span class="n">tokens_list</span><span class="p">,</span>
+                <span class="n">sampling_params</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">generate_kwargs</span><span class="p">,</span>
+                <span class="n">return_logprobs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">return_log_probs</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="c1"># Still need text_prompts for output processing</span>
+            <span class="n">text_prompts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">batch_decode</span><span class="p">(</span>
+                <span class="n">tokens_list</span><span class="p">,</span> <span class="n">skip_special_tokens</span><span class="o">=</span><span class="kc">False</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Fall back to tokenizing from history (original behavior)</span>
+            <span class="c1"># Apply chat template to get text prompts</span>
+            <span class="n">tokenizer_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">tokenizer_kwargs</span><span class="p">[</span><span class="s2">&quot;chat_template_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template_name</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">tokenizer_kwargs</span><span class="p">[</span><span class="s2">&quot;chat_template&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template</span>
+            <span class="n">tokenizer_kwargs</span><span class="p">[</span><span class="s2">&quot;add_generation_prompt&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+
+            <span class="n">text_prompts</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
+                <span class="n">tokenizer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">,</span> <span class="o">**</span><span class="n">tokenizer_kwargs</span>
+            <span class="p">)</span>
+
+            <span class="c1"># Generate via SGLang</span>
+            <span class="n">results</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
+                <span class="n">text_prompts</span><span class="p">,</span>
+                <span class="n">sampling_params</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">generate_kwargs</span><span class="p">,</span>
+                <span class="n">return_logprobs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">return_log_probs</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Process results</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_generation_results</span><span class="p">(</span>
+            <span class="n">results</span><span class="p">,</span> <span class="n">text_prompts</span><span class="p">,</span> <span class="n">out</span><span class="p">,</span> <span class="n">history</span><span class="o">=</span><span class="n">history</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_generate_from_text</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="n">out</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate from text input mode.&quot;&quot;&quot;</span>
+        <span class="n">text_prompts</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_key</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">text_prompts</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">text_prompts</span> <span class="o">=</span> <span class="p">[</span><span class="n">text_prompts</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">text_prompts</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="c1"># Handle NonTensorStack and other non-list types</span>
+            <span class="n">text_prompts</span> <span class="o">=</span> <span class="n">text_prompts</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+
+        <span class="c1"># Ensure all elements are plain strings (not NonTensorData)</span>
+        <span class="n">text_prompts</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">p</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">text_prompts</span><span class="p">]</span>
+
+        <span class="c1"># Generate via SGLang</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
+            <span class="n">text_prompts</span><span class="p">,</span>
+            <span class="n">sampling_params</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">generate_kwargs</span><span class="p">,</span>
+            <span class="n">return_logprobs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">return_log_probs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_generation_results</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="n">text_prompts</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_generate_from_tokens</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="n">out</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate from tokens input mode.</span>
+
+<span class="sd">        Uses SGLang&#39;s native input_ids support for efficient token-based generation</span>
+<span class="sd">        without requiring text decoding/re-encoding.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tokens_prompt</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_key</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># Convert tensors to lists of ints for JSON serialization</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tokens_prompt</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">tokens_prompt</span> <span class="o">=</span> <span class="n">tokens_prompt</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tokens_prompt</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="c1"># Each element might be a tensor</span>
+            <span class="n">tokens_prompt</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">t</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="k">else</span> <span class="nb">list</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tokens_prompt</span>
+            <span class="p">]</span>
+
+        <span class="c1"># Generate via SGLang using input_ids directly</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
+            <span class="n">input_ids</span><span class="o">=</span><span class="n">tokens_prompt</span><span class="p">,</span>
+            <span class="n">sampling_params</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">generate_kwargs</span><span class="p">,</span>
+            <span class="n">return_logprobs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">return_log_probs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Decode tokens to text for output processing (if text output needed)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_text</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">text_prompts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">batch_decode</span><span class="p">(</span>
+                <span class="n">tokens_prompt</span><span class="p">,</span> <span class="n">skip_special_tokens</span><span class="o">=</span><span class="kc">False</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">text_prompts</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">tokens_prompt</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_generation_results</span><span class="p">(</span>
+            <span class="n">results</span><span class="p">,</span> <span class="n">text_prompts</span><span class="p">,</span> <span class="n">out</span><span class="p">,</span> <span class="n">tokens_prompt</span><span class="o">=</span><span class="n">tokens_prompt</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_process_generation_results</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">results</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+        <span class="n">text_prompts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="n">out</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="n">history</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tokens_prompt</span><span class="p">:</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Process SGLang generation results into output tensordicts.&quot;&quot;&quot;</span>
+        <span class="c1"># Extract generated text and tokens</span>
+        <span class="n">response_texts</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">response_token_ids</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">log_probs_list</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span><span class="p">:</span>
+            <span class="n">response_texts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span>
+            <span class="n">response_token_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;output_ids&quot;</span><span class="p">,</span> <span class="p">[]),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="c1"># Extract log probs if available</span>
+            <span class="c1"># SGLang can return logprobs in different locations depending on version:</span>
+            <span class="c1"># - &quot;meta_info.output_token_logprobs&quot; (common location)</span>
+            <span class="c1"># - &quot;output_token_logprobs&quot; (top level)</span>
+            <span class="c1"># - &quot;meta_info.logprobs&quot; (alternate key)</span>
+            <span class="n">meta_info</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;meta_info&quot;</span><span class="p">,</span> <span class="p">{})</span>
+            <span class="n">logprobs</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="s2">&quot;output_token_logprobs&quot;</span> <span class="ow">in</span> <span class="n">meta_info</span><span class="p">:</span>
+                <span class="n">logprobs</span> <span class="o">=</span> <span class="n">meta_info</span><span class="p">[</span><span class="s2">&quot;output_token_logprobs&quot;</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="s2">&quot;output_token_logprobs&quot;</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
+                <span class="n">logprobs</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;output_token_logprobs&quot;</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="s2">&quot;logprobs&quot;</span> <span class="ow">in</span> <span class="n">meta_info</span><span class="p">:</span>
+                <span class="n">logprobs</span> <span class="o">=</span> <span class="n">meta_info</span><span class="p">[</span><span class="s2">&quot;logprobs&quot;</span><span class="p">]</span>
+
+            <span class="k">if</span> <span class="n">logprobs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># SGLang returns list of (token_id, logprob) tuples or just logprobs</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">logprobs</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">and</span> <span class="n">logprobs</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">logprobs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+                        <span class="c1"># Format: [(token_id, logprob), ...] - extract just logprobs</span>
+                        <span class="n">logprobs</span> <span class="o">=</span> <span class="p">[</span>
+                            <span class="n">lp</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">lp</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span> <span class="k">else</span> <span class="n">lp</span>
+                            <span class="k">for</span> <span class="n">lp</span> <span class="ow">in</span> <span class="n">logprobs</span>
+                        <span class="p">]</span>
+                <span class="n">log_probs_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">logprobs</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">log_probs_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+
+        <span class="c1"># Build Text output</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_text</span><span class="p">:</span>
+            <span class="n">text_obj</span> <span class="o">=</span> <span class="n">Text</span><span class="o">.</span><span class="n">_from_tensordict</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">empty</span><span class="p">())</span>
+            <span class="n">text_obj</span><span class="o">.</span><span class="n">prompt</span> <span class="o">=</span> <span class="n">text_prompts</span>
+            <span class="n">text_obj</span><span class="o">.</span><span class="n">response</span> <span class="o">=</span> <span class="n">response_texts</span>
+            <span class="n">text_obj</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="p">[</span><span class="n">p</span> <span class="o">+</span> <span class="n">r</span> <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">r</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">text_prompts</span><span class="p">,</span> <span class="n">response_texts</span><span class="p">)]</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">text_key</span><span class="p">,</span> <span class="n">text_obj</span><span class="p">)</span>
+
+        <span class="c1"># Build Tokens output</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_tokens</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
+                <span class="c1"># Pad response tokens to same length for batching</span>
+                <span class="kn">from</span> <span class="nn">torch.nn.utils.rnn</span> <span class="kn">import</span> <span class="n">pad_sequence</span>
+
+                <span class="k">if</span> <span class="n">response_token_ids</span><span class="p">:</span>
+                    <span class="n">response_tokens_padded</span> <span class="o">=</span> <span class="n">pad_sequence</span><span class="p">(</span>
+                        <span class="n">response_token_ids</span><span class="p">,</span> <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">padding_value</span><span class="o">=</span><span class="mi">0</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">response_tokens_padded</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="n">tokens_obj</span> <span class="o">=</span> <span class="n">Tokens</span><span class="o">.</span><span class="n">_from_tensordict</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">empty</span><span class="p">())</span>
+                <span class="k">if</span> <span class="n">tokens_prompt</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">tokens_obj</span><span class="o">.</span><span class="n">prompt</span> <span class="o">=</span> <span class="n">tokens_prompt</span>
+                    <span class="c1"># Compute full tokens (prompt + response)</span>
+                    <span class="k">if</span> <span class="n">response_tokens_padded</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="c1"># Pad prompts to same length if needed</span>
+                        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tokens_prompt</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                            <span class="c1"># Convert to tensors if needed</span>
+                            <span class="n">prompt_tensors</span> <span class="o">=</span> <span class="p">[</span>
+                                <span class="n">t</span>
+                                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span>
+                                <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+                                <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tokens_prompt</span>
+                            <span class="p">]</span>
+                            <span class="n">tokens_prompt_padded</span> <span class="o">=</span> <span class="n">pad_sequence</span><span class="p">(</span>
+                                <span class="n">prompt_tensors</span><span class="p">,</span> <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">padding_value</span><span class="o">=</span><span class="mi">0</span>
+                            <span class="p">)</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">tokens_prompt_padded</span> <span class="o">=</span> <span class="n">tokens_prompt</span>
+                        <span class="n">tokens_obj</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
+                            <span class="p">[</span><span class="n">tokens_prompt_padded</span><span class="p">,</span> <span class="n">response_tokens_padded</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span>
+                        <span class="p">)</span>
+                <span class="n">tokens_obj</span><span class="o">.</span><span class="n">response</span> <span class="o">=</span> <span class="n">response_tokens_padded</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Use nested tensors to handle variable-length sequences</span>
+                <span class="n">tokens_obj</span> <span class="o">=</span> <span class="n">Tokens</span><span class="o">.</span><span class="n">_from_tensordict</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">empty</span><span class="p">())</span>
+                <span class="k">if</span> <span class="n">tokens_prompt</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="c1"># Convert prompt to nested tensor if it&#39;s a list of variable-length tensors</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tokens_prompt</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                        <span class="n">prompt_tensors</span> <span class="o">=</span> <span class="p">[</span>
+                            <span class="n">t</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+                            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span>
+                            <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+                            <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tokens_prompt</span>
+                        <span class="p">]</span>
+                        <span class="n">tokens_obj</span><span class="o">.</span><span class="n">prompt</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nested</span><span class="o">.</span><span class="n">nested_tensor</span><span class="p">(</span><span class="n">prompt_tensors</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">tokens_obj</span><span class="o">.</span><span class="n">prompt</span> <span class="o">=</span> <span class="n">tokens_prompt</span>
+                    <span class="c1"># Compute full tokens as nested tensor of concatenated tensors</span>
+                    <span class="k">if</span> <span class="n">response_token_ids</span><span class="p">:</span>
+                        <span class="n">full_tokens</span> <span class="o">=</span> <span class="p">[]</span>
+                        <span class="n">prompt_list</span> <span class="o">=</span> <span class="p">(</span>
+                            <span class="n">tokens_prompt</span>
+                            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tokens_prompt</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
+                            <span class="k">else</span> <span class="p">[</span><span class="n">tokens_prompt</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">tokens_prompt</span><span class="p">))]</span>
+                        <span class="p">)</span>
+                        <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">r</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">prompt_list</span><span class="p">,</span> <span class="n">response_token_ids</span><span class="p">):</span>
+                            <span class="c1"># Convert prompt to tensor if needed</span>
+                            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                                <span class="n">p_tensor</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+                            <span class="k">else</span><span class="p">:</span>
+                                <span class="n">p_tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+                            <span class="n">full_tokens</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">p_tensor</span><span class="p">,</span> <span class="n">r</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+                        <span class="n">tokens_obj</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nested</span><span class="o">.</span><span class="n">nested_tensor</span><span class="p">(</span><span class="n">full_tokens</span><span class="p">)</span>
+                <span class="c1"># Convert response tokens to nested tensor</span>
+                <span class="k">if</span> <span class="n">response_token_ids</span><span class="p">:</span>
+                    <span class="n">tokens_obj</span><span class="o">.</span><span class="n">response</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nested</span><span class="o">.</span><span class="n">nested_tensor</span><span class="p">(</span><span class="n">response_token_ids</span><span class="p">)</span>
+            <span class="n">tokens_obj</span><span class="o">.</span><span class="n">padded</span> <span class="o">=</span> <span class="n">MetaData</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">)</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tokens_key</span><span class="p">,</span> <span class="n">tokens_obj</span><span class="p">)</span>
+
+        <span class="c1"># Build Masks output</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_masks</span><span class="p">:</span>
+            <span class="n">masks_obj</span> <span class="o">=</span> <span class="n">Masks</span><span class="o">.</span><span class="n">_from_tensordict</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">empty</span><span class="p">())</span>
+            <span class="n">masks_obj</span><span class="o">.</span><span class="n">all_attention_mask</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">masks_obj</span><span class="o">.</span><span class="n">all_assistant_mask</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">masks_obj</span><span class="o">.</span><span class="n">padded</span> <span class="o">=</span> <span class="n">MetaData</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">)</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">masks_key</span><span class="p">,</span> <span class="n">masks_obj</span><span class="p">)</span>
+
+        <span class="c1"># Build LogProbs output</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_log_probs</span> <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span><span class="n">lp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">lp</span> <span class="ow">in</span> <span class="n">log_probs_list</span><span class="p">):</span>
+            <span class="n">log_probs_obj</span> <span class="o">=</span> <span class="n">LogProbs</span><span class="o">.</span><span class="n">_from_tensordict</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">empty</span><span class="p">())</span>
+            <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">response</span> <span class="o">=</span> <span class="n">log_probs_list</span>
+            <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">padded</span> <span class="o">=</span> <span class="n">MetaData</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">)</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_probs_key</span><span class="p">,</span> <span class="n">log_probs_obj</span><span class="p">)</span>
+
+        <span class="c1"># Build History output</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_history</span> <span class="ow">and</span> <span class="n">history</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">torchrl.data.llm</span> <span class="kn">import</span> <span class="n">History</span>
+
+            <span class="n">chat_history</span> <span class="o">=</span> <span class="n">ChatHistory</span><span class="o">.</span><span class="n">_from_tensordict</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">empty</span><span class="p">())</span>
+            <span class="n">chat_history</span><span class="o">.</span><span class="n">prompt</span> <span class="o">=</span> <span class="n">history</span>
+
+            <span class="c1"># Create response histories directly from response text</span>
+            <span class="c1"># SGLang returns raw text without chat template markers, so we create</span>
+            <span class="c1"># simple assistant History objects instead of trying to parse</span>
+            <span class="n">response_histories</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">resp_text</span> <span class="ow">in</span> <span class="n">response_texts</span><span class="p">:</span>
+                <span class="c1"># Create a History object with a single assistant message</span>
+                <span class="n">resp_history</span> <span class="o">=</span> <span class="n">History</span><span class="p">(</span>
+                    <span class="n">role</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;assistant&quot;</span><span class="p">],</span>
+                    <span class="n">content</span><span class="o">=</span><span class="p">[</span><span class="n">resp_text</span><span class="p">],</span>
+                <span class="p">)</span>
+                <span class="n">response_histories</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">resp_history</span><span class="p">)</span>
+
+            <span class="n">chat_history</span><span class="o">.</span><span class="n">response</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="n">response_histories</span><span class="p">)</span>
+            <span class="c1"># Note: We don&#39;t compute full history here because extending History objects</span>
+            <span class="c1"># with different batch structures is complex. Users can construct full</span>
+            <span class="c1"># history by combining prompt and response if needed.</span>
+            <span class="n">chat_history</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">history_key</span><span class="p">,</span> <span class="n">chat_history</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">out</span>
+
+<div class="viewcode-block" id="SGLangWrapper.get_new_version">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.SGLangWrapper.html#torchrl.modules.llm.SGLangWrapper.get_new_version">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_new_version</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns a new version of the module with altered parameters.&quot;&quot;&quot;</span>
+        <span class="n">constructor_kwargs</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;model&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">),</span>
+            <span class="s2">&quot;tokenizer&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tokenizer&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">),</span>
+            <span class="s2">&quot;input_mode&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;input_mode&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span><span class="p">),</span>
+            <span class="s2">&quot;generate&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;generate&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">),</span>
+            <span class="s2">&quot;generate_kwargs&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;generate_kwargs&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate_kwargs</span><span class="p">),</span>
+            <span class="s2">&quot;pad_output&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;pad_output&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">),</span>
+            <span class="s2">&quot;inplace&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;inplace&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span><span class="p">),</span>
+            <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device</span><span class="p">),</span>
+            <span class="s2">&quot;layout&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;layout&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">layout</span><span class="p">),</span>
+            <span class="s2">&quot;num_samples&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;num_samples&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span><span class="p">),</span>
+            <span class="s2">&quot;chat_template_name&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="s2">&quot;chat_template_name&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template_name</span>
+            <span class="p">),</span>
+            <span class="s2">&quot;chat_template&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;chat_template&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template</span><span class="p">),</span>
+            <span class="s2">&quot;return_log_probs&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;return_log_probs&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_log_probs</span><span class="p">),</span>
+            <span class="s2">&quot;history_key&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;history_key&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">history_key</span><span class="p">),</span>
+            <span class="s2">&quot;text_key&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;text_key&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">text_key</span><span class="p">),</span>
+            <span class="s2">&quot;tokens_key&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tokens_key&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokens_key</span><span class="p">),</span>
+            <span class="s2">&quot;masks_key&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;masks_key&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">masks_key</span><span class="p">),</span>
+            <span class="s2">&quot;log_probs_key&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;log_probs_key&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_probs_key</span><span class="p">),</span>
+            <span class="s2">&quot;prefer_tokens&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;prefer_tokens&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">prefer_tokens</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)(</span><span class="o">**</span><span class="n">constructor_kwargs</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SGLangWrapper.get_dist">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.SGLangWrapper.html#torchrl.modules.llm.SGLangWrapper.get_dist">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get distribution from logits/log-probs.</span>
+
+<span class="sd">        SGLang does not return logits, so this method is not supported.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="s2">&quot;SGLang does not return logits, so get_dist is not supported&quot;</span>
+        <span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../../../../',
+            VERSION:'main',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../../../../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../../../../../_static/doctools.js"></script>
+      <script type="text/javascript" src="../../../../../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../../../../../_static/design-tabs.js"></script>
+
+  
+
+  <script type="text/javascript" src="../../../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../../../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="#">Get Started</a>
+          </li>
+
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+    })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
+  </script>
+</body>
+</html>
