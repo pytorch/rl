@@ -23,12 +23,13 @@ A comprehensive overview of TorchRL's core features and capabilities.
 #
 # **Library Structure**:
 #
-# - ``torchrl.collectors``: Data collection utilities (single/multi-process)
-# - ``torchrl.data``: Replay buffers, tensor specs, datasets
-# - ``torchrl.envs``: Environment wrappers (Gym, DMControl, etc.) and transforms
-# - ``torchrl.modules``: Neural network modules and actors
-# - ``torchrl.objectives``: RL loss functions (PPO, SAC, DQN, etc.)
-# - ``torchrl.record``: Logging utilities (TensorBoard, WandB, etc.)
+# - ``torchrl.collectors``: Data collection utilities (sync/async, single/multi-process, distributed)
+# - ``torchrl.data``: Replay buffers, tensor specs, offline RL datasets
+# - ``torchrl.envs``: Environment wrappers (Gym, DMControl, Isaac, etc.) and transforms
+# - ``torchrl.modules``: Neural network modules, actors, and probabilistic policies
+# - ``torchrl.objectives``: RL loss functions (PPO, SAC, DQN, DDPG, etc.)
+# - ``torchrl.record``: Logging utilities (TensorBoard, WandB, CSV, MLflow)
+# - ``torchrl.trainers``: High-level training utilities and algorithm implementations
 #
 # See the `API Reference <https://pytorch.org/rl/reference/index.html>`__ for
 # complete documentation.
