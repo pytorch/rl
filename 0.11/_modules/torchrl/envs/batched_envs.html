@@ -144,6 +144,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
@@ -333,6 +334,22 @@
     <span class="k">def</span> <span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># if the object returned is not a callable</span>
         <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="fm">__call__</span><span class="p">())</span>
+
+    <span class="k">def</span> <span class="fm">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Support chained attribute access: env_parallel.a.b -&gt; sends (&#39;a&#39;,&#39;b&#39;) to workers.&quot;&quot;&quot;</span>
+        <span class="c1"># Don&#39;t chain special/dunder methods - these are often called by</span>
+        <span class="c1"># display systems (e.g., Jupyter&#39;s _repr_html_) and shouldn&#39;t be</span>
+        <span class="c1"># dispatched to workers</span>
+        <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Accessing private/special attribute </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> is not supported &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;on dispatched parallel env attributes.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">attr</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+            <span class="n">new_attr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">attr</span> <span class="o">+</span> <span class="p">(</span><span class="n">name</span><span class="p">,)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">new_attr</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">attr</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_dispatch_caller_parallel</span><span class="p">(</span><span class="n">new_attr</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">parallel_env</span><span class="p">)</span>
 
 
 <span class="k">class</span> <span class="nc">_dispatch_caller_serial</span><span class="p">:</span>

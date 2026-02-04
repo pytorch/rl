@@ -147,6 +147,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
 <li class="toctree-l1"><a class="reference internal" href="pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrl_demo.html">Introduction to TorchRL</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
@@ -1353,26 +1354,26 @@ modules we need.</p>
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>  0%|          | 0/10000 [00:00&lt;?, ?it/s]
-  8%|▊         | 800/10000 [00:00&lt;00:06, 1442.17it/s]
- 16%|█▌        | 1600/10000 [00:03&lt;00:18, 452.39it/s]
- 24%|██▍       | 2400/10000 [00:03&lt;00:11, 656.84it/s]
- 32%|███▏      | 3200/10000 [00:04&lt;00:08, 847.88it/s]
- 40%|████      | 4000/10000 [00:04&lt;00:05, 1008.43it/s]
- 48%|████▊     | 4800/10000 [00:05&lt;00:04, 1140.33it/s]
- 56%|█████▌    | 5600/10000 [00:05&lt;00:03, 1236.61it/s]
-reward: -1.82 (r0 = -2.26), reward eval: reward:  0.01, reward normalized=-2.55/6.23, grad norm= 176.36, loss_value= 411.61, loss_actor= 13.13, target value: -17.14:  56%|█████▌    | 5600/10000 [00:06&lt;00:03, 1236.61it/s]
-reward: -1.82 (r0 = -2.26), reward eval: reward:  0.01, reward normalized=-2.55/6.23, grad norm= 176.36, loss_value= 411.61, loss_actor= 13.13, target value: -17.14:  64%|██████▍   | 6400/10000 [00:07&lt;00:04, 885.86it/s]
-reward: -0.05 (r0 = -2.26), reward eval: reward:  0.01, reward normalized=-2.15/5.43, grad norm= 80.41, loss_value= 216.89, loss_actor= 11.48, target value: -13.88:  64%|██████▍   | 6400/10000 [00:07&lt;00:04, 885.86it/s]
-reward: -0.05 (r0 = -2.26), reward eval: reward:  0.01, reward normalized=-2.15/5.43, grad norm= 80.41, loss_value= 216.89, loss_actor= 11.48, target value: -13.88:  72%|███████▏  | 7200/10000 [00:08&lt;00:03, 744.48it/s]
-reward: -1.56 (r0 = -2.26), reward eval: reward:  0.01, reward normalized=-2.25/5.81, grad norm= 257.90, loss_value= 334.55, loss_actor= 10.80, target value: -16.52:  72%|███████▏  | 7200/10000 [00:09&lt;00:03, 744.48it/s]
-reward: -1.56 (r0 = -2.26), reward eval: reward:  0.01, reward normalized=-2.25/5.81, grad norm= 257.90, loss_value= 334.55, loss_actor= 10.80, target value: -16.52:  80%|████████  | 8000/10000 [00:10&lt;00:02, 675.54it/s]
-reward: -3.32 (r0 = -2.26), reward eval: reward:  0.01, reward normalized=-2.55/5.28, grad norm= 135.95, loss_value= 261.24, loss_actor= 14.15, target value: -17.87:  80%|████████  | 8000/10000 [00:10&lt;00:02, 675.54it/s]
-reward: -3.32 (r0 = -2.26), reward eval: reward:  0.01, reward normalized=-2.55/5.28, grad norm= 135.95, loss_value= 261.24, loss_actor= 14.15, target value: -17.87:  88%|████████▊ | 8800/10000 [00:11&lt;00:01, 637.15it/s]
-reward: -4.87 (r0 = -2.26), reward eval: reward: -5.71, reward normalized=-2.01/5.24, grad norm= 47.64, loss_value= 225.93, loss_actor= 16.55, target value: -14.82:  88%|████████▊ | 8800/10000 [00:14&lt;00:01, 637.15it/s]
-reward: -4.87 (r0 = -2.26), reward eval: reward: -5.71, reward normalized=-2.01/5.24, grad norm= 47.64, loss_value= 225.93, loss_actor= 16.55, target value: -14.82:  96%|█████████▌| 9600/10000 [00:15&lt;00:00, 416.38it/s]
-reward: -4.29 (r0 = -2.26), reward eval: reward: -5.71, reward normalized=-2.40/4.99, grad norm= 68.86, loss_value= 196.09, loss_actor= 12.27, target value: -16.92:  96%|█████████▌| 9600/10000 [00:15&lt;00:00, 416.38it/s]
-reward: -4.29 (r0 = -2.26), reward eval: reward: -5.71, reward normalized=-2.40/4.99, grad norm= 68.86, loss_value= 196.09, loss_actor= 12.27, target value: -16.92: : 10400it [00:17, 385.09it/s]
-reward: -5.04 (r0 = -2.26), reward eval: reward: -5.71, reward normalized=-2.33/4.85, grad norm= 78.50, loss_value= 234.75, loss_actor= 12.44, target value: -17.06: : 10400it [00:18, 385.09it/s]
+  8%|▊         | 800/10000 [00:00&lt;00:06, 1466.94it/s]
+ 16%|█▌        | 1600/10000 [00:03&lt;00:18, 461.91it/s]
+ 24%|██▍       | 2400/10000 [00:03&lt;00:11, 662.82it/s]
+ 32%|███▏      | 3200/10000 [00:04&lt;00:08, 846.98it/s]
+ 40%|████      | 4000/10000 [00:04&lt;00:06, 998.83it/s]
+ 48%|████▊     | 4800/10000 [00:05&lt;00:04, 1127.38it/s]
+ 56%|█████▌    | 5600/10000 [00:05&lt;00:03, 1214.06it/s]
+reward: -1.58 (r0 = -1.98), reward eval: reward:  0.00, reward normalized=-2.04/5.86, grad norm= 34.47, loss_value= 216.46, loss_actor= 12.43, target value: -13.59:  56%|█████▌    | 5600/10000 [00:06&lt;00:03, 1214.06it/s]
+reward: -1.58 (r0 = -1.98), reward eval: reward:  0.00, reward normalized=-2.04/5.86, grad norm= 34.47, loss_value= 216.46, loss_actor= 12.43, target value: -13.59:  64%|██████▍   | 6400/10000 [00:07&lt;00:03, 920.41it/s]
+reward: -0.11 (r0 = -1.98), reward eval: reward:  0.00, reward normalized=-2.39/5.86, grad norm= 70.09, loss_value= 254.50, loss_actor= 13.23, target value: -14.59:  64%|██████▍   | 6400/10000 [00:07&lt;00:03, 920.41it/s]
+reward: -0.11 (r0 = -1.98), reward eval: reward:  0.00, reward normalized=-2.39/5.86, grad norm= 70.09, loss_value= 254.50, loss_actor= 13.23, target value: -14.59:  72%|███████▏  | 7200/10000 [00:08&lt;00:03, 768.91it/s]
+reward: -1.39 (r0 = -1.98), reward eval: reward:  0.00, reward normalized=-2.21/5.77, grad norm= 60.76, loss_value= 233.86, loss_actor= 12.66, target value: -14.70:  72%|███████▏  | 7200/10000 [00:09&lt;00:03, 768.91it/s]
+reward: -1.39 (r0 = -1.98), reward eval: reward:  0.00, reward normalized=-2.21/5.77, grad norm= 60.76, loss_value= 233.86, loss_actor= 12.66, target value: -14.70:  80%|████████  | 8000/10000 [00:09&lt;00:02, 696.19it/s]
+reward: -3.10 (r0 = -1.98), reward eval: reward:  0.00, reward normalized=-2.75/4.84, grad norm= 143.42, loss_value= 183.83, loss_actor= 14.47, target value: -18.73:  80%|████████  | 8000/10000 [00:10&lt;00:02, 696.19it/s]
+reward: -3.10 (r0 = -1.98), reward eval: reward:  0.00, reward normalized=-2.75/4.84, grad norm= 143.42, loss_value= 183.83, loss_actor= 14.47, target value: -18.73:  88%|████████▊ | 8800/10000 [00:11&lt;00:01, 658.90it/s]
+reward: -5.16 (r0 = -1.98), reward eval: reward: -4.64, reward normalized=-2.33/5.04, grad norm= 125.88, loss_value= 200.67, loss_actor= 16.49, target value: -16.69:  88%|████████▊ | 8800/10000 [00:13&lt;00:01, 658.90it/s]
+reward: -5.16 (r0 = -1.98), reward eval: reward: -4.64, reward normalized=-2.33/5.04, grad norm= 125.88, loss_value= 200.67, loss_actor= 16.49, target value: -16.69:  96%|█████████▌| 9600/10000 [00:14&lt;00:00, 429.92it/s]
+reward: -4.28 (r0 = -1.98), reward eval: reward: -4.64, reward normalized=-2.55/4.86, grad norm= 107.77, loss_value= 197.41, loss_actor= 14.59, target value: -18.89:  96%|█████████▌| 9600/10000 [00:15&lt;00:00, 429.92it/s]
+reward: -4.28 (r0 = -1.98), reward eval: reward: -4.64, reward normalized=-2.55/4.86, grad norm= 107.77, loss_value= 197.41, loss_actor= 14.59, target value: -18.89: : 10400it [00:17, 397.07it/s]
+reward: -4.20 (r0 = -1.98), reward eval: reward: -4.64, reward normalized=-2.34/4.81, grad norm= 192.78, loss_value= 239.37, loss_actor= 15.75, target value: -16.21: : 10400it [00:17, 397.07it/s]
 </pre></div>
 </div>
 </section>
@@ -1416,7 +1417,7 @@ loss component;</p></li>
 <li><p>Using <cite>&#64;dispatch</cite> (see <a class="reference external" href="https://github.com/pytorch/rl/pull/1230">[Feature] Distpatch IQL loss module</a>.)</p></li>
 <li><p>Allowing flexible TensorDict keys.</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 27.747 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 27.194 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-coding-ddpg-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/7ef773e36507adbc389133424f663224/coding_ddpg.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">coding_ddpg.ipynb</span></code></a></p>

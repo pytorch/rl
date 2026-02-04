@@ -144,6 +144,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
@@ -658,7 +659,8 @@
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;policy cannot be used with policy_factory&quot;</span><span class="p">)</span>
     <span class="k">elif</span> <span class="n">has_policy_factory</span><span class="p">:</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">policy_factory</span>
+            <span class="c1"># Use worker_idx to get the correct factory for this worker</span>
+            <span class="n">policy</span> <span class="o">=</span> <span class="n">policy_factory</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]()</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">policy</span> <span class="o">=</span> <span class="n">policy_factory</span><span class="p">()</span>
 

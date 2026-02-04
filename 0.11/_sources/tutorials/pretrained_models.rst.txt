@@ -73,14 +73,14 @@ but other models (e.g. VIP) will work equally well.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 56-60
+.. GENERATED FROM PYTHON SOURCE LINES 46-50
 
 Let us first create an environment. For the sake of simplicity, we will be using
 a common gym environment. In practice, this will work in more challenging, embodied
 AI contexts (e.g. have a look at our Habitat wrappers).
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 60-62
+.. GENERATED FROM PYTHON SOURCE LINES 50-52
 
 .. code-block:: Python
 
@@ -93,7 +93,7 @@ AI contexts (e.g. have a look at our Habitat wrappers).
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 63-70
+.. GENERATED FROM PYTHON SOURCE LINES 53-60
 
 Let us fetch our pretrained model. We ask for the pretrained version of the model through the
 download=True flag. By default this is turned off.
@@ -103,7 +103,7 @@ in the output tensordict. Our policy, consisting of a single layer MLP, will the
 the corresponding action.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 70-83
+.. GENERATED FROM PYTHON SOURCE LINES 60-73
 
 .. code-block:: Python
 
@@ -127,12 +127,12 @@ the corresponding action.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 84-86
+.. GENERATED FROM PYTHON SOURCE LINES 74-76
 
 Let's check the number of parameters of the policy:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 86-88
+.. GENERATED FROM PYTHON SOURCE LINES 76-78
 
 .. code-block:: Python
 
@@ -151,12 +151,12 @@ Let's check the number of parameters of the policy:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 89-91
+.. GENERATED FROM PYTHON SOURCE LINES 79-81
 
 We collect a rollout of 32 steps and print its output:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 91-94
+.. GENERATED FROM PYTHON SOURCE LINES 81-84
 
 .. code-block:: Python
 
@@ -195,14 +195,14 @@ We collect a rollout of 32 steps and print its output:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 95-99
+.. GENERATED FROM PYTHON SOURCE LINES 85-89
 
 For fine tuning, we integrate the transform in the policy after making the parameters
 trainable. In practice, it may be wiser to restrict this to a subset of the parameters (say the last layer
 of the MLP).
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 99-103
+.. GENERATED FROM PYTHON SOURCE LINES 89-93
 
 .. code-block:: Python
 
@@ -223,14 +223,14 @@ of the MLP).
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 104-108
+.. GENERATED FROM PYTHON SOURCE LINES 94-98
 
 Again, we collect a rollout with R3M. The structure of the output has changed slightly, as now
 the environment returns pixels (and not an embedding). The embedding "r3m_vec" is an intermediate
 result of our policy.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 108-111
+.. GENERATED FROM PYTHON SOURCE LINES 98-101
 
 .. code-block:: Python
 
@@ -269,7 +269,7 @@ result of our policy.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 112-119
+.. GENERATED FROM PYTHON SOURCE LINES 102-109
 
 The easiness with which we have swapped the transform from the env to the policy
 is due to the fact that both behave like TensorDictModule: they have a set of `"in_keys"` and
@@ -279,7 +279,7 @@ To conclude this tutorial, let's have a look at how we could use R3M to read
 images stored in a replay buffer (e.g. in an offline RL context). First, let's build our dataset:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 119-125
+.. GENERATED FROM PYTHON SOURCE LINES 109-115
 
 .. code-block:: Python
 
@@ -296,13 +296,13 @@ images stored in a replay buffer (e.g. in an offline RL context). First, let's b
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 126-129
+.. GENERATED FROM PYTHON SOURCE LINES 116-119
 
 We can now collect the data (random rollouts for our purpose) and fill the replay
 buffer with it:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 129-135
+.. GENERATED FROM PYTHON SOURCE LINES 119-125
 
 .. code-block:: Python
 
@@ -319,12 +319,12 @@ buffer with it:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 136-138
+.. GENERATED FROM PYTHON SOURCE LINES 126-128
 
 Let's check what our replay buffer storage looks like. It should not contain the "r3m_vec" entry
 since we haven't used it yet:
 
-.. GENERATED FROM PYTHON SOURCE LINES 138-140
+.. GENERATED FROM PYTHON SOURCE LINES 128-130
 
 .. code-block:: Python
 
@@ -362,13 +362,13 @@ since we haven't used it yet:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 141-144
+.. GENERATED FROM PYTHON SOURCE LINES 131-134
 
 When sampling, the data will go through the R3M transform, giving us the processed data that we wanted.
 In this way, we can train an algorithm offline on a dataset made of images:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 144-147
+.. GENERATED FROM PYTHON SOURCE LINES 134-137
 
 .. code-block:: Python
 
@@ -403,7 +403,7 @@ In this way, we can train an algorithm offline on a dataset made of images:
         batch_size=torch.Size([32]),
         device=cuda:0,
         is_shared=True)
-    Directory '/tmp/tmpn3ug6eu0' deleted successfully.
+    Directory '/tmp/tmpbbgiyayq' deleted successfully.
 
 
 
@@ -411,7 +411,7 @@ In this way, we can train an algorithm offline on a dataset made of images:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 30.846 seconds)
+   **Total running time of the script:** (0 minutes 31.529 seconds)
 
 
 .. _sphx_glr_download_tutorials_pretrained_models.py:

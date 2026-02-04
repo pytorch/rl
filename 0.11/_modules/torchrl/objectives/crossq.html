@@ -144,6 +144,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
@@ -243,6 +244,7 @@
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">wraps</span>
 
@@ -514,6 +516,7 @@
         <span class="n">separate_losses</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">reduction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">deactivate_vmap</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">scalar_output_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_in_keys</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_out_keys</span> <span class="o">=</span> <span class="kc">None</span>
@@ -588,6 +591,23 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_action_spec</span> <span class="o">=</span> <span class="n">action_spec</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_make_vmap</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">reduction</span> <span class="o">=</span> <span class="n">reduction</span>
+
+        <span class="c1"># Handle scalar_output_mode for reduction=&quot;none&quot;</span>
+        <span class="k">if</span> <span class="n">reduction</span> <span class="o">==</span> <span class="s2">&quot;none&quot;</span> <span class="ow">and</span> <span class="n">scalar_output_mode</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;CrossQLoss with reduction=&#39;none&#39; cannot include scalar values (alpha, entropy) &quot;</span>
+                <span class="s2">&quot;in the output TensorDict without changing their shape. These values will be &quot;</span>
+                <span class="s2">&quot;excluded from the output. You can access them via `loss_module._alpha` and &quot;</span>
+                <span class="s2">&quot;compute entropy from the log_prob in the actor loss metadata. &quot;</span>
+                <span class="s2">&quot;To suppress this warning, pass `scalar_output_mode=&#39;exclude&#39;` to the constructor. &quot;</span>
+                <span class="s2">&quot;Alternatively, pass `scalar_output_mode=&#39;non_tensor&#39;` to include them as non-tensor data. &quot;</span>
+                <span class="s2">&quot;This is a known limitation we&#39;re working on improving.&quot;</span><span class="p">,</span>
+                <span class="n">category</span><span class="o">=</span><span class="ne">UserWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">scalar_output_mode</span> <span class="o">=</span> <span class="s2">&quot;exclude&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scalar_output_mode</span> <span class="o">=</span> <span class="n">scalar_output_mode</span>
+
         <span class="c1"># init target entropy</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">maybe_init_target_entropy</span><span class="p">()</span>
 
@@ -804,12 +824,21 @@
             <span class="s2">&quot;loss_actor&quot;</span><span class="p">:</span> <span class="n">loss_actor</span><span class="p">,</span>
             <span class="s2">&quot;loss_qvalue&quot;</span><span class="p">:</span> <span class="n">loss_qvalue</span><span class="p">,</span>
             <span class="s2">&quot;loss_alpha&quot;</span><span class="p">:</span> <span class="n">loss_alpha</span><span class="p">,</span>
-            <span class="s2">&quot;alpha&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_alpha</span><span class="p">,</span>
-            <span class="s2">&quot;entropy&quot;</span><span class="p">:</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">(),</span>
             <span class="o">**</span><span class="n">metadata_actor</span><span class="p">,</span>
             <span class="o">**</span><span class="n">value_metadata</span><span class="p">,</span>
         <span class="p">}</span>
-        <span class="n">td_out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
+
+        <span class="c1"># Handle batch_size and scalar values (alpha, entropy) based on reduction mode</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reduction</span> <span class="o">==</span> <span class="s2">&quot;none&quot;</span><span class="p">:</span>
+            <span class="n">batch_size</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">batch_size</span>
+            <span class="n">td_out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scalar_output_mode</span> <span class="o">==</span> <span class="s2">&quot;non_tensor&quot;</span><span class="p">:</span>
+                <span class="n">td_out</span><span class="o">.</span><span class="n">set_non_tensor</span><span class="p">(</span><span class="s2">&quot;alpha&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_alpha</span><span class="p">)</span>
+                <span class="n">td_out</span><span class="o">.</span><span class="n">set_non_tensor</span><span class="p">(</span><span class="s2">&quot;entropy&quot;</span><span class="p">,</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">out</span><span class="p">[</span><span class="s2">&quot;alpha&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_alpha</span>
+            <span class="n">out</span><span class="p">[</span><span class="s2">&quot;entropy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+            <span class="n">td_out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_clear_weakrefs</span><span class="p">(</span>
             <span class="n">tensordict</span><span class="p">,</span>
             <span class="n">td_out</span><span class="p">,</span>
