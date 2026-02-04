@@ -4131,9 +4131,9 @@ class TestCollectorRB:
         env.set_seed(0)
 
         if storage_type is LazyMemmapStorage:
-            storage = storage_type(1000, scratch_dir=tmpdir)
+            storage = storage_type(1000, scratch_dir=tmpdir, ndim=2)
         else:
-            storage = storage_type(1000)
+            storage = storage_type(1000, ndim=2)
 
         rb = ReplayBuffer(storage=storage, batch_size=10)
         collector = Collector(
