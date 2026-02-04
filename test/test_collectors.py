@@ -4060,8 +4060,6 @@ class TestCollectorRB:
         materializing data into a contiguous buffer, allowing the storage to write
         directly to its buffer without intermediate copies.
         """
-        from unittest.mock import patch
-
         if storage_type is LazyMemmapStorage:
             storage = storage_type(1000, scratch_dir=tmpdir)
         else:

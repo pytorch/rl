@@ -926,8 +926,6 @@ class TestStorages:
         replay buffers and that the data integrity is preserved. Also verifies
         that the update_() optimization is used for tensor indices.
         """
-        from unittest.mock import patch
-
         rb = ReplayBuffer(
             storage=storage_type(100),
             batch_size=10,
@@ -953,7 +951,7 @@ class TestStorages:
 
         # Extend with lazy stack and verify update_() is called
         # (rb.extend uses tensor indices, so update_() path is taken)
-        with patch.object(TensorDictBase, "update_", mock_update):
+        with mock.patch.object(TensorDictBase, "update_", mock_update):
             rb.extend(lazy_td)
 
         # Verify update_() was called (optimization was used)
