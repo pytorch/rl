@@ -93,9 +93,9 @@ marl = ["vmas>=1.2.10", "pettingzoo>=1.24.1", "dm-meltingpot; python_version>='3
 open_spiel = ["open_spiel>=1.5"]
 brax = ["jax>=0.7.0; python_version>='3.11'", "brax; python_version>='3.11'"]
 procgen = ["procgen"]
+# Base LLM dependencies (no inference backend - use llm-vllm or llm-sglang)
 llm = [
     "transformers",
-    "vllm",
     "playwright",
     "datasets",
     "langdetect",
@@ -107,12 +107,27 @@ llm = [
     "einops",
     "safetensors",
 ]
+# LLM with vLLM backend
+llm-vllm = [
+    "torchrl[llm]",
+    "vllm",
+]
+# LLM with SGLang backend
+llm-sglang = [
+    "torchrl[llm]",
+    "sglang[all]",
+]
+# LLM with both backends
+llm-all = [
+    "torchrl[llm]",
+    "vllm",
+    "sglang[all]",
+]
 grpo = [
     # Core dependencies for GRPO training
-    "datasets",
+    "torchrl[llm-vllm]",
     "peft",
     "wandb",
-    "vllm",
     "transformers",
     "accelerate",
     "ray",
@@ -121,10 +136,6 @@ grpo = [
     "flash-attn",
     "bitsandbytes",
     "xformers",
-    # LLM-related dependencies that may be needed
-    "nltk",
-    "langdetect", 
-    "immutabledict",
 ]
 dev = [
     "pre-commit",
