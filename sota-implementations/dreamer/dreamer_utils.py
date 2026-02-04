@@ -892,7 +892,9 @@ def make_replay_buffer(
                 strict_length=False,
                 traj_key=("collector", "traj_ids"),
                 cache_values=False,  # Disabled for async collection (cache not synced across processes)
-                # Don't compile the sampler - inductor has C++ codegen bugs for int64 ops
+                use_gpu=device.type == "cuda"
+                if device is not None
+                else False,  # Speed up trajectory computation on GPU
             ),
             transform=sample_transforms,
             batch_size=batch_size,
