@@ -24,6 +24,13 @@ Get started with reinforcement learning in PyTorch.
 import warnings
 
 warnings.filterwarnings("ignore")
+
+# Set multiprocessing start method to fork if not already set
+# This allows the tutorial to run as a script without if __name__ == "__main__"
+from torch import multiprocessing
+
+if multiprocessing.get_start_method(allow_none=True) is None:
+    multiprocessing.set_start_method("fork")
 # sphinx_gallery_end_ignore
 
 ###############################################################################
@@ -195,8 +202,8 @@ def make_env():
     return GymEnv("Pendulum-v1")
 
 
-# Run 4 environments in parallel (using fork for script compatibility)
-vec_env = ParallelEnv(4, make_env, mp_start_method="fork")
+# Run 4 environments in parallel
+vec_env = ParallelEnv(4, make_env)
 td = vec_env.reset()
 print("Batched reset:", td.batch_size)
 
