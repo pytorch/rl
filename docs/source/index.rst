@@ -104,6 +104,7 @@ Basics
 
    tutorials/coding_ppo
    tutorials/pendulum
+   tutorials/torchrl_demo
 
 Intermediate
 ------------

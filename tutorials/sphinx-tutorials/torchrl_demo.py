@@ -1,182 +1,37 @@
 """
 Introduction to TorchRL
 =======================
-This demo was presented at ICML 2022 on the industry demo day.
+A comprehensive overview of TorchRL's core features and capabilities.
 """
 ##############################################################################
-# It gives a good overview of TorchRL functionalities. Feel free to reach out
-# to vmoens@fb.com or submit issues if you have questions or comments about
-# it.
+# This tutorial provides a hands-on introduction to TorchRL's main components.
+# Feel free to submit issues on `GitHub <https://github.com/pytorch/rl>`__ if
+# you have questions or feedback.
 #
-# TorchRL is an open-source Reinforcement Learning (RL) library for PyTorch.
+# TorchRL is an open-source Reinforcement Learning (RL) library for PyTorch,
+# developed by Meta as part of the PyTorch ecosystem.
 #
-# https://github.com/pytorch/rl
+# Key features:
 #
-# The PyTorch ecosystem team (Meta) has decided to invest in that library to
-# provide a leading platform to develop RL solutions in research settings.
+# - **PyTorch-first**: Native integration with PyTorch's tensor operations and autograd
+# - **Modular design**: Easily swap components and build custom RL pipelines
+# - **Efficient**: Optimized for both research prototyping and production use
+# - **Minimal dependencies**: Core library requires only PyTorch and numpy
 #
-# It provides pytorch and **python-first**, low and high level
-# **abstractions** # for RL that are intended to be efficient, documented and
-# properly tested.
-# The code is aimed at supporting research in RL. Most of it is written in
-# python in a highly modular way, such that researchers can easily swap
-# components, transform them or write new ones with little effort.
+# TorchRL follows PyTorch ecosystem conventions with familiar abstractions:
+# environments (like datasets), transforms, modules, and data utilities.
 #
-# This repo attempts to align with the existing pytorch ecosystem libraries
-# in that it has a dataset pillar (torchrl/envs), transforms, models, data
-# utilities (e.g. collectors and containers), etc. TorchRL aims at having as
-# few dependencies as possible (python standard library, numpy and pytorch).
-# Common environment libraries (e.g. OpenAI gym) are only optional.
+# **Library Structure**:
 #
-# **Content**:
-#    .. aafig::
+# - ``torchrl.collectors``: Data collection utilities (single/multi-process)
+# - ``torchrl.data``: Replay buffers, tensor specs, datasets
+# - ``torchrl.envs``: Environment wrappers (Gym, DMControl, etc.) and transforms
+# - ``torchrl.modules``: Neural network modules and actors
+# - ``torchrl.objectives``: RL loss functions (PPO, SAC, DQN, etc.)
+# - ``torchrl.record``: Logging utilities (TensorBoard, WandB, etc.)
 #
-#       "torchrl"
-#       │
-#       ├── "collectors"
-#       │   └── "collectors.py"
-#       │   │
-#       │   └── "distributed"
-#       │       └── "default_configs.py"
-#       │       └── "generic.py"
-#       │       └── "ray.py"
-#       │       └── "rpc.py"
-#       │       └── "sync.py"
-#       ├── "data"
-#       │   │
-#       │   ├── "datasets"
-#       │   │   └── "atari_dqn.py"
-#       │   │   └── "d4rl.py"
-#       │   │   └── "d4rl_infos.py"
-#       │   │   └── "gen_dgrl.py"
-#       │   │   └── "minari_data.py"
-#       │   │   └── "openml.py"
-#       │   │   └── "openx.py"
-#       │   │   └── "roboset.py"
-#       │   │   └── "vd4rl.py"
-#       │   ├── "postprocs"
-#       │   │   └── "postprocs.py"
-#       │   ├── "replay_buffers"
-#       │   │   └── "replay_buffers.py"
-#       │   │   └── "samplers.py"
-#       │   │   └── "storages.py"
-#       │   │   └── "writers.py"
-#       │   ├── "llm"
-#       │   │   └── "dataset.py"
-#       │   │   └── "prompt.py"
-#       │   │   └── "reward.py"
-#       │   └── "tensor_specs.py"
-#       ├── "envs"
-#       │   └── "batched_envs.py"
-#       │   └── "common.py"
-#       │   └── "env_creator.py"
-#       │   └── "gym_like.py"
-#       │   ├── "libs"
-#       │   │   └── "brax.py"
-#       │   │   └── "dm_control.py"
-#       │   │   └── "envpool.py"
-#       │   │   └── "gym.py"
-#       │   │   └── "habitat.py"
-#       │   │   └── "isaacgym.py"
-#       │   │   └── "jumanji.py"
-#       │   │   └── "openml.py"
-#       │   │   └── "pettingzoo.py"
-#       │   │   └── "robohive.py"
-#       │   │   └── "smacv2.py"
-#       │   │   └── "vmas.py"
-#       │   ├── "model_based"
-#       │   │   └── "common.py"
-#       │   │   └── "dreamer.py"
-#       │   ├── "transforms"
-#       │   │   └── "functional.py"
-#       │   │   └── "gym_transforms.py"
-#       │   │   └── "r3m.py"
-#       │   │   └── "llm.py"
-#       │   │   └── "vc1.py"
-#       │   │   └── "vip.py"
-#       │   └── "vec_envs.py"
-#       ├── "modules"
-#       │   ├── "distributions"
-#       │   │   └── "continuous.py"
-#       │   │   └── "discrete.py"
-#       │   │   └── "truncated_normal.py"
-#       │   ├── "models"
-#       │   │   └── "decision_transformer.py"
-#       │   │   └── "exploration.py"
-#       │   │   └── "model_based.py"
-#       │   │   └── "models.py"
-#       │   │   └── "multiagent.py"
-#       │   │   └── "llm.py"
-#       │   ├── "planners"
-#       │   │   └── "cem.py"
-#       │   │   └── "common.py"
-#       │   │   └── "mppi.py"
-#       │   └── "tensordict_module"
-#       │       └── "actors.py"
-#       │       └── "common.py"
-#       │       └── "exploration.py"
-#       │       └── "probabilistic.py"
-#       │       └── "rnn.py"
-#       │       └── "sequence.py"
-#       │       └── "world_models.py"
-#       ├── "objectives"
-#       │   └── "a2c.py"
-#       │   └── "common.py"
-#       │   └── "cql.py"
-#       │   └── "ddpg.py"
-#       │   └── "decision_transformer.py"
-#       │   └── "deprecated.py"
-#       │   └── "dqn.py"
-#       │   └── "dreamer.py"
-#       │   └── "functional.py"
-#       │   └── "iql.py"
-#       │   ├── "multiagent"
-#       │   │   └── "qmixer.py"
-#       │   └── "ppo.py"
-#       │   └── "redq.py"
-#       │   └── "reinforce.py"
-#       │   └── "sac.py"
-#       │   └── "td3.py"
-#       │   ├── "value"
-#       │       └── "advantages.py"
-#       │       └── "functional.py"
-#       │       └── "pg.py"
-#       ├── "record"
-#       │   ├── "loggers"
-#       │   │   └── "common.py"
-#       │   │   └── "csv.py"
-#       │   │   └── "mlflow.py"
-#       │   │   └── "tensorboard.py"
-#       │   │   └── "wandb.py"
-#       │   └── "recorder.py"
-#       ├── "trainers"
-#       │   │
-#       │   ├── "helpers"
-#       │   │   └── "collectors.py"
-#       │   │   └── "envs.py"
-#       │   │   └── "logger.py"
-#       │   │   └── "losses.py"
-#       │   │   └── "models.py"
-#       │   │   └── "replay_buffer.py"
-#       │   │   └── "trainers.py"
-#       │   └── "trainers.py"
-#       └── "version.py"
-#
-# Unlike other domains, RL is less about media than *algorithms*. As such, it
-# is harder to make truly independent components.
-#
-# What TorchRL is not:
-#
-# * a collection of algorithms: we do not intend to provide SOTA implementations of RL algorithms,
-#   but we provide these algorithms only as examples of how to use the library.
-#
-# * a research framework: modularity in TorchRL comes in two flavors. First, we try
-#   to build re-usable components, such that they can be easily swapped with each other.
-#   Second, we make our best such that components can be used independently of the rest
-#   of the library.
-#
-# TorchRL has very few core dependencies, predominantly PyTorch and numpy. All
-# other dependencies (gym, torchvision, wandb / tensorboard) are optional.
+# See the `API Reference <https://pytorch.org/rl/reference/index.html>`__ for
+# complete documentation.
 #
 # Data
 # ----
@@ -191,21 +46,11 @@ warnings.filterwarnings("ignore")
 
 from torch import multiprocessing
 
-# TorchRL prefers spawn method, that restricts creation of  ``~torchrl.envs.ParallelEnv`` inside
-# `__main__` method call, but for the easy of reading the code switch to fork
-# which is also a default spawn method in Google's Colaboratory
+# TorchRL prefers spawn method for safety across platforms
 try:
-    is_sphinx = __sphinx_build__
-except NameError:
-    is_sphinx = False
-
-try:
-    multiprocessing.set_start_method(
-        "spawn" if is_sphinx else "fork", force=not is_sphinx
-    )
+    multiprocessing.set_start_method("spawn", force=True)
 except RuntimeError:
-    pass
-
+    pass  # Already set
 
 # sphinx_gallery_end_ignore
 
@@ -262,10 +107,6 @@ print(
 )
 
 print("to device: ", data.to("cpu"))
-
-# print("pin_memory: ", data.pin_memory())
-
-print("share memory: ", data.share_memory_())
 
 print(
     "permute(1, 0): ",
@@ -444,7 +285,7 @@ def make_env():
 base_env = ParallelEnv(
     4,
     make_env,
-    mp_start_method="fork",  # This will break on Windows machines! Remove and decorate with if __name__ == "__main__"
+    mp_start_method="spawn",
 )
 env = TransformedEnv(
     base_env, Compose(StepCounter(), ToTensorImage())
