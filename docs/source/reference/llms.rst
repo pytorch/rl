@@ -431,7 +431,7 @@ Objectives
 LLM post-training requires specialized loss functions that are adapted to the unique characteristics of language models.
 
 GRPO, DAPO, CISPO
-^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~
 
 .. currentmodule:: torchrl.objectives.llm
 
@@ -449,7 +449,7 @@ GRPO, DAPO, CISPO
     MCAdvantage
 
 SFT
-^^^
+~~~
 
 .. currentmodule:: torchrl.objectives.llm
 

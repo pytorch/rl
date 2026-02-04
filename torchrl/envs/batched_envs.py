@@ -96,6 +96,22 @@ class _dispatch_caller_parallel:
         # if the object returned is not a callable
         return iter(self.__call__())
 
+    def __getattr__(self, name):
+        """Support chained attribute access: env_parallel.a.b -> sends ('a','b') to workers."""
+        # Don't chain special/dunder methods - these are often called by
+        # display systems (e.g., Jupyter's _repr_html_) and shouldn't be
+        # dispatched to workers
+        if name.startswith("_"):
+            raise AttributeError(
+                f"Accessing private/special attribute {name!r} is not supported "
+                f"on dispatched parallel env attributes."
+            )
+        if isinstance(self.attr, tuple):
+            new_attr = self.attr + (name,)
+        else:
+            new_attr = (self.attr, name)
+        return _dispatch_caller_parallel(new_attr, self.parallel_env)
+
 
 class _dispatch_caller_serial:
     def __init__(self, list_callable: list[Callable, Any]):
