@@ -147,10 +147,14 @@ def main(cfg: DictConfig):  # noqa: F821
     )
 
     # Create storage transform for extend-time processing (applied once per frame)
+    # When GPU is available, GPUImageTransform handles image processing in the env,
+    # so we skip the heavy CPU transforms in storage_transform
+    gpu_transforms = device.type == "cuda"
     storage_transform = make_storage_transform(
         pixel_obs=cfg.env.from_pixels,
         grayscale=cfg.env.grayscale,
         image_size=cfg.env.image_size,
+        gpu_transforms=gpu_transforms,
     )
 
     # Create policy version tracker for async collection
@@ -247,7 +251,11 @@ def main(cfg: DictConfig):  # noqa: F821
         compile_warmup = 3
         torchrl_logger.info(f"Compiling loss modules with warmup={compile_warmup}")
         backend = compile_cfg.backend
-        mode = compile_cfg.mode
+        cudagraphs = compile_cfg.cudagraphs
+
+        # Build compile options - disable CUDA graphs if configured (default)
+        # CUDA graphs conflict with dynamic RSSM rollout loop
+        compile_options = {"triton.cudagraphs": cudagraphs}
 
         # Note: We do NOT compile rssm_prior/rssm_posterior here because they are
         # shared with the policy used in the collector. Compiling them would cause
@@ -260,17 +268,25 @@ def main(cfg: DictConfig):  # noqa: F821
             world_model_loss = compile_with_warmup(
                 world_model_loss,
                 backend=backend,
-                mode=mode,
                 fullgraph=False,
                 warmup=compile_warmup,
+                options=compile_options,
             )
         if "actor" in compile_losses:
             actor_loss = compile_with_warmup(
-                actor_loss, backend=backend, mode=mode, warmup=compile_warmup
+                actor_loss,
+                backend=backend,
+                fullgraph=False,
+                warmup=compile_warmup,
+                options=compile_options,
             )
         if "value" in compile_losses:
             value_loss = compile_with_warmup(
-                value_loss, backend=backend, mode=mode, warmup=compile_warmup
+                value_loss,
+                backend=backend,
+                fullgraph=False,
+                warmup=compile_warmup,
+                options=compile_options,
             )
     else:
         compile_warmup = 0
