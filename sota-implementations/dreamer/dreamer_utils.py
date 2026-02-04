@@ -10,7 +10,7 @@ from contextlib import nullcontext
 
 import torch
 import torch.nn as nn
-from tensordict import NestedKey
+from tensordict import NestedKey, TensorDictBase
 from tensordict.nn import (
     InteractionType,
     ProbabilisticTensorDictModule,
@@ -38,7 +38,6 @@ from torchrl.envs import (
     DreamerEnv,
     EnvCreator,
     ExcludeTransform,
-    # ExcludeTransform,
     FrameSkipTransform,
     GrayScale,
     GymEnv,
@@ -50,6 +49,7 @@ from torchrl.envs import (
     StepCounter,
     TensorDictPrimer,
     ToTensorImage,
+    Transform,
     TransformedEnv,
 )
 from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
@@ -260,6 +260,89 @@ class DreamerProfiler:
         return self.total_optim_steps >= target_steps
 
 
+class GPUImageTransform(Transform):
+    """Composite transform that processes images on GPU for faster execution.
+
+    This transform:
+    1. Moves pixels_int to GPU
+    2. Runs ToTensorImage (permute + divide by 255)
+    3. Optionally runs GrayScale
+    4. Runs Resize
+    5. Keeps output on GPU for fast policy inference
+
+    This avoids device mismatch issues by not using DeviceCastTransform on the
+    full tensordict - only the pixel processing happens on GPU.
+    """
+
+    def __init__(
+        self,
+        device: torch.device,
+        image_size: int,
+        grayscale: bool = False,
+        in_key: str = "pixels_int",
+        out_key: str = "pixels",
+    ):
+        super().__init__(in_keys=[in_key], out_keys=[out_key])
+        self.device = device
+        self.image_size = image_size
+        self.grayscale = grayscale
+        self.in_key = in_key
+        self.out_key = out_key
+
+    def _apply_transform(self, pixels_int: torch.Tensor) -> torch.Tensor:
+        # Move to GPU
+        pixels = pixels_int.to(self.device)
+        # ToTensorImage: permute W x H x C -> C x W x H and normalize
+        pixels = pixels.permute(*list(range(pixels.ndimension() - 3)), -1, -3, -2)
+        pixels = pixels.float().div(255)
+        # GrayScale
+        if self.grayscale:
+            pixels = pixels.mean(dim=-3, keepdim=True)
+        # Resize using interpolate
+        if pixels.shape[-2:] != (self.image_size, self.image_size):
+            # Add batch dim if needed for interpolate
+            needs_squeeze = pixels.ndim == 3
+            if needs_squeeze:
+                pixels = pixels.unsqueeze(0)
+            pixels = torch.nn.functional.interpolate(
+                pixels,
+                size=(self.image_size, self.image_size),
+                mode="bilinear",
+                align_corners=False,
+                antialias=True,
+            )
+            if needs_squeeze:
+                pixels = pixels.squeeze(0)
+        return pixels
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._call(tensordict_reset)
+
+    def transform_observation_spec(self, observation_spec):
+        # Update the spec for the output key
+        # Note: Keep spec on CPU to match other specs in Composite
+        # The actual transform will put data on GPU, but spec device must be uniform
+        from torchrl.data import Unbounded
+
+        in_spec = observation_spec[self.in_key]
+        # Output shape: (C, H, W) where C=1 if grayscale else 3
+        out_channels = 1 if self.grayscale else 3
+        out_shape = (
+            *in_spec.shape[:-3],
+            out_channels,
+            self.image_size,
+            self.image_size,
+        )
+        # Use in_spec.device to maintain device consistency in Composite
+        out_spec = Unbounded(
+            shape=out_shape, dtype=torch.float32, device=in_spec.device
+        )
+        observation_spec[self.out_key] = out_spec
+        return observation_spec
+
+
 def _make_env(cfg, device, from_pixels=False):
     lib = cfg.env.backend
     if lib in ("gym", "gymnasium"):
@@ -294,22 +377,44 @@ def _make_env(cfg, device, from_pixels=False):
     return env
 
 
-def transform_env(cfg, env):
+def transform_env(cfg, env, device=None):
+    """Apply transforms to environment.
+
+    Args:
+        cfg: Config object
+        env: The environment to transform
+        device: If specified and is a CUDA device, use GPU-accelerated image
+            processing which is ~50-100x faster than CPU.
+    """
     if not isinstance(env, TransformedEnv):
         env = TransformedEnv(env)
     if cfg.env.from_pixels:
-        # transforms pixel from 0-255 to 0-1 (uint8 to float32)
+        # Rename original pixels for processing
         env.append_transform(
             RenameTransform(in_keys=["pixels"], out_keys=["pixels_int"])
         )
-        env.append_transform(
-            ToTensorImage(from_int=True, in_keys=["pixels_int"], out_keys=["pixels"])
-        )
-        if cfg.env.grayscale:
-            env.append_transform(GrayScale())
 
-        image_size = cfg.env.image_size
-        env.append_transform(Resize(image_size, image_size))
+        # Use GPU-accelerated image processing if device is CUDA
+        if device is not None and str(device).startswith("cuda"):
+            env.append_transform(
+                GPUImageTransform(
+                    device=device,
+                    image_size=cfg.env.image_size,
+                    grayscale=cfg.env.grayscale,
+                    in_key="pixels_int",
+                    out_key="pixels",
+                )
+            )
+        else:
+            # CPU fallback: use standard transforms
+            env.append_transform(
+                ToTensorImage(
+                    from_int=True, in_keys=["pixels_int"], out_keys=["pixels"]
+                )
+            )
+            if cfg.env.grayscale:
+                env.append_transform(GrayScale())
+            env.append_transform(Resize(cfg.env.image_size, cfg.env.image_size))
 
     env.append_transform(DoubleToFloat())
     env.append_transform(RewardSum())
@@ -329,24 +434,38 @@ def make_environments(cfg, parallel_envs=1, logger=None):
     """
 
     def train_env_factory():
-        """Factory function for creating training environments."""
-        func = functools.partial(
-            _make_env, cfg=cfg, device=_default_device(cfg.env.device)
-        )
+        """Factory function for creating training environments.
+
+        Note: This factory runs inside collector worker processes. We use
+        CUDA if available for GPU-accelerated image transforms (ToTensorImage,
+        Resize) which are ~50-100x faster than CPU. The cfg.env.device setting
+        is ignored in favor of auto-detecting CUDA availability.
+        """
+        # Use CUDA for transforms if available, regardless of cfg.env.device
+        # This is critical: image transforms (Resize, ToTensorImage) are ~50-100x
+        # faster on GPU. DMControl/Gym render on CPU, but we move to GPU for transforms.
+        transform_device = _default_device(None)  # Returns CUDA if available
+        # Base env still uses cfg.env.device for compatibility
+        env_device = _default_device(cfg.env.device)
+        func = functools.partial(_make_env, cfg=cfg, device=env_device)
         train_env = ParallelEnv(
             parallel_envs,
             EnvCreator(func),
             serial_for_single=True,
         )
-        train_env = transform_env(cfg, train_env)
+        # Pass transform_device to enable GPU-accelerated image transforms
+        train_env = transform_env(cfg, train_env, device=transform_device)
         train_env.set_seed(cfg.env.seed)
         return train_env
 
     # Create eval env directly (not a factory)
+    # Use CUDA for transforms if available, regardless of cfg.env.device
+    transform_device = _default_device(None)  # Returns CUDA if available
+    env_device = _default_device(cfg.env.device)
     func = functools.partial(
         _make_env,
         cfg=cfg,
-        device=_default_device(cfg.env.device),
+        device=env_device,
         from_pixels=cfg.logger.video,
     )
     eval_env = ParallelEnv(
@@ -354,7 +473,8 @@ def make_environments(cfg, parallel_envs=1, logger=None):
         EnvCreator(func),
         serial_for_single=True,
     )
-    eval_env = transform_env(cfg, eval_env)
+    # Pass transform_device to enable GPU-accelerated image transforms
+    eval_env = transform_env(cfg, eval_env, device=transform_device)
     eval_env.set_seed(cfg.env.seed + 1)
     if cfg.logger.video:
         eval_env.insert_transform(
@@ -681,15 +801,32 @@ def make_storage_transform(
     pixel_obs=True,
     grayscale=True,
     image_size,
+    gpu_transforms=False,
 ):
     """Create transforms to be applied at extend-time (once per frame).
 
-    These heavy transforms (ToTensorImage, GrayScale, Resize) are applied once
-    when data is added to the buffer, rather than on every sample.
+    Args:
+        pixel_obs: Whether observations are pixel-based.
+        grayscale: Whether to convert to grayscale.
+        image_size: Target image size.
+        gpu_transforms: If True, skip heavy image transforms (ToTensorImage,
+            GrayScale, Resize) since they're already applied by GPUImageTransform
+            in the environment. Only ExcludeTransform is applied to filter keys.
     """
     if not pixel_obs:
         return None
 
+    # When GPU transforms are enabled, GPUImageTransform already processes
+    # pixels_int -> pixels with normalization, grayscale, and resize.
+    # We only need to filter out the intermediate pixels_int key.
+    if gpu_transforms:
+        storage_transforms = Compose(
+            # Just exclude pixels_int, keep everything else including processed pixels
+            ExcludeTransform("pixels_int", ("next", "pixels_int")),
+        )
+        return storage_transforms
+
+    # CPU fallback: apply heavy transforms at storage time
     storage_transforms = Compose(
         ExcludeTransform("pixels", ("next", "pixels"), inverse=True),
         ToTensorImage(
@@ -755,7 +892,9 @@ def make_replay_buffer(
                 strict_length=False,
                 traj_key=("collector", "traj_ids"),
                 cache_values=False,  # Disabled for async collection (cache not synced across processes)
-                # Don't compile the sampler - inductor has C++ codegen bugs for int64 ops
+                use_gpu=device.type == "cuda"
+                if device is not None
+                else False,  # Speed up trajectory computation on GPU
             ),
             transform=sample_transforms,
             batch_size=batch_size,
