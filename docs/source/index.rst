@@ -104,7 +104,6 @@ Basics
 
    tutorials/coding_ppo
    tutorials/pendulum
-   tutorials/torchrl_demo
 
 Intermediate
 ------------
@@ -118,7 +117,6 @@ Intermediate
    tutorials/dqn_with_rnn
    tutorials/rb_tutorial
    tutorials/export
-   tutorials/llm_browser
 
 Advanced
 --------
