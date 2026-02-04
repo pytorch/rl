@@ -417,7 +417,8 @@ def _make_policy_factory(
         raise ValueError("policy cannot be used with policy_factory")
     elif has_policy_factory:
         if isinstance(policy_factory, Sequence):
-            return policy_factory
+            # Use worker_idx to get the correct factory for this worker
+            policy = policy_factory[worker_idx]()
         else:
             policy = policy_factory()
 
