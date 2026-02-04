@@ -4078,23 +4078,23 @@ class TestCollectorRB:
         torch.manual_seed(0)
 
         try:
-            # Track calls to update_() - used for tensor indices with stack_dim=0
-            update_called = []
-            original_update = TensorDictBase.update_
+            # Track calls to update_at_() - used for tensor indices
+            update_at_called = []
+            original_update_at = TensorDictBase.update_at_
 
-            def mock_update(self, *args, **kwargs):
-                update_called.append(True)
-                return original_update(self, *args, **kwargs)
+            def mock_update_at(self, *args, **kwargs):
+                update_at_called.append(True)
+                return original_update_at(self, *args, **kwargs)
 
-            with patch.object(TensorDictBase, "update_", mock_update):
+            with patch.object(TensorDictBase, "update_at_", mock_update_at):
                 collected_frames = 0
                 for data in collector:
                     # When replay buffer is used, collector yields None
                     assert data is None
                     collected_frames += 50
 
-            # Verify update_() was called (optimization was used)
-            assert len(update_called) > 0, "update_() should have been called"
+            # Verify update_at_() was called (optimization was used)
+            assert len(update_at_called) > 0, "update_at_() should have been called"
 
             # Verify data was properly stored in the replay buffer
             assert len(rb) == 200, f"Expected 200 frames in buffer, got {len(rb)}"

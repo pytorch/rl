@@ -1067,21 +1067,10 @@ class TensorStorage(Storage):
                         self._storage[cursor]._stack_onto_(
                             list(data.unbind(stack_dim)), dim=stack_dim
                         )
-                    elif stack_dim == 0:
-                        # For tensor/sequence indices with stack_dim=0, iterate and
-                        # update each element. storage[i] returns a view for single
-                        # index, so update_ writes directly to storage.
-                        if isinstance(cursor, torch.Tensor):
-                            indices = cursor.tolist()
-                        else:
-                            indices = cursor
-                        for idx, src_td in zip(indices, data.tensordicts):
-                            self._storage[idx].update_(src_td)
                     else:
-                        # For stack_dim > 0 with non-slice cursor, fall back to
-                        # default assignment. This avoids expensive contiguous
-                        # index checks while still handling common slice cases.
-                        self._storage[cursor] = data
+                        # For tensor/sequence indices, use update_at_ which handles
+                        # lazy stacks efficiently in a single call.
+                        self._storage.update_at_(data, cursor)
                 else:
                     self._storage[cursor] = data
             except RuntimeError as e:
@@ -1164,21 +1153,10 @@ class TensorStorage(Storage):
                     self._storage[cursor]._stack_onto_(
                         list(data.unbind(stack_dim)), dim=stack_dim
                     )
-                elif stack_dim == 0:
-                    # For tensor/sequence indices with stack_dim=0, iterate and
-                    # update each element. storage[i] returns a view for single
-                    # index, so update_ writes directly to storage.
-                    if isinstance(cursor, torch.Tensor):
-                        indices = cursor.tolist()
-                    else:
-                        indices = cursor
-                    for idx, src_td in zip(indices, data.tensordicts):
-                        self._storage[idx].update_(src_td)
                 else:
-                    # For stack_dim > 0 with non-slice cursor, fall back to
-                    # default assignment. This avoids expensive contiguous
-                    # index checks while still handling common slice cases.
-                    self._storage[cursor] = data
+                    # For tensor/sequence indices, use update_at_ which handles
+                    # lazy stacks efficiently in a single call.
+                    self._storage.update_at_(data, cursor)
             else:
                 self._storage[cursor] = data
         except RuntimeError as e:

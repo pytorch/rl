@@ -941,21 +941,21 @@ class TestStorages:
         lazy_td = LazyStackedTensorDict.lazy_stack(tensordicts, dim=0)
         assert isinstance(lazy_td, LazyStackedTensorDict)
 
-        # Track calls to update_() - used for tensor indices with stack_dim=0
-        update_called = []
-        original_update = TensorDictBase.update_
+        # Track calls to update_at_() - used for tensor indices
+        update_at_called = []
+        original_update_at = TensorDictBase.update_at_
 
-        def mock_update(self, *args, **kwargs):
-            update_called.append(True)
-            return original_update(self, *args, **kwargs)
+        def mock_update_at(self, *args, **kwargs):
+            update_at_called.append(True)
+            return original_update_at(self, *args, **kwargs)
 
-        # Extend with lazy stack and verify update_() is called
-        # (rb.extend uses tensor indices, so update_() path is taken)
-        with mock.patch.object(TensorDictBase, "update_", mock_update):
+        # Extend with lazy stack and verify update_at_() is called
+        # (rb.extend uses tensor indices, so update_at_() path is taken)
+        with mock.patch.object(TensorDictBase, "update_at_", mock_update_at):
             rb.extend(lazy_td)
 
-        # Verify update_() was called (optimization was used)
-        assert len(update_called) > 0, "update_() should have been called"
+        # Verify update_at_() was called (optimization was used)
+        assert len(update_at_called) > 0, "update_at_() should have been called"
 
         # Verify data integrity
         assert len(rb) == 10
