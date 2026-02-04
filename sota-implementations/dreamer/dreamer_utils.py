@@ -878,7 +878,6 @@ def make_replay_buffer(
         )
 
         replay_buffer = TensorDictReplayBuffer(
-            pin_memory=False,
             prefetch=prefetch,
             storage=LazyMemmapStorage(
                 buffer_size,
