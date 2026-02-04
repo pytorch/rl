@@ -22,12 +22,6 @@ Get started with reinforcement learning in PyTorch.
 import warnings
 
 warnings.filterwarnings("ignore")
-from torch import multiprocessing
-
-try:
-    multiprocessing.set_start_method("spawn", force=True)
-except RuntimeError:
-    pass
 # sphinx_gallery_end_ignore
 
 ###############################################################################
@@ -149,6 +143,11 @@ print("Transformed env:", env)
 # **Batched Environments**
 #
 # Run multiple environments in parallel for faster data collection:
+#
+# .. note::
+#    By default, ``ParallelEnv`` uses ``fork`` on Linux and ``spawn`` on
+#    Windows/macOS. You can override this with ``mp_start_method``.
+#    ``spawn`` is safer but requires code to be in ``if __name__ == "__main__"``.
 
 from torchrl.envs import ParallelEnv
 
@@ -158,7 +157,7 @@ def make_env():
 
 
 # Run 4 environments in parallel
-vec_env = ParallelEnv(4, make_env, mp_start_method="spawn")
+vec_env = ParallelEnv(4, make_env)
 td = vec_env.reset()
 print("Batched reset:", td.batch_size)
 
