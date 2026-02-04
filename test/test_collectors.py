@@ -55,7 +55,7 @@ from torchrl.collectors import (
 from torchrl.collectors._constants import _Interruptor
 from torchrl.collectors._multi_base import MultiCollector
 
-from torchrl.collectors.utils import split_trajectories
+from torchrl.collectors.utils import _make_policy_factory, split_trajectories
 from torchrl.data import (
     Composite,
     LazyMemmapStorage,
@@ -257,6 +257,84 @@ def _pendulum_env_maker():
 #         return tensordict_device_type == device_type
 #
 #     return tensordict_device_type == storing_device_type
+
+
+class TestMakePolicyFactory:
+    """Tests for _make_policy_factory and policy_factory list handling."""
+
+    def test_make_policy_factory_with_sequence_uses_worker_idx(self):
+        """Regression test: _make_policy_factory should use worker_idx to index into a Sequence."""
+        # Create factories that return policies with different bias values
+        def make_factory(bias_value):
+            def factory():
+                module = nn.Linear(3, 1, bias=True)
+                with torch.no_grad():
+                    module.weight.zero_()
+                    module.bias.fill_(bias_value)
+                return module
+
+            return factory
+
+        policy_factories = [make_factory(i) for i in range(3)]
+
+        for worker_idx in range(3):
+            policy = _make_policy_factory(
+                policy=None,
+                policy_factory=policy_factories,
+                weight_sync_scheme=None,
+                worker_idx=worker_idx,
+            )
+            # Each worker should get its own policy with correct bias
+            assert policy.bias.item() == worker_idx
+
+    def test_multi_collector_with_distinct_policy_factories(self):
+        """Integration test: MultiSyncCollector with distinct policy factories per worker.
+
+        Each factory creates a policy with a different bias (0, 1, 2).
+        The collected actions should match the bias of each worker's policy.
+        """
+        # Get env specs to create properly sized policy
+        dummy_env = ContinuousActionVecMockEnv()
+        obs_size = dummy_env.observation_spec["observation"].shape[-1]
+        action_size = dummy_env.action_spec.shape[-1]
+        del dummy_env
+
+        def make_policy_factory(bias_value, obs_size=obs_size, action_size=action_size):
+            def factory():
+                module = nn.Linear(obs_size, action_size, bias=True)
+                with torch.no_grad():
+                    module.weight.zero_()
+                    module.bias.fill_(float(bias_value))
+                return TensorDictModule(
+                    module, in_keys=["observation"], out_keys=["action"]
+                )
+
+            return factory
+
+        # 3 workers with policies outputting 0, 1, 2 respectively
+        policy_factories = [make_policy_factory(i) for i in range(3)]
+
+        collector = MultiSyncCollector(
+            create_env_fn=[ContinuousActionVecMockEnv] * 3,
+            policy_factory=policy_factories,
+            frames_per_batch=30,  # 10 per worker
+            total_frames=30,
+            cat_results="stack",
+        )
+
+        try:
+            for data in collector:
+                # data shape: [num_workers, frames_per_worker, ...]
+                actions = data["action"]
+                for worker_idx in range(3):
+                    worker_actions = actions[worker_idx]
+                    expected_value = float(worker_idx)
+                    assert torch.allclose(
+                        worker_actions, torch.full_like(worker_actions, expected_value)
+                    ), f"Worker {worker_idx} actions should be {expected_value}, got {worker_actions}"
+                break
+        finally:
+            collector.shutdown()
 
 
 class TestCollectorGeneric:
