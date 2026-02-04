@@ -34,6 +34,7 @@ from torchrl.testing.llm_mocks import (
     MockTransformerModel,
     MockTransformerOutput,
 )
+from torchrl.testing.mocking_classes import FastImageEnv
 from torchrl.testing.modules import (
     BiasModule,
     call_value_nets,
@@ -82,6 +83,8 @@ __all__ = [
     "MockTransformerConfig",
     "MockTransformerModel",
     "MockTransformerOutput",
+    # Mocking classes
+    "FastImageEnv",
     # Modules
     "BiasModule",
     "call_value_nets",

@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from .policies.common import ChatHistory, LLMWrapperBase, LogProbs, Masks, Text, Tokens
+from .policies.sglang_wrapper import SGLangWrapper
 from .policies.transformers_wrapper import (
     RemoteTransformersWrapper,
     TransformersWrapper,
@@ -34,6 +35,7 @@ __all__ = [
     # Local wrappers
     "TransformersWrapper",
     "vLLMWrapper",
+    "SGLangWrapper",
     # Remote wrappers
     "RemoteTransformersWrapper",
     # Async vLLM (recommended)
@@ -43,11 +45,14 @@ __all__ = [
     # Sync vLLM utilities
     "make_vllm_worker",
     "stateless_init_process_group",
+    # Async SGLang
+    "AsyncSGLang",
+    "RLSGLangEngine",
 ]
 
 
 def __getattr__(name: str) -> Any:  # noqa: ANN401
-    # Keep backends optional and on-demand to avoid importing vLLM native extensions
+    # Keep backends optional and on-demand to avoid importing vLLM/SGLang native extensions
     # as a side-effect of importing torchrl.
     if name in {
         "AsyncVLLM",
@@ -55,6 +60,8 @@ def __getattr__(name: str) -> Any:  # noqa: ANN401
         "make_vllm_worker",
         "stateless_init_process_group",
         "stateless_init_process_group_async",
+        "AsyncSGLang",
+        "RLSGLangEngine",
     }:
         from . import backends  # local import is intentional / required
 

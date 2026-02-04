@@ -55,7 +55,7 @@ from torchrl.collectors import (
 from torchrl.collectors._constants import _Interruptor
 from torchrl.collectors._multi_base import MultiCollector
 
-from torchrl.collectors.utils import split_trajectories
+from torchrl.collectors.utils import _make_policy_factory, split_trajectories
 from torchrl.data import (
     Composite,
     LazyMemmapStorage,
@@ -257,6 +257,243 @@ def _pendulum_env_maker():
 #         return tensordict_device_type == device_type
 #
 #     return tensordict_device_type == storing_device_type
+
+
+class TestMakePolicyFactory:
+    """Tests for _make_policy_factory and policy_factory list handling."""
+
+    def test_make_policy_factory_with_sequence_uses_worker_idx(self):
+        """Regression test: _make_policy_factory should use worker_idx to index into a Sequence."""
+        # Create factories that return policies with different bias values
+        def make_factory(bias_value):
+            def factory():
+                module = nn.Linear(3, 1, bias=True)
+                with torch.no_grad():
+                    module.weight.zero_()
+                    module.bias.fill_(bias_value)
+                return module
+
+            return factory
+
+        policy_factories = [make_factory(i) for i in range(3)]
+
+        for worker_idx in range(3):
+            policy = _make_policy_factory(
+                policy=None,
+                policy_factory=policy_factories,
+                weight_sync_scheme=None,
+                worker_idx=worker_idx,
+            )
+            # Each worker should get its own policy with correct bias
+            assert policy.bias.item() == worker_idx
+
+    def test_multi_collector_with_distinct_policy_factories(self):
+        """Integration test: MultiSyncCollector with distinct policy factories per worker.
+
+        Each factory creates a policy with a different bias (0, 1, 2).
+        The collected actions should match the bias of each worker's policy.
+        """
+        # Get env specs to create properly sized policy
+        dummy_env = ContinuousActionVecMockEnv()
+        obs_size = dummy_env.observation_spec["observation"].shape[-1]
+        action_size = dummy_env.action_spec.shape[-1]
+        del dummy_env
+
+        def make_policy_factory(bias_value, obs_size=obs_size, action_size=action_size):
+            def factory():
+                module = nn.Linear(obs_size, action_size, bias=True)
+                with torch.no_grad():
+                    module.weight.zero_()
+                    module.bias.fill_(float(bias_value))
+                return TensorDictModule(
+                    module, in_keys=["observation"], out_keys=["action"]
+                )
+
+            return factory
+
+        # 3 workers with policies outputting 0, 1, 2 respectively
+        policy_factories = [make_policy_factory(i) for i in range(3)]
+
+        collector = MultiSyncCollector(
+            create_env_fn=[ContinuousActionVecMockEnv] * 3,
+            policy_factory=policy_factories,
+            frames_per_batch=30,  # 10 per worker
+            total_frames=30,
+            cat_results="stack",
+        )
+
+        try:
+            for data in collector:
+                # data shape: [num_workers, frames_per_worker, ...]
+                actions = data["action"]
+                for worker_idx in range(3):
+                    worker_actions = actions[worker_idx]
+                    expected_value = float(worker_idx)
+                    assert torch.allclose(
+                        worker_actions, torch.full_like(worker_actions, expected_value)
+                    ), f"Worker {worker_idx} actions should be {expected_value}, got {worker_actions}"
+                break
+        finally:
+            collector.shutdown()
+
+    def test_per_worker_weight_sync_with_distinct_factories(self):
+        """Test per-worker weight synchronization with distinct policy factories.
+
+        Each worker has its own policy factory. After initial collection, we update
+        individual worker weights and verify the changes take effect.
+        """
+        # Get env specs to create properly sized policy
+        dummy_env = ContinuousActionVecMockEnv()
+        obs_size = dummy_env.observation_spec["observation"].shape[-1]
+        action_size = dummy_env.action_spec.shape[-1]
+        del dummy_env
+
+        def make_policy_factory(bias_value, obs_size=obs_size, action_size=action_size):
+            def factory():
+                module = nn.Linear(obs_size, action_size, bias=True)
+                with torch.no_grad():
+                    module.weight.zero_()
+                    module.bias.fill_(float(bias_value))
+                return TensorDictModule(
+                    module, in_keys=["observation"], out_keys=["action"]
+                )
+
+            return factory
+
+        # 3 workers with policies outputting 0, 1, 2 respectively
+        policy_factories = [make_policy_factory(i) for i in range(3)]
+
+        collector = MultiSyncCollector(
+            create_env_fn=[ContinuousActionVecMockEnv] * 3,
+            policy_factory=policy_factories,
+            frames_per_batch=30,  # 10 per worker
+            total_frames=90,  # 3 batches
+            cat_results="stack",
+        )
+
+        try:
+            # First batch: verify initial per-worker outputs
+            data_iter = iter(collector)
+            data = next(data_iter)
+            actions = data["action"]
+            for worker_idx in range(3):
+                worker_actions = actions[worker_idx]
+                expected_value = float(worker_idx)
+                assert torch.allclose(
+                    worker_actions, torch.full_like(worker_actions, expected_value)
+                ), f"Initial: Worker {worker_idx} actions should be {expected_value}"
+
+            # Update worker 0's weights to output 10 instead of 0
+            new_weights_w0 = TensorDict(
+                {
+                    "module": {
+                        "weight": torch.zeros(action_size, obs_size),
+                        "bias": torch.full((action_size,), 10.0),
+                    }
+                }
+            )
+            collector.update_policy_weights_({0: new_weights_w0})
+
+            # Second batch: verify worker 0 now outputs 10, others unchanged
+            data = next(data_iter)
+            actions = data["action"]
+
+            # Worker 0 should now output 10
+            assert torch.allclose(
+                actions[0], torch.full_like(actions[0], 10.0)
+            ), f"After update: Worker 0 actions should be 10.0, got {actions[0]}"
+
+            # Workers 1 and 2 should still output their original values
+            assert torch.allclose(
+                actions[1], torch.full_like(actions[1], 1.0)
+            ), "After update: Worker 1 actions should still be 1.0"
+            assert torch.allclose(
+                actions[2], torch.full_like(actions[2], 2.0)
+            ), "After update: Worker 2 actions should still be 2.0"
+
+        finally:
+            collector.shutdown()
+
+    def test_per_worker_weight_sync_multiple_workers_update(self):
+        """Test updating multiple workers' weights at once with distinct factories."""
+        # Get env specs to create properly sized policy
+        dummy_env = ContinuousActionVecMockEnv()
+        obs_size = dummy_env.observation_spec["observation"].shape[-1]
+        action_size = dummy_env.action_spec.shape[-1]
+        del dummy_env
+
+        def make_policy_factory(bias_value, obs_size=obs_size, action_size=action_size):
+            def factory():
+                module = nn.Linear(obs_size, action_size, bias=True)
+                with torch.no_grad():
+                    module.weight.zero_()
+                    module.bias.fill_(float(bias_value))
+                return TensorDictModule(
+                    module, in_keys=["observation"], out_keys=["action"]
+                )
+
+            return factory
+
+        # 3 workers with policies outputting 0, 1, 2 respectively
+        policy_factories = [make_policy_factory(i) for i in range(3)]
+
+        collector = MultiSyncCollector(
+            create_env_fn=[ContinuousActionVecMockEnv] * 3,
+            policy_factory=policy_factories,
+            frames_per_batch=30,
+            total_frames=60,
+            cat_results="stack",
+        )
+
+        try:
+            data_iter = iter(collector)
+            next(data_iter)  # First batch with initial weights
+
+            # Update all workers at once with new values
+            new_weights = {
+                0: TensorDict(
+                    {
+                        "module": {
+                            "weight": torch.zeros(action_size, obs_size),
+                            "bias": torch.full((action_size,), 100.0),
+                        }
+                    }
+                ),
+                1: TensorDict(
+                    {
+                        "module": {
+                            "weight": torch.zeros(action_size, obs_size),
+                            "bias": torch.full((action_size,), 200.0),
+                        }
+                    }
+                ),
+                2: TensorDict(
+                    {
+                        "module": {
+                            "weight": torch.zeros(action_size, obs_size),
+                            "bias": torch.full((action_size,), 300.0),
+                        }
+                    }
+                ),
+            }
+            collector.update_policy_weights_(new_weights)
+
+            # Second batch: verify all workers have updated weights
+            data = next(data_iter)
+            actions = data["action"]
+
+            assert torch.allclose(
+                actions[0], torch.full_like(actions[0], 100.0)
+            ), "Worker 0 should output 100.0"
+            assert torch.allclose(
+                actions[1], torch.full_like(actions[1], 200.0)
+            ), "Worker 1 should output 200.0"
+            assert torch.allclose(
+                actions[2], torch.full_like(actions[2], 300.0)
+            ), "Worker 2 should output 300.0"
+
+        finally:
+            collector.shutdown()
 
 
 class TestCollectorGeneric:
@@ -4050,6 +4287,123 @@ class TestCollectorRB:
             env.close()
         del collector, env
         assert assert_allclose_td(rbdata0, rbdata1)
+
+    @pytest.mark.skipif(not _has_gym, reason="requires gym.")
+    @pytest.mark.parametrize("storage_type", [LazyTensorStorage, LazyMemmapStorage])
+    def test_collector_with_rb_uses_lazy_stack(self, storage_type, tmpdir):
+        """Test that collector uses lazy stack path when replay buffer is provided.
+
+        This tests the optimization where collectors create lazy stacks instead of
+        materializing data into a contiguous buffer, allowing the storage to write
+        directly to its buffer without intermediate copies.
+        """
+        if storage_type is LazyMemmapStorage:
+            storage = storage_type(1000, scratch_dir=tmpdir)
+        else:
+            storage = storage_type(1000)
+
+        env = GymEnv(CARTPOLE_VERSIONED())
+        env.set_seed(0)
+        rb = ReplayBuffer(storage=storage, batch_size=10)
+        collector = Collector(
+            env,
+            RandomPolicy(env.action_spec),
+            frames_per_batch=50,
+            total_frames=200,
+            replay_buffer=rb,
+        )
+        torch.manual_seed(0)
+
+        try:
+            # Track calls to update_at_() - used for tensor indices
+            update_at_called = []
+            original_update_at = TensorDictBase.update_at_
+
+            def mock_update_at(self, *args, **kwargs):
+                update_at_called.append(True)
+                return original_update_at(self, *args, **kwargs)
+
+            with patch.object(TensorDictBase, "update_at_", mock_update_at):
+                collected_frames = 0
+                for data in collector:
+                    # When replay buffer is used, collector yields None
+                    assert data is None
+                    collected_frames += 50
+
+            # Verify update_at_() was called (optimization was used)
+            assert len(update_at_called) > 0, "update_at_() should have been called"
+
+            # Verify data was properly stored in the replay buffer
+            assert len(rb) == 200, f"Expected 200 frames in buffer, got {len(rb)}"
+
+            # Sample and verify data integrity
+            sample = rb.sample(10)
+            assert "observation" in sample.keys()
+            assert "action" in sample.keys()
+            assert "next" in sample.keys()
+            assert sample["observation"].shape[0] == 10
+
+            # Verify we can sample multiple times without issues
+            for _ in range(5):
+                sample = rb.sample(20)
+                assert sample["observation"].shape[0] == 20
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.skipif(not _has_gym, reason="requires gym.")
+    @pytest.mark.parametrize("storage_type", [LazyTensorStorage, LazyMemmapStorage])
+    def test_collector_with_rb_parallel_env(self, storage_type, tmpdir):
+        """Test collector with replay buffer using parallel envs (2D storage).
+
+        With parallel environments, the storage is 2D [max_size, n_steps] and the
+        lazy stack has stack_dim=1. This tests that data is correctly stored and
+        can be sampled from the replay buffer.
+        """
+        n_envs = 4
+
+        def make_env():
+            return GymEnv(CARTPOLE_VERSIONED())
+
+        env = SerialEnv(n_envs, make_env)
+        env.set_seed(0)
+
+        if storage_type is LazyMemmapStorage:
+            storage = storage_type(1000, scratch_dir=tmpdir, ndim=2)
+        else:
+            storage = storage_type(1000, ndim=2)
+
+        rb = ReplayBuffer(storage=storage, batch_size=10)
+        collector = Collector(
+            env,
+            RandomPolicy(env.action_spec),
+            frames_per_batch=100,  # 100 frames = 25 steps per env
+            total_frames=200,
+            replay_buffer=rb,
+        )
+        torch.manual_seed(0)
+
+        try:
+            collected_frames = 0
+            for data in collector:
+                # When replay buffer is used, collector yields None
+                assert data is None
+                collected_frames += 100
+
+            # With 2D storage [n_rows, n_steps], len(rb) returns n_rows
+            # Each batch adds n_envs rows, so 2 batches = 8 rows
+            assert len(rb) >= 8, f"Expected >= 8 rows in buffer, got {len(rb)}"
+
+            # Sample and verify data integrity
+            sample = rb.sample(4)
+            assert "observation" in sample.keys()
+            assert "action" in sample.keys()
+            assert "next" in sample.keys()
+
+            # Verify we can sample multiple times without issues
+            for _ in range(5):
+                sample = rb.sample(4)
+        finally:
+            collector.shutdown()
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
     @pytest.mark.parametrize("extend_buffer", [False, True])

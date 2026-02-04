@@ -9,16 +9,51 @@ Before starting a release, ensure you have:
 - Ability to create branches, tags, and pull requests
 - Access to view GitHub Actions workflow runs
 
+## Determine Latest PyTorch Version
+
+**CRITICAL**: Before triggering any release workflow, you MUST determine the latest stable PyTorch version. Using an incorrect version will cause build failures.
+
+### Option 1: Check GitHub (Preferred)
+
+Query the latest PyTorch release from GitHub:
+
+```bash
+# Get the latest PyTorch release tag
+gh release view --repo pytorch/pytorch --json tagName --jq '.tagName'
+
+# Or list recent releases
+gh release list --repo pytorch/pytorch --limit 5
+```
+
+The release tag format is `v2.X.Y`. Extract the major.minor version for the `pytorch_release` parameter (e.g., `v2.10.0` → `release/2.10`).
+
+### Option 2: Check PyPI
+
+```bash
+pip index versions torch 2>/dev/null | head -1
+# Or: pip install torch== 2>&1 | grep -oP '\d+\.\d+\.\d+' | head -1
+```
+
+### Option 3: Ask the User
+
+If you cannot determine the latest PyTorch version programmatically, **always ask the user**:
+
+> "What is the latest stable PyTorch version? I need this to configure the release build correctly."
+
+**Never guess or use an outdated version from examples in this document.**
+
+---
+
 ## Input Parameters
 
-Collect the following information from the user:
+Collect the following information from the user (or determine automatically where possible):
 
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `version_tag` | The version to release | `v0.11.0` |
-| `release_type` | Major (0.x.0) or minor (0.x.y) release | `major` or `minor` |
-| `pytorch_release` | PyTorch release branch to build against | `release/2.8` |
-| `previous_version` | Previous release tag (for release notes) | `v0.10.0` |
+| Parameter | Description | Example | How to Determine |
+|-----------|-------------|---------|------------------|
+| `version_tag` | The version to release | `v0.11.0` | User provides |
+| `release_type` | Major (0.x.0) or minor (0.x.y) release | `major` or `minor` | User provides |
+| `pytorch_release` | PyTorch release branch to build against | `release/2.10` | **Check latest PyTorch version (see above)** |
+| `previous_version` | Previous release tag (for release notes) | `v0.10.0` | `git describe --tags --abbrev=0` |
 
 ---
 
