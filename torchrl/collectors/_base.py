@@ -585,6 +585,14 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             ...     "actor": actor_weights,
             ...     "critic": critic_weights,
             ... })
+            >>>
+            >>> # Per-worker weight updates (for distinct policy factories)
+            >>> # Each worker can have independently updated weights
+            >>> collector.update_policy_weights_({
+            ...     0: worker_0_weights,
+            ...     1: worker_1_weights,
+            ...     2: worker_2_weights,
+            ... })
 
         Args:
             policy_or_weights: The weights to update with. Can be:
@@ -593,6 +601,8 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                 - ``TensorDictModuleBase``: A TensorDict module whose weights will be extracted
                 - ``TensorDictBase``: A TensorDict containing weights
                 - ``dict``: A regular dict containing weights
+                - ``dict[int, TensorDictBase]``: Per-worker weights where keys are worker indices.
+                  This is used with distinct policy factories where each worker has independent weights.
                 - ``None``: Will try to get weights from server using ``_get_server_weights()``
 
         Keyword Args:

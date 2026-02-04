@@ -336,6 +336,165 @@ class TestMakePolicyFactory:
         finally:
             collector.shutdown()
 
+    def test_per_worker_weight_sync_with_distinct_factories(self):
+        """Test per-worker weight synchronization with distinct policy factories.
+
+        Each worker has its own policy factory. After initial collection, we update
+        individual worker weights and verify the changes take effect.
+        """
+        # Get env specs to create properly sized policy
+        dummy_env = ContinuousActionVecMockEnv()
+        obs_size = dummy_env.observation_spec["observation"].shape[-1]
+        action_size = dummy_env.action_spec.shape[-1]
+        del dummy_env
+
+        def make_policy_factory(bias_value, obs_size=obs_size, action_size=action_size):
+            def factory():
+                module = nn.Linear(obs_size, action_size, bias=True)
+                with torch.no_grad():
+                    module.weight.zero_()
+                    module.bias.fill_(float(bias_value))
+                return TensorDictModule(
+                    module, in_keys=["observation"], out_keys=["action"]
+                )
+
+            return factory
+
+        # 3 workers with policies outputting 0, 1, 2 respectively
+        policy_factories = [make_policy_factory(i) for i in range(3)]
+
+        collector = MultiSyncCollector(
+            create_env_fn=[ContinuousActionVecMockEnv] * 3,
+            policy_factory=policy_factories,
+            frames_per_batch=30,  # 10 per worker
+            total_frames=90,  # 3 batches
+            cat_results="stack",
+        )
+
+        try:
+            # First batch: verify initial per-worker outputs
+            data_iter = iter(collector)
+            data = next(data_iter)
+            actions = data["action"]
+            for worker_idx in range(3):
+                worker_actions = actions[worker_idx]
+                expected_value = float(worker_idx)
+                assert torch.allclose(
+                    worker_actions, torch.full_like(worker_actions, expected_value)
+                ), f"Initial: Worker {worker_idx} actions should be {expected_value}"
+
+            # Update worker 0's weights to output 10 instead of 0
+            new_weights_w0 = TensorDict(
+                {
+                    "module": {
+                        "weight": torch.zeros(action_size, obs_size),
+                        "bias": torch.full((action_size,), 10.0),
+                    }
+                }
+            )
+            collector.update_policy_weights_({0: new_weights_w0})
+
+            # Second batch: verify worker 0 now outputs 10, others unchanged
+            data = next(data_iter)
+            actions = data["action"]
+
+            # Worker 0 should now output 10
+            assert torch.allclose(
+                actions[0], torch.full_like(actions[0], 10.0)
+            ), f"After update: Worker 0 actions should be 10.0, got {actions[0]}"
+
+            # Workers 1 and 2 should still output their original values
+            assert torch.allclose(
+                actions[1], torch.full_like(actions[1], 1.0)
+            ), "After update: Worker 1 actions should still be 1.0"
+            assert torch.allclose(
+                actions[2], torch.full_like(actions[2], 2.0)
+            ), "After update: Worker 2 actions should still be 2.0"
+
+        finally:
+            collector.shutdown()
+
+    def test_per_worker_weight_sync_multiple_workers_update(self):
+        """Test updating multiple workers' weights at once with distinct factories."""
+        # Get env specs to create properly sized policy
+        dummy_env = ContinuousActionVecMockEnv()
+        obs_size = dummy_env.observation_spec["observation"].shape[-1]
+        action_size = dummy_env.action_spec.shape[-1]
+        del dummy_env
+
+        def make_policy_factory(bias_value, obs_size=obs_size, action_size=action_size):
+            def factory():
+                module = nn.Linear(obs_size, action_size, bias=True)
+                with torch.no_grad():
+                    module.weight.zero_()
+                    module.bias.fill_(float(bias_value))
+                return TensorDictModule(
+                    module, in_keys=["observation"], out_keys=["action"]
+                )
+
+            return factory
+
+        # 3 workers with policies outputting 0, 1, 2 respectively
+        policy_factories = [make_policy_factory(i) for i in range(3)]
+
+        collector = MultiSyncCollector(
+            create_env_fn=[ContinuousActionVecMockEnv] * 3,
+            policy_factory=policy_factories,
+            frames_per_batch=30,
+            total_frames=60,
+            cat_results="stack",
+        )
+
+        try:
+            data_iter = iter(collector)
+            next(data_iter)  # First batch with initial weights
+
+            # Update all workers at once with new values
+            new_weights = {
+                0: TensorDict(
+                    {
+                        "module": {
+                            "weight": torch.zeros(action_size, obs_size),
+                            "bias": torch.full((action_size,), 100.0),
+                        }
+                    }
+                ),
+                1: TensorDict(
+                    {
+                        "module": {
+                            "weight": torch.zeros(action_size, obs_size),
+                            "bias": torch.full((action_size,), 200.0),
+                        }
+                    }
+                ),
+                2: TensorDict(
+                    {
+                        "module": {
+                            "weight": torch.zeros(action_size, obs_size),
+                            "bias": torch.full((action_size,), 300.0),
+                        }
+                    }
+                ),
+            }
+            collector.update_policy_weights_(new_weights)
+
+            # Second batch: verify all workers have updated weights
+            data = next(data_iter)
+            actions = data["action"]
+
+            assert torch.allclose(
+                actions[0], torch.full_like(actions[0], 100.0)
+            ), "Worker 0 should output 100.0"
+            assert torch.allclose(
+                actions[1], torch.full_like(actions[1], 200.0)
+            ), "Worker 1 should output 200.0"
+            assert torch.allclose(
+                actions[2], torch.full_like(actions[2], 300.0)
+            ), "Worker 2 should output 300.0"
+
+        finally:
+            collector.shutdown()
+
 
 class TestCollectorGeneric:
     @pytest.mark.parametrize("num_env", [1, 2])

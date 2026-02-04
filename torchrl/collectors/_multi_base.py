@@ -430,23 +430,29 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                 "Cannot specify both weight_sync_schemes and weight_updater."
             )
         # Check if policy_factory entries are all the same (replicated from single factory)
-        # vs different factories per worker. Weight sync only makes sense for the former.
+        # vs different factories per worker.
         has_uniform_policy_factory = any(policy_factory) and all(
             f is policy_factory[0] for f in policy_factory
+        )
+        has_distinct_policy_factory = (
+            any(policy_factory) and not has_uniform_policy_factory
         )
         if (
             weight_sync_schemes is not None
             and not weight_sync_schemes
             and weight_updater is None
-            and (isinstance(policy, nn.Module) or has_uniform_policy_factory)
         ):
-            # Set up a default local shared-memory sync scheme for the policy.
-            # This is used to propagate weights from the orchestrator policy
-            # (possibly combined with a policy_factory) down to worker policies.
-            # Note: We only add this when all workers use the same policy factory.
-            # If different factories are provided, weight sync would incorrectly
-            # synchronize weights from factory[0] to all workers.
-            weight_sync_schemes["policy"] = SharedMemWeightSyncScheme()
+            if isinstance(policy, nn.Module) or has_uniform_policy_factory:
+                # Set up a default local shared-memory sync scheme for the policy.
+                # This is used to propagate weights from the orchestrator policy
+                # (possibly combined with a policy_factory) down to worker policies.
+                weight_sync_schemes["policy"] = SharedMemWeightSyncScheme()
+            elif has_distinct_policy_factory:
+                # Distinct factories: set up per-worker weight sync scheme.
+                # Each worker maintains independent weights that can be updated individually.
+                weight_sync_schemes["policy"] = SharedMemWeightSyncScheme(
+                    per_worker_weights=True
+                )
 
         self._setup_multi_weight_sync(weight_updater, weight_sync_schemes)
 
