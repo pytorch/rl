@@ -183,9 +183,10 @@ print("Transformed env:", env)
 # returning batched TensorDicts:
 #
 # .. note::
-#    By default, ``ParallelEnv`` uses ``fork`` on Linux and ``spawn`` on
-#    Windows/macOS. You can override this with ``mp_start_method``.
-#    ``spawn`` is safer but requires code to be in ``if __name__ == "__main__"``.
+#    ``ParallelEnv`` uses multiprocessing. The ``mp_start_method`` parameter
+#    controls how processes are spawned: ``"fork"`` (Linux default) is fast but
+#    can have issues with some libraries; ``"spawn"`` (Windows/macOS default)
+#    is safer but requires code to be guarded with ``if __name__ == "__main__"``.
 
 from torchrl.envs import ParallelEnv
 
@@ -194,8 +195,8 @@ def make_env():
     return GymEnv("Pendulum-v1")
 
 
-# Run 4 environments in parallel
-vec_env = ParallelEnv(4, make_env)
+# Run 4 environments in parallel (using fork for script compatibility)
+vec_env = ParallelEnv(4, make_env, mp_start_method="fork")
 td = vec_env.reset()
 print("Batched reset:", td.batch_size)
 
@@ -361,8 +362,10 @@ buffer = PrioritizedReplayBuffer(
     storage=LazyTensorStorage(max_size=10000),
 )
 buffer.extend(TensorDict(obs=torch.randn(100, 4), batch_size=[100]))
-sample = buffer.sample(32)
-print("Prioritized sample with indices:", sample["index"])
+
+# Use return_info=True to get sampling metadata (indices, weights)
+sample, info = buffer.sample(32, return_info=True)
+print("Prioritized sample indices:", info["index"][:5], "...")  # First 5 indices
 
 ###############################################################################
 # Loss Functions
@@ -377,8 +380,8 @@ print("Prioritized sample with indices:", sample["index"])
 # - :class:`~torchrl.objectives.PPOLoss` - Proximal Policy Optimization
 # - :class:`~torchrl.objectives.TD3Loss` - Twin Delayed DDPG
 #
-# Here's how to set up a DQN loss. First, we create a Q-network that maps
-# observations to action values:
+# Here's how to set up a DQN loss. We create a Q-network wrapped in a
+# :class:`~torchrl.modules.QValueActor`, which handles action selection:
 
 from torchrl.objectives import DQNLoss
 
@@ -388,7 +391,11 @@ qnet = TensorDictModule(
     out_keys=["action_value"],
 )
 
-loss_fn = DQNLoss(qnet, action_space=2)
+# QValueActor wraps the Q-network to select actions and output chosen values
+from torchrl.data import Categorical
+
+actor = QValueActor(qnet, in_keys=["observation"], spec=Categorical(n=2))
+loss_fn = DQNLoss(actor, action_space="categorical")
 
 ###############################################################################
 # The loss function expects batches with specific keys. Let's create a
@@ -396,11 +403,12 @@ loss_fn = DQNLoss(qnet, action_space=2)
 
 batch = TensorDict(
     observation=torch.randn(32, 4),
-    action=torch.randint(0, 2, (32, 1)),
+    action=torch.randint(0, 2, (32,)),
     next=TensorDict(
         observation=torch.randn(32, 4),
         reward=torch.randn(32, 1),
         done=torch.zeros(32, 1, dtype=torch.bool),
+        terminated=torch.zeros(32, 1, dtype=torch.bool),
         batch_size=[32],
     ),
     batch_size=[32],
@@ -443,9 +451,9 @@ collector = SyncDataCollector(
 # 4. Create a replay buffer
 buffer = ReplayBuffer(storage=LazyTensorStorage(max_size=10000))
 
-# 5. Set up the loss and optimizer
-loss_fn = DQNLoss(qnet, action_space=env.action_spec)
-optimizer = torch.optim.Adam(qnet.parameters(), lr=1e-3)
+# 5. Set up the loss and optimizer (pass the QValueActor, not just the network)
+loss_fn = DQNLoss(policy, action_space=env.action_spec)
+optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
 
 # 6. Training loop: collect -> store -> sample -> train
 for i, batch in enumerate(collector):
