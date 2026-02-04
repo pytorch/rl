@@ -287,7 +287,7 @@ policy = ProbabilisticTensorDictSequential(
 td = TensorDict(observation=torch.randn(4, 3), batch_size=[4])
 policy(td)
 print("Sampled action:", td["action"].shape)
-print("Log prob:", td["sample_log_prob"].shape)
+print("Log prob:", td["action_log_prob"].shape)
 
 ###############################################################################
 # The ``TanhNormal`` distribution squashes samples to [-1, 1], which is useful
