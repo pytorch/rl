@@ -4052,6 +4052,123 @@ class TestCollectorRB:
         assert assert_allclose_td(rbdata0, rbdata1)
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
+    @pytest.mark.parametrize("storage_type", [LazyTensorStorage, LazyMemmapStorage])
+    def test_collector_with_rb_uses_lazy_stack(self, storage_type, tmpdir):
+        """Test that collector uses lazy stack path when replay buffer is provided.
+
+        This tests the optimization where collectors create lazy stacks instead of
+        materializing data into a contiguous buffer, allowing the storage to write
+        directly to its buffer without intermediate copies.
+        """
+        if storage_type is LazyMemmapStorage:
+            storage = storage_type(1000, scratch_dir=tmpdir)
+        else:
+            storage = storage_type(1000)
+
+        env = GymEnv(CARTPOLE_VERSIONED())
+        env.set_seed(0)
+        rb = ReplayBuffer(storage=storage, batch_size=10)
+        collector = Collector(
+            env,
+            RandomPolicy(env.action_spec),
+            frames_per_batch=50,
+            total_frames=200,
+            replay_buffer=rb,
+        )
+        torch.manual_seed(0)
+
+        try:
+            # Track calls to update_at_() - used for tensor indices
+            update_at_called = []
+            original_update_at = TensorDictBase.update_at_
+
+            def mock_update_at(self, *args, **kwargs):
+                update_at_called.append(True)
+                return original_update_at(self, *args, **kwargs)
+
+            with patch.object(TensorDictBase, "update_at_", mock_update_at):
+                collected_frames = 0
+                for data in collector:
+                    # When replay buffer is used, collector yields None
+                    assert data is None
+                    collected_frames += 50
+
+            # Verify update_at_() was called (optimization was used)
+            assert len(update_at_called) > 0, "update_at_() should have been called"
+
+            # Verify data was properly stored in the replay buffer
+            assert len(rb) == 200, f"Expected 200 frames in buffer, got {len(rb)}"
+
+            # Sample and verify data integrity
+            sample = rb.sample(10)
+            assert "observation" in sample.keys()
+            assert "action" in sample.keys()
+            assert "next" in sample.keys()
+            assert sample["observation"].shape[0] == 10
+
+            # Verify we can sample multiple times without issues
+            for _ in range(5):
+                sample = rb.sample(20)
+                assert sample["observation"].shape[0] == 20
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.skipif(not _has_gym, reason="requires gym.")
+    @pytest.mark.parametrize("storage_type", [LazyTensorStorage, LazyMemmapStorage])
+    def test_collector_with_rb_parallel_env(self, storage_type, tmpdir):
+        """Test collector with replay buffer using parallel envs (2D storage).
+
+        With parallel environments, the storage is 2D [max_size, n_steps] and the
+        lazy stack has stack_dim=1. This tests that data is correctly stored and
+        can be sampled from the replay buffer.
+        """
+        n_envs = 4
+
+        def make_env():
+            return GymEnv(CARTPOLE_VERSIONED())
+
+        env = SerialEnv(n_envs, make_env)
+        env.set_seed(0)
+
+        if storage_type is LazyMemmapStorage:
+            storage = storage_type(1000, scratch_dir=tmpdir, ndim=2)
+        else:
+            storage = storage_type(1000, ndim=2)
+
+        rb = ReplayBuffer(storage=storage, batch_size=10)
+        collector = Collector(
+            env,
+            RandomPolicy(env.action_spec),
+            frames_per_batch=100,  # 100 frames = 25 steps per env
+            total_frames=200,
+            replay_buffer=rb,
+        )
+        torch.manual_seed(0)
+
+        try:
+            collected_frames = 0
+            for data in collector:
+                # When replay buffer is used, collector yields None
+                assert data is None
+                collected_frames += 100
+
+            # With 2D storage [n_rows, n_steps], len(rb) returns n_rows
+            # Each batch adds n_envs rows, so 2 batches = 8 rows
+            assert len(rb) >= 8, f"Expected >= 8 rows in buffer, got {len(rb)}"
+
+            # Sample and verify data integrity
+            sample = rb.sample(4)
+            assert "observation" in sample.keys()
+            assert "action" in sample.keys()
+            assert "next" in sample.keys()
+
+            # Verify we can sample multiple times without issues
+            for _ in range(5):
+                sample = rb.sample(4)
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.skipif(not _has_gym, reason="requires gym.")
     @pytest.mark.parametrize("extend_buffer", [False, True])
     @pytest.mark.parametrize("env_creator", [False, True])
     @pytest.mark.parametrize("storagetype", [LazyTensorStorage, LazyMemmapStorage])

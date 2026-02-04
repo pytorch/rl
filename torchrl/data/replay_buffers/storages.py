@@ -1057,7 +1057,22 @@ class TensorStorage(Storage):
             if storage_keys is not None:
                 data = data.select(*storage_keys, strict=False)
             try:
-                self._storage[cursor] = data
+                # Optimize lazy stack writes: write each tensordict directly to
+                # storage to avoid creating an intermediate contiguous copy.
+                if isinstance(data, LazyStackedTensorDict):
+                    stack_dim = data.stack_dim
+                    if isinstance(cursor, slice):
+                        # For slices, storage[slice] typically returns a view.
+                        # Use _stack_onto_ to write directly without intermediate copy.
+                        self._storage[cursor]._stack_onto_(
+                            list(data.unbind(stack_dim)), dim=stack_dim
+                        )
+                    else:
+                        # For tensor/sequence indices, use update_at_ which handles
+                        # lazy stacks efficiently in a single call.
+                        self._storage.update_at_(data, cursor)
+                else:
+                    self._storage[cursor] = data
             except RuntimeError as e:
                 if "locked" in str(e).lower():
                     # Provide informative error about key differences
@@ -1128,7 +1143,22 @@ class TensorStorage(Storage):
             if storage_keys is not None:
                 data = data.select(*storage_keys, strict=False)
         try:
-            self._storage[cursor] = data
+            # Optimize lazy stack writes: write each tensordict directly to
+            # storage to avoid creating an intermediate contiguous copy.
+            if is_tensor_collection(data) and isinstance(data, LazyStackedTensorDict):
+                stack_dim = data.stack_dim
+                if isinstance(cursor, slice):
+                    # For slices, storage[slice] typically returns a view.
+                    # Use _stack_onto_ to write directly without intermediate copy.
+                    self._storage[cursor]._stack_onto_(
+                        list(data.unbind(stack_dim)), dim=stack_dim
+                    )
+                else:
+                    # For tensor/sequence indices, use update_at_ which handles
+                    # lazy stacks efficiently in a single call.
+                    self._storage.update_at_(data, cursor)
+            else:
+                self._storage[cursor] = data
         except RuntimeError as e:
             if "locked" in str(e).lower():
                 # Provide informative error about key differences
