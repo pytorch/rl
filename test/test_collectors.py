@@ -4057,9 +4057,11 @@ class TestCollectorRB:
         """Test that collector uses lazy stack path when replay buffer is provided.
 
         This tests the optimization where collectors create lazy stacks instead of
-        materializing data into a contiguous buffer, allowing the storage to stack
-        directly into its buffer without intermediate copies.
+        materializing data into a contiguous buffer, allowing the storage to write
+        directly to its buffer without intermediate copies.
         """
+        from unittest.mock import patch
+
         if storage_type is LazyMemmapStorage:
             storage = storage_type(1000, scratch_dir=tmpdir)
         else:
@@ -4077,29 +4079,41 @@ class TestCollectorRB:
         )
         torch.manual_seed(0)
 
-        collected_frames = 0
-        for data in collector:
-            # When replay buffer is used, collector yields None
-            assert data is None
-            collected_frames += 50
+        try:
+            # Track calls to update_() - used for tensor indices with stack_dim=0
+            update_called = []
+            original_update = TensorDictBase.update_
 
-        # Verify data was properly stored in the replay buffer
-        assert len(rb) == 200, f"Expected 200 frames in buffer, got {len(rb)}"
+            def mock_update(self, *args, **kwargs):
+                update_called.append(True)
+                return original_update(self, *args, **kwargs)
 
-        # Sample and verify data integrity
-        sample = rb.sample(10)
-        assert "observation" in sample.keys()
-        assert "action" in sample.keys()
-        assert "next" in sample.keys()
-        assert sample["observation"].shape[0] == 10
+            with patch.object(TensorDictBase, "update_", mock_update):
+                collected_frames = 0
+                for data in collector:
+                    # When replay buffer is used, collector yields None
+                    assert data is None
+                    collected_frames += 50
 
-        # Verify we can sample multiple times without issues
-        for _ in range(5):
-            sample = rb.sample(20)
-            assert sample["observation"].shape[0] == 20
+            # Verify update_() was called (optimization was used)
+            assert len(update_called) > 0, "update_() should have been called"
 
-        collector.shutdown()
-        env.close()
+            # Verify data was properly stored in the replay buffer
+            assert len(rb) == 200, f"Expected 200 frames in buffer, got {len(rb)}"
+
+            # Sample and verify data integrity
+            sample = rb.sample(10)
+            assert "observation" in sample.keys()
+            assert "action" in sample.keys()
+            assert "next" in sample.keys()
+            assert sample["observation"].shape[0] == 10
+
+            # Verify we can sample multiple times without issues
+            for _ in range(5):
+                sample = rb.sample(20)
+                assert sample["observation"].shape[0] == 20
+        finally:
+            collector.shutdown()
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
     @pytest.mark.parametrize("storage_type", [LazyTensorStorage, LazyMemmapStorage])
@@ -4107,10 +4121,9 @@ class TestCollectorRB:
         """Test collector with replay buffer using parallel envs (2D storage).
 
         With parallel environments, the storage is 2D [max_size, n_steps] and the
-        lazy stack has stack_dim=1. This tests the optimization handles this case.
+        lazy stack has stack_dim=1. This tests that data is correctly stored and
+        can be sampled from the replay buffer.
         """
-        from torchrl.envs import SerialEnv
-
         n_envs = 4
 
         def make_env():
@@ -4134,28 +4147,28 @@ class TestCollectorRB:
         )
         torch.manual_seed(0)
 
-        collected_frames = 0
-        for data in collector:
-            # When replay buffer is used, collector yields None
-            assert data is None
-            collected_frames += 100
+        try:
+            collected_frames = 0
+            for data in collector:
+                # When replay buffer is used, collector yields None
+                assert data is None
+                collected_frames += 100
 
-        # With 2D storage [n_rows, n_steps], len(rb) returns n_rows
-        # Each batch adds n_envs rows, so 2 batches = 8 rows
-        assert len(rb) >= 8, f"Expected >= 8 rows in buffer, got {len(rb)}"
+            # With 2D storage [n_rows, n_steps], len(rb) returns n_rows
+            # Each batch adds n_envs rows, so 2 batches = 8 rows
+            assert len(rb) >= 8, f"Expected >= 8 rows in buffer, got {len(rb)}"
 
-        # Sample and verify data integrity
-        sample = rb.sample(4)
-        assert "observation" in sample.keys()
-        assert "action" in sample.keys()
-        assert "next" in sample.keys()
-
-        # Verify we can sample multiple times without issues
-        for _ in range(5):
+            # Sample and verify data integrity
             sample = rb.sample(4)
+            assert "observation" in sample.keys()
+            assert "action" in sample.keys()
+            assert "next" in sample.keys()
 
-        collector.shutdown()
-        # env is already closed by collector.shutdown()
+            # Verify we can sample multiple times without issues
+            for _ in range(5):
+                sample = rb.sample(4)
+        finally:
+            collector.shutdown()
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
     @pytest.mark.parametrize("extend_buffer", [False, True])

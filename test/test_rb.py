@@ -923,8 +923,11 @@ class TestStorages:
         """Test that lazy stacks can be extended to storage correctly.
 
         This tests that lazy stacks from collectors are properly stored in
-        replay buffers and that the data integrity is preserved.
+        replay buffers and that the data integrity is preserved. Also verifies
+        that the update_() optimization is used for tensor indices.
         """
+        from unittest.mock import patch
+
         rb = ReplayBuffer(
             storage=storage_type(100),
             batch_size=10,
@@ -940,8 +943,21 @@ class TestStorages:
         lazy_td = LazyStackedTensorDict.lazy_stack(tensordicts, dim=0)
         assert isinstance(lazy_td, LazyStackedTensorDict)
 
-        # Extend with lazy stack
-        rb.extend(lazy_td)
+        # Track calls to update_() - used for tensor indices with stack_dim=0
+        update_called = []
+        original_update = TensorDictBase.update_
+
+        def mock_update(self, *args, **kwargs):
+            update_called.append(True)
+            return original_update(self, *args, **kwargs)
+
+        # Extend with lazy stack and verify update_() is called
+        # (rb.extend uses tensor indices, so update_() path is taken)
+        with patch.object(TensorDictBase, "update_", mock_update):
+            rb.extend(lazy_td)
+
+        # Verify update_() was called (optimization was used)
+        assert len(update_called) > 0, "update_() should have been called"
 
         # Verify data integrity
         assert len(rb) == 10

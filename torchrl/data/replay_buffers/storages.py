@@ -1062,12 +1062,15 @@ class TensorStorage(Storage):
                 if isinstance(data, LazyStackedTensorDict):
                     stack_dim = data.stack_dim
                     if isinstance(cursor, slice):
-                        # For slices, storage[slice] returns a view - use _stack_onto_
+                        # For slices, storage[slice] typically returns a view.
+                        # Use _stack_onto_ to write directly without intermediate copy.
                         self._storage[cursor]._stack_onto_(
                             list(data.unbind(stack_dim)), dim=stack_dim
                         )
                     elif stack_dim == 0:
-                        # For non-contiguous indices with stack_dim=0, iterate and update
+                        # For tensor/sequence indices with stack_dim=0, iterate and
+                        # update each element. storage[i] returns a view for single
+                        # index, so update_ writes directly to storage.
                         if isinstance(cursor, torch.Tensor):
                             indices = cursor.tolist()
                         else:
@@ -1075,28 +1078,10 @@ class TensorStorage(Storage):
                         for idx, src_td in zip(indices, data.tensordicts):
                             self._storage[idx].update_(src_td)
                     else:
-                        # For stack_dim > 0 with tensor indices, check if contiguous
-                        if isinstance(cursor, torch.Tensor):
-                            sorted_indices, _ = torch.sort(cursor)
-                            expected = torch.arange(
-                                sorted_indices[0],
-                                sorted_indices[0] + len(cursor),
-                                device=cursor.device,
-                            )
-                            if torch.equal(sorted_indices, expected):
-                                # Contiguous range - convert to slice for view access
-                                equiv_slice = slice(
-                                    int(sorted_indices[0]), int(sorted_indices[-1]) + 1
-                                )
-                                self._storage[equiv_slice]._stack_onto_(
-                                    list(data.unbind(stack_dim)), dim=stack_dim
-                                )
-                            else:
-                                # Non-contiguous with stack_dim > 0, fall back to default
-                                self._storage[cursor] = data
-                        else:
-                            # Non-tensor cursor with stack_dim > 0, fall back to default
-                            self._storage[cursor] = data
+                        # For stack_dim > 0 with non-slice cursor, fall back to
+                        # default assignment. This avoids expensive contiguous
+                        # index checks while still handling common slice cases.
+                        self._storage[cursor] = data
                 else:
                     self._storage[cursor] = data
             except RuntimeError as e:
@@ -1174,12 +1159,15 @@ class TensorStorage(Storage):
             if is_tensor_collection(data) and isinstance(data, LazyStackedTensorDict):
                 stack_dim = data.stack_dim
                 if isinstance(cursor, slice):
-                    # For slices, storage[slice] returns a view - use _stack_onto_
+                    # For slices, storage[slice] typically returns a view.
+                    # Use _stack_onto_ to write directly without intermediate copy.
                     self._storage[cursor]._stack_onto_(
                         list(data.unbind(stack_dim)), dim=stack_dim
                     )
                 elif stack_dim == 0:
-                    # For non-contiguous indices with stack_dim=0, iterate and update
+                    # For tensor/sequence indices with stack_dim=0, iterate and
+                    # update each element. storage[i] returns a view for single
+                    # index, so update_ writes directly to storage.
                     if isinstance(cursor, torch.Tensor):
                         indices = cursor.tolist()
                     else:
@@ -1187,28 +1175,10 @@ class TensorStorage(Storage):
                     for idx, src_td in zip(indices, data.tensordicts):
                         self._storage[idx].update_(src_td)
                 else:
-                    # For stack_dim > 0 with tensor indices, check if contiguous
-                    if isinstance(cursor, torch.Tensor):
-                        sorted_indices, _ = torch.sort(cursor)
-                        expected = torch.arange(
-                            sorted_indices[0],
-                            sorted_indices[0] + len(cursor),
-                            device=cursor.device,
-                        )
-                        if torch.equal(sorted_indices, expected):
-                            # Contiguous range - convert to slice for view access
-                            equiv_slice = slice(
-                                int(sorted_indices[0]), int(sorted_indices[-1]) + 1
-                            )
-                            self._storage[equiv_slice]._stack_onto_(
-                                list(data.unbind(stack_dim)), dim=stack_dim
-                            )
-                        else:
-                            # Non-contiguous with stack_dim > 0, fall back to default
-                            self._storage[cursor] = data
-                    else:
-                        # Non-tensor cursor with stack_dim > 0, fall back to default
-                        self._storage[cursor] = data
+                    # For stack_dim > 0 with non-slice cursor, fall back to
+                    # default assignment. This avoids expensive contiguous
+                    # index checks while still handling common slice cases.
+                    self._storage[cursor] = data
             else:
                 self._storage[cursor] = data
         except RuntimeError as e:
