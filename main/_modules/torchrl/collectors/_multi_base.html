@@ -670,16 +670,30 @@
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
                 <span class="s2">&quot;Cannot specify both weight_sync_schemes and weight_updater.&quot;</span>
             <span class="p">)</span>
+        <span class="c1"># Check if policy_factory entries are all the same (replicated from single factory)</span>
+        <span class="c1"># vs different factories per worker.</span>
+        <span class="n">has_uniform_policy_factory</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span>
+            <span class="n">f</span> <span class="ow">is</span> <span class="n">policy_factory</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">policy_factory</span>
+        <span class="p">)</span>
+        <span class="n">has_distinct_policy_factory</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="nb">any</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">has_uniform_policy_factory</span>
+        <span class="p">)</span>
         <span class="k">if</span> <span class="p">(</span>
             <span class="n">weight_sync_schemes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
             <span class="ow">and</span> <span class="ow">not</span> <span class="n">weight_sync_schemes</span>
             <span class="ow">and</span> <span class="n">weight_updater</span> <span class="ow">is</span> <span class="kc">None</span>
-            <span class="ow">and</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">any</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">))</span>
         <span class="p">):</span>
-            <span class="c1"># Set up a default local shared-memory sync scheme for the policy.</span>
-            <span class="c1"># This is used to propagate weights from the orchestrator policy</span>
-            <span class="c1"># (possibly combined with a policy_factory) down to worker policies.</span>
-            <span class="n">weight_sync_schemes</span><span class="p">[</span><span class="s2">&quot;policy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">SharedMemWeightSyncScheme</span><span class="p">()</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="ow">or</span> <span class="n">has_uniform_policy_factory</span><span class="p">:</span>
+                <span class="c1"># Set up a default local shared-memory sync scheme for the policy.</span>
+                <span class="c1"># This is used to propagate weights from the orchestrator policy</span>
+                <span class="c1"># (possibly combined with a policy_factory) down to worker policies.</span>
+                <span class="n">weight_sync_schemes</span><span class="p">[</span><span class="s2">&quot;policy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">SharedMemWeightSyncScheme</span><span class="p">()</span>
+            <span class="k">elif</span> <span class="n">has_distinct_policy_factory</span><span class="p">:</span>
+                <span class="c1"># Distinct factories: set up per-worker weight sync scheme.</span>
+                <span class="c1"># Each worker maintains independent weights that can be updated individually.</span>
+                <span class="n">weight_sync_schemes</span><span class="p">[</span><span class="s2">&quot;policy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">SharedMemWeightSyncScheme</span><span class="p">(</span>
+                    <span class="n">per_worker_weights</span><span class="o">=</span><span class="kc">True</span>
+                <span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_setup_multi_weight_sync</span><span class="p">(</span><span class="n">weight_updater</span><span class="p">,</span> <span class="n">weight_sync_schemes</span><span class="p">)</span>
 

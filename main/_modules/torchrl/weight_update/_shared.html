@@ -304,20 +304,46 @@
 <div class="viewcode-block" id="SharedMemTransport.register_weights">
 <a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport.register_weights">[docs]</a>
     <span class="k">def</span> <span class="nf">register_weights</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">params_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">],</span> <span class="n">init_queues</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">]</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">params_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">],</span>
+        <span class="n">init_queues</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">],</span>
+        <span class="n">per_worker</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize per-worker queues for shared memory buffer distribution.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize per-worker queues for shared memory buffer distribution.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            params_map: Mapping of worker_idx to weights TensorDict.</span>
+<span class="sd">            init_queues: Mapping of worker_idx to initialization queues.</span>
+<span class="sd">            per_worker: If True, each worker gets its own independent weight copy</span>
+<span class="sd">                (for distinct policy factories). If False, workers on the same</span>
+<span class="sd">                device share the same weight buffer (device-based deduplication).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="kn">from</span> <span class="nn">torchrl.collectors.utils</span> <span class="kn">import</span> <span class="n">_cast</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_weight_queues</span> <span class="o">=</span> <span class="n">init_queues</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_params_map</span> <span class="o">=</span> <span class="n">params_map</span>
-        <span class="c1"># Create set of the unique weights</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">weights</span> <span class="ow">in</span> <span class="n">params_map</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="k">if</span> <span class="nb">id</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span> <span class="ow">in</span> <span class="p">[</span><span class="nb">id</span><span class="p">(</span><span class="n">w</span><span class="p">)</span> <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span><span class="p">]:</span>
-                <span class="k">continue</span>
-            <span class="n">weights</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_cast</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_per_worker</span> <span class="o">=</span> <span class="n">per_worker</span>
+
+        <span class="k">if</span> <span class="n">per_worker</span><span class="p">:</span>
+            <span class="c1"># Per-worker mode: each worker gets its own independent weight copy</span>
+            <span class="c1"># No deduplication - every worker has unique weights</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_worker_to_weights_idx</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="p">{}</span>
+            <span class="p">)</span>  <span class="c1"># Maps worker_idx to index in _unique_weights</span>
+            <span class="k">for</span> <span class="n">worker_idx</span><span class="p">,</span> <span class="n">weights</span> <span class="ow">in</span> <span class="n">params_map</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">weights</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_cast</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_worker_to_weights_idx</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Default mode: device-based deduplication</span>
+            <span class="c1"># Workers on the same device share the same weight buffer</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">weights</span> <span class="ow">in</span> <span class="n">params_map</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                <span class="k">if</span> <span class="nb">id</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span> <span class="ow">in</span> <span class="p">[</span><span class="nb">id</span><span class="p">(</span><span class="n">w</span><span class="p">)</span> <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span><span class="p">]:</span>
+                    <span class="k">continue</span>
+                <span class="n">weights</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_cast</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="SharedMemTransport.setup_connection_and_weights_on_sender">
@@ -376,41 +402,104 @@
 
 <div class="viewcode-block" id="SharedMemTransport.send_weights">
 <a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport.send_weights">[docs]</a>
-    <span class="k">def</span> <span class="nf">send_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">send_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">],</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Update weights in-place in shared memory.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            weights: New weights to send. Can be a TensorDictBase or dict.</span>
+<span class="sd">            weights: New weights to send. Can be:</span>
+<span class="sd">                - TensorDictBase: Same weights broadcast to all workers (or subset via worker_ids)</span>
+<span class="sd">                - dict[int, TensorDictBase]: Per-worker weights (keys are worker indices)</span>
+<span class="sd">            worker_ids: Which workers to update (None = all workers). Only used when</span>
+<span class="sd">                weights is a TensorDictBase (broadcast mode).</span>
 
 <span class="sd">        Raises:</span>
 <span class="sd">            ValueError: If weights type is unsupported.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># Update shared memory in-place (workers see this automatically)</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-            <span class="n">weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported weights type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="c1"># Unflatten if needed to match shared buffer structure</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Unique weights not set. Call register_weights() first.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Check if per-worker weights dict is provided</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">weights</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+        <span class="p">):</span>
+            <span class="c1"># Per-worker weights: dict[int, TensorDictBase]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_per_worker&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Per-worker weights dict provided but register_weights() was not &quot;</span>
+                    <span class="s2">&quot;called with per_worker=True. Cannot update individual worker weights.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">for</span> <span class="n">worker_idx</span><span class="p">,</span> <span class="n">worker_weights</span> <span class="ow">in</span> <span class="n">weights</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_worker_to_weights_idx</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Worker </span><span class="si">{</span><span class="n">worker_idx</span><span class="si">}</span><span class="s2"> not registered.&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_update_single_worker</span><span class="p">(</span><span class="n">worker_idx</span><span class="p">,</span> <span class="n">worker_weights</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Broadcast mode: same weights to all (or subset)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+                <span class="n">weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported weights type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Unflatten if needed to match shared buffer structure</span>
+            <span class="n">weights_to_update</span> <span class="o">=</span> <span class="n">weights</span>
+            <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="s2">&quot;.&quot;</span> <span class="ow">in</span> <span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">weights</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
+                <span class="n">weights_to_update</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">unflatten_keys</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Detach weights to allow in-place updates</span>
+            <span class="n">weights_to_update</span> <span class="o">=</span> <span class="n">weights_to_update</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+
+            <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_per_worker&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="ow">and</span> <span class="n">worker_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># Per-worker mode with specific worker_ids - update only those workers</span>
+                <span class="k">for</span> <span class="n">worker_idx</span> <span class="ow">in</span> <span class="n">worker_ids</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_update_single_worker</span><span class="p">(</span><span class="n">worker_idx</span><span class="p">,</span> <span class="n">weights_to_update</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Default: update all unique weight buffers</span>
+                <span class="k">for</span> <span class="n">buffer</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">buffer</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                            <span class="s2">&quot;Gradients should not be required for shared memory buffers.&quot;</span>
+                        <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">weights_to_update</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                            <span class="s2">&quot;Gradients should not be required for weights.&quot;</span>
+                        <span class="p">)</span>
+                    <span class="n">buffer</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">weights_to_update</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_update_single_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update weights for a single worker in per-worker mode.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            worker_idx: The worker index.</span>
+<span class="sd">            weights: The weights to update.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_worker_to_weights_idx&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Per-worker mode not initialized.&quot;</span><span class="p">)</span>
+
+        <span class="n">weights_idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_worker_to_weights_idx</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span>
+        <span class="n">buffer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span><span class="p">[</span><span class="n">weights_idx</span><span class="p">]</span>
+
+        <span class="c1"># Unflatten if needed</span>
         <span class="n">weights_to_update</span> <span class="o">=</span> <span class="n">weights</span>
         <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="s2">&quot;.&quot;</span> <span class="ow">in</span> <span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">weights</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
             <span class="n">weights_to_update</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">unflatten_keys</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)</span>
 
-        <span class="c1"># Detach weights to allow in-place updates (gradients are not needed for weight sync)</span>
         <span class="n">weights_to_update</span> <span class="o">=</span> <span class="n">weights_to_update</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Unique weights not set. Call register_weights() first.&quot;</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">buffer</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unique_weights</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">buffer</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                    <span class="s2">&quot;Gradients should not be required for shared memory buffers.&quot;</span>
-                <span class="p">)</span>
-            <span class="k">if</span> <span class="n">weights_to_update</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Gradients should not be required for weights.&quot;</span><span class="p">)</span>
-            <span class="n">buffer</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">weights_to_update</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
-            <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span></div>
+        <span class="k">if</span> <span class="n">buffer</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Gradients should not be required for shared memory buffers.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">weights_to_update</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Gradients should not be required for weights.&quot;</span><span class="p">)</span>
 
+        <span class="n">buffer</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">weights_to_update</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
 <div class="viewcode-block" id="SharedMemTransport.receive_weights">
 <a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport.receive_weights">[docs]</a>
@@ -468,6 +557,10 @@
 <span class="sd">        strategy: The weight transmission strategy (default: &quot;tensordict&quot;).</span>
 <span class="sd">        sync: If True (default), send() blocks until receiver acknowledges.</span>
 <span class="sd">            If False, send() returns immediately (use send_async/wait_async).</span>
+<span class="sd">        per_worker_weights: If True, each worker maintains independent weights</span>
+<span class="sd">            (for distinct policy factories). If False (default), workers on the</span>
+<span class="sd">            same device share the same weight buffer. This flag is auto-set to</span>
+<span class="sd">            True when distinct policy factories are detected.</span>
 
 <span class="sd">    Example:</span>
 <span class="sd">        &gt;&gt;&gt; # Basic usage</span>
@@ -479,9 +572,11 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">strategy</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;tensordict&quot;</span><span class="p">,</span>
         <span class="n">sync</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">per_worker_weights</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">strategy</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">sync</span> <span class="o">=</span> <span class="n">sync</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">per_worker_weights</span> <span class="o">=</span> <span class="n">per_worker_weights</span>
         <span class="c1"># Create a single shared transport for all workers</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">shared_transport</span> <span class="o">=</span> <span class="n">SharedMemTransport</span><span class="p">()</span>
 
@@ -615,7 +710,9 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
 
         <span class="c1"># Set worker info in transport</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">shared_transport</span><span class="o">.</span><span class="n">register_weights</span><span class="p">(</span><span class="n">params_map</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_init_queues</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shared_transport</span><span class="o">.</span><span class="n">register_weights</span><span class="p">(</span>
+            <span class="n">params_map</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_init_queues</span><span class="p">,</span> <span class="n">per_worker</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">per_worker_weights</span>
+        <span class="p">)</span>
 
         <span class="c1"># Store model_id and context on scheme</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">model_id</span> <span class="o">=</span> <span class="n">model_id</span>
@@ -688,8 +785,33 @@
             <span class="n">model</span> <span class="o">=</span> <span class="n">_resolve_model</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">model_id</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">model_id</span> <span class="o">==</span> <span class="s2">&quot;policy&quot;</span><span class="p">:</span>
-                    <span class="c1"># we need to get a copy of the weights from the factory</span>
-                    <span class="n">model</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">policy_factory</span><span class="p">[</span><span class="mi">0</span><span class="p">]()</span>
+                    <span class="c1"># Check if policy factories are uniform or distinct</span>
+                    <span class="n">factories</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">policy_factory</span>
+                    <span class="n">has_uniform_factories</span> <span class="o">=</span> <span class="nb">all</span><span class="p">(</span><span class="n">f</span> <span class="ow">is</span> <span class="n">factories</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">factories</span><span class="p">)</span>
+
+                    <span class="k">if</span> <span class="n">has_uniform_factories</span><span class="p">:</span>
+                        <span class="c1"># Uniform factories - single model for all workers</span>
+                        <span class="n">model</span> <span class="o">=</span> <span class="n">factories</span><span class="p">[</span><span class="mi">0</span><span class="p">]()</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="c1"># Distinct factories - create per-worker weights directly</span>
+                        <span class="n">params_map</span> <span class="o">=</span> <span class="p">{}</span>
+                        <span class="k">for</span> <span class="n">worker_idx</span><span class="p">,</span> <span class="n">factory</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">factories</span><span class="p">):</span>
+                            <span class="k">if</span> <span class="n">factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                                <span class="n">worker_model</span> <span class="o">=</span> <span class="n">factory</span><span class="p">()</span>
+                                <span class="n">worker_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">worker_model</span><span class="p">)</span>
+                                <span class="n">worker_weights</span> <span class="o">=</span> <span class="n">worker_weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+                                    <span class="n">_cast</span><span class="p">,</span> <span class="n">worker_weights</span>
+                                <span class="p">)</span>
+                                <span class="c1"># Move to appropriate device</span>
+                                <span class="k">if</span> <span class="n">devices</span> <span class="ow">and</span> <span class="n">worker_idx</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">devices</span><span class="p">):</span>
+                                    <span class="n">device</span> <span class="o">=</span> <span class="n">devices</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span>
+                                    <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                                        <span class="n">worker_weights</span> <span class="o">=</span> <span class="n">worker_weights</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+                                <span class="n">worker_weights</span> <span class="o">=</span> <span class="n">worker_weights</span><span class="o">.</span><span class="n">share_memory_</span><span class="p">()</span>
+                                <span class="n">params_map</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">worker_weights</span>
+                        <span class="c1"># Set per_worker_weights flag on the scheme</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">per_worker_weights</span> <span class="o">=</span> <span class="kc">True</span>
+                        <span class="k">return</span> <span class="n">params_map</span>
             <span class="n">weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
         <span class="k">elif</span> <span class="n">model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -964,18 +1086,21 @@
 <a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.SharedMemWeightSyncScheme.html#torchrl.weight_update.SharedMemWeightSyncScheme.send">[docs]</a>
     <span class="k">def</span> <span class="nf">send</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Send weights via shared memory (in-place update).</span>
 
 <span class="sd">        For SharedMemWeightSyncScheme:</span>
-<span class="sd">        1. prepare_weights() updates the shared memory buffer in-place</span>
+<span class="sd">        1. Updates the shared memory buffer(s) in-place</span>
 <span class="sd">        2. _send_instruction() tells workers to apply the new weights</span>
 <span class="sd">        3. If sync=True, waits for acknowledgments from all workers</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            weights: Weights to send (can be None to extract from model).</span>
+<span class="sd">            weights: Weights to send. Can be:</span>
+<span class="sd">                - None: Extract weights from the model</span>
+<span class="sd">                - TensorDictBase: Same weights broadcast to all workers</span>
+<span class="sd">                - dict[int, TensorDictBase]: Per-worker weights (keys are worker indices)</span>
 <span class="sd">            worker_ids: Which workers to notify (None = all workers).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized_on_sender</span><span class="p">:</span>
@@ -983,20 +1108,40 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">synchronized_on_sender</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Must be synchronized on sender before sending weights&quot;</span><span class="p">)</span>
 
-        <span class="c1"># prepare_weights updates the shared buffer in-place</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">prepare_weights</span><span class="p">(</span>
-            <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span>
-            <span class="n">model_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_model_id</span><span class="p">,</span>
-            <span class="n">strategy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="p">,</span>
-            <span class="n">context</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span>
+        <span class="c1"># Check if per-worker weights dict is provided</span>
+        <span class="n">is_per_worker_dict</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="n">weights</span>
+            <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">weights</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
         <span class="p">)</span>
 
+        <span class="k">if</span> <span class="n">is_per_worker_dict</span><span class="p">:</span>
+            <span class="c1"># Per-worker weights: update each worker&#39;s buffer directly</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">per_worker_weights</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Per-worker weights dict provided but scheme was not initialized &quot;</span>
+                    <span class="s2">&quot;with per_worker_weights=True (or auto-detected from distinct factories).&quot;</span>
+                <span class="p">)</span>
+            <span class="c1"># Update shared memory buffers for each worker</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">shared_transport</span><span class="o">.</span><span class="n">send_weights</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">)</span>
+            <span class="c1"># Determine which workers to notify</span>
+            <span class="n">target_workers</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">weights</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="k">if</span> <span class="n">worker_ids</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">worker_ids</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Broadcast mode: prepare_weights updates the shared buffer in-place</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">prepare_weights</span><span class="p">(</span>
+                <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span>
+                <span class="n">model_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_model_id</span><span class="p">,</span>
+                <span class="n">strategy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="p">,</span>
+                <span class="n">context</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">target_workers</span> <span class="o">=</span> <span class="n">worker_ids</span>
+
         <span class="c1"># Send instruction to workers&#39; background threads to apply the weights</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_send_instruction</span><span class="p">(</span><span class="n">instruction</span><span class="o">=</span><span class="s2">&quot;receive&quot;</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_send_instruction</span><span class="p">(</span><span class="n">instruction</span><span class="o">=</span><span class="s2">&quot;receive&quot;</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">target_workers</span><span class="p">)</span>
 
         <span class="c1"># Wait for acknowledgments if in synchronous mode</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sync</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_ack</span><span class="p">(</span><span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">)</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_ack</span><span class="p">(</span><span class="n">worker_ids</span><span class="o">=</span><span class="n">target_workers</span><span class="p">)</span></div>
 
 
     <span class="nd">@property</span>

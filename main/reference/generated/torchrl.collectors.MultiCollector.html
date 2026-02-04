@@ -958,6 +958,14 @@ the collector configuration.</p>
 <span class="gp">... </span>    <span class="s2">&quot;actor&quot;</span><span class="p">:</span> <span class="n">actor_weights</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="s2">&quot;critic&quot;</span><span class="p">:</span> <span class="n">critic_weights</span><span class="p">,</span>
 <span class="gp">... </span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Per-worker weight updates (for distinct policy factories)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Each worker can have independently updated weights</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">({</span>
+<span class="gp">... </span>    <span class="mi">0</span><span class="p">:</span> <span class="n">worker_0_weights</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="mi">1</span><span class="p">:</span> <span class="n">worker_1_weights</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="mi">2</span><span class="p">:</span> <span class="n">worker_2_weights</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">})</span>
 </pre></div>
 </div>
 <dl class="field-list simple">
@@ -968,6 +976,8 @@ the collector configuration.</p>
 <li><p><code class="docutils literal notranslate"><span class="pre">TensorDictModuleBase</span></code>: A TensorDict module whose weights will be extracted</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">TensorDictBase</span></code>: A TensorDict containing weights</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">dict</span></code>: A regular dict containing weights</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dict[int,</span> <span class="pre">TensorDictBase]</span></code>: Per-worker weights where keys are worker indices.
+This is used with distinct policy factories where each worker has independent weights.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">None</span></code>: Will try to get weights from server using <code class="docutils literal notranslate"><span class="pre">_get_server_weights()</span></code></p></li>
 </ul>
 </p>
