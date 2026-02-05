@@ -34,7 +34,7 @@ on:
         required: true
         type: string
       pytorch_release:
-        description: '[DEPRECATED - not used] PyTorch version is auto-detected from channel:release'
+        description: 'PyTorch release branch (e.g., release/2.8)'
         required: false
         type: string
         default: 'main'
@@ -256,15 +256,9 @@ jobs:
     if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     uses: ./.github/workflows/build-wheels-linux.yml
     with:
-      # test-infra-ref must be a branch in pytorch/test-infra, not pytorch/pytorch
-      # Use 'main' for test-infra; the 'channel: release' controls using stable PyTorch
-      test-infra-ref: main
+      test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
-      # TorchRL is pure Python - only build CPU wheels (same wheel works with any CUDA)
-      with-cuda: disable
-      with-rocm: disable
-      with-cpu: enable
     secrets: inherit
 
   build-windows:
@@ -274,14 +268,9 @@ jobs:
     if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     uses: ./.github/workflows/build-wheels-windows.yml
     with:
-      # test-infra-ref must be a branch in pytorch/test-infra, not pytorch/pytorch
-      # Use 'main' for test-infra; the 'channel: release' controls using stable PyTorch
-      test-infra-ref: main
+      test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
-      # TorchRL is pure Python - only build CPU wheels (same wheel works with any CUDA)
-      with-cuda: disable
-      with-cpu: enable
     secrets: inherit
 
   build-macos:
@@ -291,9 +280,7 @@ jobs:
     if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     uses: ./.github/workflows/build-wheels-m1.yml
     with:
-      # test-infra-ref must be a branch in pytorch/test-infra, not pytorch/pytorch
-      # Use 'main' for test-infra; the 'channel: release' controls using stable PyTorch
-      test-infra-ref: main
+      test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
     secrets: inherit
@@ -305,9 +292,7 @@ jobs:
     if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     uses: ./.github/workflows/build-wheels-aarch64-linux.yml
     with:
-      # test-infra-ref must be a branch in pytorch/test-infra, not pytorch/pytorch
-      # Use 'main' for test-infra; the 'channel: release' controls using stable PyTorch
-      test-infra-ref: main
+      test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
     secrets: inherit

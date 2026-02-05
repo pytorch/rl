@@ -29,21 +29,6 @@ on:
         required: false
         type: string
         default: ''
-      with-cuda:
-        description: 'Build with CUDA? (enable/disable)'
-        required: false
-        type: string
-        default: 'enable'
-      with-rocm:
-        description: 'Build with ROCm? (enable/disable)'
-        required: false
-        type: string
-        default: 'enable'
-      with-cpu:
-        description: 'Build with CPU? (enable/disable)'
-        required: false
-        type: string
-        default: 'enable'
 
 permissions:
   id-token: write
@@ -65,9 +50,6 @@ jobs:
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
       channel: ${{ inputs.channel || '' }}
       use-only-dl-pytorch-org: ${{ inputs.channel == 'release' && 'true' || 'false' }}
-      with-cuda: ${{ inputs.with-cuda || 'enable' }}
-      with-rocm: ${{ inputs.with-rocm || 'enable' }}
-      with-cpu: ${{ inputs.with-cpu || 'enable' }}
   build:
     needs: generate-matrix
     strategy:
