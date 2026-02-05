@@ -6,11 +6,69 @@ from __future__ import annotations
 
 import abc
 from collections.abc import Sequence
+from typing import Any
 
+import torch
 from torch import Tensor
 
 
 __all__ = ["Logger"]
+
+
+def _make_metrics_safe(metrics: dict[str, Any]) -> dict[str, Any]:
+    """Convert metric values to be safe for cross-process logging.
+
+    This function converts torch tensors to CPU/Python types, which is
+    necessary when logging metrics to external services (e.g., wandb, mlflow)
+    that may run in separate processes without GPU access.
+
+    The implementation batches CUDA->CPU transfers using non_blocking=True
+    and synchronizes once via a CUDA event, avoiding the overhead of
+    multiple implicit synchronizations that would occur if calling .item()
+    on each CUDA tensor individually.
+
+    Args:
+        metrics: Dictionary of metric names to values. Values can be
+            torch.Tensor (CUDA or CPU), Python scalars, or other types.
+
+    Returns:
+        Dictionary with the same keys but tensor values converted to
+        Python scalars (for single-element tensors) or lists (for
+        multi-element tensors). Non-tensor values are passed through unchanged.
+    """
+    out: dict[str, Any] = {}
+    cpu_tensors: dict[str, Tensor] = {}
+    has_cuda_tensors = False
+
+    # First pass: identify tensors and start non-blocking CUDA->CPU transfers
+    for key, value in metrics.items():
+        if isinstance(value, Tensor):
+            if value.is_cuda:
+                # Non-blocking transfer - queues the copy without waiting
+                value = value.detach().to("cpu", non_blocking=True)
+                has_cuda_tensors = True
+            else:
+                value = value.detach()
+            cpu_tensors[key] = value
+        else:
+            out[key] = value
+
+    # Explicit sync: use a CUDA event instead of global synchronize() - this
+    # only waits for work up to the point the event was recorded, not ALL
+    # pending GPU work.
+    if has_cuda_tensors:
+        event = torch.cuda.Event()
+        event.record()
+        event.synchronize()
+
+    # Second pass: convert CPU tensors to Python scalars/lists
+    for key, value in cpu_tensors.items():
+        if value.numel() == 1:
+            out[key] = value.item()
+        else:
+            out[key] = value.tolist()
+
+    return out
 
 
 class Logger:
@@ -46,3 +104,29 @@ class Logger:
     @abc.abstractmethod
     def log_histogram(self, name: str, data: Sequence, **kwargs):
         ...
+
+    def log_metrics(
+        self, metrics: dict[str, Any], step: int | None = None
+    ) -> dict[str, Any]:
+        """Log multiple scalar metrics at once.
+
+        This method efficiently handles tensor values by batching CUDA->CPU
+        transfers and performing a single synchronization, avoiding the overhead
+        of multiple implicit syncs that would occur when logging tensors one at
+        a time.
+
+        This is particularly useful when logging to services running in separate
+        processes (e.g., Ray actors) that may not have GPU access.
+
+        Args:
+            metrics: Dictionary mapping metric names to values. Tensor values
+                are automatically converted to Python scalars/lists.
+            step: Optional step value for all metrics.
+
+        Returns:
+            The converted metrics dictionary (with tensors converted to Python types).
+        """
+        safe_metrics = _make_metrics_safe(metrics)
+        for name, value in safe_metrics.items():
+            self.log_scalar(name, value, step=step)
+        return safe_metrics

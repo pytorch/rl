@@ -8,10 +8,11 @@ import importlib.util
 
 import os
 from collections.abc import Sequence
+from typing import Any
 
 from torch import Tensor
 
-from .common import Logger
+from .common import _make_metrics_safe, Logger
 
 _has_wandb = importlib.util.find_spec("wandb") is not None
 _has_omegaconf = importlib.util.find_spec("omegaconf") is not None
@@ -212,3 +213,24 @@ class WandbLogger(Logger):
             self.experiment.log({name: value}, step=step)
         else:
             self.experiment.log({name: table})
+
+    def log_metrics(
+        self, metrics: dict[str, Any], step: int | None = None
+    ) -> dict[str, Any]:
+        """Log multiple scalar metrics at once to wandb.
+
+        This method efficiently handles tensor values by batching CUDA->CPU
+        transfers and performing a single synchronization, then logs all
+        metrics in a single wandb API call.
+
+        Args:
+            metrics: Dictionary mapping metric names to values. Tensor values
+                are automatically converted to Python scalars/lists.
+            step: Optional step value for all metrics.
+
+        Returns:
+            The converted metrics dictionary (with tensors converted to Python types).
+        """
+        safe_metrics = _make_metrics_safe(metrics)
+        self.experiment.log(safe_metrics, step=step)
+        return safe_metrics

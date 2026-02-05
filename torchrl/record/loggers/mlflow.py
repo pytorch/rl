@@ -13,7 +13,7 @@ from typing import Any
 
 from torch import Tensor
 
-from torchrl.record.loggers.common import Logger
+from torchrl.record.loggers.common import _make_metrics_safe, Logger
 
 _has_tv = importlib.util.find_spec("torchvision") is not None
 
@@ -139,4 +139,28 @@ class MLFlowLogger(Logger):
         return f"MLFlowLogger(experiment={self.experiment.__repr__()})"
 
     def log_histogram(self, name: str, data: Sequence, **kwargs):
-        raise NotImplementedError("Logging histograms in cvs is not permitted.")
+        raise NotImplementedError("Logging histograms in mlflow is not permitted.")
+
+    def log_metrics(
+        self, metrics: dict[str, Any], step: int | None = None
+    ) -> dict[str, Any]:
+        """Log multiple scalar metrics at once to mlflow.
+
+        This method efficiently handles tensor values by batching CUDA->CPU
+        transfers and performing a single synchronization, then logs all
+        metrics in a single mlflow API call.
+
+        Args:
+            metrics: Dictionary mapping metric names to values. Tensor values
+                are automatically converted to Python scalars/lists.
+            step: Optional step value for all metrics.
+
+        Returns:
+            The converted metrics dictionary (with tensors converted to Python types).
+        """
+        import mlflow
+
+        safe_metrics = _make_metrics_safe(metrics)
+        mlflow.set_experiment(experiment_id=self.id)
+        mlflow.log_metrics(safe_metrics, step=step)
+        return safe_metrics
