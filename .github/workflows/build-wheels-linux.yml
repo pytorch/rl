@@ -12,6 +12,22 @@ on:
         # Release candidate tags look like: v1.11.0-rc1
         - v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+
   workflow_dispatch:
+    inputs:
+      build-cpu:
+        description: 'Build CPU wheels'
+        required: false
+        type: boolean
+        default: true
+      build-cuda:
+        description: 'Build CUDA wheels'
+        required: false
+        type: boolean
+        default: false
+      build-rocm:
+        description: 'Build ROCm wheels'
+        required: false
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       test-infra-ref:
@@ -29,6 +45,21 @@ on:
         required: false
         type: string
         default: ''
+      with-cuda:
+        description: 'Build with CUDA (enable/disable)'
+        required: false
+        type: string
+        default: 'enable'
+      with-rocm:
+        description: 'Build with ROCm (enable/disable)'
+        required: false
+        type: string
+        default: 'enable'
+      with-cpu:
+        description: 'Build with CPU (enable/disable)'
+        required: false
+        type: string
+        default: 'enable'
 
 permissions:
   id-token: write
@@ -50,6 +81,12 @@ jobs:
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
       channel: ${{ inputs.channel || '' }}
       use-only-dl-pytorch-org: ${{ inputs.channel == 'release' && 'true' || 'false' }}
+      # For workflow_dispatch: convert boolean to enable/disable string
+      # For workflow_call: use the string input directly
+      # Default: enable all variants
+      with-cuda: ${{ github.event_name == 'workflow_dispatch' && (inputs.build-cuda && 'enable' || 'disable') || inputs.with-cuda || 'enable' }}
+      with-rocm: ${{ github.event_name == 'workflow_dispatch' && (inputs.build-rocm && 'enable' || 'disable') || inputs.with-rocm || 'enable' }}
+      with-cpu: ${{ github.event_name == 'workflow_dispatch' && (inputs.build-cpu && 'enable' || 'disable') || inputs.with-cpu || 'enable' }}
   build:
     needs: generate-matrix
     strategy:
