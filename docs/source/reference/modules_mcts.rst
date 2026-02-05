@@ -5,6 +5,18 @@ torchrl.modules.mcts package
 
 This module provides Monte Carlo Tree Search (MCTS) components, including score computation modules for balancing exploration and exploitation in tree search algorithms.
 
+MCTS Policies
+-------------
+
+.. autosummary::
+   :toctree: generated/
+
+   MCTSPolicyBase
+   MCTSPolicy
+   AlphaGoPolicy
+   AlphaStarPolicy
+   MuZeroPolicy
+
 MCTS Scores
 -----------
 
