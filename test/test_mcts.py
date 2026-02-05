@@ -305,9 +305,7 @@ class TestEXP3Score:
             (gamma / k) * (reward / prob_i)
         )
 
-        torch.testing.assert_close(
-            updated_weights[action_idx], torch.tensor(expected_new_weight_val)
-        )
+        torch.testing.assert_close(updated_weights[action_idx], expected_new_weight_val)
         torch.testing.assert_close(
             updated_weights[action_idx + 1 :], initial_weights[action_idx + 1 :]
         )
@@ -412,7 +410,7 @@ class TestEXP3Score:
             (gamma / k) * (reward / prob_i)
         )
         torch.testing.assert_close(
-            updated_weights[action_idx], torch.tensor(expected_new_weight_val)
+            updated_weights[action_idx], expected_new_weight_val
         )
 
     @pytest.mark.parametrize(
@@ -489,7 +487,7 @@ class TestEXP3Score:
             (gamma / k) * (reward / prob_i2)
         )
         torch.testing.assert_close(
-            updated_weights2[action_idx], torch.tensor(expected_new_weight_val2)
+            updated_weights2[action_idx], expected_new_weight_val2
         )
 
     def test_forward_raises_error_on_mismatched_num_actions(self, default_scorer):

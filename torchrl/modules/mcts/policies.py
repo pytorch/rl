@@ -95,21 +95,21 @@ class MCTSPolicy(MCTSPolicyBase):
         )
 
     def select_action(self, score: torch.Tensor, mask: torch.Tensor | None) -> torch.Tensor:
-        """Selects the action with the highest score, respecting the mask if provided.
-
-        Args:
-            score (torch.Tensor): The scores for each action, shape (..., num_actions).
-            mask (torch.Tensor | None): Optional boolean mask for valid actions.
-
-        Returns:
-            torch.Tensor: The selected action indices, shape (...).
-        """
         if mask is not None:
             if mask.dtype is not torch.bool:
-                score = torch.where(mask, score, torch.full_like(score, -torch.inf))
+                mask = mask.to(torch.bool)
+            while mask.ndim > score.ndim and mask.shape[0] == 1:
+                mask = mask.squeeze(0)
+            if mask.shape != score.shape:
+                mask, score = torch.broadcast_tensors(mask, score)
+            if not mask.any(dim=-1).all():
+                raise ValueError("action_mask must allow at least one valid action per node.")
+            score = torch.where(mask, score, torch.full_like(score, -torch.inf))
+        action = score.argmax(dim=-1)
+        if score.ndim == 1 and action.ndim == 1 and action.numel() == 1:
+            return action.squeeze(0)
+        return action
 
-        return torch.argmax(score, dim=-1)
-    
 class AlphaGoPolicy(MCTSPolicy):
     def __init__(self, *, c: float = 5.0, win_count_key: NestedKey = "win_count", visits_key: NestedKey = "visits", total_visits_key: NestedKey = "total_visits", prior_prob_key: NestedKey = "prior_prob", action_mask_key: NestedKey = "action_mask", score_key: NestedKey = "score", action_key: NestedKey = "action") -> None:
         """
