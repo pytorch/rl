@@ -1,0 +1,245 @@
+name: Build Docker Images
+
+on:
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      image_type:
+        description: 'Image type to build'
+        required: true
+        type: choice
+        options:
+          - all
+          - base
+          - nightly
+          - stable
+          - habitat
+      force_rebuild:
+        description: 'Force rebuild even if unchanged'
+        required: false
+        type: boolean
+        default: false
+  
+  # Weekly schedule for nightly images (Sundays at 2 AM UTC)
+  schedule:
+    - cron: '0 2 * * 0'
+  
+  # Trigger on changes to Docker files
+  push:
+    branches:
+      - main
+      - docker-images
+    paths:
+      - '.github/docker/**'
+      - '.github/workflows/build-docker-images.yml'
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: pytorch/torchrl-ci
+
+jobs:
+  # Matrix strategy for building multiple images
+  build-base:
+    if: |
+      github.event_name == 'schedule' || 
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && 
+       (github.event.inputs.image_type == 'all' || github.event.inputs.image_type == 'base'))
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        cuda_version: ['12.4.0', '11.8.0']
+        python_version: ['3.11', '3.9']
+        include:
+          - cuda_version: '12.4.0'
+            cuda_short: 'cuda12.4'
+          - cuda_version: '11.8.0'
+            cuda_short: 'cuda11.8'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=base-${{ matrix.cuda_short }}-py${{ matrix.python_version }}
+
+      - name: Build and push base image
+        uses: docker/build-push-action@v5
+        with:
+          context: .github/docker
+          file: .github/docker/Dockerfile.base
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            CUDA_VERSION=${{ matrix.cuda_version }}
+            PYTHON_VERSION=${{ matrix.python_version }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:base-${{ matrix.cuda_short }}-py${{ matrix.python_version }}-cache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:base-${{ matrix.cuda_short }}-py${{ matrix.python_version }}-cache,mode=max
+
+  build-nightly:
+    needs: build-base
+    if: |
+      always() &&
+      (github.event_name == 'schedule' || 
+       github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && 
+        (github.event.inputs.image_type == 'all' || github.event.inputs.image_type == 'nightly')))
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        config:
+          # Main testing configuration
+          - cuda_version: '12.4.0'
+            cuda_short: 'cuda12.4'
+            cu_version: 'cu124'
+            python_version: '3.11'
+          # CPU testing
+          - cuda_version: '12.2.0'
+            cuda_short: 'cuda12.2'
+            cu_version: 'cpu'
+            python_version: '3.9'
+          # Old deps testing
+          - cuda_version: '11.8.0'
+            cuda_short: 'cuda11.8'
+            cu_version: 'cu118'
+            python_version: '3.9'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get current date
+        id: date
+        run: echo "DATE=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=nightly-${{ matrix.config.cuda_short }}-py${{ matrix.config.python_version }}-${{ steps.date.outputs.DATE }}
+            type=raw,value=nightly-${{ matrix.config.cuda_short }}-py${{ matrix.config.python_version }}-latest
+
+      - name: Build and push nightly image
+        uses: docker/build-push-action@v5
+        with:
+          context: .github/docker
+          file: .github/docker/Dockerfile.nightly
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            CUDA_VERSION=${{ matrix.config.cuda_version }}
+            PYTHON_VERSION=${{ matrix.config.python_version }}
+            CU_VERSION=${{ matrix.config.cu_version }}
+            BASE_TAG=base-${{ matrix.config.cuda_short }}-py${{ matrix.config.python_version }}
+            BUILD_DATE=${{ steps.date.outputs.DATE }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:nightly-${{ matrix.config.cuda_short }}-py${{ matrix.config.python_version }}-cache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:nightly-${{ matrix.config.cuda_short }}-py${{ matrix.config.python_version }}-cache,mode=max
+
+  build-stable:
+    needs: build-base
+    if: |
+      always() &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && 
+        (github.event.inputs.image_type == 'all' || github.event.inputs.image_type == 'stable')))
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        config:
+          - cuda_version: '12.4.0'
+            cuda_short: 'cuda12.4'
+            cu_version: 'cu124'
+            python_version: '3.10'
+          - cuda_version: '11.8.0'
+            cuda_short: 'cuda11.8'
+            cu_version: 'cu118'
+            python_version: '3.10'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get current date
+        id: date
+        run: echo "DATE=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=stable-${{ matrix.config.cuda_short }}-py${{ matrix.config.python_version }}
+
+      - name: Build and push stable image
+        uses: docker/build-push-action@v5
+        with:
+          context: .github/docker
+          file: .github/docker/Dockerfile.stable
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            CUDA_VERSION=${{ matrix.config.cuda_version }}
+            PYTHON_VERSION=${{ matrix.config.python_version }}
+            CU_VERSION=${{ matrix.config.cu_version }}
+            BASE_TAG=base-${{ matrix.config.cuda_short }}-py${{ matrix.config.python_version }}
+            BUILD_DATE=${{ steps.date.outputs.DATE }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:stable-${{ matrix.config.cuda_short }}-py${{ matrix.config.python_version }}-cache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:stable-${{ matrix.config.cuda_short }}-py${{ matrix.config.python_version }}-cache,mode=max
+
+  cleanup-old-images:
+    needs: [build-nightly]
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete old nightly images
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const package_name = 'torchrl-ci';
+            const keep_count = 3; // Keep last 3 nightly builds per config
+            
+            // This is a simplified version - you might want to use a dedicated action
+            // like snok/container-retention-policy for production use
+            console.log('Image cleanup would run here - implement based on your retention policy');
