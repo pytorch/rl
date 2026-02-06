@@ -80,15 +80,17 @@ fi
 # ---- 3) Clone / update the repo --------------------------------------------
 git config --global --add safe.directory '*'
 
+BRANCH="${BRANCH:-dreamer-isaac}"
+
 if [[ ! -d "$REPO_DIR" ]]; then
-    echo "* Cloning repo..."
-    git clone "$REPO_URL" "$REPO_DIR"
+    echo "* Cloning repo (branch=$BRANCH)..."
+    git clone -b "$BRANCH" "$REPO_URL" "$REPO_DIR"
 else
-    echo "* Repo exists, pulling latest..."
+    echo "* Repo exists, pulling latest (branch=$BRANCH)..."
     cd "$REPO_DIR"
     git fetch --all
-    # Safe pull: reset to origin/main if diverged
-    git reset --hard origin/main 2>/dev/null || git pull --ff-only || true
+    git checkout "$BRANCH" 2>/dev/null || true
+    git reset --hard "origin/$BRANCH"
 fi
 cd "$REPO_DIR"
 
@@ -199,6 +201,8 @@ echo "============================================================"
 cd "$REPO_DIR"
 
 if [[ "$MODE" == "isaac" ]]; then
+    # Expose 2 GPUs for async pipeline: GPU 0 = sim, GPU 1 = training
+    export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1}"
     $PYTHON "sota-implementations/dreamer/dreamer_isaac.py" "${EXTRA_ARGS[@]}"
 else
     export MUJOCO_GL=egl
