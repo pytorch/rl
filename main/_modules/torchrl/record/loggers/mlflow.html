@@ -252,7 +252,7 @@
 
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">Tensor</span>
 
-<span class="kn">from</span> <span class="nn">torchrl.record.loggers.common</span> <span class="kn">import</span> <span class="n">Logger</span>
+<span class="kn">from</span> <span class="nn">torchrl.record.loggers.common</span> <span class="kn">import</span> <span class="n">_make_metrics_safe</span><span class="p">,</span> <span class="n">Logger</span>
 
 <span class="n">_has_tv</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;torchvision&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 
@@ -380,7 +380,31 @@
         <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;MLFlowLogger(experiment=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">experiment</span><span class="o">.</span><span class="fm">__repr__</span><span class="p">()</span><span class="si">}</span><span class="s2">)&quot;</span>
 
     <span class="k">def</span> <span class="nf">log_histogram</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Logging histograms in cvs is not permitted.&quot;</span><span class="p">)</span></div>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Logging histograms in mlflow is not permitted.&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">log_metrics</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">metrics</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Log multiple scalar metrics at once to mlflow.</span>
+
+<span class="sd">        This method efficiently handles tensor values by batching CUDA-&gt;CPU</span>
+<span class="sd">        transfers and performing a single synchronization, then logs all</span>
+<span class="sd">        metrics in a single mlflow API call.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            metrics: Dictionary mapping metric names to values. Tensor values</span>
+<span class="sd">                are automatically converted to Python scalars/lists.</span>
+<span class="sd">            step: Optional step value for all metrics.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The converted metrics dictionary (with tensors converted to Python types).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span> <span class="nn">mlflow</span>
+
+        <span class="n">safe_metrics</span> <span class="o">=</span> <span class="n">_make_metrics_safe</span><span class="p">(</span><span class="n">metrics</span><span class="p">)</span>
+        <span class="n">mlflow</span><span class="o">.</span><span class="n">set_experiment</span><span class="p">(</span><span class="n">experiment_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+        <span class="n">mlflow</span><span class="o">.</span><span class="n">log_metrics</span><span class="p">(</span><span class="n">safe_metrics</span><span class="p">,</span> <span class="n">step</span><span class="o">=</span><span class="n">step</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">safe_metrics</span></div>
 
 </pre></div>
 

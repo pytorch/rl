@@ -245,11 +245,69 @@
 
 <span class="kn">import</span> <span class="nn">abc</span>
 <span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Sequence</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
 
+<span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">Tensor</span>
 
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Logger&quot;</span><span class="p">]</span>
+
+
+<span class="k">def</span> <span class="nf">_make_metrics_safe</span><span class="p">(</span><span class="n">metrics</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert metric values to be safe for cross-process logging.</span>
+
+<span class="sd">    This function converts torch tensors to CPU/Python types, which is</span>
+<span class="sd">    necessary when logging metrics to external services (e.g., wandb, mlflow)</span>
+<span class="sd">    that may run in separate processes without GPU access.</span>
+
+<span class="sd">    The implementation batches CUDA-&gt;CPU transfers using non_blocking=True</span>
+<span class="sd">    and synchronizes once via a CUDA event, avoiding the overhead of</span>
+<span class="sd">    multiple implicit synchronizations that would occur if calling .item()</span>
+<span class="sd">    on each CUDA tensor individually.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        metrics: Dictionary of metric names to values. Values can be</span>
+<span class="sd">            torch.Tensor (CUDA or CPU), Python scalars, or other types.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Dictionary with the same keys but tensor values converted to</span>
+<span class="sd">        Python scalars (for single-element tensors) or lists (for</span>
+<span class="sd">        multi-element tensors). Non-tensor values are passed through unchanged.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">out</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">cpu_tensors</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">has_cuda_tensors</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="c1"># First pass: identify tensors and start non-blocking CUDA-&gt;CPU transfers</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">metrics</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">is_cuda</span><span class="p">:</span>
+                <span class="c1"># Non-blocking transfer - queues the copy without waiting</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">has_cuda_tensors</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+            <span class="n">cpu_tensors</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="c1"># Explicit sync: use a CUDA event instead of global synchronize() - this</span>
+    <span class="c1"># only waits for work up to the point the event was recorded, not ALL</span>
+    <span class="c1"># pending GPU work.</span>
+    <span class="k">if</span> <span class="n">has_cuda_tensors</span><span class="p">:</span>
+        <span class="n">event</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+        <span class="n">event</span><span class="o">.</span><span class="n">record</span><span class="p">()</span>
+        <span class="n">event</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+
+    <span class="c1"># Second pass: convert CPU tensors to Python scalars/lists</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">cpu_tensors</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">out</span>
 
 
 <div class="viewcode-block" id="Logger">
@@ -286,7 +344,33 @@
 
     <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
     <span class="k">def</span> <span class="nf">log_histogram</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="o">...</span></div>
+        <span class="o">...</span>
+
+    <span class="k">def</span> <span class="nf">log_metrics</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">metrics</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Log multiple scalar metrics at once.</span>
+
+<span class="sd">        This method efficiently handles tensor values by batching CUDA-&gt;CPU</span>
+<span class="sd">        transfers and performing a single synchronization, avoiding the overhead</span>
+<span class="sd">        of multiple implicit syncs that would occur when logging tensors one at</span>
+<span class="sd">        a time.</span>
+
+<span class="sd">        This is particularly useful when logging to services running in separate</span>
+<span class="sd">        processes (e.g., Ray actors) that may not have GPU access.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            metrics: Dictionary mapping metric names to values. Tensor values</span>
+<span class="sd">                are automatically converted to Python scalars/lists.</span>
+<span class="sd">            step: Optional step value for all metrics.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The converted metrics dictionary (with tensors converted to Python types).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">safe_metrics</span> <span class="o">=</span> <span class="n">_make_metrics_safe</span><span class="p">(</span><span class="n">metrics</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">safe_metrics</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_scalar</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">step</span><span class="o">=</span><span class="n">step</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">safe_metrics</span></div>
 
 </pre></div>
 
