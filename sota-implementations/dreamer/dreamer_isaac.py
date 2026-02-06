@@ -255,7 +255,10 @@ def main(cfg: DictConfig):
             "Use false, true, float16, or bfloat16."
         )
 
-    if autocast_dtype is not None:
+    # GradScaler is only needed for float16 (limited dynamic range).
+    # bfloat16 has the same exponent range as float32, so no scaling needed.
+    use_scaler = autocast_dtype == torch.float16
+    if use_scaler:
         scaler1 = GradScaler()
         scaler2 = GradScaler()
         scaler3 = GradScaler()
@@ -389,13 +392,13 @@ def main(cfg: DictConfig):
             "## world_model/backward ##"
         ):
             world_model_opt.zero_grad()
-            if autocast_dtype:
+            if use_scaler:
                 scaler1.scale(loss_world_model).backward()
                 scaler1.unscale_(world_model_opt)
             else:
                 loss_world_model.backward()
             world_model_grad = clip_grad_norm_(world_model.parameters(), grad_clip)
-            if autocast_dtype:
+            if use_scaler:
                 scaler1.step(world_model_opt)
                 scaler1.update()
             else:
@@ -413,13 +416,13 @@ def main(cfg: DictConfig):
 
         with timeit("train/actor-backward"), record_function("## actor/backward ##"):
             actor_opt.zero_grad()
-            if autocast_dtype:
+            if use_scaler:
                 scaler2.scale(actor_loss_td["loss_actor"]).backward()
                 scaler2.unscale_(actor_opt)
             else:
                 actor_loss_td["loss_actor"].backward()
             actor_model_grad = clip_grad_norm_(actor_model.parameters(), grad_clip)
-            if autocast_dtype:
+            if use_scaler:
                 scaler2.step(actor_opt)
                 scaler2.update()
             else:
@@ -435,13 +438,13 @@ def main(cfg: DictConfig):
 
         with timeit("train/value-backward"), record_function("## value/backward ##"):
             value_opt.zero_grad()
-            if autocast_dtype:
+            if use_scaler:
                 scaler3.scale(value_loss_td["loss_value"]).backward()
                 scaler3.unscale_(value_opt)
             else:
                 value_loss_td["loss_value"].backward()
             critic_model_grad = clip_grad_norm_(value_model.parameters(), grad_clip)
-            if autocast_dtype:
+            if use_scaler:
                 scaler3.step(value_opt)
                 scaler3.update()
             else:
