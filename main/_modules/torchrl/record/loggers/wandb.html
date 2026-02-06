@@ -249,6 +249,7 @@
 <span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Sequence</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
 
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDictBase</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">Tensor</span>
 
 <span class="kn">from</span> <span class="nn">.common</span> <span class="kn">import</span> <span class="n">_make_metrics_safe</span><span class="p">,</span> <span class="n">Logger</span>
@@ -456,7 +457,11 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">experiment</span><span class="o">.</span><span class="n">log</span><span class="p">({</span><span class="n">name</span><span class="p">:</span> <span class="n">table</span><span class="p">})</span>
 
     <span class="k">def</span> <span class="nf">log_metrics</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">metrics</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">metrics</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="n">step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">keys_sep</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;/&quot;</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Log multiple scalar metrics at once to wandb.</span>
 
@@ -465,14 +470,17 @@
 <span class="sd">        metrics in a single wandb API call.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            metrics: Dictionary mapping metric names to values. Tensor values</span>
-<span class="sd">                are automatically converted to Python scalars/lists.</span>
+<span class="sd">            metrics: Dictionary or TensorDict mapping metric names to values.</span>
+<span class="sd">                Tensor values are automatically converted to Python scalars/lists.</span>
+<span class="sd">                For TensorDict inputs, nested keys are flattened using ``keys_sep``.</span>
 <span class="sd">            step: Optional step value for all metrics.</span>
+<span class="sd">            keys_sep: Separator used to flatten nested TensorDict keys into strings.</span>
+<span class="sd">                Defaults to &quot;/&quot;. Only used for TensorDict inputs.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            The converted metrics dictionary (with tensors converted to Python types).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">safe_metrics</span> <span class="o">=</span> <span class="n">_make_metrics_safe</span><span class="p">(</span><span class="n">metrics</span><span class="p">)</span>
+        <span class="n">safe_metrics</span> <span class="o">=</span> <span class="n">_make_metrics_safe</span><span class="p">(</span><span class="n">metrics</span><span class="p">,</span> <span class="n">keys_sep</span><span class="o">=</span><span class="n">keys_sep</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">experiment</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">safe_metrics</span><span class="p">,</span> <span class="n">step</span><span class="o">=</span><span class="n">step</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">safe_metrics</span></div>
 
