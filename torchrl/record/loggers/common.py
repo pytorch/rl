@@ -9,33 +9,46 @@ from collections.abc import Sequence
 from typing import Any
 
 import torch
+from tensordict import TensorDictBase
 from torch import Tensor
 
 
 __all__ = ["Logger"]
 
 
-def _make_metrics_safe(metrics: dict[str, Any]) -> dict[str, Any]:
+def _make_metrics_safe(
+    metrics: dict[str, Any] | TensorDictBase,
+    *,
+    keys_sep: str = "/",
+) -> dict[str, Any]:
     """Convert metric values to be safe for cross-process logging.
 
     This function converts torch tensors to CPU/Python types, which is
     necessary when logging metrics to external services (e.g., wandb, mlflow)
     that may run in separate processes without GPU access.
 
-    The implementation batches CUDA->CPU transfers using non_blocking=True
-    and synchronizes once via a CUDA event, avoiding the overhead of
-    multiple implicit synchronizations that would occur if calling .item()
-    on each CUDA tensor individually.
+    For regular dicts, the implementation batches CUDA->CPU transfers using
+    non_blocking=True and synchronizes once via a CUDA event, avoiding the
+    overhead of multiple implicit synchronizations that would occur if calling
+    .item() on each CUDA tensor individually.
+
+    For TensorDict inputs, this leverages TensorDict's efficient batch `.to()`
+    method which transfers all tensors in a single operation.
 
     Args:
-        metrics: Dictionary of metric names to values. Values can be
-            torch.Tensor (CUDA or CPU), Python scalars, or other types.
+        metrics: Dictionary or TensorDict of metric names to values. Values can
+            be torch.Tensor (CUDA or CPU), Python scalars, or other types.
+        keys_sep: Separator used to flatten nested TensorDict keys into strings.
+            Defaults to "/". Only used for TensorDict inputs.
 
     Returns:
         Dictionary with the same keys but tensor values converted to
         Python scalars (for single-element tensors) or lists (for
         multi-element tensors). Non-tensor values are passed through unchanged.
     """
+    if isinstance(metrics, TensorDictBase):
+        return _make_metrics_safe_tensordict(metrics, keys_sep=keys_sep)
+
     out: dict[str, Any] = {}
     cpu_tensors: dict[str, Tensor] = {}
     has_cuda_tensors = False
@@ -67,6 +80,49 @@ def _make_metrics_safe(metrics: dict[str, Any]) -> dict[str, Any]:
             out[key] = value.item()
         else:
             out[key] = value.tolist()
+
+    return out
+
+
+def _make_metrics_safe_tensordict(
+    metrics: TensorDictBase,
+    *,
+    keys_sep: str = "/",
+) -> dict[str, Any]:
+    """Convert TensorDict metric values to be safe for cross-process logging.
+
+    This leverages TensorDict's efficient batch `.to()` method which transfers
+    all tensors in a single operation, then converts to Python scalars.
+
+    Args:
+        metrics: TensorDict of metric names to tensor values.
+        keys_sep: Separator used to flatten nested keys into strings.
+
+    Returns:
+        Dictionary with flattened string keys and Python scalar/list values.
+    """
+    # TensorDict's .to() efficiently batches all tensor transfers
+    if metrics.device is not None and metrics.device.type == "cuda":
+        metrics = metrics.to("cpu", non_blocking=True)
+        # Sync after batched transfer
+        event = torch.cuda.Event()
+        event.record()
+        event.synchronize()
+
+    # Flatten nested keys and convert to dict
+    flat_dict = metrics.flatten_keys(keys_sep).to_dict()
+
+    # Convert tensors to Python scalars/lists
+    out: dict[str, Any] = {}
+    for key, value in flat_dict.items():
+        if isinstance(value, Tensor):
+            value = value.detach()
+            if value.numel() == 1:
+                out[key] = value.item()
+            else:
+                out[key] = value.tolist()
+        else:
+            out[key] = value
 
     return out
 
@@ -106,7 +162,11 @@ class Logger:
         ...
 
     def log_metrics(
-        self, metrics: dict[str, Any], step: int | None = None
+        self,
+        metrics: dict[str, Any] | TensorDictBase,
+        step: int | None = None,
+        *,
+        keys_sep: str = "/",
     ) -> dict[str, Any]:
         """Log multiple scalar metrics at once.
 
@@ -119,14 +179,17 @@ class Logger:
         processes (e.g., Ray actors) that may not have GPU access.
 
         Args:
-            metrics: Dictionary mapping metric names to values. Tensor values
-                are automatically converted to Python scalars/lists.
+            metrics: Dictionary or TensorDict mapping metric names to values.
+                Tensor values are automatically converted to Python scalars/lists.
+                For TensorDict inputs, nested keys are flattened using ``keys_sep``.
             step: Optional step value for all metrics.
+            keys_sep: Separator used to flatten nested TensorDict keys into strings.
+                Defaults to "/". Only used for TensorDict inputs.
 
         Returns:
             The converted metrics dictionary (with tensors converted to Python types).
         """
-        safe_metrics = _make_metrics_safe(metrics)
+        safe_metrics = _make_metrics_safe(metrics, keys_sep=keys_sep)
         for name, value in safe_metrics.items():
             self.log_scalar(name, value, step=step)
         return safe_metrics
