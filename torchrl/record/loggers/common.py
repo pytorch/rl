@@ -101,10 +101,17 @@ def _make_metrics_safe_tensordict(
     Returns:
         Dictionary with flattened string keys and Python scalar/list values.
     """
+    # Check if any tensor is on CUDA before transfer
+    # (metrics.device can be None even if tensors are on CUDA)
+    has_cuda = any(
+        v.is_cuda for v in metrics.values(True, True) if isinstance(v, Tensor)
+    )
+
     # TensorDict's .to() efficiently batches all tensor transfers
-    if metrics.device is not None and metrics.device.type == "cuda":
-        metrics = metrics.to("cpu", non_blocking=True)
-        # Sync after batched transfer
+    metrics = metrics.to("cpu", non_blocking=True)
+
+    # Sync only if there were CUDA tensors
+    if has_cuda:
         event = torch.cuda.Event()
         event.record()
         event.synchronize()
