@@ -189,8 +189,7 @@ def main(cfg: DictConfig):  # noqa: F821
         if len(accumulator) < batch_size:
             accumulator.append(data)
             if logger:
-                for key, value in metrics_to_log.items():
-                    logger.log_scalar(key, value, collected_frames)
+                logger.log_metrics(metrics_to_log, collected_frames)
             continue
 
         losses = TensorDict(batch_size=[sgd_updates])
@@ -275,8 +274,7 @@ def main(cfg: DictConfig):  # noqa: F821
                 actor.train()
 
         if logger:
-            for key, value in metrics_to_log.items():
-                logger.log_scalar(key, value, collected_frames)
+            logger.log_metrics(metrics_to_log, collected_frames)
 
         collector.update_policy_weights_()
         sampling_start = time.time()

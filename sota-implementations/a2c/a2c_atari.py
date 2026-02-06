@@ -279,8 +279,7 @@ def main(cfg: DictConfig):  # noqa: F821
         if logger:
             metrics_to_log.update(timeit.todict(prefix="time"))
             metrics_to_log["time/speed"] = pbar.format_dict["rate"]
-            for key, value in metrics_to_log.items():
-                logger.log_scalar(key, value, collected_frames)
+            logger.log_metrics(metrics_to_log, collected_frames)
 
     collector.shutdown()
     if not test_env.is_closed:
