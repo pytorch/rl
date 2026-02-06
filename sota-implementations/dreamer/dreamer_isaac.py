@@ -310,11 +310,12 @@ def main(cfg: DictConfig):
             # Sample from replay buffer
             with timeit("train/sample"), record_function("## train/sample ##"):
                 sampled_tensordict = replay_buffer.sample()
-                torchrl_logger.info(
-                    f"Sample shape: {sampled_tensordict.batch_size}, "
-                    f"numel={sampled_tensordict.numel()}"
-                )
-                # Flatten env batch dims (if any) and reshape to (num_slices, batch_length)
+                # With strict_length=False, the sample numel may not be
+                # exactly divisible by batch_length. Truncate to make it so.
+                numel = sampled_tensordict.numel()
+                usable = (numel // batch_length) * batch_length
+                if usable < numel:
+                    sampled_tensordict = sampled_tensordict[:usable]
                 sampled_tensordict = sampled_tensordict.reshape(-1, batch_length)
 
             # --- World model update ---
