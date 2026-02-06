@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from tempfile import TemporaryDirectory
 from typing import Any
 
+from tensordict import TensorDictBase
 from torch import Tensor
 
 from torchrl.record.loggers.common import _make_metrics_safe, Logger
@@ -142,7 +143,11 @@ class MLFlowLogger(Logger):
         raise NotImplementedError("Logging histograms in mlflow is not permitted.")
 
     def log_metrics(
-        self, metrics: dict[str, Any], step: int | None = None
+        self,
+        metrics: dict[str, Any] | TensorDictBase,
+        step: int | None = None,
+        *,
+        keys_sep: str = "/",
     ) -> dict[str, Any]:
         """Log multiple scalar metrics at once to mlflow.
 
@@ -151,16 +156,19 @@ class MLFlowLogger(Logger):
         metrics in a single mlflow API call.
 
         Args:
-            metrics: Dictionary mapping metric names to values. Tensor values
-                are automatically converted to Python scalars/lists.
+            metrics: Dictionary or TensorDict mapping metric names to values.
+                Tensor values are automatically converted to Python scalars/lists.
+                For TensorDict inputs, nested keys are flattened using ``keys_sep``.
             step: Optional step value for all metrics.
+            keys_sep: Separator used to flatten nested TensorDict keys into strings.
+                Defaults to "/". Only used for TensorDict inputs.
 
         Returns:
             The converted metrics dictionary (with tensors converted to Python types).
         """
         import mlflow
 
-        safe_metrics = _make_metrics_safe(metrics)
+        safe_metrics = _make_metrics_safe(metrics, keys_sep=keys_sep)
         mlflow.set_experiment(experiment_id=self.id)
         mlflow.log_metrics(safe_metrics, step=step)
         return safe_metrics

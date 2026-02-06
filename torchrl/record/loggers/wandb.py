@@ -10,6 +10,7 @@ import os
 from collections.abc import Sequence
 from typing import Any
 
+from tensordict import TensorDictBase
 from torch import Tensor
 
 from .common import _make_metrics_safe, Logger
@@ -215,7 +216,11 @@ class WandbLogger(Logger):
             self.experiment.log({name: table})
 
     def log_metrics(
-        self, metrics: dict[str, Any], step: int | None = None
+        self,
+        metrics: dict[str, Any] | TensorDictBase,
+        step: int | None = None,
+        *,
+        keys_sep: str = "/",
     ) -> dict[str, Any]:
         """Log multiple scalar metrics at once to wandb.
 
@@ -224,13 +229,16 @@ class WandbLogger(Logger):
         metrics in a single wandb API call.
 
         Args:
-            metrics: Dictionary mapping metric names to values. Tensor values
-                are automatically converted to Python scalars/lists.
+            metrics: Dictionary or TensorDict mapping metric names to values.
+                Tensor values are automatically converted to Python scalars/lists.
+                For TensorDict inputs, nested keys are flattened using ``keys_sep``.
             step: Optional step value for all metrics.
+            keys_sep: Separator used to flatten nested TensorDict keys into strings.
+                Defaults to "/". Only used for TensorDict inputs.
 
         Returns:
             The converted metrics dictionary (with tensors converted to Python types).
         """
-        safe_metrics = _make_metrics_safe(metrics)
+        safe_metrics = _make_metrics_safe(metrics, keys_sep=keys_sep)
         self.experiment.log(safe_metrics, step=step)
         return safe_metrics
