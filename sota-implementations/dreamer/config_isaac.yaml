@@ -9,10 +9,11 @@ env:
 
 collector:
   # IsaacLab with 4096 envs: one env step = 4096 frames.
-  # 10 env steps per collection = 40960 frames.
-  frames_per_batch: 40960
-  # Must be >= batch_length * num_envs so SliceSampler has enough sequential data.
-  # 50 * 4096 = 204800
+  # Must collect at least batch_length env steps per collection so the
+  # SliceSampler can find contiguous sequences of batch_length.
+  # 50 env steps * 4096 envs = 204800 frames.
+  frames_per_batch: 204800
+  # Must be >= frames_per_batch so we have enough data before training starts.
   init_random_frames: 204800
   # Number of gradient steps between each data collection
   optim_steps_per_collect: 50
