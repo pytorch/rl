@@ -280,6 +280,28 @@ def _main_async_collector(
             if worker_profiler.is_active:
                 worker_profiler.start()
 
+        # Set up distributed profiling with prof library if PROF_SHM_NAME is set
+        # This allows coordinated profiling with the master training process
+        _prof_available = False
+        import os
+
+        prof_shm_name = os.environ.get("PROF_SHM_NAME")
+        if prof_shm_name and os.environ.get("PROF_ENABLED") == "1":
+            try:
+                import prof
+
+                prof.prepare(
+                    f"collector_{worker_idx}", backend="shm", shm_name=prof_shm_name
+                )
+                _prof_available = True
+                torchrl_logger.info(
+                    f"Worker {worker_idx}: Connected to distributed profiling (shm={prof_shm_name})"
+                )
+            except Exception as e:
+                torchrl_logger.warning(
+                    f"Worker {worker_idx}: Failed to initialize distributed profiling: {e}"
+                )
+
         dc_iter = iter(inner_collector)
         j = 0
         pipe_child.send("instantiated")
@@ -429,7 +451,16 @@ def _main_async_collector(
                 if worker_profiler is not None and worker_profiler.is_active
                 else contextlib.nullcontext()
             )
-            with profile_ctx:
+
+            # Distributed profiling context (prof library)
+            if _prof_available:
+                import prof
+
+                prof_ctx = prof.profile("collector.rollout")
+            else:
+                prof_ctx = contextlib.nullcontext()
+
+            with profile_ctx, prof_ctx:
                 with timeit(f"worker/{idx}/rollout") as rollout_timer:
                     torchrl_logger.debug(
                         f"mp worker {idx}: Starting rollout (j={j})..."

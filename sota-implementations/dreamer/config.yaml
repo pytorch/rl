@@ -95,7 +95,10 @@ profiling:
   # Enable PyTorch profiling
   enabled: False
   # Total optim steps when profiling (overrides optimization.total_optim_steps)
-  total_optim_steps: 50
+  # When using distributed profiling (profiling.distributed.enabled=true), set this
+  # higher than PROF_ITERATIONS end value to allow prof to complete its window.
+  # e.g., if PROF_ITERATIONS=50-55, set total_optim_steps >= 60
+  total_optim_steps: 70
   # Skip the first N optim steps (no profiling at all)
   skip_first: 1
   # Warmup steps (profiler runs but data discarded for warmup)
@@ -129,3 +132,17 @@ profiling:
     trace_file: collector_trace_{worker_idx}.json
     # Override init_random_frames when collector profiling is enabled (0 = skip random frames phase)
     init_random_frames_override: 0
+
+  # Distributed profiling with the prof library
+  # This enables coordinated profiling across training and collector workers
+  # using shared memory signaling. Set environment variables to control behavior:
+  #   PROF_ENABLED=1           - Enable distributed profiling
+  #   PROF_ITERATIONS=50-55    - Which training steps to profile
+  #   PROF_OUTPUT_DIR=./traces - Where to save trace files
+  #   PROF_MODE=lite           - Only trace explicit regions (default)
+  distributed:
+    # Enable prof-based distributed profiling
+    enabled: False
+    # Backend for coordination: "shm" (shared memory) for subprocess collectors,
+    # "ray" for Ray actors (requires Ray-based collectors)
+    backend: shm

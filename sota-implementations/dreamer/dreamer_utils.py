@@ -140,24 +140,66 @@ def allocate_collector_devices(
     return collector_devices
 
 
+def create_prof_handle(cfg):
+    """Create a prof handle for distributed profiling if enabled.
+
+    This should be called early in the training script, before creating
+    the collector, so that the shm_name can be passed to worker processes.
+
+    Args:
+        cfg: Hydra config with profiling section.
+
+    Returns:
+        prof.ProfHandle if distributed profiling is enabled, None otherwise.
+    """
+    if hasattr(cfg.profiling, "distributed") and cfg.profiling.distributed.enabled:
+        import prof
+
+        backend = getattr(cfg.profiling.distributed, "backend", "shm")
+        handle = prof.prepare("training", master=True, backend=backend)
+        torchrl_logger.info(
+            f"Distributed profiling enabled with prof (backend={backend})"
+        )
+        return handle
+    return None
+
+
 class DreamerProfiler:
     """Helper class for PyTorch profiling in Dreamer training.
 
     Encapsulates profiler setup, stepping, and trace export logic.
+    Optionally integrates with the ``prof`` library for distributed profiling
+    across training and collector workers.
 
     Args:
         cfg: Hydra config with profiling section.
         device: Training device (used to determine CUDA profiling).
         pbar: Progress bar to update total when profiling.
+        compile_warmup: Number of warmup steps for torch.compile.
+        prof_handle: Pre-created prof handle for distributed profiling.
+            If None, will create one if cfg.profiling.distributed.enabled is True.
     """
 
-    def __init__(self, cfg, device, pbar=None, *, compile_warmup: int = 0):
+    def __init__(
+        self, cfg, device, pbar=None, *, compile_warmup: int = 0, prof_handle=None
+    ):
         self.enabled = cfg.profiling.enabled
         self.cfg = cfg
         self.total_optim_steps = 0
         self._profiler = None
         self._stopped = False
         self._compile_warmup = compile_warmup
+
+        # Use provided prof handle or create one if distributed profiling is enabled
+        self._prof_handle = prof_handle
+        self._prof_enabled = prof_handle is not None
+        if (
+            self._prof_handle is None
+            and hasattr(cfg.profiling, "distributed")
+            and cfg.profiling.distributed.enabled
+        ):
+            self._prof_handle = create_prof_handle(cfg)
+            self._prof_enabled = self._prof_handle is not None
 
         # Enable detailed profiling instrumentation in torchrl when profiling
         set_profiling_enabled(self.enabled)
@@ -218,14 +260,21 @@ class DreamerProfiler:
 
         Returns:
             True if profiling is complete and training should exit.
+            When distributed profiling is enabled, always returns False
+            to let prof control the training duration via PROF_ITERATIONS.
         """
+        # Step the distributed prof handle (if enabled)
+        # This signals the current iteration to workers for synchronized profiling
+        if self._prof_handle is not None:
+            self._prof_handle.step()
+
         if not self.enabled or self._stopped:
             return False
 
         self.total_optim_steps += 1
         self._profiler.step()
 
-        # Check if we should stop profiling
+        # Check if we should stop the local profiler
         extra_skip = self._compile_warmup + 1 if self._compile_warmup else 0
         target_steps = (
             self.cfg.profiling.skip_first
@@ -233,9 +282,9 @@ class DreamerProfiler:
             + self.cfg.profiling.warmup_steps
             + self.cfg.profiling.active_steps
         )
-        if self.total_optim_steps >= target_steps:
+        if self.total_optim_steps >= target_steps and not self._stopped:
             torchrl_logger.info(
-                f"Profiling complete after {self.total_optim_steps} optim steps. "
+                f"Local profiling complete after {self.total_optim_steps} optim steps. "
                 f"Exporting trace to {self.cfg.profiling.trace_file}"
             )
             self._profiler.stop()
@@ -243,13 +292,28 @@ class DreamerProfiler:
             # Export trace if trace_file is set
             if self.cfg.profiling.trace_file:
                 self._profiler.export_chrome_trace(self.cfg.profiling.trace_file)
+
+            # When distributed profiling is enabled, don't exit - let prof control timing
+            if self._prof_enabled:
+                torchrl_logger.info(
+                    "Distributed profiling enabled - continuing training until PROF_ITERATIONS window completes"
+                )
+                return False
+
             return True
 
         return False
 
     def should_exit(self) -> bool:
-        """Check if training loop should exit due to profiling completion."""
+        """Check if training loop should exit due to profiling completion.
+
+        When distributed profiling is enabled, always returns False to let
+        prof control the training duration via PROF_ITERATIONS.
+        """
         if not self.enabled:
+            return False
+        # When distributed profiling is enabled, don't exit based on local profiler
+        if self._prof_enabled:
             return False
         extra_skip = self._compile_warmup + 1 if self._compile_warmup else 0
         target_steps = (
@@ -259,6 +323,31 @@ class DreamerProfiler:
             + self.cfg.profiling.active_steps
         )
         return self.total_optim_steps >= target_steps
+
+    @property
+    def shm_name(self) -> str | None:
+        """Get the shared memory name for passing to collector workers.
+
+        Only available when distributed profiling is enabled with backend="shm".
+        Pass this to collector workers so they can connect to the profiling signal.
+
+        Returns:
+            Shared memory name string, or None if not using shm backend.
+        """
+        if self._prof_handle is not None:
+            return self._prof_handle.shm_name
+        return None
+
+    def finish(self) -> None:
+        """Finish profiling and clean up resources.
+
+        Call this at the end of training to ensure distributed profiling
+        resources are properly released.
+        """
+        if self._prof_handle is not None:
+            self._prof_handle.finish()
+            if hasattr(self._prof_handle, "cleanup"):
+                self._prof_handle.cleanup()
 
 
 class GPUImageTransform(Transform):
@@ -746,6 +835,7 @@ def make_collector(
     replay_buffer=None,
     storage_transform=None,
     track_policy_version=False,
+    prof_shm_name: str | None = None,
 ):
     """Make async multi-collector for parallel data collection.
 
@@ -758,6 +848,10 @@ def make_collector(
         storage_transform: Optional transform to apply before storing in buffer
         track_policy_version: If True, track policy version using integer versioning.
             Can also be a PolicyVersion instance for custom versioning.
+        prof_shm_name: Shared memory name for distributed profiling with prof library.
+            If set, workers can connect to this shared memory to receive profiling signals.
+            Workers need to call ``prof.prepare("collector", backend="shm", shm_name=...)``.
+
 
     Returns:
         MultiCollector in async mode with multiple worker processes
@@ -766,7 +860,23 @@ def make_collector(
         - If training on CUDA with multiple GPUs: collectors use cuda:1, cuda:2, etc.
         - If training on CUDA with single GPU: collectors colocate on cuda:0
         - If training on CPU: collectors use CPU
+
+    Note:
+        For distributed profiling to work in collector workers, TorchRL's _runner.py
+        needs to be modified to check for the PROF_SHM_NAME environment variable
+        and initialize prof if set. This is an exploratory feature.
     """
+    import os
+
+    # Set environment variable for worker processes to pick up
+    # Workers would need to check this and initialize prof accordingly
+    if prof_shm_name is not None:
+        os.environ["PROF_SHM_NAME"] = prof_shm_name
+        os.environ["PROF_ENABLED"] = "1"
+        torchrl_logger.info(
+            f"Distributed profiling: set PROF_SHM_NAME={prof_shm_name} for collector workers"
+        )
+
     num_collectors = cfg.collector.num_collectors
     init_random_frames = (
         cfg.collector.init_random_frames
