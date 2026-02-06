@@ -34,10 +34,8 @@ optimization:
   lmbda: 0.95
   imagination_horizon: 15
   compile:
-    # Compile individual MLP sub-modules (encoder, decoder, reward, value)
-    # with suppress_errors=True. RSSM and loss modules stay in eager mode
-    # to avoid tensordict compatibility issues.
-    enabled: True
+    # Disabled for now: focus on getting stable training first.
+    enabled: False
     backend: inductor
     cudagraphs: False
   # Autocast disabled: Dreamer's world model produces NaN grads with
@@ -63,7 +61,7 @@ replay_buffer:
   batch_length: 50
   scratch_dir: null
   prefetch: 32
-  gpu_storage: true
+  gpu_storage: false
 
 logger:
   backend: wandb

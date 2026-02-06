@@ -13,11 +13,10 @@ IsaacLab environments are:
 - GPU-native (always on cuda:0)
 - State-based (observations are vectors, not pixels)
 
-GPU strategy (2-GPU async pipeline):
+GPU strategy:
 - GPU 0 ("sim_device"): IsaacLab simulation + collection policy inference
 - GPU 1 ("train_device"): Model training (world model, actor, value gradients)
-- Collection runs in a background thread; training runs in the main thread
-- Policy weights are synced periodically from train_device to sim_device
+- Collection and training alternate synchronously
 - Falls back to single-GPU if only 1 GPU is available
 """
 from __future__ import annotations
@@ -39,7 +38,6 @@ app_launcher = AppLauncher(args_cli)
 # ============================================================================
 import contextlib
 import copy
-import threading
 import time
 
 import hydra
@@ -68,27 +66,6 @@ from torchrl.objectives.dreamer import (
 from torchrl.record.loggers import generate_exp_name, get_logger
 
 
-def _collect_loop(collector, replay_buffer, stop_event, stats):
-    """Background collection loop.
-
-    Runs the collector and extends the replay buffer continuously.
-    Tracks episode statistics for logging.
-    """
-    for data in collector:
-        replay_buffer.extend(data)
-        stats["collected_frames"] += data.numel()
-
-        # Track episode rewards from completed episodes
-        done_mask = data["next", "done"].squeeze(-1)
-        if done_mask.any():
-            episode_rewards = data["next", "episode_reward"][done_mask]
-            stats["last_mean_reward"] = episode_rewards.mean().item()
-            stats["last_episodes_done"] = done_mask.sum().item()
-
-        if stop_event.is_set():
-            break
-
-
 @hydra.main(version_base="1.1", config_path="", config_name="config_isaac")
 def main(cfg: DictConfig):
     # ========================================================================
@@ -97,12 +74,10 @@ def main(cfg: DictConfig):
     sim_device = torch.device("cuda:0")  # IsaacLab always binds to cuda:0
     num_gpus = torch.cuda.device_count()
     train_device = torch.device("cuda:1") if num_gpus > 1 else sim_device
-    async_mode = train_device != sim_device
 
     torchrl_logger.info(
         f"GPU setup: {num_gpus} GPUs available, "
-        f"sim_device={sim_device}, train_device={train_device}, "
-        f"async={'yes' if async_mode else 'no (single GPU)'}"
+        f"sim_device={sim_device}, train_device={train_device}"
     )
 
     # Create logger
@@ -157,10 +132,10 @@ def main(cfg: DictConfig):
     )
 
     # ========================================================================
-    # Collector policy: deep copy on sim_device for parallel collection
+    # Collector policy: deep copy on sim_device for collection
     # ========================================================================
     collector_policy = copy.deepcopy(policy)
-    if async_mode:
+    if train_device != sim_device:
         collector_policy = collector_policy.to(sim_device)
         torchrl_logger.info(
             f"Created collector policy copy on {sim_device} "
@@ -189,11 +164,10 @@ def main(cfg: DictConfig):
     )
 
     # ========================================================================
-    # Replay buffer
+    # Replay buffer (always CPU storage for thread safety)
     # ========================================================================
     batch_size = cfg.replay_buffer.batch_size
     batch_length = cfg.replay_buffer.batch_length
-    gpu_storage = cfg.replay_buffer.get("gpu_storage", False)
     replay_buffer = make_replay_buffer(
         batch_size=batch_size,
         batch_seq_len=batch_length,
@@ -204,11 +178,11 @@ def main(cfg: DictConfig):
         pixel_obs=False,
         grayscale=False,
         image_size=64,  # unused for state-based
-        gpu_storage=gpu_storage,
+        gpu_storage=False,
     )
     torchrl_logger.info(
         f"Replay buffer: batch_size={batch_size}, batch_length={batch_length}, "
-        f"gpu_storage={gpu_storage}, device={train_device}"
+        f"device={train_device}"
     )
 
     # ========================================================================
@@ -267,253 +241,216 @@ def main(cfg: DictConfig):
         torch.set_float32_matmul_precision("high")
 
     # ========================================================================
-    # torch.compile -- compile individual MLP sub-modules, not full losses.
-    # The full loss modules use heavy TensorDict operations that dynamo can't
-    # trace reliably with the container's tensordict version. Instead, we
-    # compile the pure-tensor MLP internals (encoder, decoder, reward) and
-    # set suppress_errors=True so dynamo falls back to eager for anything
-    # it can't trace.
-    # ========================================================================
-    compile_cfg = cfg.optimization.compile
-    if compile_cfg.enabled:
-        torch._dynamo.config.suppress_errors = True
-        torch._dynamo.config.capture_scalar_outputs = True
-        backend = compile_cfg.backend
-
-        # Access inner MLP modules through the world model structure:
-        #   world_model = WorldModelWrapper(transition_model, reward_model)
-        #   transition_model = TensorDictSequential(encoder_td, rssm_rollout, decoder_td)
-        transition_model = world_model.module[0]
-        reward_td = world_model.module[1]
-
-        # Encoder MLP: transition_model[0].module
-        encoder_mlp = transition_model.module[0].module
-        transition_model.module[0].module = torch.compile(encoder_mlp, backend=backend)
-
-        # Decoder MLP: transition_model[2][0].module
-        # (decoder is ProbabilisticTensorDictSequential, first element has the MLP)
-        decoder_mlp = transition_model.module[2].module[0].module
-        transition_model.module[2].module[0].module = torch.compile(
-            decoder_mlp, backend=backend
-        )
-
-        # Reward MLP: reward_model[0].module
-        reward_mlp = reward_td.module[0].module
-        reward_td.module[0].module = torch.compile(reward_mlp, backend=backend)
-
-        # Value model MLP: value_model[0].module
-        value_mlp = value_model.module[0].module
-        value_model.module[0].module = torch.compile(value_mlp, backend=backend)
-
-        torchrl_logger.info(
-            f"Compiled 4 MLP sub-modules with backend={backend}, "
-            f"suppress_errors=True (RSSM + loss modules stay eager)"
-        )
-
-    # ========================================================================
     # Training config
     # ========================================================================
     total_optim_steps = cfg.optimization.total_optim_steps
     log_every = cfg.optimization.log_every
     grad_clip = cfg.optimization.grad_clip
-    # How often to sync weights from training policy to collector policy
-    weight_sync_every = cfg.collector.optim_steps_per_collect
+    optim_steps_per_collect = cfg.collector.optim_steps_per_collect
 
     pbar = tqdm.tqdm(total=total_optim_steps, desc="Optim steps")
     t_log_start = time.time()
     frames_at_log_start = 0
-
-    # ========================================================================
-    # Start async collection in background thread
-    # ========================================================================
-    collection_stats = {
-        "collected_frames": 0,
-        "last_mean_reward": float("nan"),
-        "last_episodes_done": 0,
-    }
-    stop_event = threading.Event()
-    collector_thread = threading.Thread(
-        target=_collect_loop,
-        args=(collector, replay_buffer, stop_event, collection_stats),
-        daemon=True,
-    )
+    collected_frames = 0
+    optim_step = 0
+    last_mean_reward = float("nan")
 
     torchrl_logger.info(
-        f"Starting async training: {total_optim_steps} optim steps, "
-        f"weight_sync_every={weight_sync_every}, "
+        f"Starting synchronous training: {total_optim_steps} optim steps, "
+        f"optim_steps_per_collect={optim_steps_per_collect}, "
         f"frames_per_batch={cfg.collector.frames_per_batch}, "
         f"init_random_frames={cfg.collector.init_random_frames}"
     )
-    collector_thread.start()
-
-    # Wait for enough data before starting training
-    init_random_frames = cfg.collector.init_random_frames
-    while collection_stats["collected_frames"] < init_random_frames:
-        time.sleep(0.1)
-
-    torchrl_logger.info(
-        f"Init data collected: {collection_stats['collected_frames']} frames. "
-        f"Starting training on {train_device}."
-    )
 
     # ========================================================================
-    # Main training loop (runs on train_device, async with collection)
+    # Main training loop: synchronous collect → train
     # ========================================================================
-    for optim_step in range(total_optim_steps):
-        pbar.update(1)
+    for i_collect, data in enumerate(collector):
+        # ---- Extend replay buffer ----
+        with timeit("collect/extend"):
+            replay_buffer.extend(data)
+        collected_frames += data.numel()
 
-        # Sample from replay buffer (prefetched to train_device)
-        with timeit("train/sample"), record_function("## train/sample ##"):
-            sampled_tensordict = replay_buffer.sample()
-            # With strict_length=False, the sample numel may not be
-            # exactly divisible by batch_length. Truncate to make it so.
-            numel = sampled_tensordict.numel()
-            usable = (numel // batch_length) * batch_length
-            if usable < numel:
-                sampled_tensordict = sampled_tensordict[:usable]
-            sampled_tensordict = sampled_tensordict.reshape(-1, batch_length)
+        # Track episode rewards from completed episodes
+        done_mask = data["next", "done"].squeeze(-1)
+        if done_mask.any():
+            episode_rewards = data["next", "episode_reward"][done_mask]
+            last_mean_reward = episode_rewards.mean().item()
 
-        # --- World model update ---
-        with timeit("train/world_model-forward"), record_function(
-            "## world_model/forward ##"
-        ):
-            torch.compiler.cudagraph_mark_step_begin()
-            with torch.autocast(
-                device_type=train_device.type, dtype=autocast_dtype
-            ) if autocast_dtype else contextlib.nullcontext():
-                model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
-                loss_world_model = (
-                    model_loss_td["loss_model_kl"]
-                    + model_loss_td["loss_model_reco"]
-                    + model_loss_td["loss_model_reward"]
+        # Skip training on first batch (random exploration data)
+        if i_collect == 0:
+            torchrl_logger.info(
+                f"Init data collected: {collected_frames} frames. "
+                f"Starting training on {train_device}."
+            )
+            continue
+
+        # ---- Train for optim_steps_per_collect steps ----
+        for _j in range(optim_steps_per_collect):
+            if optim_step >= total_optim_steps:
+                break
+            pbar.update(1)
+
+            # Sample from replay buffer
+            with timeit("train/sample"), record_function("## train/sample ##"):
+                sampled_tensordict = replay_buffer.sample()
+                # With strict_length=False, the sample numel may not be
+                # exactly divisible by batch_length. Truncate to make it so.
+                numel = sampled_tensordict.numel()
+                usable = (numel // batch_length) * batch_length
+                if usable < numel:
+                    sampled_tensordict = sampled_tensordict[:usable]
+                sampled_tensordict = sampled_tensordict.reshape(-1, batch_length)
+
+            # --- World model update ---
+            with timeit("train/world_model-forward"), record_function(
+                "## world_model/forward ##"
+            ):
+                torch.compiler.cudagraph_mark_step_begin()
+                with torch.autocast(
+                    device_type=train_device.type, dtype=autocast_dtype
+                ) if autocast_dtype else contextlib.nullcontext():
+                    model_loss_td, sampled_tensordict = world_model_loss(
+                        sampled_tensordict
+                    )
+                    loss_world_model = (
+                        model_loss_td["loss_model_kl"]
+                        + model_loss_td["loss_model_reco"]
+                        + model_loss_td["loss_model_reward"]
+                    )
+
+            with timeit("train/world_model-backward"), record_function(
+                "## world_model/backward ##"
+            ):
+                world_model_opt.zero_grad()
+                if use_scaler:
+                    scaler1.scale(loss_world_model).backward()
+                    scaler1.unscale_(world_model_opt)
+                else:
+                    loss_world_model.backward()
+                world_model_grad = clip_grad_norm_(world_model.parameters(), grad_clip)
+                if use_scaler:
+                    scaler1.step(world_model_opt)
+                    scaler1.update()
+                else:
+                    world_model_opt.step()
+
+            # --- Actor update ---
+            with timeit("train/actor-forward"), record_function("## actor/forward ##"):
+                torch.compiler.cudagraph_mark_step_begin()
+                with torch.autocast(
+                    device_type=train_device.type, dtype=autocast_dtype
+                ) if autocast_dtype else contextlib.nullcontext():
+                    actor_loss_td, sampled_tensordict = actor_loss(
+                        sampled_tensordict.reshape(-1)
+                    )
+
+            with timeit("train/actor-backward"), record_function(
+                "## actor/backward ##"
+            ):
+                actor_opt.zero_grad()
+                if use_scaler:
+                    scaler2.scale(actor_loss_td["loss_actor"]).backward()
+                    scaler2.unscale_(actor_opt)
+                else:
+                    actor_loss_td["loss_actor"].backward()
+                actor_model_grad = clip_grad_norm_(actor_model.parameters(), grad_clip)
+                if use_scaler:
+                    scaler2.step(actor_opt)
+                    scaler2.update()
+                else:
+                    actor_opt.step()
+
+            # --- Value update ---
+            with timeit("train/value-forward"), record_function("## value/forward ##"):
+                torch.compiler.cudagraph_mark_step_begin()
+                with torch.autocast(
+                    device_type=train_device.type, dtype=autocast_dtype
+                ) if autocast_dtype else contextlib.nullcontext():
+                    value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
+
+            with timeit("train/value-backward"), record_function(
+                "## value/backward ##"
+            ):
+                value_opt.zero_grad()
+                if use_scaler:
+                    scaler3.scale(value_loss_td["loss_value"]).backward()
+                    scaler3.unscale_(value_opt)
+                else:
+                    value_loss_td["loss_value"].backward()
+                critic_model_grad = clip_grad_norm_(value_model.parameters(), grad_clip)
+                if use_scaler:
+                    scaler3.step(value_opt)
+                    scaler3.update()
+                else:
+                    value_opt.step()
+
+            optim_step += 1
+
+            # ============================================================
+            # Logging
+            # ============================================================
+            if optim_step % log_every == 0:
+                t_log_end = time.time()
+                log_interval_time = t_log_end - t_log_start
+                frames_this_interval = collected_frames - frames_at_log_start
+
+                fps = (
+                    frames_this_interval / log_interval_time
+                    if log_interval_time > 0
+                    else 0
+                )
+                ops = log_every / log_interval_time if log_interval_time > 0 else 0
+                opf = optim_step / collected_frames if collected_frames > 0 else 0
+
+                pbar.set_postfix(
+                    fps=f"{fps:.1f}",
+                    ops=f"{ops:.1f}",
+                    opf=f"{opf:.2f}",
+                    frames=collected_frames,
                 )
 
-        with timeit("train/world_model-backward"), record_function(
-            "## world_model/backward ##"
-        ):
-            world_model_opt.zero_grad()
-            if use_scaler:
-                scaler1.scale(loss_world_model).backward()
-                scaler1.unscale_(world_model_opt)
-            else:
-                loss_world_model.backward()
-            world_model_grad = clip_grad_norm_(world_model.parameters(), grad_clip)
-            if use_scaler:
-                scaler1.step(world_model_opt)
-                scaler1.update()
-            else:
-                world_model_opt.step()
+                sampled_reward = sampled_tensordict.get(("next", "reward"))
+                reward_mean = sampled_reward.mean().item()
+                reward_std = sampled_reward.std().item()
 
-        # --- Actor update ---
-        with timeit("train/actor-forward"), record_function("## actor/forward ##"):
-            torch.compiler.cudagraph_mark_step_begin()
-            with torch.autocast(
-                device_type=train_device.type, dtype=autocast_dtype
-            ) if autocast_dtype else contextlib.nullcontext():
-                actor_loss_td, sampled_tensordict = actor_loss(
-                    sampled_tensordict.reshape(-1)
-                )
+                metrics = {
+                    "loss_model_kl": model_loss_td["loss_model_kl"].item(),
+                    "loss_model_reco": model_loss_td["loss_model_reco"].item(),
+                    "loss_model_reward": model_loss_td["loss_model_reward"].item(),
+                    "loss_actor": actor_loss_td["loss_actor"].item(),
+                    "loss_value": value_loss_td["loss_value"].item(),
+                    "world_model_grad": world_model_grad,
+                    "actor_model_grad": actor_model_grad,
+                    "critic_model_grad": critic_model_grad,
+                    "train/reward_mean": reward_mean,
+                    "train/reward_std": reward_std,
+                    "train/episode_reward": last_mean_reward,
+                    "throughput/fps": fps,
+                    "throughput/ops": ops,
+                    "throughput/opf": opf,
+                    "collected_frames": collected_frames,
+                    **timeit.todict(prefix="time"),
+                }
 
-        with timeit("train/actor-backward"), record_function("## actor/backward ##"):
-            actor_opt.zero_grad()
-            if use_scaler:
-                scaler2.scale(actor_loss_td["loss_actor"]).backward()
-                scaler2.unscale_(actor_opt)
-            else:
-                actor_loss_td["loss_actor"].backward()
-            actor_model_grad = clip_grad_norm_(actor_model.parameters(), grad_clip)
-            if use_scaler:
-                scaler2.step(actor_opt)
-                scaler2.update()
-            else:
-                actor_opt.step()
+                if logger is not None:
+                    log_metrics(logger, metrics, collected_frames)
 
-        # --- Value update ---
-        with timeit("train/value-forward"), record_function("## value/forward ##"):
-            torch.compiler.cudagraph_mark_step_begin()
-            with torch.autocast(
-                device_type=train_device.type, dtype=autocast_dtype
-            ) if autocast_dtype else contextlib.nullcontext():
-                value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
+                t_log_start = time.time()
+                frames_at_log_start = collected_frames
 
-        with timeit("train/value-backward"), record_function("## value/backward ##"):
-            value_opt.zero_grad()
-            if use_scaler:
-                scaler3.scale(value_loss_td["loss_value"]).backward()
-                scaler3.unscale_(value_opt)
-            else:
-                value_loss_td["loss_value"].backward()
-            critic_model_grad = clip_grad_norm_(value_model.parameters(), grad_clip)
-            if use_scaler:
-                scaler3.step(value_opt)
-                scaler3.update()
-            else:
-                value_opt.step()
+        # ---- Sync weights to collector policy ----
+        weights = TensorDict.from_module(policy)
+        collector.update_policy_weights_(weights)
+        policy[1].step(optim_steps_per_collect)  # Update exploration noise schedule
 
-        # Sync training weights to collector policy
-        if (optim_step + 1) % weight_sync_every == 0:
-            with timeit("train/weight_sync"):
-                weights = TensorDict.from_module(policy)
-                collector.update_policy_weights_(weights)
-                policy[1].step(weight_sync_every)  # Update exploration noise schedule
-
-        # ============================================================
-        # Logging
-        # ============================================================
-        collected_frames = collection_stats["collected_frames"]
-        if (optim_step + 1) % log_every == 0:
-            t_log_end = time.time()
-            log_interval_time = t_log_end - t_log_start
-            frames_this_interval = collected_frames - frames_at_log_start
-
-            fps = (
-                frames_this_interval / log_interval_time if log_interval_time > 0 else 0
-            )
-            ops = log_every / log_interval_time if log_interval_time > 0 else 0
-            opf = (optim_step + 1) / collected_frames if collected_frames > 0 else 0
-
-            pbar.set_postfix(
-                fps=f"{fps:.1f}",
-                ops=f"{ops:.1f}",
-                opf=f"{opf:.2f}",
-                frames=collected_frames,
-            )
-
-            sampled_reward = sampled_tensordict.get(("next", "reward"))
-            reward_mean = sampled_reward.mean().item()
-            reward_std = sampled_reward.std().item()
-
-            metrics = {
-                "loss_model_kl": model_loss_td["loss_model_kl"].item(),
-                "loss_model_reco": model_loss_td["loss_model_reco"].item(),
-                "loss_model_reward": model_loss_td["loss_model_reward"].item(),
-                "loss_actor": actor_loss_td["loss_actor"].item(),
-                "loss_value": value_loss_td["loss_value"].item(),
-                "world_model_grad": world_model_grad,
-                "actor_model_grad": actor_model_grad,
-                "critic_model_grad": critic_model_grad,
-                "train/reward_mean": reward_mean,
-                "train/reward_std": reward_std,
-                "train/episode_reward": collection_stats["last_mean_reward"],
-                "throughput/fps": fps,
-                "throughput/ops": ops,
-                "throughput/opf": opf,
-                "collected_frames": collected_frames,
-                **timeit.todict(prefix="time"),
-            }
-
-            if logger is not None:
-                log_metrics(logger, metrics, collected_frames)
-
-            t_log_start = time.time()
-            frames_at_log_start = collected_frames
+        if optim_step >= total_optim_steps:
+            break
 
     # ========================================================================
     # Cleanup
     # ========================================================================
     pbar.close()
-    stop_event.set()
-    collector_thread.join(timeout=30)
     if not train_env.is_closed:
         train_env.close()
     collector.shutdown()
