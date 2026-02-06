@@ -309,6 +309,63 @@ pip<span class="w"> </span>install<span class="w"> </span>dm-env<span class="w">
 <h3>2. EGL/rendering issues<a class="headerlink" href="#egl-rendering-issues" title="Link to this heading">¶</a></h3>
 <p>See <a class="reference internal" href="#./MUJOCO_INSTALLATION.md"><span class="xref myst">MUJOCO_INSTALLATION.md</span></a> for rendering-related
 issues, as dm_control uses MuJoCo for rendering.</p>
+<section id="egl-multi-gpu-device-selection-in-containers-docker-slurm">
+<h4>EGL multi-GPU device selection in containers (Docker / SLURM)<a class="headerlink" href="#egl-multi-gpu-device-selection-in-containers-docker-slurm" title="Link to this heading">¶</a></h4>
+<p>When running <code class="docutils literal notranslate"><span class="pre">ParallelEnv</span></code> with pixel-based dm_control environments on a
+multi-GPU machine, all rendering contends on a <strong>single GPU</strong> — even if the
+host has 8 GPUs. This inflates per-worker render time by ~3x (e.g. 17ms serial
+→ 54ms with 8 workers sharing one GPU’s EGL queue).</p>
+<p><strong>Root cause:</strong> Inside Docker or SLURM containers, the NVIDIA container runtime
+only exposes the GPU(s) assigned to the job to EGL. <code class="docutils literal notranslate"><span class="pre">eglQueryDevicesEXT()</span></code>
+returns 1 device regardless of how many physical GPUs the host has.
+Setting <code class="docutils literal notranslate"><span class="pre">MUJOCO_EGL_DEVICE_ID</span></code> or <code class="docutils literal notranslate"><span class="pre">EGL_DEVICE_ID</span></code> to anything other than 0
+raises:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="ne">RuntimeError</span><span class="p">:</span> <span class="n">MUJOCO_EGL_DEVICE_ID</span> <span class="n">must</span> <span class="n">be</span> <span class="n">an</span> <span class="n">integer</span> <span class="n">between</span> <span class="mi">0</span> <span class="ow">and</span> <span class="mi">0</span> <span class="p">(</span><span class="n">inclusive</span><span class="p">),</span> <span class="n">got</span> <span class="mf">1.</span>
+</pre></div>
+</div>
+<p>Unsetting <code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code> in the worker does <strong>not</strong> help — the
+container isolation happens at the NVIDIA driver/runtime level, below the
+environment variable.</p>
+<p><strong>Note on variable naming:</strong> dm_control uses <code class="docutils literal notranslate"><span class="pre">MUJOCO_EGL_DEVICE_ID</span></code> internally
+(which maps to the same thing as MuJoCo’s variable). Historically there was
+also <code class="docutils literal notranslate"><span class="pre">EGL_DEVICE_ID</span></code> used by older dm_control versions. See
+<a class="reference external" href="https://github.com/google-deepmind/dm_control/issues/345">dm_control#345</a>
+for the unification discussion.</p>
+<p><strong>Upstream issues:</strong></p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://github.com/google-deepmind/mujoco/issues/572">mujoco#572 — Cannot access all GPUs through EGL devices when using docker</a></p></li>
+<li><p><a class="reference external" href="https://github.com/google-deepmind/dm_control/issues/345">dm_control#345 — Unify EGL_DEVICE_ID with MUJOCO_EGL_DEVICE_ID</a></p></li>
+</ul>
+<p><strong>Workarounds:</strong></p>
+<ol class="arabic simple">
+<li><p><strong>Configure container for full GPU access.</strong> If you control the container
+runtime, set <code class="docutils literal notranslate"><span class="pre">NVIDIA_VISIBLE_DEVICES=all</span></code> and
+<code class="docutils literal notranslate"><span class="pre">NVIDIA_DRIVER_CAPABILITIES=all</span></code> so EGL can see all GPUs. Then assign
+<code class="docutils literal notranslate"><span class="pre">MUJOCO_EGL_DEVICE_ID=&lt;worker_idx</span> <span class="pre">%</span> <span class="pre">num_gpus&gt;</span></code> per worker process
+<strong>before</strong> dm_control is imported (the EGL display is created at import
+time).</p></li>
+<li><p><strong>Run outside containers.</strong> On bare metal, <code class="docutils literal notranslate"><span class="pre">eglQueryDevicesEXT()</span></code> correctly
+returns all GPUs (plus the X server display, if any).</p></li>
+<li><p><strong>Reduce rendering overhead.</strong> If multi-GPU rendering is not possible:</p>
+<ul class="simple">
+<li><p>Lower the rendering resolution (e.g. 64x64 instead of 84x84)</p></li>
+<li><p>Render at a lower frequency than the simulation step (frame-skip)</p></li>
+<li><p>Use state-only observations where possible — the IPC overhead is small
+compared to rendering</p></li>
+</ul>
+</li>
+</ol>
+</section>
+<section id="no-batched-rendering-support-in-mujoco">
+<h4>No batched rendering support in MuJoCo<a class="headerlink" href="#no-batched-rendering-support-in-mujoco" title="Link to this heading">¶</a></h4>
+<p>MuJoCo does not support batched GPU rendering — each environment renders its
+scene independently through its own OpenGL context. There is no API to submit
+multiple scenes to the GPU in one call.</p>
+<p>MuJoCo XLA (MJX) accelerates <em>simulation</em> on GPU via JAX but still requires
+copying data back to CPU for rendering through the standard <code class="docutils literal notranslate"><span class="pre">mujoco.Renderer</span></code>
+pipeline. See <a class="reference external" href="https://github.com/google-deepmind/mujoco/issues/1604">mujoco#1604</a>
+for discussion on batched rendering support.</p>
+</section>
 </section>
 <section id="macos-arm64-apple-silicon-specific-issues">
 <h3>3. macOS ARM64 (Apple Silicon) specific issues<a class="headerlink" href="#macos-arm64-apple-silicon-specific-issues" title="Link to this heading">¶</a></h3>
@@ -390,7 +447,11 @@ arch<span class="w"> </span>-arm64<span class="w"> </span>pyenv<span class="w"> 
 <li><a class="reference internal" href="#option-3-install-dm-control-without-labmaze">Option 3: Install dm_control without labmaze</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#egl-rendering-issues">2. EGL/rendering issues</a></li>
+<li><a class="reference internal" href="#egl-rendering-issues">2. EGL/rendering issues</a><ul>
+<li><a class="reference internal" href="#egl-multi-gpu-device-selection-in-containers-docker-slurm">EGL multi-GPU device selection in containers (Docker / SLURM)</a></li>
+<li><a class="reference internal" href="#no-batched-rendering-support-in-mujoco">No batched rendering support in MuJoCo</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#macos-arm64-apple-silicon-specific-issues">3. macOS ARM64 (Apple Silicon) specific issues</a></li>
 </ul>
 </li>
