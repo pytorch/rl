@@ -393,8 +393,12 @@ def _make_env(cfg, device, from_pixels=False):
         "state": Unbounded(shape=(cfg.networks.state_dim,)),
         "belief": Unbounded(shape=(cfg.networks.rssm_hidden_dim,)),
     }
+    # expand_specs=True allows primers to auto-expand to the env's batch_size
+    # (needed for pre-vectorized envs like IsaacLab with batch_size=(4096,))
     env = env.append_transform(
-        TensorDictPrimer(random=False, default_value=0, **default_dict)
+        TensorDictPrimer(
+            random=False, default_value=0, expand_specs=True, **default_dict
+        )
     )
     return env
 
