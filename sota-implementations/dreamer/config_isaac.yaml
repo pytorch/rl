@@ -40,9 +40,9 @@ optimization:
     enabled: True
     backend: inductor
     cudagraphs: False
-  # bfloat16 autocast: ~2x faster matmuls on H200 tensor cores.
-  # Works independently of torch.compile.
-  autocast: bfloat16
+  # Autocast disabled: Dreamer's world model produces NaN grads with
+  # mixed precision from iteration 1. Needs investigation.
+  autocast: false
 
 networks:
   exploration_noise: 0.3
