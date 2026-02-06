@@ -1630,14 +1630,15 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         # Eliminates futex syscalls from mp.Event on the critical path.
         self._shm_done_flags = mp.RawArray("b", _num_workers)
 
-        kwargs = [
-            {
-                "mp_event": self._events[i],
-                "worker_idx": i,
-                "shm_done_flags": self._shm_done_flags,
-            }
-            for i in range(_num_workers)
-        ]
+        kwargs = [{"mp_event": self._events[i]} for i in range(_num_workers)]
+        if self._use_buffers:
+            for i in range(_num_workers):
+                kwargs[i].update(
+                    {
+                        "worker_idx": i,
+                        "shm_done_flags": self._shm_done_flags,
+                    }
+                )
         with clear_mpi_env_vars():
             for idx in range(_num_workers):
                 if self._verbose:
