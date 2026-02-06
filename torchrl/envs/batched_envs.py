@@ -1892,33 +1892,44 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         device = self.device
-        if shared_tensordict_parent.device == device:
+        shared_device = shared_tensordict_parent.device
+        if shared_device == device:
             next_td = next_td.clone()
             tensordict_ = tensordict_.clone()
         elif device is not None:
-            next_td = next_td._fast_apply(
-                lambda x: x.to(device, non_blocking=self.non_blocking)
-                if x.device != device
-                else x.clone(),
-                device=device,
-                filter_empty=True,
-            )
-            tensordict_ = tensordict_._fast_apply(
-                lambda x: x.to(device, non_blocking=self.non_blocking)
-                if x.device != device
-                else x.clone(),
-                device=device,
-                filter_empty=True,
-            )
-            if tensordict.device != device:
-                tensordict = tensordict._fast_apply(
-                    lambda x: x.to(device, non_blocking=self.non_blocking)
-                    if x.device != device
-                    else x,
+            _non_blocking = self.non_blocking
+            if shared_device is not None and shared_device != device:
+                # Fast path: all tensors on one device, transferring to another.
+                # .to(device) creates new tensors so no need for per-tensor clone.
+                next_td = next_td.to(device, non_blocking=_non_blocking)
+                tensordict_ = tensordict_.to(device, non_blocking=_non_blocking)
+                if tensordict.device != device:
+                    tensordict = tensordict.to(device, non_blocking=_non_blocking)
+            else:
+                # Mixed devices: per-tensor check needed
+                def _to_or_clone(x, _device=device, _nb=_non_blocking):
+                    if x.device != _device:
+                        return x.to(_device, non_blocking=_nb)
+                    return x.clone()
+
+                next_td = next_td._fast_apply(
+                    _to_or_clone,
                     device=device,
                     filter_empty=True,
                 )
-            self._sync_w2m()
+                tensordict_ = tensordict_._fast_apply(
+                    _to_or_clone,
+                    device=device,
+                    filter_empty=True,
+                )
+                if tensordict.device != device:
+                    tensordict = tensordict._fast_apply(
+                        _to_or_clone,
+                        device=device,
+                        filter_empty=True,
+                    )
+            if shared_device != device:
+                self._sync_w2m()
         else:
             next_td = next_td.clone().clear_device_()
             tensordict_ = tensordict_.clone().clear_device_()
