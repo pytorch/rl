@@ -221,10 +221,11 @@ IsaacLab typically runs one simulation per process. Creating a second env for ev
 
 ### Throughput
 
-With 4096 parallel envs:
+Measured on a single NVIDIA H200 with 4096 parallel envs:
+- **~15,600 fps** data collection throughput
+- **~7.5 optim steps/sec** during gradient updates (without compile/autocast)
 - One env step = 4096 frames
-- 10 steps per collection = 40,960 frames
-- At ~1ms per step, one collection takes ~10ms
+- 50 steps per collection = 204,800 frames
 - This is orders of magnitude faster than DMControl (which needs 7 multiprocess workers)
 
 ### Config Differences from DMControl
@@ -234,8 +235,10 @@ With 4096 parallel envs:
 | `env.backend` | `dm_control` | `isaaclab` |
 | `env.from_pixels` | `True` | `False` |
 | `collector.num_collectors` | `7` | N/A (single Collector) |
-| `collector.frames_per_batch` | `1000` | `40960` |
+| `collector.frames_per_batch` | `1000` | `204800` |
 | `collector.init_random_frames` | `10000` | `204800` |
+| `optimization.compile.enabled` | `True` | `False` (container compat) |
+| `optimization.autocast` | `bfloat16` | `false` (container compat) |
 
 ## Gotchas and Traps
 
@@ -256,3 +259,42 @@ With 4096 parallel envs:
 8. **Zombie processes**: IsaacLab can leave orphan processes. Always `pkill -9 python` before relaunching (handled in `setup-and-run.sh`).
 
 9. **Installing torchrl in Isaac container**: Use `--no-build-isolation --no-deps` to avoid conflicts with Isaac's pre-installed torch/numpy.
+
+10. **`TensorDictPrimer` expand_specs**: When adding primers (e.g., `state`, `belief`) to a pre-vectorized env, you MUST pass `expand_specs=True` to `TensorDictPrimer`. Otherwise the primer shapes `()` conflict with the env's batch_size `(4096,)`.
+
+11. **Model-based env spec double-batching**: `model_based_env.set_specs_from_env(batched_env)` copies specs with batch dims baked in. The model-based env then double-batches actions during sampling (e.g., `(4096, 4096, 8)` instead of `(4096, 8)`). **Fix**: unbatch the model-based env's specs after copying:
+    ```python
+    model_based_env.set_specs_from_env(test_env)
+    if test_env.batch_size:
+        idx = (0,) * len(test_env.batch_size)
+        model_based_env.__dict__["_output_spec"] = model_based_env.__dict__["_output_spec"][idx]
+        model_based_env.__dict__["_input_spec"] = model_based_env.__dict__["_input_spec"][idx]
+        model_based_env.empty_cache()
+    ```
+
+12. **`torch.compile` incompatibility**: The `tensordict` version bundled in the IsaacLab container (`_isaac_sim/kit/python/lib/python3.11/site-packages/tensordict/`) has a different internal API (`_tensordict` attribute) than the latest git version. `torch.compile`/dynamo traces through TensorDict internals and triggers `AttributeError: 'TensorDict' object has no attribute '_tensordict'`. **Fix**: disable `torch.compile` and `autocast` in the Isaac config until the container's tensordict is updated.
+
+13. **SliceSampler with strict_length=False**: The sampler may return fewer elements than `batch_size` (e.g., 9999 instead of 10000) when some trajectories are shorter than `slice_len`. This causes `reshape(-1, batch_length)` to fail. **Fix**: truncate the sample to make `numel` divisible by `batch_length`:
+    ```python
+    sample = replay_buffer.sample()
+    numel = sample.numel()
+    usable = (numel // batch_length) * batch_length
+    if usable < numel:
+        sample = sample[:usable]
+    sample = sample.reshape(-1, batch_length)
+    ```
+
+14. **`frames_per_batch` vs `batch_length`**: Each collection adds `frames_per_batch / num_envs` time steps per env. The `SliceSampler` needs contiguous sequences of at least `batch_length` steps within a single trajectory. Ensure `frames_per_batch >= batch_length * num_envs` for the initial collection, or that `init_random_frames >= batch_length * num_envs`.
+
+15. **TERM environment variable**: The Isaac container may not have `TERM` set, causing `isaaclab.sh` to print `'': unknown terminal type`. **Fix**: `export TERM="${TERM:-xterm}"`.
+
+16. **`rsync` not installed**: The IsaacLab container does not ship with `rsync`. Install with `apt-get install -y rsync` if needed for file transfer.
+
+17. **`gym.make` requires `cfg` argument**: IsaacLab environments require an explicit configuration object. Resolve it dynamically:
+    ```python
+    spec = gymnasium.spec(env_name)
+    entry = spec.kwargs["env_cfg_entry_point"]
+    module_path, class_name = entry.rsplit(":", 1)
+    env_cfg = getattr(importlib.import_module(module_path), class_name)()
+    env = gymnasium.make(env_name, cfg=env_cfg)
+    ```
