@@ -9,6 +9,10 @@ env:
   image_size : 64
   horizon: 500
   n_parallel_envs: 8
+  # Environment batching mode: "parallel" (default, uses ParallelEnv with IPC)
+  # or "serial" (uses SerialEnv, avoids IPC overhead — useful for cheap envs
+  # or when GPU contention between collector workers degrades throughput)
+  parallel_env_mode: parallel
   device: cpu
 
 collector:
@@ -18,6 +22,11 @@ collector:
   # On multi-GPU: must be <= num_gpus - 1 (cuda:0 reserved for training)
   num_collectors: 7
   device:
+  # Compile policy for collection (experimental)
+  compile:
+    enabled: True
+    backend: inductor
+    cudagraphs: True
 
 optimization:
   # Total number of optimization steps (the main training target)
