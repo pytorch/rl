@@ -39,9 +39,9 @@ optimization:
     backend: inductor
     cudagraphs: False
     losses: ["actor", "value"]
-  # Disabled for now: autocast + IsaacLab container tensordict causes
-  # dtype-related recompilation storms in dynamo.
-  autocast: false
+  # bfloat16 autocast: ~2x faster matmuls on H200 tensor cores.
+  # Works independently of torch.compile.
+  autocast: bfloat16
 
 networks:
   exploration_noise: 0.3
