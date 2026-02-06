@@ -310,6 +310,10 @@ def main(cfg: DictConfig):
             # Sample from replay buffer
             with timeit("train/sample"), record_function("## train/sample ##"):
                 sampled_tensordict = replay_buffer.sample()
+                torchrl_logger.info(
+                    f"Sample shape: {sampled_tensordict.batch_size}, "
+                    f"numel={sampled_tensordict.numel()}"
+                )
                 # Flatten env batch dims (if any) and reshape to (num_slices, batch_length)
                 sampled_tensordict = sampled_tensordict.reshape(-1, batch_length)
 
