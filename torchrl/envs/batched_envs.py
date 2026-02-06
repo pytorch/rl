@@ -1677,15 +1677,16 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             prof_handle = _prof_env_module.profiler._prof_handle
             prof_shm_name = getattr(prof_handle, "shm_name", None)
 
-        kwargs = [
-            {
-                "mp_event": self._events[i],
-                "prof_shm_name": prof_shm_name,
-                "worker_idx": i,
-                "shm_done_flags": self._shm_done_flags,
-            }
-            for i in range(_num_workers)
-        ]
+        kwargs = [{"mp_event": self._events[i]} for i in range(_num_workers)]
+        if self._use_buffers:
+            for i in range(_num_workers):
+                kwargs[i].update(
+                    {
+                        "prof_shm_name": prof_shm_name,
+                        "worker_idx": i,
+                        "shm_done_flags": self._shm_done_flags,
+                    }
+                )
         with clear_mpi_env_vars():
             for idx in range(_num_workers):
                 if self._verbose:
