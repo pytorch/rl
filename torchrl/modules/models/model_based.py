@@ -496,6 +496,13 @@ class RSSMPrior(nn.Module):
         Returns:
             Tuple of (prior_mean, prior_std, state, belief).
         """
+        # DEBUG: print shapes
+        from torchrl import logger as _dbg_logger
+
+        _dbg_logger.info(
+            f"RSSMPrior.forward: state.shape={state.shape}, "
+            f"action.shape={action.shape}, belief.shape={belief.shape}"
+        )
         projector_input = torch.cat([state, action], dim=-1)
         action_state = self.action_state_projector(projector_input)
         unsqueeze = False
