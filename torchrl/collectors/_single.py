@@ -11,6 +11,22 @@ from typing import Any
 
 import torch
 
+try:
+    import prof as _prof_collector_module
+except ImportError:
+    _prof_collector_module = None
+
+
+def _prof_ctx(name):
+    """Return a prof.profile context manager if prof is available and initialized, else nullcontext."""
+    if (
+        _prof_collector_module is not None
+        and _prof_collector_module.profiler._prof_handle is not None
+    ):
+        return _prof_collector_module.profile(name)
+    return contextlib.nullcontext()
+
+
 from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict.nn import CudaGraphModule, TensorDictModule, TensorDictModuleBase
 from torch import nn
@@ -1655,16 +1671,17 @@ class Collector(BaseCollector):
                     else:
                         policy_input = self._carrier
                     # we still do the assignment for security
-                    if self.compiled_policy:
-                        cudagraph_mark_step_begin()
-                    policy_output = self._wrapped_policy(policy_input)
-                    if self.compiled_policy:
-                        policy_output = policy_output.clone()
-                    if self._carrier is not policy_output:
-                        # ad-hoc update shuttle
-                        self._carrier.update(
-                            policy_output, keys_to_update=self._policy_output_keys
-                        )
+                    with _prof_ctx("collector.policy_call"):
+                        if self.compiled_policy:
+                            cudagraph_mark_step_begin()
+                        policy_output = self._wrapped_policy(policy_input)
+                        if self.compiled_policy:
+                            policy_output = policy_output.clone()
+                        if self._carrier is not policy_output:
+                            # ad-hoc update shuttle
+                            self._carrier.update(
+                                policy_output, keys_to_update=self._policy_output_keys
+                            )
 
                 if self._cast_to_env_device:
                     if self.env_device is not None:
@@ -1683,7 +1700,10 @@ class Collector(BaseCollector):
                         env_input = self._carrier
                 else:
                     env_input = self._carrier
-                env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
+                with _prof_ctx("collector.env_step"):
+                    env_output, env_next_output = self.env.step_and_maybe_reset(
+                        env_input
+                    )
 
                 if self._carrier is not env_output:
                     # ad-hoc update shuttle
@@ -1702,19 +1722,21 @@ class Collector(BaseCollector):
                     if self._increment_frames(self._carrier.numel()):
                         return
                 else:
-                    if self.storing_device is not None:
-                        non_blocking = (
-                            not self.no_cuda_sync or self.storing_device.type == "cuda"
-                        )
-                        tensordicts.append(
-                            self._carrier.to(
-                                self.storing_device, non_blocking=non_blocking
+                    with _prof_ctx("collector.to_device"):
+                        if self.storing_device is not None:
+                            non_blocking = (
+                                not self.no_cuda_sync
+                                or self.storing_device.type == "cuda"
                             )
-                        )
-                        if not self.no_cuda_sync:
-                            self._sync_storage()
-                    else:
-                        tensordicts.append(self._carrier)
+                            tensordicts.append(
+                                self._carrier.to(
+                                    self.storing_device, non_blocking=non_blocking
+                                )
+                            )
+                            if not self.no_cuda_sync:
+                                self._sync_storage()
+                        else:
+                            tensordicts.append(self._carrier)
 
                 # carry over collector data without messing up devices
                 collector_data = self._carrier.get("collector").copy()
@@ -1760,39 +1782,40 @@ class Collector(BaseCollector):
                         result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
                     break
             else:
-                if self._use_buffers:
-                    result = self._final_rollout
-                    try:
-                        result = torch.stack(
-                            tensordicts,
-                            self._final_rollout.ndim - 1,
-                            out=self._final_rollout,
-                        )
-
-                    except RuntimeError:
-                        with self._final_rollout.unlock_():
+                with _prof_ctx("collector.stack_results"):
+                    if self._use_buffers:
+                        result = self._final_rollout
+                        try:
                             result = torch.stack(
                                 tensordicts,
                                 self._final_rollout.ndim - 1,
                                 out=self._final_rollout,
                             )
-                elif (
-                    self.replay_buffer is not None
-                    and not self._ignore_rb
-                    and not self.extend_buffer
-                ):
-                    return
-                elif (
-                    self.replay_buffer is not None
-                    and not self._ignore_rb
-                    and self.extend_buffer
-                ):
-                    # Use lazy stack for direct storage write optimization.
-                    # This avoids creating an intermediate contiguous copy -
-                    # the storage will stack directly into its buffer.
-                    result = LazyStackedTensorDict.lazy_stack(tensordicts, dim=-1)
-                else:
-                    result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
+
+                        except RuntimeError:
+                            with self._final_rollout.unlock_():
+                                result = torch.stack(
+                                    tensordicts,
+                                    self._final_rollout.ndim - 1,
+                                    out=self._final_rollout,
+                                )
+                    elif (
+                        self.replay_buffer is not None
+                        and not self._ignore_rb
+                        and not self.extend_buffer
+                    ):
+                        return
+                    elif (
+                        self.replay_buffer is not None
+                        and not self._ignore_rb
+                        and self.extend_buffer
+                    ):
+                        # Use lazy stack for direct storage write optimization.
+                        # This avoids creating an intermediate contiguous copy -
+                        # the storage will stack directly into its buffer.
+                        result = LazyStackedTensorDict.lazy_stack(tensordicts, dim=-1)
+                    else:
+                        result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
                     result.refine_names(..., "time")
 
         return self._maybe_set_truncated(result)

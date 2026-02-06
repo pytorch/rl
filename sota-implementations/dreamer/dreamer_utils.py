@@ -45,6 +45,7 @@ from torchrl.envs import (
     RenameTransform,
     Resize,
     RewardSum,
+    SerialEnv,
     set_gym_backend,
     StepCounter,
     TensorDictPrimer,
@@ -448,7 +449,9 @@ def make_environments(cfg, parallel_envs=1, logger=None):
         # Base env still uses cfg.env.device for compatibility
         env_device = _default_device(cfg.env.device)
         func = functools.partial(_make_env, cfg=cfg, device=env_device)
-        train_env = ParallelEnv(
+        env_mode = getattr(cfg.env, "parallel_env_mode", "parallel")
+        EnvClass = SerialEnv if env_mode == "serial" else ParallelEnv
+        train_env = EnvClass(
             parallel_envs,
             EnvCreator(func),
             serial_for_single=True,
@@ -774,6 +777,16 @@ def make_collector(
     # Allocate devices for collectors (reserves cuda:0 for training if multi-GPU)
     collector_devices = allocate_collector_devices(num_collectors, training_device)
 
+    # Get compilation settings from config
+    compile_cfg = cfg.collector.compile
+    compile_policy = False
+    cudagraph_policy = False
+    if compile_cfg.enabled:
+        # Pass compilation options to workers via compile_policy dict
+        compile_policy = {"backend": compile_cfg.backend}
+        if compile_cfg.cudagraphs:
+            cudagraph_policy = True
+
     collector = MultiCollector(
         create_env_fn=[train_env_factory] * num_collectors,
         policy=actor_model_explore,
@@ -790,6 +803,9 @@ def make_collector(
         track_policy_version=track_policy_version,
         # Skip fake data initialization - storage handles coordination
         local_init_rb=True,
+        # Compile policy in workers (avoids serialization issues)
+        compile_policy=compile_policy,
+        cudagraph_policy=cudagraph_policy,
     )
     collector.set_seed(cfg.env.seed)
 
