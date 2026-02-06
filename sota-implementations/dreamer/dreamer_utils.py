@@ -387,7 +387,12 @@ def _make_env(cfg, device, from_pixels=False):
         env_cfg_cls = getattr(importlib.import_module(module_path), class_name)
         env_cfg = env_cfg_cls()
         env = gym.make(cfg.env.name, cfg=env_cfg)
-        env = IsaacLabWrapper(env)
+        # missing_obs_value=0: IsaacLab auto-resets internally and returns
+        # the correct post-reset observation directly. It does NOT provide
+        # terminal observations in info["final_observation"]. The default
+        # VecGymEnvTransform fills next obs with np.nan for done envs when
+        # final obs are missing, which poisons the replay buffer.
+        env = IsaacLabWrapper(env, missing_obs_value=0)
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")
     default_dict = {
