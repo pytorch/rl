@@ -58,7 +58,7 @@ from tensordict import TensorDict
 from torch.amp import GradScaler
 from torch.autograd.profiler import record_function
 from torch.nn.utils import clip_grad_norm_
-from torchrl._utils import compile_with_warmup, logger as torchrl_logger, timeit
+from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.collectors import Collector
 from torchrl.objectives.dreamer import (
     DreamerActorLoss,
@@ -264,43 +264,48 @@ def main(cfg: DictConfig):
         torch.set_float32_matmul_precision("high")
 
     # ========================================================================
-    # torch.compile
+    # torch.compile -- compile individual MLP sub-modules, not full losses.
+    # The full loss modules use heavy TensorDict operations that dynamo can't
+    # trace reliably with the container's tensordict version. Instead, we
+    # compile the pure-tensor MLP internals (encoder, decoder, reward) and
+    # set suppress_errors=True so dynamo falls back to eager for anything
+    # it can't trace.
     # ========================================================================
     compile_cfg = cfg.optimization.compile
-    compile_enabled = compile_cfg.enabled
-    compile_losses = set(compile_cfg.losses)
-    compile_warmup = 0
-    if compile_enabled:
+    if compile_cfg.enabled:
+        torch._dynamo.config.suppress_errors = True
         torch._dynamo.config.capture_scalar_outputs = True
-        compile_warmup = 3
-        torchrl_logger.info(f"Compiling loss modules with warmup={compile_warmup}")
         backend = compile_cfg.backend
-        compile_options = {"triton.cudagraphs": compile_cfg.cudagraphs}
 
-        if "world_model" in compile_losses:
-            world_model_loss = compile_with_warmup(
-                world_model_loss,
-                backend=backend,
-                fullgraph=False,
-                warmup=compile_warmup,
-                options=compile_options,
-            )
-        if "actor" in compile_losses:
-            actor_loss = compile_with_warmup(
-                actor_loss,
-                backend=backend,
-                fullgraph=False,
-                warmup=compile_warmup,
-                options=compile_options,
-            )
-        if "value" in compile_losses:
-            value_loss = compile_with_warmup(
-                value_loss,
-                backend=backend,
-                fullgraph=False,
-                warmup=compile_warmup,
-                options=compile_options,
-            )
+        # Access inner MLP modules through the world model structure:
+        #   world_model = WorldModelWrapper(transition_model, reward_model)
+        #   transition_model = TensorDictSequential(encoder_td, rssm_rollout, decoder_td)
+        transition_model = world_model.module[0]
+        reward_td = world_model.module[1]
+
+        # Encoder MLP: transition_model[0].module
+        encoder_mlp = transition_model.module[0].module
+        transition_model.module[0].module = torch.compile(encoder_mlp, backend=backend)
+
+        # Decoder MLP: transition_model[2][0].module
+        # (decoder is ProbabilisticTensorDictSequential, first element has the MLP)
+        decoder_mlp = transition_model.module[2].module[0].module
+        transition_model.module[2].module[0].module = torch.compile(
+            decoder_mlp, backend=backend
+        )
+
+        # Reward MLP: reward_model[0].module
+        reward_mlp = reward_td.module[0].module
+        reward_td.module[0].module = torch.compile(reward_mlp, backend=backend)
+
+        # Value model MLP: value_model[0].module
+        value_mlp = value_model.module[0].module
+        value_model.module[0].module = torch.compile(value_mlp, backend=backend)
+
+        torchrl_logger.info(
+            f"Compiled 4 MLP sub-modules with backend={backend}, "
+            f"suppress_errors=True (RSSM + loss modules stay eager)"
+        )
 
     # ========================================================================
     # Training config

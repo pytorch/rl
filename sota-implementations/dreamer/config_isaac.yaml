@@ -34,13 +34,12 @@ optimization:
   lmbda: 0.95
   imagination_horizon: 15
   compile:
-    # Disabled: torch.compile conflicts with the tensordict version
-    # bundled in the IsaacLab container.  Re-enable once IsaacLab ships
-    # a compatible tensordict (or we install from source into the container).
-    enabled: False
+    # Compile individual MLP sub-modules (encoder, decoder, reward, value)
+    # with suppress_errors=True. RSSM and loss modules stay in eager mode
+    # to avoid tensordict compatibility issues.
+    enabled: True
     backend: inductor
     cudagraphs: False
-    losses: ["actor", "value"]
   # bfloat16 autocast: ~2x faster matmuls on H200 tensor cores.
   # Works independently of torch.compile.
   autocast: bfloat16
