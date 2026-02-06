@@ -663,12 +663,23 @@ def make_dreamer(
     # Initialize world model (already on device)
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         tensordict = test_env.rollout(5, auto_cast_to_device=True)
+        torchrl_logger.info(
+            f"Init rollout: batch_size={tensordict.batch_size}, "
+            f"keys={list(tensordict.keys(True, True))}"
+        )
         # For batched envs (e.g., IsaacLab with 4096 parallel envs),
         # select a single env's trajectory for initialization
         while len(tensordict.batch_size) > 1:
             tensordict = tensordict[0]
         tensordict = tensordict.unsqueeze(-1).to(device)
         tensordict = tensordict.to_tensordict()
+        torchrl_logger.info(
+            f"Init tensordict after reshape: batch_size={tensordict.batch_size}"
+        )
+        for key in tensordict.keys(True, True):
+            val = tensordict.get(key)
+            if hasattr(val, "shape"):
+                torchrl_logger.info(f"  {key}: {val.shape}")
         world_model(tensordict)
 
     # Create model-based environment
