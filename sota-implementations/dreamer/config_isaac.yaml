@@ -31,11 +31,16 @@ optimization:
   lmbda: 0.95
   imagination_horizon: 15
   compile:
-    enabled: True
+    # Disabled: torch.compile conflicts with the tensordict version
+    # bundled in the IsaacLab container.  Re-enable once IsaacLab ships
+    # a compatible tensordict (or we install from source into the container).
+    enabled: False
     backend: inductor
     cudagraphs: False
     losses: ["actor", "value"]
-  autocast: bfloat16
+  # Disabled for now: autocast + IsaacLab container tensordict causes
+  # dtype-related recompilation storms in dynamo.
+  autocast: false
 
 networks:
   exploration_noise: 0.3
