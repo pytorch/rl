@@ -365,6 +365,28 @@ def _make_env(cfg, device, from_pixels=False):
             device=device,
             frame_skip=cfg.env.frame_skip,  # Native frame skip inside worker
         )
+    elif lib == "isaaclab":
+        # Local imports required: isaaclab must be imported AFTER AppLauncher init,
+        # and isaaclab is an optional dependency
+        import importlib
+
+        import gymnasium as gym
+
+        import isaaclab_tasks  # noqa: F401 - registers Isaac environments
+        from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
+
+        # IsaacLab envs are GPU-native (cuda:0) and pre-vectorized (e.g., 4096 parallel envs).
+        # The `device` and `from_pixels` parameters are ignored.
+        #
+        # Resolve the env config class from the gymnasium registry.
+        # IsaacLab registers `env_cfg_entry_point` as "module.path:ClassName".
+        spec = gym.spec(cfg.env.name)
+        env_cfg_entry = spec.kwargs["env_cfg_entry_point"]
+        module_path, class_name = env_cfg_entry.rsplit(":", 1)
+        env_cfg_cls = getattr(importlib.import_module(module_path), class_name)
+        env_cfg = env_cfg_cls()
+        env = gym.make(cfg.env.name, cfg=env_cfg)
+        env = IsaacLabWrapper(env)
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")
     default_dict = {
@@ -528,9 +550,11 @@ def make_dreamer(
     use_decoder_in_env: bool = False,
     compile: bool = True,
     logger=None,
+    test_env=None,
 ):
-    test_env = _make_env(cfg, device="cpu")
-    test_env = transform_env(cfg, test_env)
+    if test_env is None:
+        test_env = _make_env(cfg, device="cpu")
+        test_env = transform_env(cfg, test_env)
 
     # Get dimensions for explicit module instantiation (avoids lazy modules)
     state_dim = cfg.networks.state_dim
@@ -554,6 +578,13 @@ def make_dreamer(
         observation_in_key = "pixels"
         observation_out_key = "reco_pixels"
     else:
+        # Determine the observation key name based on backend.
+        # IsaacLab uses "policy" as observation key, others use "observation".
+        observation_in_key = (
+            "policy" if cfg.env.backend == "isaaclab" else "observation"
+        )
+        observation_out_key = f"reco_{observation_in_key}"
+
         obs_embed_dim = 1024  # MLP output size
         encoder = MLP(
             out_features=obs_embed_dim,
@@ -563,15 +594,12 @@ def make_dreamer(
             device=device,
         )
         decoder = MLP(
-            out_features=test_env.observation_spec["observation"].shape[-1],
+            out_features=test_env.observation_spec[observation_in_key].shape[-1],
             depth=2,
             num_cells=cfg.networks.hidden_dim,
             activation_class=get_activation(cfg.networks.activation),
             device=device,
         )
-
-        observation_in_key = "observation"
-        observation_out_key = "reco_observation"
 
     # Make RSSM with explicit input sizes (no lazy modules)
     rssm_prior = RSSMPrior(
@@ -630,9 +658,12 @@ def make_dreamer(
 
     # Initialize world model (already on device)
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        tensordict = (
-            test_env.rollout(5, auto_cast_to_device=True).unsqueeze(-1).to(device)
-        )
+        tensordict = test_env.rollout(5, auto_cast_to_device=True)
+        # For batched envs (e.g., IsaacLab with 4096 parallel envs),
+        # select a single env's trajectory for initialization
+        while len(tensordict.batch_size) > 1:
+            tensordict = tensordict[0]
+        tensordict = tensordict.unsqueeze(-1).to(device)
         tensordict = tensordict.to_tensordict()
         world_model(tensordict)
 

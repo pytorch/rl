@@ -1,0 +1,68 @@
+env:
+  name: Isaac-Velocity-Flat-Anymal-C-v0
+  seed: 0
+  backend: isaaclab
+  from_pixels: False
+  # IsaacLab envs are pre-vectorized (e.g., 4096 parallel envs).
+  # num_envs is controlled by IsaacLab's env config, not here.
+  horizon: 1000
+
+collector:
+  # IsaacLab with 4096 envs: one env step = 4096 frames.
+  # 10 env steps per collection = 40960 frames.
+  frames_per_batch: 40960
+  # Must be >= batch_length * num_envs so SliceSampler has enough sequential data.
+  # 50 * 4096 = 204800
+  init_random_frames: 204800
+  # Number of gradient steps between each data collection
+  optim_steps_per_collect: 50
+
+optimization:
+  total_optim_steps: 100_000
+  log_every: 100
+  grad_clip: 100
+
+  world_model_lr: 6e-4
+  actor_lr: 8e-5
+  value_lr: 8e-5
+  kl_scale: 1.0
+  free_nats: 3.0
+  gamma: 0.99
+  lmbda: 0.95
+  imagination_horizon: 15
+  compile:
+    enabled: True
+    backend: inductor
+    cudagraphs: False
+    losses: ["actor", "value"]
+  autocast: bfloat16
+
+networks:
+  exploration_noise: 0.3
+  device:
+  state_dim: 30
+  rssm_hidden_dim: 200
+  hidden_dim: 400
+  activation: "elu"
+  use_scan: False
+  rssm_rollout:
+    compile: False
+    compile_backend: inductor
+    compile_mode: reduce-overhead
+
+replay_buffer:
+  batch_size: 10000
+  buffer_size: 1000000
+  batch_length: 50
+  scratch_dir: null
+  prefetch: 16
+
+logger:
+  backend: wandb
+  project: dreamer-isaac
+  exp_name: ${env.name}-${env.seed}
+  mode: online
+  eval_every: 1000
+  eval_rollout_steps: 500
+  video: False
+  video_skip: 1
