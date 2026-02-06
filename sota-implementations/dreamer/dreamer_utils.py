@@ -25,6 +25,7 @@ from torchrl.collectors import MultiCollector
 from torchrl.data import (
     Composite,
     LazyMemmapStorage,
+    LazyTensorStorage,
     SliceSampler,
     TensorDictReplayBuffer,
     Unbounded,
@@ -892,6 +893,7 @@ def make_replay_buffer(
     pixel_obs=True,
     grayscale=True,
     image_size,
+    gpu_storage=False,
 ):
     """Create replay buffer with minimal sample-time transforms.
 
@@ -901,39 +903,55 @@ def make_replay_buffer(
     Note: We don't compile the SliceSampler because:
     1. Sampler operations (index computation) happen on CPU and are already fast
     2. torch.compile with inductor has bugs with the sampler's vectorized int64 operations
+
+    Args:
+        gpu_storage: If True, use LazyTensorStorage on `device` instead of
+            LazyMemmapStorage on CPU.  Eliminates CPU-GPU transfer at sample
+            time (data lives on training GPU) but costs GPU memory.
     """
-    with (
-        tempfile.TemporaryDirectory()
-        if buffer_scratch_dir is None
-        else nullcontext(buffer_scratch_dir)
-    ) as scratch_dir:
-        # Sample-time transforms: only device transfer (fast)
+    use_gpu = device is not None and device.type == "cuda"
+
+    if gpu_storage and use_gpu:
+        # GPU-resident storage: data lives on the training device
+        storage = LazyTensorStorage(
+            buffer_size,
+            device=device,
+            ndim=2,
+        )
+        # No sample transform needed: data is already on the right device
+        sample_transforms = None
+    else:
+        scratch_dir_ctx = (
+            tempfile.TemporaryDirectory()
+            if buffer_scratch_dir is None
+            else nullcontext(buffer_scratch_dir)
+        )
+        scratch_dir = scratch_dir_ctx.__enter__()
+        storage = LazyMemmapStorage(
+            buffer_size,
+            scratch_dir=scratch_dir,
+            device="cpu",
+            ndim=2,
+            shared_init=True,
+        )
         sample_transforms = Compose(
             functools.partial(_to_device, device=device),
         )
 
-        replay_buffer = TensorDictReplayBuffer(
-            prefetch=prefetch,
-            storage=LazyMemmapStorage(
-                buffer_size,
-                scratch_dir=scratch_dir,
-                device="cpu",
-                ndim=2,
-                shared_init=True,  # Allow remote processes to initialize storage
-            ),
-            sampler=SliceSampler(
-                slice_len=batch_seq_len,
-                strict_length=False,
-                traj_key=("collector", "traj_ids"),
-                cache_values=False,  # Disabled for async collection (cache not synced across processes)
-                use_gpu=device.type == "cuda"
-                if device is not None
-                else False,  # Speed up trajectory computation on GPU
-            ),
-            transform=sample_transforms,
-            batch_size=batch_size,
-        )
-        return replay_buffer
+    replay_buffer = TensorDictReplayBuffer(
+        prefetch=prefetch,
+        storage=storage,
+        sampler=SliceSampler(
+            slice_len=batch_seq_len,
+            strict_length=False,
+            traj_key=("collector", "traj_ids"),
+            cache_values=False,
+            use_gpu=use_gpu,
+        ),
+        transform=sample_transforms,
+        batch_size=batch_size,
+    )
+    return replay_buffer
 
 
 def _dreamer_make_value_model(

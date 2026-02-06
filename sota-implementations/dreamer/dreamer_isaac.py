@@ -189,20 +189,26 @@ def main(cfg: DictConfig):
     )
 
     # ========================================================================
-    # Replay buffer (CPU storage, prefetch to train_device)
+    # Replay buffer
     # ========================================================================
     batch_size = cfg.replay_buffer.batch_size
     batch_length = cfg.replay_buffer.batch_length
+    gpu_storage = cfg.replay_buffer.get("gpu_storage", False)
     replay_buffer = make_replay_buffer(
         batch_size=batch_size,
         batch_seq_len=batch_length,
         buffer_size=cfg.replay_buffer.buffer_size,
         buffer_scratch_dir=cfg.replay_buffer.scratch_dir,
-        device=train_device,  # Prefetch samples directly to training GPU
+        device=train_device,
         prefetch=cfg.replay_buffer.prefetch,
         pixel_obs=False,
         grayscale=False,
         image_size=64,  # unused for state-based
+        gpu_storage=gpu_storage,
+    )
+    torchrl_logger.info(
+        f"Replay buffer: batch_size={batch_size}, batch_length={batch_length}, "
+        f"gpu_storage={gpu_storage}, device={train_device}"
     )
 
     # ========================================================================

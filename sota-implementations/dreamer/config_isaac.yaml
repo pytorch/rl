@@ -15,8 +15,10 @@ collector:
   frames_per_batch: 204800
   # Must be >= frames_per_batch so we have enough data before training starts.
   init_random_frames: 204800
-  # Number of gradient steps between each data collection
-  optim_steps_per_collect: 50
+  # Number of gradient steps between weight syncs to collector policy.
+  # Reduced from 50 because batch_size is 5x larger (50k vs 10k),
+  # so each step processes more gradient signal.
+  optim_steps_per_collect: 10
 
 optimization:
   total_optim_steps: 100_000
@@ -57,11 +59,12 @@ networks:
     compile_mode: reduce-overhead
 
 replay_buffer:
-  batch_size: 10000
+  batch_size: 50000
   buffer_size: 1000000
   batch_length: 50
   scratch_dir: null
-  prefetch: 16
+  prefetch: 32
+  gpu_storage: true
 
 logger:
   backend: wandb
