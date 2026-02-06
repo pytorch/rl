@@ -106,6 +106,42 @@ collector = Collector(
 - `no_cuda_sync=True`: Avoids unnecessary CUDA synchronization that can cause hangs
 - `storing_device="cpu"`: Move collected data to CPU for the replay buffer
 
+### 2-GPU Async Pipeline (recommended for production)
+
+For maximum throughput, use 2 GPUs with a background collection thread:
+- **GPU 0 (`sim_device`)**: IsaacLab simulation + collection policy inference
+- **GPU 1 (`train_device`)**: Model training (world model, actor, value gradients)
+
+```python
+import copy, threading
+from tensordict import TensorDict
+
+# Deep copy policy to sim_device for collection
+collector_policy = copy.deepcopy(policy).to(sim_device)
+
+# Background thread for continuous collection
+def collect_loop(collector, replay_buffer, stop_event):
+    for data in collector:
+        replay_buffer.extend(data)
+        if stop_event.is_set():
+            break
+
+# Main thread: train on train_device
+for optim_step in range(total_steps):
+    batch = replay_buffer.sample()
+    train(batch)  # All on cuda:1
+    # Periodic weight sync: training policy -> collector policy
+    if optim_step % sync_every == 0:
+        weights = TensorDict.from_module(policy)
+        collector.update_policy_weights_(weights)
+```
+
+Key points:
+- Both CUDA operations release the GIL, so they truly overlap
+- Must pass `TensorDict.from_module(policy)` to `update_policy_weights_()`, not the module itself (the container's old tensordict doesn't handle `.data` on modules)
+- Set `CUDA_VISIBLE_DEVICES=0,1` to expose 2 GPUs (IsaacLab defaults to only GPU 0)
+- Falls back gracefully to single-GPU if only 1 GPU available
+
 ### RayCollector (alternative)
 
 If you need distributed collection across multiple GPUs/nodes, use `RayCollector`:
@@ -221,12 +257,23 @@ IsaacLab typically runs one simulation per process. Creating a second env for ev
 
 ### Throughput
 
-Measured on a single NVIDIA H200 with 4096 parallel envs:
+#### Single GPU (synchronous collect-then-train)
+Measured on a single NVIDIA H200, 4096 parallel envs, batch_size=10k:
 - **~15,600 fps** data collection throughput
-- **~7.5 optim steps/sec** during gradient updates (without compile/autocast)
-- One env step = 4096 frames
-- 50 steps per collection = 204,800 frames
-- This is orders of magnitude faster than DMControl (which needs 7 multiprocess workers)
+- **~7.0 optim steps/sec** during gradient updates (FP32, no compile)
+- **~55s for 200 steps** end-to-end (3.6 ops/s)
+- 50% time collecting, 50% training (perfectly balanced bottleneck)
+
+#### 2-GPU async pipeline (recommended)
+GPU 0 = IsaacLab sim + collection, GPU 1 = training. Background thread.
+With bfloat16 autocast, torch.compile (sub-modules), batch_size=50k:
+- **~78k-137k fps** continuous collection (never pauses)
+- **~2.9-3.5 optim steps/sec** with 50k batch (5x more gradient signal per step)
+- Collection and training fully overlap on separate GPUs
+- **~9.5h ETA for 100k steps** on H200 (Anymal-C locomotion)
+
+#### Key insight: CPU replay buffer is the bottleneck
+With async 2-GPU, the replay buffer `extend()` (collector thread) and `sample()` (training thread) both touch CPU memory, causing GIL contention. GPU-resident replay buffer (`LazyTensorStorage` on cuda:1) eliminates the CPU-GPU transfer at sample time but adds it at extend time.
 
 ### Config Differences from DMControl
 
@@ -237,8 +284,10 @@ Measured on a single NVIDIA H200 with 4096 parallel envs:
 | `collector.num_collectors` | `7` | N/A (single Collector) |
 | `collector.frames_per_batch` | `1000` | `204800` |
 | `collector.init_random_frames` | `10000` | `204800` |
-| `optimization.compile.enabled` | `True` | `False` (container compat) |
-| `optimization.autocast` | `bfloat16` | `false` (container compat) |
+| `optimization.compile.enabled` | `True` | `True` (sub-modules only) |
+| `optimization.autocast` | `bfloat16` | `bfloat16` |
+| `replay_buffer.batch_size` | `10000` | `50000` |
+| `replay_buffer.gpu_storage` | N/A | `true` |
 
 ## Gotchas and Traps
 
@@ -272,7 +321,7 @@ Measured on a single NVIDIA H200 with 4096 parallel envs:
         model_based_env.empty_cache()
     ```
 
-12. **`torch.compile` incompatibility**: The `tensordict` version bundled in the IsaacLab container (`_isaac_sim/kit/python/lib/python3.11/site-packages/tensordict/`) has a different internal API (`_tensordict` attribute) than the latest git version. `torch.compile`/dynamo traces through TensorDict internals and triggers `AttributeError: 'TensorDict' object has no attribute '_tensordict'`. **Fix**: disable `torch.compile` and `autocast` in the Isaac config until the container's tensordict is updated.
+12. **`torch.compile` with TensorDict**: Compiling full loss modules crashes because dynamo traces through TensorDict internals. **Fix**: compile individual MLP sub-modules (encoder, decoder, reward_model, value_model) with `torch._dynamo.config.suppress_errors = True`. Do NOT compile RSSM (sequential, shared with collector) or loss modules (heavy TensorDict use). This gives dynamo the tensor-level optimizations while falling back to eager for TensorDict ops.
 
 13. **SliceSampler with strict_length=False**: The sampler may return fewer elements than `batch_size` (e.g., 9999 instead of 10000) when some trajectories are shorter than `slice_len`. This causes `reshape(-1, batch_length)` to fail. **Fix**: truncate the sample to make `numel` divisible by `batch_length`:
     ```python
