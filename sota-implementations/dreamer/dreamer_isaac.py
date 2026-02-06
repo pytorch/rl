@@ -309,7 +309,9 @@ def main(cfg: DictConfig):
 
             # Sample from replay buffer
             with timeit("train/sample"), record_function("## train/sample ##"):
-                sampled_tensordict = replay_buffer.sample().reshape(-1, batch_length)
+                sampled_tensordict = replay_buffer.sample()
+                # Flatten env batch dims (if any) and reshape to (num_slices, batch_length)
+                sampled_tensordict = sampled_tensordict.reshape(-1, batch_length)
 
             # --- World model update ---
             with timeit("train/world_model-forward"), record_function(

@@ -923,7 +923,7 @@ def make_replay_buffer(
             ),
             sampler=SliceSampler(
                 slice_len=batch_seq_len,
-                strict_length=False,
+                strict_length=True,  # Ensure all slices are exactly slice_len
                 traj_key=("collector", "traj_ids"),
                 cache_values=False,  # Disabled for async collection (cache not synced across processes)
                 use_gpu=device.type == "cuda"
