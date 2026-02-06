@@ -13,6 +13,23 @@ from tensordict import TensorDict, TensorDictBase
 
 from torchrl import logger as torchrl_logger
 from torchrl._utils import timeit, VERBOSE
+
+try:
+    import prof as _prof_runner_module
+except ImportError:
+    _prof_runner_module = None
+
+
+def _prof_runner_ctx(name):
+    """Return a prof.profile context manager if prof is available and initialized, else nullcontext."""
+    if (
+        _prof_runner_module is not None
+        and _prof_runner_module.profiler._prof_handle is not None
+    ):
+        return _prof_runner_module.profile(name)
+    return contextlib.nullcontext()
+
+
 from torchrl.collectors._base import BaseCollector, ProfileConfig
 from torchrl.collectors._constants import (
     _MAX_IDLE_COUNT,
@@ -434,14 +451,16 @@ def _main_async_collector(
 
             if replay_buffer is not None:
                 if extend_buffer:
-                    next_data.names = None
-                    replay_buffer.extend(next_data)
+                    with _prof_runner_ctx("worker.buffer_extend"):
+                        next_data.names = None
+                        replay_buffer.extend(next_data)
 
                 if run_free:
                     continue
 
                 try:
-                    queue_out.put((idx, j), timeout=_TIMEOUT)
+                    with _prof_runner_ctx("worker.queue_put"):
+                        queue_out.put((idx, j), timeout=_TIMEOUT)
                     if verbose:
                         torchrl_logger.debug(f"mp worker {idx} successfully sent data")
                     j += 1
@@ -461,35 +480,36 @@ def _main_async_collector(
                         f"expected device to be {storing_device} but got {collected_tensordict.device}"
                     )
                 if use_buffers:
-                    # If policy and env are on cpu, we put in shared mem,
-                    # if policy is on cuda and env on cuda, we are fine with this
-                    # If policy is on cuda and env on cpu (or opposite) we put tensors that
-                    # are on cpu in shared mem.
-                    MPS_ERROR = (
-                        "tensors on mps device cannot be put in shared memory. Make sure "
-                        "the shared device (aka storing_device) is set to CPU."
-                    )
-                    if collected_tensordict.device is not None:
-                        # placeholder in case we need different behaviors
-                        if collected_tensordict.device.type in ("cpu",):
-                            collected_tensordict.share_memory_()
-                        elif collected_tensordict.device.type in ("mps",):
-                            raise RuntimeError(MPS_ERROR)
-                        elif collected_tensordict.device.type == "cuda":
-                            collected_tensordict.share_memory_()
+                    with _prof_runner_ctx("worker.share_memory"):
+                        # If policy and env are on cpu, we put in shared mem,
+                        # if policy is on cuda and env on cuda, we are fine with this
+                        # If policy is on cuda and env on cpu (or opposite) we put tensors that
+                        # are on cpu in shared mem.
+                        MPS_ERROR = (
+                            "tensors on mps device cannot be put in shared memory. Make sure "
+                            "the shared device (aka storing_device) is set to CPU."
+                        )
+                        if collected_tensordict.device is not None:
+                            # placeholder in case we need different behaviors
+                            if collected_tensordict.device.type in ("cpu",):
+                                collected_tensordict.share_memory_()
+                            elif collected_tensordict.device.type in ("mps",):
+                                raise RuntimeError(MPS_ERROR)
+                            elif collected_tensordict.device.type == "cuda":
+                                collected_tensordict.share_memory_()
+                            else:
+                                raise NotImplementedError(
+                                    f"Device {collected_tensordict.device} is not supported in multi-collectors yet."
+                                )
                         else:
-                            raise NotImplementedError(
-                                f"Device {collected_tensordict.device} is not supported in multi-collectors yet."
-                            )
-                    else:
-                        # make sure each cpu tensor is shared - assuming non-cpu devices are shared
-                        def cast_tensor(x, MPS_ERROR=MPS_ERROR):
-                            if x.device.type in ("cpu",):
-                                x.share_memory_()
-                            if x.device.type in ("mps",):
-                                RuntimeError(MPS_ERROR)
+                            # make sure each cpu tensor is shared - assuming non-cpu devices are shared
+                            def cast_tensor(x, MPS_ERROR=MPS_ERROR):
+                                if x.device.type in ("cpu",):
+                                    x.share_memory_()
+                                if x.device.type in ("mps",):
+                                    RuntimeError(MPS_ERROR)
 
-                        collected_tensordict.apply(cast_tensor, filter_empty=True)
+                            collected_tensordict.apply(cast_tensor, filter_empty=True)
                 data = (collected_tensordict, idx)
             else:
                 if next_data is not collected_tensordict:
@@ -498,7 +518,8 @@ def _main_async_collector(
                     )
                 data = idx  # flag the worker that has sent its data
             try:
-                queue_out.put((data, j), timeout=_TIMEOUT)
+                with _prof_runner_ctx("worker.queue_put"):
+                    queue_out.put((data, j), timeout=_TIMEOUT)
                 if verbose:
                     torchrl_logger.debug(f"mp worker {idx} successfully sent data")
                 j += 1

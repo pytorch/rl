@@ -13,6 +13,19 @@ from pathlib import Path
 from typing import Any, overload
 
 import torch
+
+try:
+    import prof as _prof_module
+except ImportError:
+    _prof_module = None
+
+
+def _prof_sync_weights_ctx():
+    if _prof_module is not None:
+        return _prof_module.profile("collector.sync_weights")
+    return contextlib.nullcontext()
+
+
 from tensordict import TensorDict, TensorDictBase
 from tensordict.base import NO_DEFAULT
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
@@ -631,38 +644,39 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             :meth:`~torchrl.collectors.RemoteWeightsUpdaterBase`.
 
         """
-        # Handle the different keyword argument forms
-        if weights is not None:
-            if policy_or_weights is not None:
-                raise ValueError(
-                    "Cannot specify both positional 'policy_or_weights' and keyword 'weights'"
-                )
-            if policy is not None:
-                raise ValueError("Cannot specify both 'weights' and 'policy'")
-            policy_or_weights = weights
+        with _prof_sync_weights_ctx():
+            # Handle the different keyword argument forms
+            if weights is not None:
+                if policy_or_weights is not None:
+                    raise ValueError(
+                        "Cannot specify both positional 'policy_or_weights' and keyword 'weights'"
+                    )
+                if policy is not None:
+                    raise ValueError("Cannot specify both 'weights' and 'policy'")
+                policy_or_weights = weights
 
-        if policy is not None:
-            if policy_or_weights is not None:
-                raise ValueError(
-                    "Cannot specify both positional 'policy_or_weights' and keyword 'policy'"
+            if policy is not None:
+                if policy_or_weights is not None:
+                    raise ValueError(
+                        "Cannot specify both positional 'policy_or_weights' and keyword 'policy'"
+                    )
+                policy_or_weights = policy
+            if self._legacy_weight_updater:
+                return self._legacy_weight_update_impl(
+                    policy_or_weights=policy_or_weights,
+                    worker_ids=worker_ids,
+                    model_id=model_id,
+                    weights_dict=weights_dict,
+                    **kwargs,
                 )
-            policy_or_weights = policy
-        if self._legacy_weight_updater:
-            return self._legacy_weight_update_impl(
-                policy_or_weights=policy_or_weights,
-                worker_ids=worker_ids,
-                model_id=model_id,
-                weights_dict=weights_dict,
-                **kwargs,
-            )
-        else:
-            return self._weight_update_impl(
-                policy_or_weights=policy_or_weights,
-                worker_ids=worker_ids,
-                model_id=model_id,
-                weights_dict=weights_dict,
-                **kwargs,
-            )
+            else:
+                return self._weight_update_impl(
+                    policy_or_weights=policy_or_weights,
+                    worker_ids=worker_ids,
+                    model_id=model_id,
+                    weights_dict=weights_dict,
+                    **kwargs,
+                )
 
     def _legacy_weight_update_impl(
         self,
