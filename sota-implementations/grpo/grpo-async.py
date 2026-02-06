@@ -284,8 +284,9 @@ def train(
 
         if step % cfg.train.weight_update_frequency == 0:
             timeit.print(prefix="timeit")
-            for key, val in timeit.todict().items():
-                wandb_logger.log_scalar(f"timeit/{key}", val)
+            wandb_logger.log_metrics(
+                {f"timeit/{key}": val for key, val in timeit.todict().items()}
+            )
             timeit.reset()
 
         del loss_val
