@@ -54,6 +54,7 @@ from dreamer_utils import (
     transform_env,
 )
 from omegaconf import DictConfig
+from tensordict import TensorDict
 from torch.amp import GradScaler
 from torch.autograd.profiler import record_function
 from torch.nn.utils import clip_grad_norm_
@@ -438,7 +439,8 @@ def main(cfg: DictConfig):
         # Sync training weights to collector policy
         if (optim_step + 1) % weight_sync_every == 0:
             with timeit("train/weight_sync"):
-                collector.update_policy_weights_(policy)
+                weights = TensorDict.from_module(policy)
+                collector.update_policy_weights_(weights)
                 policy[1].step(weight_sync_every)  # Update exploration noise schedule
 
         # ============================================================
