@@ -40,6 +40,7 @@ app_launcher = AppLauncher(args_cli)
 # ============================================================================
 import contextlib
 import copy
+import functools
 import math
 import time
 
@@ -47,8 +48,10 @@ import hydra
 import torch
 import torch.cuda
 import tqdm
+
 from dreamer_utils import (
     _make_env,
+    dump_video,
     log_metrics,
     make_dreamer,
     make_eval_policy_factory,
@@ -64,6 +67,7 @@ from torch.autograd.profiler import record_function
 from torch.nn.utils import clip_grad_norm_
 from torchrl._utils import compile_with_warmup, logger as torchrl_logger, timeit
 from torchrl.collectors import Collector
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives.dreamer import (
     DreamerActorLoss,
     DreamerModelLoss,
@@ -72,68 +76,8 @@ from torchrl.objectives.dreamer import (
 from torchrl.record.loggers import generate_exp_name, get_logger
 
 
-def _td_stats(td, key):
-    """Return a compact stats string for a tensor in a TensorDict."""
-    try:
-        t = td[key]
-    except KeyError:
-        return f"{key}: MISSING"
-    has_nan = t.isnan().any().item()
-    has_inf = t.isinf().any().item()
-    return (
-        f"{key}: shape={list(t.shape)} dtype={t.dtype} device={t.device} "
-        f"min={t.min().item():.4g} max={t.max().item():.4g} "
-        f"mean={t.float().mean().item():.4g} std={t.float().std().item():.4g} "
-        f"nan={has_nan} inf={has_inf}"
-    )
-
-
-def _param_stats(name, module):
-    """Return stats for module parameters."""
-    lines = []
-    for pname, p in module.named_parameters():
-        has_nan = p.isnan().any().item()
-        has_inf = p.isinf().any().item()
-        grad_info = "no_grad"
-        if p.grad is not None:
-            grad_nan = p.grad.isnan().any().item()
-            grad_inf = p.grad.isinf().any().item()
-            grad_info = (
-                f"grad_min={p.grad.min().item():.4g} "
-                f"grad_max={p.grad.max().item():.4g} "
-                f"grad_nan={grad_nan} grad_inf={grad_inf}"
-            )
-        lines.append(
-            f"  {name}.{pname}: min={p.min().item():.4g} max={p.max().item():.4g} "
-            f"nan={has_nan} inf={has_inf} {grad_info}"
-        )
-    return "\n".join(lines)
-
-
-def _check_nan_grads(module, name, optim_step):
-    """Check for NaN in gradients. Abort if found."""
-    for pname, p in module.named_parameters():
-        if p.grad is not None and p.grad.isnan().any():
-            torchrl_logger.error(
-                f"NaN gradient detected at optim_step={optim_step} "
-                f"in {name}.{pname} (shape={list(p.grad.shape)})\n"
-                f"Param stats: min={p.min().item():.4g} max={p.max().item():.4g} "
-                f"nan={p.isnan().any().item()}\n"
-                f"Full param diagnostics:\n{_param_stats(name, module)}"
-            )
-            torchrl_logger.error("ABORTING: NaN gradients are not recoverable.")
-            sys.exit(1)
-
-
 @hydra.main(version_base="1.1", config_path="", config_name="config_isaac")
 def main(cfg: DictConfig):
-    # Force DEBUG logging level
-    import logging
-
-    torchrl_logger.setLevel(logging.DEBUG)
-    for handler in torchrl_logger.handlers:
-        handler.setLevel(logging.DEBUG)
-
     # ========================================================================
     # Device setup: sim on cuda:0, training on cuda:1 (or cuda:0 if single GPU)
     # ========================================================================
@@ -392,9 +336,9 @@ def main(cfg: DictConfig):
     optim_steps_per_collect = cfg.collector.optim_steps_per_collect
 
     eval_every = cfg.logger.eval_every
+    eval_rollout_steps = cfg.logger.eval_rollout_steps
     next_eval_step = eval_every
-
-    obs_key = "pixels" if cfg.env.from_pixels else "policy"
+    next_sim_eval_step = eval_every
 
     pbar = tqdm.tqdm(total=total_optim_steps, desc="Optim steps")
     t_log_start = time.time()
@@ -422,14 +366,6 @@ def main(cfg: DictConfig):
                 data = data.exclude("pixels_int", ("next", "pixels_int"))
             replay_buffer.extend(data)
         collected_frames += data.numel()
-        torchrl_logger.debug(
-            f"[collect #{i_collect}] frames={data.numel()}, "
-            f"total_collected={collected_frames}\n"
-            f"  {_td_stats(data, obs_key)}\n"
-            f"  {_td_stats(data, 'action')}\n"
-            f"  {_td_stats(data, ('next', 'reward'))}\n"
-            f"  {_td_stats(data, ('next', 'done'))}"
-        )
 
         # Track episode rewards from completed episodes
         done_mask = data["next", "done"].squeeze(-1)
@@ -462,18 +398,6 @@ def main(cfg: DictConfig):
                     sampled_tensordict = sampled_tensordict[:usable]
                 sampled_tensordict = sampled_tensordict.reshape(-1, batch_length)
 
-            # DEBUG: log sampled data stats
-            torchrl_logger.debug(
-                f"[optim_step={optim_step}] Sampled batch "
-                f"shape={list(sampled_tensordict.shape)}\n"
-                f"  {_td_stats(sampled_tensordict, obs_key)}\n"
-                f"  {_td_stats(sampled_tensordict, 'action')}\n"
-                f"  {_td_stats(sampled_tensordict, ('next', obs_key))}\n"
-                f"  {_td_stats(sampled_tensordict, ('next', 'reward'))}\n"
-                f"  {_td_stats(sampled_tensordict, 'state')}\n"
-                f"  {_td_stats(sampled_tensordict, 'belief')}"
-            )
-
             # --- World model update ---
             with timeit("train/world_model-forward"), record_function(
                 "## world_model/forward ##"
@@ -491,33 +415,10 @@ def main(cfg: DictConfig):
                         + model_loss_td["loss_model_reward"]
                     )
 
-            # DEBUG: log world model losses
-            kl_val = model_loss_td["loss_model_kl"].item()
-            reco_val = model_loss_td["loss_model_reco"].item()
-            reward_val = model_loss_td["loss_model_reward"].item()
             total_val = loss_world_model.item()
-            torchrl_logger.debug(
-                f"[optim_step={optim_step}] World model loss: "
-                f"kl={kl_val:.4g} reco={reco_val:.4g} reward={reward_val:.4g} "
-                f"total={total_val:.4g} "
-                f"nan={math.isnan(total_val)} inf={math.isinf(total_val)}"
-            )
-
             if math.isnan(total_val) or math.isinf(total_val):
-                # Log posterior/prior stats from the world model output
                 torchrl_logger.error(
-                    f"NaN/Inf in world model loss at optim_step={optim_step}!\n"
-                    f"  {_td_stats(sampled_tensordict, ('next', 'prior_mean'))}\n"
-                    f"  {_td_stats(sampled_tensordict, ('next', 'prior_std'))}\n"
-                    f"  {_td_stats(sampled_tensordict, ('next', 'posterior_mean'))}\n"
-                    f"  {_td_stats(sampled_tensordict, ('next', 'posterior_std'))}\n"
-                    f"  {_td_stats(sampled_tensordict, ('next', 'state'))}\n"
-                    f"  {_td_stats(sampled_tensordict, ('next', 'belief'))}\n"
-                    f"  {_td_stats(sampled_tensordict, ('next', 'reco_pixels'))}\n"
-                    f"  {_td_stats(sampled_tensordict, ('next', 'reward'))}"
-                )
-                torchrl_logger.error(
-                    "ABORTING: NaN/Inf in world model loss is not recoverable."
+                    f"NaN/Inf in world model loss at optim_step={optim_step}, aborting."
                 )
                 sys.exit(1)
 
@@ -531,12 +432,6 @@ def main(cfg: DictConfig):
                 else:
                     loss_world_model.backward()
                 world_model_grad = clip_grad_norm_(world_model.parameters(), grad_clip)
-
-                torchrl_logger.debug(
-                    f"[optim_step={optim_step}] World model grad_norm="
-                    f"{world_model_grad:.4g}"
-                )
-                _check_nan_grads(world_model, "world_model", optim_step)
 
                 if use_scaler:
                     scaler1.step(world_model_opt)
@@ -555,17 +450,9 @@ def main(cfg: DictConfig):
                     )
 
             actor_val = actor_loss_td["loss_actor"].item()
-            torchrl_logger.debug(
-                f"[optim_step={optim_step}] Actor loss: {actor_val:.4g} "
-                f"nan={math.isnan(actor_val)}"
-            )
-
             if math.isnan(actor_val) or math.isinf(actor_val):
                 torchrl_logger.error(
-                    f"NaN/Inf in actor loss at optim_step={optim_step}!"
-                )
-                torchrl_logger.error(
-                    "ABORTING: NaN/Inf in actor loss is not recoverable."
+                    f"NaN/Inf in actor loss at optim_step={optim_step}, aborting."
                 )
                 sys.exit(1)
 
@@ -579,12 +466,6 @@ def main(cfg: DictConfig):
                 else:
                     actor_loss_td["loss_actor"].backward()
                 actor_model_grad = clip_grad_norm_(actor_model.parameters(), grad_clip)
-
-                torchrl_logger.debug(
-                    f"[optim_step={optim_step}] Actor grad_norm="
-                    f"{actor_model_grad:.4g}"
-                )
-                _check_nan_grads(actor_model, "actor_model", optim_step)
 
                 if use_scaler:
                     scaler2.step(actor_opt)
@@ -601,17 +482,9 @@ def main(cfg: DictConfig):
                     value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
 
             value_val = value_loss_td["loss_value"].item()
-            torchrl_logger.debug(
-                f"[optim_step={optim_step}] Value loss: {value_val:.4g} "
-                f"nan={math.isnan(value_val)}"
-            )
-
             if math.isnan(value_val) or math.isinf(value_val):
                 torchrl_logger.error(
-                    f"NaN/Inf in value loss at optim_step={optim_step}!"
-                )
-                torchrl_logger.error(
-                    "ABORTING: NaN/Inf in value loss is not recoverable."
+                    f"NaN/Inf in value loss at optim_step={optim_step}, aborting."
                 )
                 sys.exit(1)
 
@@ -625,12 +498,6 @@ def main(cfg: DictConfig):
                 else:
                     value_loss_td["loss_value"].backward()
                 critic_model_grad = clip_grad_norm_(value_model.parameters(), grad_clip)
-
-                torchrl_logger.debug(
-                    f"[optim_step={optim_step}] Value grad_norm="
-                    f"{critic_model_grad:.4g}"
-                )
-                _check_nan_grads(value_model, "value_model", optim_step)
 
                 if use_scaler:
                     scaler3.step(value_opt)
@@ -720,11 +587,43 @@ def main(cfg: DictConfig):
                 eval_weights = TensorDict.from_module(policy).data.detach().cpu()
                 eval_worker.submit(
                     eval_weights,
-                    max_steps=cfg.logger.eval_rollout_steps,
+                    max_steps=eval_rollout_steps,
                     # Isaac envs auto-reset, so done.any() fires as soon as a
                     # single sub-env finishes.  Run the full rollout instead.
                     break_when_any_done=False,
                 )
+
+        # ---- Simulated (world model) eval: imagination rollout video ----
+        if model_based_env_eval is not None and optim_step >= next_sim_eval_step:
+            next_sim_eval_step += eval_every
+            with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
+                # Seed from replay buffer: take one trajectory's first timestep
+                sim_seed = replay_buffer.sample()
+                numel = sim_seed.numel()
+                usable = (numel // batch_length) * batch_length
+                if usable < numel:
+                    sim_seed = sim_seed[:usable]
+                sim_seed = sim_seed.reshape(-1, batch_length)
+                sim_seed = sim_seed[0, 0].exclude("next", "action").to(train_device)
+                sim_rollout = model_based_env_eval.rollout(
+                    eval_rollout_steps,
+                    actor_model,
+                    auto_cast_to_device=True,
+                    break_when_any_done=True,
+                    auto_reset=False,
+                    tensordict=sim_seed,
+                )
+                model_based_env_eval.apply(
+                    functools.partial(dump_video, step=collected_frames)
+                )
+                sim_reward = sim_rollout["next", "reward"].sum(-2).mean().item()
+                if logger is not None:
+                    log_metrics(
+                        logger,
+                        {"eval/simulated_reward": sim_reward},
+                        collected_frames,
+                    )
+                torchrl_logger.info(f"Simulated eval: reward={sim_reward:.4f}")
 
         if optim_step >= total_optim_steps:
             break
