@@ -128,7 +128,7 @@ class EGreedyModule(TensorDictModuleBase):
     @property
     def spec(self):
         return self._spec
-    
+
     @spec.setter
     def spec(self, value: TensorSpec | None) -> None:
         if value is not None:
@@ -208,8 +208,10 @@ class EGreedyModule(TensorDictModuleBase):
                     r = r.to(device)
                 action = torch.where(cond, r, action)
             else:
-                raise RuntimeError("spec has not been set. Pass spec at construction time or set it via "
-                                   "the `spec` property before calling forward().")
+                raise RuntimeError(
+                    "spec has not been set. Pass spec at construction time or set it via "
+                    "the `spec` property before calling forward()."
+                )
             action_tensordict.set(action_key, action)
         return tensordict
 
@@ -580,7 +582,7 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
     @property
     def spec(self):
         return self._spec
-    
+
     @spec.setter
     def spec(self, value: TensorSpec | None) -> None:
         if value is None:
@@ -825,6 +827,5 @@ def set_exploration_modules_spec_from_env(policy: nn.Module, env: EnvBase) -> No
 
     for submodule in policy.modules():
         if isinstance(submodule, exploration_modules):
-            module_spec = getattr(submodule, "spec", None)
-            if module_spec is None:
+            if submodule.spec is None:
                 submodule.spec = action_spec
