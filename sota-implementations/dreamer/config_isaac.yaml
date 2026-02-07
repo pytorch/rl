@@ -34,12 +34,14 @@ optimization:
   lmbda: 0.95
   imagination_horizon: 15
   compile:
-    enabled: True
+    # Loss-level compile disabled: TensorDict output from compiled loss modules
+    # hits 'TensorDict has no attribute _tensordict' with the IsaacLab container's
+    # bundled tensordict. The RSSM rollout compile (networks.rssm_rollout.compile)
+    # still works because it compiles the step function internally.
+    enabled: False
     backend: inductor
     cudagraphs: False
-    # Which losses to compile (subset of: world_model, actor, value)
-    # Note: world_model excluded - CUDA graph tensor overwrite errors due to RSSM loop
-    losses: ["actor", "value"]
+    losses: []
   autocast: bfloat16
 
 networks:
