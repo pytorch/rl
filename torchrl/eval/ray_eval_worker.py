@@ -197,6 +197,9 @@ class _EvalActor:
 
         self.env = env_maker()
         self.policy = policy_maker(self.env)
+        # Cache device before any to_module call can replace nn.Parameter
+        # with plain tensors (which makes .parameters() empty).
+        self._device = next(self.policy.parameters()).device
 
     def eval(
         self,
@@ -210,8 +213,7 @@ class _EvalActor:
         from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 
         # Load weights into the eval policy (move to policy device first)
-        device = next(self.policy.parameters()).device
-        weights.to(device).to_module(self.policy)
+        weights.to(self._device).to_module(self.policy)
 
         frames = []
         total_reward = 0.0
