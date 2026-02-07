@@ -345,6 +345,55 @@ class GPUImageTransform(Transform):
         return observation_spec
 
 
+class IsaacCameraReadTransform(Transform):
+    """Read TiledCamera data from an IsaacLab scene and inject as ``"pixels"``.
+
+    This transform is added *before* the pixel-processing pipeline
+    (``RenameTransform`` → ``GPUImageTransform``) so that the image
+    coming out of the Isaac renderer enters the standard Dreamer
+    ``from_pixels`` data path.
+
+    The camera is expected to exist in the scene under *camera_name*
+    (default ``"tiled_camera"``).  Its output tensor has shape
+    ``[N, H, W, C]``, dtype ``uint8``, on GPU – exactly what the
+    downstream ``GPUImageTransform`` consumes.
+    """
+
+    def __init__(
+        self, scene, camera_name: str = "tiled_camera", data_type: str = "rgb"
+    ):
+        super().__init__(in_keys=[], out_keys=["pixels"])
+        self._scene = scene
+        self._camera_name = camera_name
+        self._data_type = data_type
+        # Cache camera dimensions for spec generation
+        camera = scene[camera_name]
+        self._h = camera.cfg.height
+        self._w = camera.cfg.width
+        self._c = 3 if data_type == "rgb" else 1
+
+    def _call(self, tensordict):
+        camera = self._scene[self._camera_name]
+        pixels = camera.data.output[self._data_type]  # [N, H, W, C], uint8, GPU
+        tensordict.set("pixels", pixels)
+        return tensordict
+
+    def _reset(self, tensordict, tensordict_reset):
+        return self._call(tensordict_reset)
+
+    def transform_observation_spec(self, observation_spec):
+        from torchrl.data import Bounded
+
+        observation_spec["pixels"] = Bounded(
+            low=0,
+            high=255,
+            shape=(self._h, self._w, self._c),
+            dtype=torch.uint8,
+            device=observation_spec.device,
+        )
+        return observation_spec
+
+
 def _make_env(cfg, device, from_pixels=False):
     lib = cfg.env.backend
     if lib in ("gym", "gymnasium"):
@@ -374,12 +423,12 @@ def _make_env(cfg, device, from_pixels=False):
 
         import gymnasium as gym
 
+        import isaaclab.sim as sim_utils
         import isaaclab_tasks  # noqa: F401 - registers Isaac environments
+        from isaaclab.sensors import TiledCameraCfg
         from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 
-        # IsaacLab envs are GPU-native (cuda:0) and pre-vectorized (e.g., 4096 parallel envs).
-        # The `device` and `from_pixels` parameters are ignored.
-        #
+        # IsaacLab envs are GPU-native (cuda:0) and pre-vectorized.
         # Resolve the env config class from the gymnasium registry.
         # IsaacLab registers `env_cfg_entry_point` as "module.path:ClassName".
         spec = gym.spec(cfg.env.name)
@@ -387,13 +436,55 @@ def _make_env(cfg, device, from_pixels=False):
         module_path, class_name = env_cfg_entry.rsplit(":", 1)
         env_cfg_cls = getattr(importlib.import_module(module_path), class_name)
         env_cfg = env_cfg_cls()
+
+        use_pixels = cfg.env.from_pixels or from_pixels
+        if use_pixels:
+            # Add TiledCamera to the scene for per-env pixel observations.
+            # Rendering is expensive: reduce num_envs (default 4096 → num_envs).
+            image_size = cfg.env.image_size
+            env_cfg.scene.num_envs = cfg.env.num_envs
+            env_cfg.scene.env_spacing = (
+                8.0  # wider spacing to avoid cross-env camera bleed
+            )
+            env_cfg.scene.tiled_camera = TiledCameraCfg(
+                prim_path="{ENV_REGEX_NS}/Camera",
+                offset=TiledCameraCfg.OffsetCfg(
+                    # Third-person rear-elevated view of the quadruped
+                    pos=(-3.0, 0.0, 2.0),
+                    rot=(0.9945, 0.0, 0.1045, 0.0),
+                    convention="world",
+                ),
+                data_types=["rgb"],
+                spawn=sim_utils.PinholeCameraCfg(
+                    focal_length=24.0,
+                    focus_distance=400.0,
+                    horizontal_aperture=20.955,
+                    clipping_range=(0.1, 20.0),
+                ),
+                width=image_size,
+                height=image_size,
+            )
+
         env = gym.make(cfg.env.name, cfg=env_cfg)
+
+        if use_pixels:
+            # Stash the Isaac scene reference before wrapping, so
+            # IsaacCameraReadTransform can read camera data each step.
+            isaac_scene = env.unwrapped.scene
+
         # missing_obs_value=0: IsaacLab auto-resets internally and returns
         # the correct post-reset observation directly. It does NOT provide
         # terminal observations in info["final_observation"]. The default
         # VecGymEnvTransform fills next obs with np.nan for done envs when
         # final obs are missing, which poisons the replay buffer.
         env = IsaacLabWrapper(env, missing_obs_value=0)
+
+        if use_pixels:
+            # Inject camera pixels into the TensorDict on every step/reset.
+            # Must come before RenameTransform → GPUImageTransform in
+            # transform_env() so the standard pixel pipeline applies.
+            env = TransformedEnv(env) if not isinstance(env, TransformedEnv) else env
+            env.append_transform(IsaacCameraReadTransform(isaac_scene))
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")
     default_dict = {
@@ -1366,7 +1457,7 @@ def make_isaac_init_fn(gpu_id: int = 2):
     return _init
 
 
-def make_isaac_eval_env_factory(cfg, obs_norm_loc=None, obs_norm_scale=None):
+def make_isaac_eval_env_factory(cfg):
     """Return a callable that creates an Isaac Lab eval env with rendering.
 
     The eval env differs from the training env in two ways:
@@ -1375,33 +1466,32 @@ def make_isaac_eval_env_factory(cfg, obs_norm_loc=None, obs_norm_scale=None):
     * Created with ``render_mode="rgb_array"`` so that the actor can call
       ``env.render()`` to capture viewport frames.
 
+    For pixel-based training, a TiledCamera is also added to the scene
+    so that the eval policy receives the same pixel observations as
+    during training.
+
     Args:
         cfg: Hydra config.
-        obs_norm_loc: Pre-computed observation mean (from training env).
-        obs_norm_scale: Pre-computed observation std (from training env).
     """
     from omegaconf import OmegaConf
 
     cfg_container = OmegaConf.to_container(cfg, resolve=True)
-    # Detach and convert to list for pickling
-    norm_loc = obs_norm_loc.detach().tolist() if obs_norm_loc is not None else None
-    norm_scale = (
-        obs_norm_scale.detach().tolist() if obs_norm_scale is not None else None
-    )
 
     def _make():
         import importlib
 
         import gymnasium as gym
 
+        import isaaclab.sim as sim_utils
         import isaaclab_tasks  # noqa: F401 – registers Isaac environments
         import torch
+        from isaaclab.sensors import TiledCameraCfg
         from omegaconf import OmegaConf
 
         from torchrl.data import Unbounded
         from torchrl.envs import (
             DoubleToFloat,
-            ObservationNorm,
+            RenameTransform,
             RewardSum,
             StepCounter,
             TensorDictPrimer,
@@ -1421,8 +1511,33 @@ def make_isaac_eval_env_factory(cfg, obs_norm_loc=None, obs_norm_scale=None):
         # Use fewer envs for evaluation to save GPU memory.
         env_cfg.scene.num_envs = cfg["logger"]["eval_num_envs"]
 
+        use_pixels = cfg["env"].get("from_pixels", False)
+        if use_pixels:
+            image_size = cfg["env"]["image_size"]
+            env_cfg.scene.env_spacing = 8.0
+            env_cfg.scene.tiled_camera = TiledCameraCfg(
+                prim_path="{ENV_REGEX_NS}/Camera",
+                offset=TiledCameraCfg.OffsetCfg(
+                    pos=(-3.0, 0.0, 2.0),
+                    rot=(0.9945, 0.0, 0.1045, 0.0),
+                    convention="world",
+                ),
+                data_types=["rgb"],
+                spawn=sim_utils.PinholeCameraCfg(
+                    focal_length=24.0,
+                    focus_distance=400.0,
+                    horizontal_aperture=20.955,
+                    clipping_range=(0.1, 20.0),
+                ),
+                width=image_size,
+                height=image_size,
+            )
+
         # render_mode="rgb_array" enables viewport rendering via env.render().
         env = gym.make(cfg["env"]["name"], cfg=env_cfg, render_mode="rgb_array")
+
+        isaac_scene = env.unwrapped.scene if use_pixels else None
+
         env = IsaacLabWrapper(env, missing_obs_value=0)
 
         # --- same transforms as the training env (see _make_env / transform_env) ---
@@ -1437,20 +1552,27 @@ def make_isaac_eval_env_factory(cfg, obs_norm_loc=None, obs_norm_scale=None):
         )
         if not isinstance(env, TransformedEnv):
             env = TransformedEnv(env)
+
+        if use_pixels:
+            from dreamer_utils import GPUImageTransform, IsaacCameraReadTransform
+
+            env.append_transform(IsaacCameraReadTransform(isaac_scene))
+            env.append_transform(
+                RenameTransform(in_keys=["pixels"], out_keys=["pixels_int"])
+            )
+            env.append_transform(
+                GPUImageTransform(
+                    device=torch.device("cuda:0"),
+                    image_size=image_size,
+                    grayscale=cfg["env"].get("grayscale", False),
+                    in_key="pixels_int",
+                    out_key="pixels",
+                )
+            )
+
         env.append_transform(DoubleToFloat())
         env.append_transform(RewardSum())
         env.append_transform(StepCounter(cfg["env"]["horizon"]))
-
-        # Apply the same ObservationNorm as training env
-        if norm_loc is not None:
-            env.append_transform(
-                ObservationNorm(
-                    loc=torch.tensor(norm_loc),
-                    scale=torch.tensor(norm_scale),
-                    in_keys=["policy"],
-                    standard_normal=True,
-                )
-            )
 
         return env
 

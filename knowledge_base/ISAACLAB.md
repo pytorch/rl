@@ -347,3 +347,59 @@ With async 2-GPU, the replay buffer `extend()` (collector thread) and `sample()`
     env_cfg = getattr(importlib.import_module(module_path), class_name)()
     env = gymnasium.make(env_name, cfg=env_cfg)
     ```
+
+## Pixel-Based Observations (TiledCamera)
+
+IsaacLab's default ManagerBased environments only provide state vectors (joint positions, velocities, etc.). For pixel-based RL (e.g., Dreamer with CNN encoder/decoder), you need to add a `TiledCamera` sensor.
+
+### How It Works
+
+`TiledCamera` renders all environments in a single batched pass on the GPU, producing `[num_envs, H, W, C]` uint8 tensors efficiently. Much faster than per-env camera rendering.
+
+### Setup Steps
+
+1. **Enable cameras**: Pass `--enable_cameras` to `AppLauncher`. Without this, rendering APIs are not initialised.
+
+2. **Add TiledCameraCfg to the scene config** before calling `gym.make`:
+    ```python
+    from isaaclab.sensors import TiledCameraCfg
+    import isaaclab.sim as sim_utils
+
+    env_cfg.scene.tiled_camera = TiledCameraCfg(
+        prim_path="{ENV_REGEX_NS}/Camera",
+        offset=TiledCameraCfg.OffsetCfg(
+            pos=(-3.0, 0.0, 2.0),  # behind and above the robot
+            rot=(0.9945, 0.0, 0.1045, 0.0),
+            convention="world",
+        ),
+        data_types=["rgb"],
+        spawn=sim_utils.PinholeCameraCfg(
+            focal_length=24.0, focus_distance=400.0,
+            horizontal_aperture=20.955, clipping_range=(0.1, 20.0),
+        ),
+        width=64, height=64,
+    )
+    ```
+
+3. **Read camera data**: After each `env.step()`, read from `scene["tiled_camera"].data.output["rgb"]`. In TorchRL, this is done via `IsaacCameraReadTransform`.
+
+4. **Reduce num_envs**: Rendering is expensive. 512 cameras on RTX 4090 is the recommended max. For 64×64 images, 256 envs is a safe starting point on A100/H100.
+
+5. **Increase env_spacing**: Set `env_cfg.scene.env_spacing = 8.0` or higher to prevent the camera from seeing neighbouring environments.
+
+### Camera Position for ANYmal-C
+
+The `offset.pos` is in world coordinates relative to the environment origin. For the ANYmal-C quadruped (base at ~0.5m height):
+- **Rear-elevated**: `pos=(-3.0, 0.0, 2.0)` – sees the full body from behind
+- **Side view**: `pos=(0.0, -3.0, 1.5)` – captures gait from the side
+- **Top-down**: `pos=(0.0, 0.0, 5.0)` – overhead view
+
+The rotation quaternion `(w, x, y, z) = (0.9945, 0.0, 0.1045, 0.0)` applies a slight downward pitch (≈12°).
+
+### Gotchas
+
+18. **`from_pixels` ignored for IsaacLab**: The `from_pixels` parameter in `GymEnv` / `IsaacLabWrapper` does NOT add pixel observations. You must add a TiledCamera sensor to the scene config manually.
+
+19. **Camera data is NOT in the observation manager**: ManagerBased envs don't include camera data in their observation groups. The camera data must be read separately from `scene["tiled_camera"].data.output[...]` via a custom transform.
+
+20. **Memory**: Pixel replay buffers are large. 500K frames at 64×64×3 float32 ≈ 24 GB on disk (memmap). Strip intermediate `pixels_int` tensors before storing.

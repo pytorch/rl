@@ -2,23 +2,20 @@ env:
   name: Isaac-Velocity-Flat-Anymal-C-v0
   seed: 0
   backend: isaaclab
-  from_pixels: False
-  # IsaacLab envs are pre-vectorized (e.g., 4096 parallel envs).
-  # num_envs is controlled by IsaacLab's env config, not here.
+  from_pixels: True
+  image_size: 64
+  grayscale: False
+  # Number of parallel envs.  Rendering is expensive so we use fewer
+  # than the default 4096 used for state-based training.
+  num_envs: 256
   horizon: 1000
 
 collector:
-  # IsaacLab with 4096 envs: one env step = 4096 frames.
-  # Must collect at least batch_length env steps per collection so the
-  # SliceSampler can find contiguous sequences of batch_length.
-  # 50 env steps * 4096 envs = 204800 frames.
-  frames_per_batch: 204800
-  # Must be >= frames_per_batch so we have enough data before training starts.
-  init_random_frames: 204800
-  # Number of gradient steps between weight syncs to collector policy.
-  # Reduced from 50 because batch_size is 5x larger (50k vs 10k),
-  # so each step processes more gradient signal.
-  optim_steps_per_collect: 10
+  # 256 envs × 50 steps = 12 800 frames per batch.
+  frames_per_batch: 12800
+  init_random_frames: 12800
+  # More gradient steps per collection to compensate for fewer frames.
+  optim_steps_per_collect: 50
 
 optimization:
   total_optim_steps: 100_000
@@ -61,11 +58,13 @@ networks:
     compile_mode: default
 
 replay_buffer:
-  batch_size: 50000
-  buffer_size: 1000000
+  # Pixel data is large (64×64×3 float32 ≈ 48 KB/frame).
+  # 8000 frames × 50 batch_length → 160 trajectories per batch.
+  batch_size: 8000
+  buffer_size: 500000
   batch_length: 50
   scratch_dir: null
-  prefetch: 32
+  prefetch: 16
   gpu_storage: false
 
 logger:

@@ -2,20 +2,21 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""Dreamer v1 training with IsaacLab environments.
+"""Dreamer v1 training with IsaacLab environments (pixel-based).
 
 CRITICAL: IsaacLab requires AppLauncher to be initialized before importing torch.
 This is why this script has a non-standard import order -- the AppLauncher init
 MUST happen at the very top, before any torch/torchrl imports.
 
 IsaacLab environments are:
-- Pre-vectorized (e.g., 4096 parallel envs in a single GPU simulation)
+- Pre-vectorized (e.g., 256 parallel envs for pixel-based training)
 - GPU-native (always on cuda:0)
-- State-based (observations are vectors, not pixels)
+- Pixel observations via TiledCamera (efficient batched rendering)
 
 GPU strategy:
-- GPU 0 ("sim_device"): IsaacLab simulation + collection policy inference
+- GPU 0 ("sim_device"): IsaacLab simulation + rendering + collection policy
 - GPU 1 ("train_device"): Model training (world model, actor, value gradients)
+- GPU 2 (optional): Async evaluation rendering via RayEvalWorker
 - Collection and training alternate synchronously
 - Falls back to single-GPU if only 1 GPU is available
 """
@@ -31,7 +32,7 @@ from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Dreamer + IsaacLab Training")
 AppLauncher.add_app_launcher_args(parser)
-args_cli, _ = parser.parse_known_args(["--headless"])
+args_cli, _ = parser.parse_known_args(["--headless", "--enable_cameras"])
 app_launcher = AppLauncher(args_cli)
 
 # ============================================================================
@@ -166,29 +167,13 @@ def main(cfg: DictConfig):
     # ========================================================================
     torchrl_logger.info(f"Creating IsaacLab env: {cfg.env.name}")
     train_env = _make_env(cfg, device=sim_device)
-    train_env = transform_env(cfg, train_env)
+    # Pass device=sim_device so GPU-accelerated image transforms are used
+    train_env = transform_env(cfg, train_env, device=sim_device)
     train_env.set_seed(cfg.env.seed)
 
-    # Normalize observations to ~N(0,1).  Without this, the raw IsaacLab
-    # observations (std ~1.7, range [-30, 30]) produce an initial reco loss
-    # of ~150 000 whose gradients are clipped to ~100 (vs. norms of ~700 000),
-    # effectively reducing the world-model learning rate by ~7000x.
-    from torchrl.envs import ObservationNorm
-
-    obs_norm = ObservationNorm(
-        in_keys=["policy"],
-        standard_normal=True,
-        eps=1e-2,  # prevent division by near-zero std
-    )
-    train_env.append_transform(obs_norm)
-    # Collect 50 env steps (50 * 4096 = 204 800 frames) to get meaningful
-    # per-feature statistics across different robot configurations.
-    torchrl_logger.info("Initialising ObservationNorm stats (50 steps)...")
-    obs_norm.init_stats(num_iter=50, reduce_dim=(0, 1), cat_dim=0)
-    torchrl_logger.info(
-        f"ObservationNorm: loc range=[{obs_norm.loc.min():.2f}, {obs_norm.loc.max():.2f}], "
-        f"scale range=[{obs_norm.scale.min():.2f}, {obs_norm.scale.max():.2f}]"
-    )
+    # Pixel observations are normalised to [0, 1] by ToTensorImage /
+    # GPUImageTransform inside transform_env.  No additional ObservationNorm
+    # is needed (unlike the state-based setup).
 
     torchrl_logger.info(
         f"IsaacLab env created: batch_size={train_env.batch_size}, "
@@ -213,7 +198,7 @@ def main(cfg: DictConfig):
         device=train_device,
         action_key=action_key,
         value_key=value_key,
-        use_decoder_in_env=False,  # No video for Isaac (state-based)
+        use_decoder_in_env=cfg.env.from_pixels,
         logger=logger,
         test_env=train_env,  # env on sim_device; make_dreamer transfers init data
     )
@@ -241,11 +226,7 @@ def main(cfg: DictConfig):
         ray.init(num_gpus=num_gpus - 2)
         eval_worker = RayEvalWorker(
             init_fn=make_isaac_init_fn(),
-            env_maker=make_isaac_eval_env_factory(
-                cfg,
-                obs_norm_loc=obs_norm.loc.cpu(),
-                obs_norm_scale=obs_norm.scale.cpu(),
-            ),
+            env_maker=make_isaac_eval_env_factory(cfg),
             policy_maker=make_eval_policy_factory(cfg),
             num_gpus=1,
         )
@@ -263,13 +244,11 @@ def main(cfg: DictConfig):
     # ========================================================================
     # Losses (on train_device)
     # ========================================================================
-    # global_average=True: for state-based observations the tensor is 3D
-    # [B, T, F], and the default sum((-3,-2,-1)) accidentally sums over
-    # batch and time too, inflating the loss ~40000x and rendering the
-    # gradient clipping far too aggressive.
-    world_model_loss = DreamerModelLoss(world_model, global_average=True)
-    # IsaacLab uses "policy" as observation key (state-based, not pixels)
-    world_model_loss.set_keys(pixels="policy", reco_pixels="reco_policy")
+    # Pixel observations are 5D [B, T, C, H, W].  The default reduction
+    # sum((-3,-2,-1)) correctly sums over C, H, W only, so global_average
+    # is not needed (unlike the 3D state-based case).
+    world_model_loss = DreamerModelLoss(world_model)
+    # Default keys "pixels" / "reco_pixels" match the CNN encoder/decoder.
 
     actor_loss = DreamerActorLoss(
         actor_model,
@@ -297,9 +276,9 @@ def main(cfg: DictConfig):
         buffer_scratch_dir=cfg.replay_buffer.scratch_dir,
         device=train_device,
         prefetch=cfg.replay_buffer.prefetch,
-        pixel_obs=False,
-        grayscale=False,
-        image_size=64,  # unused for state-based
+        pixel_obs=cfg.env.from_pixels,
+        grayscale=cfg.env.get("grayscale", False),
+        image_size=cfg.env.get("image_size", 64),
         gpu_storage=False,
     )
     torchrl_logger.info(
@@ -415,6 +394,8 @@ def main(cfg: DictConfig):
     eval_every = cfg.logger.eval_every
     next_eval_step = eval_every
 
+    obs_key = "pixels" if cfg.env.from_pixels else "policy"
+
     pbar = tqdm.tqdm(total=total_optim_steps, desc="Optim steps")
     t_log_start = time.time()
     frames_at_log_start = 0
@@ -435,14 +416,16 @@ def main(cfg: DictConfig):
     for i_collect, data in enumerate(collector):
         # ---- Extend replay buffer ----
         with timeit("collect/extend"):
+            # Strip intermediate pixels_int to save memory (already processed
+            # into float32 "pixels" by GPUImageTransform in the env).
+            if "pixels_int" in data.keys():
+                data = data.exclude("pixels_int", ("next", "pixels_int"))
             replay_buffer.extend(data)
         collected_frames += data.numel()
-
-        # DEBUG: log collected data stats
         torchrl_logger.debug(
             f"[collect #{i_collect}] frames={data.numel()}, "
             f"total_collected={collected_frames}\n"
-            f"  {_td_stats(data, 'policy')}\n"
+            f"  {_td_stats(data, obs_key)}\n"
             f"  {_td_stats(data, 'action')}\n"
             f"  {_td_stats(data, ('next', 'reward'))}\n"
             f"  {_td_stats(data, ('next', 'done'))}"
@@ -483,9 +466,9 @@ def main(cfg: DictConfig):
             torchrl_logger.debug(
                 f"[optim_step={optim_step}] Sampled batch "
                 f"shape={list(sampled_tensordict.shape)}\n"
-                f"  {_td_stats(sampled_tensordict, 'policy')}\n"
+                f"  {_td_stats(sampled_tensordict, obs_key)}\n"
                 f"  {_td_stats(sampled_tensordict, 'action')}\n"
-                f"  {_td_stats(sampled_tensordict, ('next', 'policy'))}\n"
+                f"  {_td_stats(sampled_tensordict, ('next', obs_key))}\n"
                 f"  {_td_stats(sampled_tensordict, ('next', 'reward'))}\n"
                 f"  {_td_stats(sampled_tensordict, 'state')}\n"
                 f"  {_td_stats(sampled_tensordict, 'belief')}"
@@ -530,7 +513,7 @@ def main(cfg: DictConfig):
                     f"  {_td_stats(sampled_tensordict, ('next', 'posterior_std'))}\n"
                     f"  {_td_stats(sampled_tensordict, ('next', 'state'))}\n"
                     f"  {_td_stats(sampled_tensordict, ('next', 'belief'))}\n"
-                    f"  {_td_stats(sampled_tensordict, ('next', 'reco_policy'))}\n"
+                    f"  {_td_stats(sampled_tensordict, ('next', 'reco_pixels'))}\n"
                     f"  {_td_stats(sampled_tensordict, ('next', 'reward'))}"
                 )
                 torchrl_logger.error(
