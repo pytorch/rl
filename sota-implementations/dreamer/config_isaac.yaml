@@ -55,7 +55,10 @@ networks:
   rssm_rollout:
     compile: True
     compile_backend: inductor
-    compile_mode: reduce-overhead
+    # "default" instead of "reduce-overhead": reduce-overhead uses CUDAGraphs
+    # which re-record for every new batch size, causing massive slowdowns when
+    # the sampler returns varying batch sizes (strict_length=False).
+    compile_mode: default
 
 replay_buffer:
   batch_size: 50000
