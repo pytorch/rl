@@ -384,10 +384,12 @@ class IsaacCameraReadTransform(Transform):
     def transform_observation_spec(self, observation_spec):
         from torchrl.data import Bounded
 
+        # Prepend the Composite's batch shape (e.g., (256,) for 256 envs)
+        # so the spec matches the batched output [N, H, W, C].
         observation_spec["pixels"] = Bounded(
             low=0,
             high=255,
-            shape=(self._h, self._w, self._c),
+            shape=(*observation_spec.shape, self._h, self._w, self._c),
             dtype=torch.uint8,
             device=observation_spec.device,
         )
