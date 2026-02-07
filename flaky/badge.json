@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
   "label": "flaky tests",
-  "message": "13",
-  "color": "red"
+  "message": "0",
+  "color": "brightgreen"
 }
