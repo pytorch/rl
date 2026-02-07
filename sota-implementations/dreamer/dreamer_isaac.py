@@ -178,10 +178,13 @@ def main(cfg: DictConfig):
     obs_norm = ObservationNorm(
         in_keys=["policy"],
         standard_normal=True,
+        eps=1e-2,  # prevent division by near-zero std
     )
     train_env.append_transform(obs_norm)
-    torchrl_logger.info("Initialising ObservationNorm stats (1 rollout)...")
-    obs_norm.init_stats(num_iter=1, reduce_dim=0, cat_dim=0)
+    # Collect 50 env steps (50 * 4096 = 204 800 frames) to get meaningful
+    # per-feature statistics across different robot configurations.
+    torchrl_logger.info("Initialising ObservationNorm stats (50 steps)...")
+    obs_norm.init_stats(num_iter=50, reduce_dim=(0, 1), cat_dim=0)
     torchrl_logger.info(
         f"ObservationNorm: loc range=[{obs_norm.loc.min():.2f}, {obs_norm.loc.max():.2f}], "
         f"scale range=[{obs_norm.scale.min():.2f}, {obs_norm.scale.max():.2f}]"
