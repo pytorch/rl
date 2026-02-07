@@ -653,6 +653,8 @@ class TensorSpec(metaclass=abc.ABCMeta):
     def __getstate__(self):
         state = dict(self.__dict__)
         state["_encode"] = {}
+        # Clear device-specific bounds cache to avoid serializing CUDA tensors
+        state.pop("_bounds_cache", None)
         return state
 
     @classmethod
@@ -2564,16 +2566,24 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
                 r = r.to(self.device)
             return r
 
+    def _get_space_bounds(
+        self, device: torch.device
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Get space bounds on the specified device, using cache to avoid .to() during CUDA graph capture."""
+        if self.device == device:
+            return self.space.low, self.space.high
+        cache = self.__dict__.get("_bounds_cache")
+        if cache is None:
+            cache = self.__dict__["_bounds_cache"] = {}
+        if device not in cache:
+            cache[device] = (self.space.low.to(device), self.space.high.to(device))
+        return cache[device]
+
     def _project(self, val: torch.Tensor) -> torch.Tensor:
-        low = self.space.low
-        high = self.space.high
-        if self.device != val.device:
-            low = low.to(val.device)
-            high = high.to(val.device)
+        low, high = self._get_space_bounds(val.device)
         low = low.expand_as(val)
         high = high.expand_as(val)
-        val = torch.clamp(val, low, high)
-        return val
+        return torch.clamp(val, low, high)
 
     def is_in(self, val: torch.Tensor) -> bool:
         val_shape = _remove_neg_shapes(tensordict.utils._shape(val))
@@ -2590,15 +2600,14 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
         if not dtype_match:
             return False
         try:
-            within_bounds = (val >= self.space.low.to(val.device)).all() and (
-                val <= self.space.high.to(val.device)
-            ).all()
+            low, high = self._get_space_bounds(val.device)
+            within_bounds = (val >= low).all() and (val <= high).all()
             return within_bounds
         except NotImplementedError:
+            low, high = self._get_space_bounds(val.device)
             within_bounds = all(
-                (_val >= space.low.to(val.device)).all()
-                and (_val <= space.high.to(val.device)).all()
-                for (_val, space) in zip(val, self.space.unbind(0))
+                (_val >= _low).all() and (_val <= _high).all()
+                for (_val, _low, _high) in zip(val, low.unbind(0), high.unbind(0))
             )
             return within_bounds
         except RuntimeError as err:
