@@ -181,7 +181,7 @@ def main(cfg: DictConfig):
     )
     train_env.append_transform(obs_norm)
     torchrl_logger.info("Initialising ObservationNorm stats (1 rollout)...")
-    obs_norm.init_stats(num_iter=1, cat_dim=None, reduce_dim=(0, 1))
+    obs_norm.init_stats(num_iter=1, reduce_dim=0, cat_dim=0)
     torchrl_logger.info(
         f"ObservationNorm: loc range=[{obs_norm.loc.min():.2f}, {obs_norm.loc.max():.2f}], "
         f"scale range=[{obs_norm.scale.min():.2f}, {obs_norm.scale.max():.2f}]"
