@@ -127,6 +127,8 @@ if [[ "$MODE" == "isaac" ]]; then
     # Install runtime deps
     echo "* Installing runtime deps..."
     $PIP install wandb hydra-core omegaconf tqdm --disable-pip-version-check -q
+    # ray + moviepy needed for async eval with video rendering
+    $PIP install "ray[default]" moviepy --disable-pip-version-check -q
 
 else
     # DMControl mode: create a venv with uv (more reliable than python -m venv)
@@ -201,8 +203,8 @@ echo "============================================================"
 cd "$REPO_DIR"
 
 if [[ "$MODE" == "isaac" ]]; then
-    # Expose 2 GPUs for async pipeline: GPU 0 = sim, GPU 1 = training
-    export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1}"
+    # Expose 3 GPUs: GPU 0 = sim, GPU 1 = training, GPU 2 = eval (rendering)
+    export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2}"
     $PYTHON "sota-implementations/dreamer/dreamer_isaac.py" "${EXTRA_ARGS[@]}"
 else
     export MUJOCO_GL=egl

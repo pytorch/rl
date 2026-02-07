@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import functools
+import os
 import tempfile
 from contextlib import nullcontext
 
@@ -1317,3 +1318,159 @@ def _default_device(device=None):
             return torch.device("cuda")
         return torch.device("cpu")
     return torch.device(device)
+
+
+# =========================================================================
+# Isaac Lab async-eval factory functions
+# =========================================================================
+# These return *closures* whose bodies use only local imports so that
+# cloudpickle (used by Ray) can serialise them without pulling in torch or
+# IsaacLab at deserialisation time.  The closures run inside the Ray actor
+# process AFTER ``init_fn`` has initialised AppLauncher.
+
+
+def make_isaac_init_fn(gpu_id: int = 2):
+    """Return a callable that initialises Isaac Lab's ``AppLauncher``.
+
+    The returned callable must be executed as the **very first thing** in a
+    new Python process – before any ``torch`` import.  It also adds the
+    dreamer directory to ``sys.path`` so that ``dreamer_utils`` is importable
+    in the actor process.
+
+    Args:
+        gpu_id: Physical GPU index that the eval actor should use.
+            Defaults to 2 (GPU 0 = sim, GPU 1 = train, GPU 2 = eval).
+    """
+    dreamer_dir = os.path.dirname(os.path.abspath(__file__))
+
+    def _init():
+        import argparse
+        import os as _os
+        import sys
+
+        # Pin the eval actor to a specific GPU *before* AppLauncher and
+        # torch can read CUDA_VISIBLE_DEVICES.
+        _os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+
+        from isaaclab.app import AppLauncher
+
+        parser = argparse.ArgumentParser()
+        AppLauncher.add_app_launcher_args(parser)
+        args, _ = parser.parse_known_args(["--headless", "--enable_cameras"])
+        AppLauncher(args)
+
+        # Make dreamer_utils importable inside the actor process.
+        if dreamer_dir not in sys.path:
+            sys.path.insert(0, dreamer_dir)
+
+    return _init
+
+
+def make_isaac_eval_env_factory(cfg):
+    """Return a callable that creates an Isaac Lab eval env with rendering.
+
+    The eval env differs from the training env in two ways:
+
+    * Fewer parallel sub-environments (``cfg.logger.eval_num_envs``).
+    * Created with ``render_mode="rgb_array"`` so that the actor can call
+      ``env.render()`` to capture viewport frames.
+    """
+    from omegaconf import OmegaConf
+
+    cfg_container = OmegaConf.to_container(cfg, resolve=True)
+
+    def _make():
+        import importlib
+
+        import gymnasium as gym
+
+        import isaaclab_tasks  # noqa: F401 – registers Isaac environments
+        from omegaconf import OmegaConf
+
+        from torchrl.data import Unbounded
+        from torchrl.envs import (
+            DoubleToFloat,
+            RewardSum,
+            StepCounter,
+            TensorDictPrimer,
+            TransformedEnv,
+        )
+        from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
+
+        cfg = OmegaConf.create(cfg_container)
+
+        # Resolve the env-config class from the gymnasium registry.
+        spec = gym.spec(cfg["env"]["name"])
+        env_cfg_entry = spec.kwargs["env_cfg_entry_point"]
+        module_path, class_name = env_cfg_entry.rsplit(":", 1)
+        env_cfg_cls = getattr(importlib.import_module(module_path), class_name)
+        env_cfg = env_cfg_cls()
+
+        # Use fewer envs for evaluation to save GPU memory.
+        env_cfg.scene.num_envs = cfg["logger"]["eval_num_envs"]
+
+        # render_mode="rgb_array" enables viewport rendering via env.render().
+        env = gym.make(cfg["env"]["name"], cfg=env_cfg, render_mode="rgb_array")
+        env = IsaacLabWrapper(env, missing_obs_value=0)
+
+        # --- same transforms as the training env (see _make_env / transform_env) ---
+        default_dict = {
+            "state": Unbounded(shape=(cfg["networks"]["state_dim"],)),
+            "belief": Unbounded(shape=(cfg["networks"]["rssm_hidden_dim"],)),
+        }
+        env = env.append_transform(
+            TensorDictPrimer(
+                random=False, default_value=0, expand_specs=True, **default_dict
+            )
+        )
+        if not isinstance(env, TransformedEnv):
+            env = TransformedEnv(env)
+        env.append_transform(DoubleToFloat())
+        env.append_transform(RewardSum())
+        env.append_transform(StepCounter(cfg["env"]["horizon"]))
+
+        return env
+
+    return _make
+
+
+def make_eval_policy_factory(cfg):
+    """Return a callable ``(env) -> policy`` that builds the Dreamer policy.
+
+    The returned callable runs inside the Ray actor process after
+    ``init_fn`` and ``env_maker``.  It calls :func:`make_dreamer` to
+    construct the full Dreamer stack and returns only the real-world policy
+    (``actor_realworld`` with exploration noise).
+    """
+    from omegaconf import OmegaConf
+
+    cfg_container = OmegaConf.to_container(cfg, resolve=True)
+
+    def _make(env):
+        import torch
+
+        from dreamer_utils import make_dreamer
+        from omegaconf import OmegaConf
+
+        cfg = OmegaConf.create(cfg_container)
+        device = torch.device("cuda:0")
+
+        (
+            _world_model,
+            _model_based_env,
+            _model_based_env_eval,
+            _actor_simulator,
+            _value_model,
+            policy,
+        ) = make_dreamer(
+            cfg=cfg,
+            device=device,
+            action_key="action",
+            value_key="state_value",
+            use_decoder_in_env=False,
+            logger=None,
+            test_env=env,
+        )
+        return policy
+
+    return _make

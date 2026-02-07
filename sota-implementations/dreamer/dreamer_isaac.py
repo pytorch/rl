@@ -50,6 +50,9 @@ from dreamer_utils import (
     _make_env,
     log_metrics,
     make_dreamer,
+    make_eval_policy_factory,
+    make_isaac_eval_env_factory,
+    make_isaac_init_fn,
     make_replay_buffer,
     transform_env,
 )
@@ -205,6 +208,33 @@ def main(cfg: DictConfig):
         )
 
     # ========================================================================
+    # Async eval worker (on a dedicated GPU via Ray)
+    # ========================================================================
+    eval_worker = None
+    if cfg.logger.video and num_gpus >= 3:
+        import ray
+
+        from torchrl.eval import RayEvalWorker
+
+        ray.init(num_gpus=num_gpus - 2)
+        eval_worker = RayEvalWorker(
+            init_fn=make_isaac_init_fn(),
+            env_maker=make_isaac_eval_env_factory(cfg),
+            policy_maker=make_eval_policy_factory(cfg),
+            num_gpus=1,
+        )
+        torchrl_logger.info(
+            f"Eval worker created: eval_every={cfg.logger.eval_every}, "
+            f"eval_rollout_steps={cfg.logger.eval_rollout_steps}, "
+            f"eval_num_envs={cfg.logger.eval_num_envs}"
+        )
+    elif cfg.logger.video:
+        torchrl_logger.warning(
+            f"Video rendering requested but only {num_gpus} GPUs available. "
+            "Need >= 3 GPUs (sim + train + eval). Skipping eval worker."
+        )
+
+    # ========================================================================
     # Losses (on train_device)
     # ========================================================================
     world_model_loss = DreamerModelLoss(world_model)
@@ -309,6 +339,9 @@ def main(cfg: DictConfig):
     log_every = cfg.optimization.log_every
     grad_clip = cfg.optimization.grad_clip
     optim_steps_per_collect = cfg.collector.optim_steps_per_collect
+
+    eval_every = cfg.logger.eval_every
+    next_eval_step = eval_every
 
     pbar = tqdm.tqdm(total=total_optim_steps, desc="Optim steps")
     t_log_start = time.time()
@@ -609,6 +642,35 @@ def main(cfg: DictConfig):
         collector.update_policy_weights_(weights)
         policy[1].step(optim_steps_per_collect)  # Update exploration noise schedule
 
+        # ---- Async eval: poll results & submit new rollout ----
+        if eval_worker is not None:
+            eval_result = eval_worker.poll()
+            if eval_result is not None:
+                eval_metrics = {"eval/reward": eval_result["reward"]}
+                if logger is not None:
+                    log_metrics(logger, eval_metrics, collected_frames)
+                    if eval_result["frames"] is not None:
+                        logger.log_video(
+                            "eval/video",
+                            eval_result["frames"],
+                            step=collected_frames,
+                        )
+                torchrl_logger.info(
+                    f"Eval result: reward={eval_result['reward']:.4f}, "
+                    f"has_video={eval_result['frames'] is not None}"
+                )
+
+            if optim_step >= next_eval_step:
+                next_eval_step += eval_every
+                eval_weights = TensorDict.from_module(policy).data.detach().cpu()
+                eval_worker.submit(
+                    eval_weights,
+                    max_steps=cfg.logger.eval_rollout_steps,
+                    # Isaac envs auto-reset, so done.any() fires as soon as a
+                    # single sub-env finishes.  Run the full rollout instead.
+                    break_when_any_done=False,
+                )
+
         if optim_step >= total_optim_steps:
             break
 
@@ -616,6 +678,8 @@ def main(cfg: DictConfig):
     # Cleanup
     # ========================================================================
     pbar.close()
+    if eval_worker is not None:
+        eval_worker.shutdown()
     if not train_env.is_closed:
         train_env.close()
     collector.shutdown()

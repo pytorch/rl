@@ -70,5 +70,8 @@ logger:
   mode: online
   eval_every: 1000
   eval_rollout_steps: 500
-  video: False
+  # Number of parallel envs in the eval actor (fewer = less GPU memory).
+  eval_num_envs: 4
+  # Enable async eval with viewport rendering (requires >= 3 GPUs).
+  video: True
   video_skip: 1
