@@ -61,7 +61,7 @@ from tensordict import TensorDict
 from torch.amp import GradScaler
 from torch.autograd.profiler import record_function
 from torch.nn.utils import clip_grad_norm_
-from torchrl._utils import logger as torchrl_logger, timeit
+from torchrl._utils import compile_with_warmup, logger as torchrl_logger, timeit
 from torchrl.collectors import Collector
 from torchrl.objectives.dreamer import (
     DreamerActorLoss,
@@ -361,6 +361,48 @@ def main(cfg: DictConfig):
 
     if train_device.type == "cuda":
         torch.set_float32_matmul_precision("high")
+
+    # ========================================================================
+    # torch.compile
+    # ========================================================================
+    compile_cfg = cfg.optimization.compile
+    compile_enabled = compile_cfg.enabled
+    compile_losses = set(compile_cfg.losses)
+    if compile_enabled:
+        torch._dynamo.config.capture_scalar_outputs = True
+
+        compile_warmup = 3
+        torchrl_logger.info(f"Compiling loss modules with warmup={compile_warmup}")
+        backend = compile_cfg.backend
+        cudagraphs = compile_cfg.cudagraphs
+        compile_options = {"triton.cudagraphs": cudagraphs}
+
+        if "world_model" in compile_losses:
+            world_model_loss = compile_with_warmup(
+                world_model_loss,
+                backend=backend,
+                fullgraph=False,
+                warmup=compile_warmup,
+                options=compile_options,
+            )
+        if "actor" in compile_losses:
+            actor_loss = compile_with_warmup(
+                actor_loss,
+                backend=backend,
+                fullgraph=False,
+                warmup=compile_warmup,
+                options=compile_options,
+            )
+        if "value" in compile_losses:
+            value_loss = compile_with_warmup(
+                value_loss,
+                backend=backend,
+                fullgraph=False,
+                warmup=compile_warmup,
+                options=compile_options,
+            )
+    else:
+        compile_warmup = 0
 
     # ========================================================================
     # Training config
