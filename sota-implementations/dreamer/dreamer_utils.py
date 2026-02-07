@@ -1366,7 +1366,7 @@ def make_isaac_init_fn(gpu_id: int = 2):
     return _init
 
 
-def make_isaac_eval_env_factory(cfg):
+def make_isaac_eval_env_factory(cfg, obs_norm_loc=None, obs_norm_scale=None):
     """Return a callable that creates an Isaac Lab eval env with rendering.
 
     The eval env differs from the training env in two ways:
@@ -1374,10 +1374,20 @@ def make_isaac_eval_env_factory(cfg):
     * Fewer parallel sub-environments (``cfg.logger.eval_num_envs``).
     * Created with ``render_mode="rgb_array"`` so that the actor can call
       ``env.render()`` to capture viewport frames.
+
+    Args:
+        cfg: Hydra config.
+        obs_norm_loc: Pre-computed observation mean (from training env).
+        obs_norm_scale: Pre-computed observation std (from training env).
     """
     from omegaconf import OmegaConf
 
     cfg_container = OmegaConf.to_container(cfg, resolve=True)
+    # Detach and convert to list for pickling
+    norm_loc = obs_norm_loc.detach().tolist() if obs_norm_loc is not None else None
+    norm_scale = (
+        obs_norm_scale.detach().tolist() if obs_norm_scale is not None else None
+    )
 
     def _make():
         import importlib
@@ -1385,11 +1395,13 @@ def make_isaac_eval_env_factory(cfg):
         import gymnasium as gym
 
         import isaaclab_tasks  # noqa: F401 – registers Isaac environments
+        import torch
         from omegaconf import OmegaConf
 
         from torchrl.data import Unbounded
         from torchrl.envs import (
             DoubleToFloat,
+            ObservationNorm,
             RewardSum,
             StepCounter,
             TensorDictPrimer,
@@ -1428,6 +1440,17 @@ def make_isaac_eval_env_factory(cfg):
         env.append_transform(DoubleToFloat())
         env.append_transform(RewardSum())
         env.append_transform(StepCounter(cfg["env"]["horizon"]))
+
+        # Apply the same ObservationNorm as training env
+        if norm_loc is not None:
+            env.append_transform(
+                ObservationNorm(
+                    loc=torch.tensor(norm_loc),
+                    scale=torch.tensor(norm_scale),
+                    in_keys=["policy"],
+                    standard_normal=True,
+                )
+            )
 
         return env
 

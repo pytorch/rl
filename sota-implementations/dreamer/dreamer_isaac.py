@@ -168,6 +168,25 @@ def main(cfg: DictConfig):
     train_env = _make_env(cfg, device=sim_device)
     train_env = transform_env(cfg, train_env)
     train_env.set_seed(cfg.env.seed)
+
+    # Normalize observations to ~N(0,1).  Without this, the raw IsaacLab
+    # observations (std ~1.7, range [-30, 30]) produce an initial reco loss
+    # of ~150 000 whose gradients are clipped to ~100 (vs. norms of ~700 000),
+    # effectively reducing the world-model learning rate by ~7000x.
+    from torchrl.envs import ObservationNorm
+
+    obs_norm = ObservationNorm(
+        in_keys=["policy"],
+        standard_normal=True,
+    )
+    train_env.append_transform(obs_norm)
+    torchrl_logger.info("Initialising ObservationNorm stats (1 rollout)...")
+    obs_norm.init_stats(num_iter=1, cat_dim=None, reduce_dim=(0, 1))
+    torchrl_logger.info(
+        f"ObservationNorm: loc range=[{obs_norm.loc.min():.2f}, {obs_norm.loc.max():.2f}], "
+        f"scale range=[{obs_norm.scale.min():.2f}, {obs_norm.scale.max():.2f}]"
+    )
+
     torchrl_logger.info(
         f"IsaacLab env created: batch_size={train_env.batch_size}, "
         f"obs_spec keys={list(train_env.observation_spec.keys())}, "
@@ -219,7 +238,11 @@ def main(cfg: DictConfig):
         ray.init(num_gpus=num_gpus - 2)
         eval_worker = RayEvalWorker(
             init_fn=make_isaac_init_fn(),
-            env_maker=make_isaac_eval_env_factory(cfg),
+            env_maker=make_isaac_eval_env_factory(
+                cfg,
+                obs_norm_loc=obs_norm.loc.cpu(),
+                obs_norm_scale=obs_norm.scale.cpu(),
+            ),
             policy_maker=make_eval_policy_factory(cfg),
             num_gpus=1,
         )
@@ -237,7 +260,11 @@ def main(cfg: DictConfig):
     # ========================================================================
     # Losses (on train_device)
     # ========================================================================
-    world_model_loss = DreamerModelLoss(world_model)
+    # global_average=True: for state-based observations the tensor is 3D
+    # [B, T, F], and the default sum((-3,-2,-1)) accidentally sums over
+    # batch and time too, inflating the loss ~40000x and rendering the
+    # gradient clipping far too aggressive.
+    world_model_loss = DreamerModelLoss(world_model, global_average=True)
     # IsaacLab uses "policy" as observation key (state-based, not pixels)
     world_model_loss.set_keys(pixels="policy", reco_pixels="reco_policy")
 
