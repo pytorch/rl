@@ -1881,7 +1881,20 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">event</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_events</span> <span class="o">=</span> <span class="p">[</span><span class="n">ctx</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">_num_workers</span><span class="p">)]</span>
+
+        <span class="c1"># Shared-memory done flags: workers write 1 when done, parent spin-polls.</span>
+        <span class="c1"># Eliminates futex syscalls from mp.Event on the critical path.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_shm_done_flags</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">RawArray</span><span class="p">(</span><span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="n">_num_workers</span><span class="p">)</span>
+
         <span class="n">kwargs</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;mp_event&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_events</span><span class="p">[</span><span class="n">i</span><span class="p">]}</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">_num_workers</span><span class="p">)]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">_num_workers</span><span class="p">):</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;worker_idx&quot;</span><span class="p">:</span> <span class="n">i</span><span class="p">,</span>
+                        <span class="s2">&quot;shm_done_flags&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shm_done_flags</span><span class="p">,</span>
+                    <span class="p">}</span>
+                <span class="p">)</span>
         <span class="k">with</span> <span class="n">clear_mpi_env_vars</span><span class="p">():</span>
             <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">_num_workers</span><span class="p">):</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_verbose</span><span class="p">:</span>
@@ -2144,33 +2157,44 @@
         <span class="c1"># We must pass a clone of the tensordict, as the values of this tensordict</span>
         <span class="c1"># will be modified in-place at further steps</span>
         <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
-        <span class="k">if</span> <span class="n">shared_tensordict_parent</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="n">device</span><span class="p">:</span>
+        <span class="n">shared_device</span> <span class="o">=</span> <span class="n">shared_tensordict_parent</span><span class="o">.</span><span class="n">device</span>
+        <span class="k">if</span> <span class="n">shared_device</span> <span class="o">==</span> <span class="n">device</span><span class="p">:</span>
             <span class="n">next_td</span> <span class="o">=</span> <span class="n">next_td</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
             <span class="n">tensordict_</span> <span class="o">=</span> <span class="n">tensordict_</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
         <span class="k">elif</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">next_td</span> <span class="o">=</span> <span class="n">next_td</span><span class="o">.</span><span class="n">_fast_apply</span><span class="p">(</span>
-                <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">x</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span>
-                <span class="k">else</span> <span class="n">x</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>
-                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
-                <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="n">tensordict_</span> <span class="o">=</span> <span class="n">tensordict_</span><span class="o">.</span><span class="n">_fast_apply</span><span class="p">(</span>
-                <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">x</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span>
-                <span class="k">else</span> <span class="n">x</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>
-                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
-                <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span><span class="p">:</span>
-                <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">_fast_apply</span><span class="p">(</span>
-                    <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span><span class="p">)</span>
-                    <span class="k">if</span> <span class="n">x</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span>
-                    <span class="k">else</span> <span class="n">x</span><span class="p">,</span>
+            <span class="n">_non_blocking</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span>
+            <span class="k">if</span> <span class="n">shared_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">shared_device</span> <span class="o">!=</span> <span class="n">device</span><span class="p">:</span>
+                <span class="c1"># Fast path: all tensors on one device, transferring to another.</span>
+                <span class="c1"># .to(device) creates new tensors so no need for per-tensor clone.</span>
+                <span class="n">next_td</span> <span class="o">=</span> <span class="n">next_td</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">_non_blocking</span><span class="p">)</span>
+                <span class="n">tensordict_</span> <span class="o">=</span> <span class="n">tensordict_</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">_non_blocking</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span><span class="p">:</span>
+                    <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">_non_blocking</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Mixed devices: per-tensor check needed</span>
+                <span class="k">def</span> <span class="nf">_to_or_clone</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">_device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">_nb</span><span class="o">=</span><span class="n">_non_blocking</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">x</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">_device</span><span class="p">:</span>
+                        <span class="k">return</span> <span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">_nb</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="n">x</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+
+                <span class="n">next_td</span> <span class="o">=</span> <span class="n">next_td</span><span class="o">.</span><span class="n">_fast_apply</span><span class="p">(</span>
+                    <span class="n">_to_or_clone</span><span class="p">,</span>
                     <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
                     <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
                 <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_sync_w2m</span><span class="p">()</span>
+                <span class="n">tensordict_</span> <span class="o">=</span> <span class="n">tensordict_</span><span class="o">.</span><span class="n">_fast_apply</span><span class="p">(</span>
+                    <span class="n">_to_or_clone</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                    <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span><span class="p">:</span>
+                    <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">_fast_apply</span><span class="p">(</span>
+                        <span class="n">_to_or_clone</span><span class="p">,</span>
+                        <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                        <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="p">)</span>
+            <span class="k">if</span> <span class="n">shared_device</span> <span class="o">!=</span> <span class="n">device</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_sync_w2m</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">next_td</span> <span class="o">=</span> <span class="n">next_td</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span><span class="o">.</span><span class="n">clear_device_</span><span class="p">()</span>
             <span class="n">tensordict_</span> <span class="o">=</span> <span class="n">tensordict_</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span><span class="o">.</span><span class="n">clear_device_</span><span class="p">()</span>
@@ -2233,41 +2257,40 @@
 
 
     <span class="k">def</span> <span class="nf">_wait_for_workers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">workers_range</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Wait for all workers to signal completion via their events.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Wait for all workers to signal completion.</span>
 
-<span class="sd">        Uses multiprocessing.connection.wait() for efficient OS-level</span>
-<span class="sd">        waiting on multiple pipes simultaneously.</span>
+<span class="sd">        Uses shared-memory byte flags for the hot path (step_and_maybe_reset)</span>
+<span class="sd">        to avoid syscalls. Falls back to mp.Event for other commands.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">timeout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">BATCHED_PIPE_TIMEOUT</span>
         <span class="n">t0</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
 
-        <span class="c1"># In shared-memory/buffer mode, workers signal completion by setting</span>
-        <span class="c1"># their `mp_event` (they may not send anything back on the pipe).</span>
+        <span class="c1"># Spin-poll shared memory done flags (no syscalls on the fast path).</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span><span class="p">:</span>
-            <span class="n">pending</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">workers_range</span><span class="p">)</span>
-            <span class="n">n_iter</span> <span class="o">=</span> <span class="mi">0</span>
-            <span class="k">while</span> <span class="n">pending</span><span class="p">:</span>
-                <span class="n">n_iter</span> <span class="o">+=</span> <span class="mi">1</span>
-                <span class="n">remaining</span> <span class="o">=</span> <span class="n">timeout</span> <span class="o">-</span> <span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">t0</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">remaining</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Failed to run all workers within the </span><span class="si">{</span><span class="n">timeout</span><span class="si">}</span><span class="s2"> sec time limit. This &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;threshold can be increased via the BATCHED_PIPE_TIMEOUT env variable.&quot;</span>
-                    <span class="p">)</span>
+            <span class="n">done_flags</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shm_done_flags</span>
+            <span class="n">n_spins</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="n">all_done</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">workers_range</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">done_flags</span><span class="p">[</span><span class="n">i</span><span class="p">]:</span>
+                        <span class="n">all_done</span> <span class="o">=</span> <span class="kc">False</span>
+                        <span class="k">break</span>
+                <span class="k">if</span> <span class="n">all_done</span><span class="p">:</span>
+                    <span class="c1"># Clear flags for next round</span>
+                    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">workers_range</span><span class="p">:</span>
+                        <span class="n">done_flags</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+                    <span class="k">return</span>
 
-                <span class="c1"># Wait in short slices so we can both harvest multiple events and</span>
-                <span class="c1"># periodically check for dead workers without blocking forever.</span>
-                <span class="n">slice_timeout</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">remaining</span><span class="p">)</span>
-                <span class="n">progressed</span> <span class="o">=</span> <span class="kc">False</span>
-                <span class="k">for</span> <span class="n">wi</span> <span class="ow">in</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">pending</span><span class="p">):</span>
-                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_events</span><span class="p">[</span><span class="n">wi</span><span class="p">]</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">slice_timeout</span><span class="p">):</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_events</span><span class="p">[</span><span class="n">wi</span><span class="p">]</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
-                        <span class="n">pending</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">wi</span><span class="p">)</span>
-                        <span class="n">progressed</span> <span class="o">=</span> <span class="kc">True</span>
-
-                <span class="k">if</span> <span class="ow">not</span> <span class="n">progressed</span> <span class="ow">and</span> <span class="p">(</span><span class="n">n_iter</span> <span class="o">%</span> <span class="mi">50</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-                    <span class="k">for</span> <span class="n">wi</span> <span class="ow">in</span> <span class="n">pending</span><span class="p">:</span>
-                        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_workers</span><span class="p">[</span><span class="n">wi</span><span class="p">]</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+                <span class="n">n_spins</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="c1"># Periodically check timeout and worker health</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">n_spins</span> <span class="o">&amp;</span> <span class="mh">0xFFFF</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>  <span class="c1"># every 65536 spins (~1ms on modern CPUs)</span>
+                    <span class="k">if</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">t0</span> <span class="o">&gt;</span> <span class="n">timeout</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;Failed to run all workers within the </span><span class="si">{</span><span class="n">timeout</span><span class="si">}</span><span class="s2"> sec time limit. This &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;threshold can be increased via the BATCHED_PIPE_TIMEOUT env variable.&quot;</span>
+                        <span class="p">)</span>
+                    <span class="k">for</span> <span class="n">wi</span> <span class="ow">in</span> <span class="n">workers_range</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="ow">not</span> <span class="n">done_flags</span><span class="p">[</span><span class="n">wi</span><span class="p">]</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_workers</span><span class="p">[</span><span class="n">wi</span><span class="p">]</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
                             <span class="k">try</span><span class="p">:</span>
                                 <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_workers</span><span class="p">()</span>
                             <span class="k">finally</span><span class="p">:</span>
@@ -2718,9 +2741,7 @@
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_verbose</span><span class="p">:</span>
                     <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;closing </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
                 <span class="n">channel</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="s2">&quot;close&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
-            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_events</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_events</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_workers</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">))</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span><span class="p">:</span>
                 <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_tensordicts</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_tensordict_parent</span>
 
@@ -2864,6 +2885,8 @@
     <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">num_threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># for fork start method</span>
     <span class="n">filter_warnings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">shm_done_flags</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
     <span class="n">pid</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">()</span>
     <span class="c1"># Handle warning filtering (moved from _ProcessNoWarn)</span>
@@ -2911,6 +2934,18 @@
     <span class="n">_cmd_count</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="n">_last_cmd</span> <span class="o">=</span> <span class="s2">&quot;N/A&quot;</span>
     <span class="c1"># Create a timeit instance to track elapsed time since worker start</span>
+    <span class="c1"># Use shared memory for done signaling (avoids futex syscalls).</span>
+    <span class="c1"># Command delivery still goes through pipes (kernel wakeup is efficient).</span>
+    <span class="k">if</span> <span class="n">shm_done_flags</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">worker_idx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+
+        <span class="k">def</span> <span class="nf">_signal_done</span><span class="p">():</span>
+            <span class="n">shm_done_flags</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="k">else</span><span class="p">:</span>
+
+        <span class="k">def</span> <span class="nf">_signal_done</span><span class="p">():</span>
+            <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+
     <span class="n">_worker_timer</span> <span class="o">=</span> <span class="n">timeit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;batched_env_worker/</span><span class="si">{</span><span class="n">pid</span><span class="si">}</span><span class="s2">/lifetime&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
     <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
@@ -2991,15 +3026,12 @@
                 <span class="n">event</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
 
             <span class="k">if</span> <span class="n">_non_tensor_keys</span><span class="p">:</span>
-                <span class="c1"># Set event BEFORE sending to avoid deadlocks when the pipe buffer</span>
-                <span class="c1"># is full (the parent will start reading as soon as it observes</span>
-                <span class="c1"># the event).</span>
-                <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+                <span class="n">_signal_done</span><span class="p">()</span>
                 <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
                     <span class="p">(</span><span class="s2">&quot;non_tensor&quot;</span><span class="p">,</span> <span class="n">cur_td</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">_non_tensor_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
                 <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+                <span class="n">_signal_done</span><span class="p">()</span>
 
             <span class="k">del</span> <span class="n">cur_td</span>
 
@@ -3031,15 +3063,12 @@
             <span class="n">root_shared_tensordict</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">_step_mdp</span><span class="p">(</span><span class="nb">input</span><span class="p">))</span>
 
             <span class="k">if</span> <span class="n">_non_tensor_keys</span><span class="p">:</span>
-                <span class="c1"># Set event BEFORE sending to avoid deadlocks when the pipe buffer</span>
-                <span class="c1"># is full (the parent will start reading as soon as it observes</span>
-                <span class="c1"># the event).</span>
-                <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+                <span class="n">_signal_done</span><span class="p">()</span>
                 <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
                     <span class="p">(</span><span class="s2">&quot;non_tensor&quot;</span><span class="p">,</span> <span class="n">next_td</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">_non_tensor_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
                 <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+                <span class="n">_signal_done</span><span class="p">()</span>
 
             <span class="k">del</span> <span class="n">next_td</span>
 
@@ -3077,13 +3106,12 @@
             <span class="k">if</span> <span class="n">_non_tensor_keys</span><span class="p">:</span>
                 <span class="n">ntd</span> <span class="o">=</span> <span class="n">root_next_td</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">_non_tensor_keys</span><span class="p">)</span>
                 <span class="n">ntd</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">td_next</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">_non_tensor_keys</span><span class="p">))</span>
-                <span class="c1"># Set event BEFORE sending to avoid deadlocks when the pipe buffer</span>
-                <span class="c1"># is full (the parent will start reading as soon as it observes</span>
-                <span class="c1"># the event).</span>
-                <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+                <span class="c1"># Signal done BEFORE sending pipe data to avoid deadlocks when</span>
+                <span class="c1"># the pipe buffer is full.</span>
+                <span class="n">_signal_done</span><span class="p">()</span>
                 <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="s2">&quot;non_tensor&quot;</span><span class="p">,</span> <span class="n">ntd</span><span class="p">))</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+                <span class="n">_signal_done</span><span class="p">()</span>
 
             <span class="k">del</span> <span class="n">td</span><span class="p">,</span> <span class="n">root_next_td</span>
 
@@ -3098,7 +3126,7 @@
                 <span class="n">next_shared_tensordict</span><span class="p">,</span>
                 <span class="n">root_shared_tensordict</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+            <span class="n">_signal_done</span><span class="p">()</span>
             <span class="n">child_pipe</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
                 <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">pid</span><span class="si">}</span><span class="s2"> closed&quot;</span><span class="p">)</span>
@@ -3107,7 +3135,7 @@
 
         <span class="k">elif</span> <span class="n">cmd</span> <span class="o">==</span> <span class="s2">&quot;load_state_dict&quot;</span><span class="p">:</span>
             <span class="n">env</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-            <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+            <span class="n">_signal_done</span><span class="p">()</span>
 
         <span class="k">elif</span> <span class="n">cmd</span> <span class="o">==</span> <span class="s2">&quot;state_dict&quot;</span><span class="p">:</span>
             <span class="n">state_dict</span> <span class="o">=</span> <span class="n">_recursively_strip_locks_from_state_dict</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">state_dict</span><span class="p">())</span>

@@ -683,11 +683,11 @@ synchronously - it waits for a batch to be ready before returning:</p>
 <span class="n">collector</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Collected batch: torch.Size([200]), reward: -7.77
-Collected batch: torch.Size([200]), reward: -7.96
-Collected batch: torch.Size([200]), reward: -7.82
-Collected batch: torch.Size([200]), reward: -8.00
-Collected batch: torch.Size([200]), reward: -8.22
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Collected batch: torch.Size([200]), reward: -7.66
+Collected batch: torch.Size([200]), reward: -7.62
+Collected batch: torch.Size([200]), reward: -7.48
+Collected batch: torch.Size([200]), reward: -7.99
+Collected batch: torch.Size([200]), reward: -6.75
 </pre></div>
 </div>
 <p>For async collection (useful when training takes longer than collecting),
@@ -732,7 +732,7 @@ variants), use <a class="reference internal" href="../reference/generated/torchr
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Prioritized sample indices:&quot;</span><span class="p">,</span> <span class="n">info</span><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">][:</span><span class="mi">5</span><span class="p">],</span> <span class="s2">&quot;...&quot;</span><span class="p">)</span>  <span class="c1"># First 5 indices</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Prioritized sample indices: tensor([87, 98, 56, 76,  2]) ...
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Prioritized sample indices: tensor([ 0,  4, 90, 56, 44]) ...
 </pre></div>
 </div>
 </section>
@@ -783,7 +783,7 @@ dummy batch to see it in action:</p>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Loss:&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">loss_td</span></a><span class="p">[</span><span class="s2">&quot;loss&quot;</span><span class="p">])</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Loss: tensor(0.8576, grad_fn=&lt;MeanBackward0&gt;)
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Loss: tensor(0.9122, grad_fn=&lt;MeanBackward0&gt;)
 </pre></div>
 </div>
 <p>The loss function handles target network updates, Bellman backup
@@ -846,10 +846,10 @@ training loop. We’ll train a simple DQN agent on CartPole:</p>
 <span class="n">env</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Step 0: loss=0.993
-Step 5: loss=0.667
-Step 10: loss=0.436
-Step 15: loss=0.274
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Step 0: loss=1.024
+Step 5: loss=0.647
+Step 10: loss=0.399
+Step 15: loss=0.269
 </pre></div>
 </div>
 <p>This is a minimal example - a production DQN would include target network
@@ -887,7 +887,7 @@ folder contains production-ready implementations of:</p>
 <li><p><a class="reference external" href="https://github.com/pytorch/rl">GitHub</a></p></li>
 <li><p><a class="reference external" href="https://github.com/pytorch/rl/blob/main/CONTRIBUTING.md">Contributing Guide</a></p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 4.171 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 4.204 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-torchrl-demo-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/36fe09d5d4546649ee1a029c7144936e/torchrl_demo.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">torchrl_demo.ipynb</span></code></a></p>
