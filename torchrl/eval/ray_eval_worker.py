@@ -209,8 +209,9 @@ class _EvalActor:
         import torch
         from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 
-        # Load weights into the eval policy
-        weights.to_module(self.policy)
+        # Load weights into the eval policy (move to policy device first)
+        device = next(self.policy.parameters()).device
+        weights.to(device).to_module(self.policy)
 
         frames = []
         total_reward = 0.0
