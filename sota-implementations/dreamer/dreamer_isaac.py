@@ -258,6 +258,23 @@ def main(cfg: DictConfig):
         value_model.parameters(), lr=cfg.optimization.value_lr, fused=use_fused
     )
 
+    # Optional linear warmup for actor & value LRs — keeps them near-zero
+    # while the world model learns to reconstruct, then ramps to target LR.
+    warmup_steps = cfg.optimization.get("actor_value_warmup_steps", 0)
+    actor_scheduler = None
+    value_scheduler = None
+    if warmup_steps > 0:
+        actor_scheduler = torch.optim.lr_scheduler.LinearLR(
+            actor_opt, start_factor=1e-3, end_factor=1.0, total_iters=warmup_steps
+        )
+        value_scheduler = torch.optim.lr_scheduler.LinearLR(
+            value_opt, start_factor=1e-3, end_factor=1.0, total_iters=warmup_steps
+        )
+        torchrl_logger.info(
+            f"Actor/value LR warmup: {warmup_steps} steps "
+            f"(0 → {cfg.optimization.actor_lr} / {cfg.optimization.value_lr})"
+        )
+
     # ========================================================================
     # Mixed precision
     # ========================================================================
@@ -472,6 +489,8 @@ def main(cfg: DictConfig):
                     scaler2.update()
                 else:
                     actor_opt.step()
+                if actor_scheduler is not None:
+                    actor_scheduler.step()
 
             # --- Value update ---
             with timeit("train/value-forward"), record_function("## value/forward ##"):
@@ -504,6 +523,8 @@ def main(cfg: DictConfig):
                     scaler3.update()
                 else:
                     value_opt.step()
+                if value_scheduler is not None:
+                    value_scheduler.step()
 
             optim_step += 1
 
@@ -552,6 +573,9 @@ def main(cfg: DictConfig):
                     "collected_frames": collected_frames,
                     **timeit.todict(prefix="time"),
                 }
+                if actor_scheduler is not None:
+                    metrics["lr/actor"] = actor_scheduler.get_last_lr()[0]
+                    metrics["lr/value"] = value_scheduler.get_last_lr()[0]
 
                 if logger is not None:
                     log_metrics(logger, metrics, collected_frames)

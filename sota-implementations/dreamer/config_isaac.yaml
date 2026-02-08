@@ -25,6 +25,10 @@ optimization:
   world_model_lr: 6e-4
   actor_lr: 8e-5
   value_lr: 8e-5
+  # Linear warmup for actor/value LRs.  During the first `warmup_steps`
+  # optimisation steps the LR ramps linearly from 0 → target.  Set to 0
+  # to disable warmup.
+  actor_value_warmup_steps: 0
   kl_scale: 1.0
   free_nats: 3.0
   gamma: 0.99
