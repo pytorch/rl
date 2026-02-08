@@ -1220,8 +1220,7 @@ def _dreamer_make_world_model(
 
 
 def log_metrics(logger, metrics, step):
-    for metric_name, metric_value in metrics.items():
-        logger.log_scalar(metric_name, metric_value, step)
+    logger.log_metrics(metrics, step)
 
 
 def get_activation(name):
