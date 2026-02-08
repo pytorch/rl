@@ -670,14 +670,22 @@ def make_dreamer(
         # Determine input channels (1 for grayscale, 3 for RGB)
         in_channels = 1 if cfg.env.grayscale else 3
         image_size = cfg.env.image_size
+        encoder_channels = cfg.networks.get("encoder_channels", 32)
 
         # Compute encoder output size for explicit posterior input
         obs_embed_dim = _compute_encoder_output_size(
-            image_size, channels=32, num_layers=4
+            image_size, channels=encoder_channels, num_layers=4
         )
 
-        encoder = ObsEncoder(in_channels=in_channels, device=device)
-        decoder = ObsDecoder(latent_dim=state_dim + rssm_hidden_dim, device=device)
+        encoder = ObsEncoder(
+            channels=encoder_channels, in_channels=in_channels, device=device
+        )
+        decoder = ObsDecoder(
+            channels=encoder_channels,
+            latent_dim=state_dim + rssm_hidden_dim,
+            out_channels=in_channels,
+            device=device,
+        )
 
         observation_in_key = "pixels"
         observation_out_key = "reco_pixels"

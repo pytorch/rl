@@ -47,6 +47,7 @@ networks:
   state_dim: 30
   rssm_hidden_dim: 200
   hidden_dim: 400
+  encoder_channels: 32
   activation: "elu"
   use_scan: False
   rssm_rollout:
