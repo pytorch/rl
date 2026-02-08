@@ -2741,7 +2741,13 @@
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_verbose</span><span class="p">:</span>
                     <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;closing </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
                 <span class="n">channel</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="s2">&quot;close&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_workers</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">))</span>
+            <span class="c1"># Wait on mp.Event (not _wait_for_workers) because the &quot;close&quot;</span>
+            <span class="c1"># handler doesn&#39;t send data on the pipe — it just closes it — and</span>
+            <span class="c1"># connection_wait does not reliably detect socketpair closure</span>
+            <span class="c1"># on all platforms (macOS with forked workers).</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_events</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_events</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span><span class="p">:</span>
                 <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_tensordicts</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_tensordict_parent</span>
 
@@ -3127,6 +3133,9 @@
                 <span class="n">root_shared_tensordict</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">_signal_done</span><span class="p">()</span>
+            <span class="c1"># Also set mp_event so _shutdown_workers (which waits on events,</span>
+            <span class="c1"># not shm flags) can detect completion.</span>
+            <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
             <span class="n">child_pipe</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
                 <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">pid</span><span class="si">}</span><span class="s2"> closed&quot;</span><span class="p">)</span>
@@ -3136,6 +3145,9 @@
         <span class="k">elif</span> <span class="n">cmd</span> <span class="o">==</span> <span class="s2">&quot;load_state_dict&quot;</span><span class="p">:</span>
             <span class="n">env</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
             <span class="n">_signal_done</span><span class="p">()</span>
+            <span class="c1"># Also set mp_event so the parent&#39;s load_state_dict (which waits</span>
+            <span class="c1"># on events) can detect completion.</span>
+            <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
 
         <span class="k">elif</span> <span class="n">cmd</span> <span class="o">==</span> <span class="s2">&quot;state_dict&quot;</span><span class="p">:</span>
             <span class="n">state_dict</span> <span class="o">=</span> <span class="n">_recursively_strip_locks_from_state_dict</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">state_dict</span><span class="p">())</span>
