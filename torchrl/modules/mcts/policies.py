@@ -86,13 +86,6 @@ class MCTSPolicy(MCTSPolicyBase):
         score_key (NestedKey, optional): Key for storing scores. Defaults to "score".
         action_key (NestedKey, optional): Key for the selected action. Defaults to "action".
     """
-    def __init__(self, *, score_module: MCTSScore, action_mask_key: NestedKey = "action_mask", score_key: NestedKey = "score", action_key: NestedKey = "action") -> None:
-        super().__init__(
-            score_module=score_module,
-            action_mask_key=action_mask_key,
-            score_key=score_key,
-            action_key=action_key,
-        )
 
     def select_action(self, score: torch.Tensor, mask: torch.Tensor | None) -> torch.Tensor:
         if mask is not None:
@@ -106,28 +99,25 @@ class MCTSPolicy(MCTSPolicyBase):
                 raise ValueError("action_mask must allow at least one valid action per node.")
             score = torch.where(mask, score, torch.full_like(score, -torch.inf))
         action = score.argmax(dim=-1)
-        if score.ndim == 1 and action.ndim == 1 and action.numel() == 1:
-            return action.squeeze(0)
         return action
 
 class AlphaGoPolicy(MCTSPolicy):
+    """AlphaGo-style MCTS policy using PUCT scoring.
+
+    This policy implements the selection mechanism from AlphaGo, using PUCT (Predictor + Upper Confidence Bound)
+    to balance exploration and exploitation.
+
+    Args:
+        c (float, optional): Exploration constant for PUCT. Defaults to 5.0.
+        win_count_key (NestedKey, optional): Key for win counts. Defaults to "win_count".
+        visits_key (NestedKey, optional): Key for visit counts. Defaults to "visits".
+        total_visits_key (NestedKey, optional): Key for total visits. Defaults to "total_visits".
+        prior_prob_key (NestedKey, optional): Key for prior probabilities. Defaults to "prior_prob".
+        action_mask_key (NestedKey, optional): Key for the action mask. Defaults to "action_mask".
+        score_key (NestedKey, optional): Key for storing scores. Defaults to "score".
+        action_key (NestedKey, optional): Key for the selected action. Defaults to "action".
+    """
     def __init__(self, *, c: float = 5.0, win_count_key: NestedKey = "win_count", visits_key: NestedKey = "visits", total_visits_key: NestedKey = "total_visits", prior_prob_key: NestedKey = "prior_prob", action_mask_key: NestedKey = "action_mask", score_key: NestedKey = "score", action_key: NestedKey = "action") -> None:
-        """
-        AlphaGo-style MCTS policy using PUCT scoring.
-
-        This policy implements the selection mechanism from AlphaGo, using PUCT (Predictor + Upper Confidence Bound)
-        to balance exploration and exploitation.
-
-        Args:
-            c (float, optional): Exploration constant for PUCT. Defaults to 5.0.
-            win_count_key (NestedKey, optional): Key for win counts. Defaults to "win_count".
-            visits_key (NestedKey, optional): Key for visit counts. Defaults to "visits".
-            total_visits_key (NestedKey, optional): Key for total visits. Defaults to "total_visits".
-            prior_prob_key (NestedKey, optional): Key for prior probabilities. Defaults to "prior_prob".
-            action_mask_key (NestedKey, optional): Key for the action mask. Defaults to "action_mask".
-            score_key (NestedKey, optional): Key for storing scores. Defaults to "score".
-            action_key (NestedKey, optional): Key for the selected action. Defaults to "action".
-        """
         score_module = PUCTScore(
             c=c,
             win_count_key=win_count_key,
