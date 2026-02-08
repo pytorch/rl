@@ -1,21 +1,21 @@
-# @rlbot
+# <img src="https://raw.githubusercontent.com/pytorch/rl/main/docs/source/_static/img/icon.png" width="30"> @torchrlbot
 
 A GitHub bot for managing Pull Requests in the **torchrl** repository.
 Inspired by PyTorch's [@pytorchbot](https://github.com/pytorch/pytorch/wiki/Bot-commands).
 
 ## How it works
 
-`@rlbot` is powered by a GitHub Actions workflow (`.github/workflows/rlbot.yml`)
-that triggers on PR comments containing `@rlbot`. A Python script
-(`.github/rlbot/rlbot.py`) parses the command and executes the appropriate
+`@torchrlbot` is powered by a GitHub Actions workflow (`.github/workflows/torchrlbot.yml`)
+that triggers on PR comments containing `@torchrlbot`. A Python script
+(`.github/torchrlbot/torchrlbot.py`) parses the command and executes the appropriate
 action.
 
 ## Usage
 
-Add a comment on any PR starting with `@rlbot` followed by a command:
+Add a comment on any PR starting with `@torchrlbot` followed by a command:
 
 ```
-@rlbot <command> [options]
+@torchrlbot <command> [options]
 ```
 
 ### Commands
@@ -26,7 +26,7 @@ Merge a PR. If the PR was created with **ghstack**, the bot uses `ghstack land`;
 otherwise it performs a squash merge via `gh pr merge --squash`.
 
 ```
-@rlbot merge [-f MESSAGE]
+@torchrlbot merge [-f MESSAGE]
 ```
 
 | Flag | Description |
@@ -36,8 +36,8 @@ otherwise it performs a squash merge via `gh pr merge --squash`.
 **Examples:**
 
 ```
-@rlbot merge
-@rlbot merge -f 'Trivial doc fix, tests passing'
+@torchrlbot merge
+@torchrlbot merge -f 'Trivial doc fix, tests passing'
 ```
 
 **Requirements:**
@@ -51,7 +51,7 @@ otherwise it performs a squash merge via `gh pr merge --squash`.
 Rebase the PR branch onto a target branch (default: `main`).
 
 ```
-@rlbot rebase [-b BRANCH]
+@torchrlbot rebase [-b BRANCH]
 ```
 
 | Flag | Description |
@@ -61,8 +61,8 @@ Rebase the PR branch onto a target branch (default: `main`).
 **Examples:**
 
 ```
-@rlbot rebase
-@rlbot rebase -b release/0.6
+@torchrlbot rebase
+@torchrlbot rebase -b release/0.6
 ```
 
 **Requirements:**
@@ -73,7 +73,7 @@ Rebase the PR branch onto a target branch (default: `main`).
 Display the help message with all available commands.
 
 ```
-@rlbot help
+@torchrlbot help
 ```
 
 ## Permissions
@@ -86,18 +86,18 @@ checks permissions via the GitHub API before executing any action.
 
 ```
 .github/
-├── rlbot/
-│   ├── rlbot.py      # Command parser and handler
-│   └── README.md     # This file
+├── torchrlbot/
+│   ├── torchrlbot.py   # Command parser and handler
+│   └── README.md       # This file
 └── workflows/
-    └── rlbot.yml     # GitHub Actions workflow (issue_comment trigger)
+    └── torchrlbot.yml  # GitHub Actions workflow (issue_comment trigger)
 ```
 
 The workflow:
 
 1. **Trigger**: An `issue_comment` event fires when someone comments on a PR.
-2. **Filter**: The job only runs if the comment is on a PR and contains `@rlbot`.
-3. **Parse**: `rlbot.py` reads the GitHub event payload, extracts the command
+2. **Filter**: The job only runs if the comment is on a PR and contains `@torchrlbot`.
+3. **Parse**: `torchrlbot.py` reads the GitHub event payload, extracts the command
    line from the comment, and parses it with `argparse`.
 4. **Validate**: The bot checks that the commenter has write permission and that
    the PR meets any required conditions (e.g., approval status for merge).
@@ -106,7 +106,7 @@ The workflow:
 
 ## Adding new commands
 
-1. Add a handler function `cmd_<name>(ctx, args)` in `rlbot.py`.
+1. Add a handler function `cmd_<name>(ctx, args)` in `torchrlbot.py`.
 2. Register a subparser in `build_parser()`.
 3. Add the handler to the `COMMAND_HANDLERS` dict.
 4. Update `HELP_TEXT` and this README.

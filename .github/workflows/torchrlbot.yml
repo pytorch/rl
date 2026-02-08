@@ -1,25 +1,25 @@
-# @rlbot - PR management bot for torchrl
+# @torchrlbot - PR management bot for torchrl
 #
-# Triggered by PR comments starting with `@rlbot`.
-# See .github/rlbot/README.md for full documentation.
+# Triggered by PR comments starting with `@torchrlbot`.
+# See .github/torchrlbot/README.md for full documentation.
 #
 # Commands:
-#   @rlbot merge [-f 'reason']   Merge a PR (ghstack land or squash merge)
-#   @rlbot rebase [-b BRANCH]    Rebase PR onto a branch (default: main)
-#   @rlbot help                  Show available commands
+#   @torchrlbot merge [-f 'reason']   Merge a PR (ghstack land or squash merge)
+#   @torchrlbot rebase [-b BRANCH]    Rebase PR onto a branch (default: main)
+#   @torchrlbot help                  Show available commands
 
-name: RLBot
+name: TorchRLBot
 
 on:
   issue_comment:
     types: [created]
 
 jobs:
-  rlbot:
-    # Only run on PR comments (not issue comments) that mention @rlbot
+  torchrlbot:
+    # Only run on PR comments (not issue comments) that mention @torchrlbot
     if: >-
       github.event.issue.pull_request != null &&
-      contains(github.event.comment.body, '@rlbot')
+      contains(github.event.comment.body, '@torchrlbot')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -46,9 +46,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Run rlbot
+      - name: Run torchrlbot
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_EVENT_PATH: ${{ github.event_path }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: python .github/rlbot/rlbot.py
+        run: python .github/torchrlbot/torchrlbot.py
