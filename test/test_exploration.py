@@ -185,7 +185,7 @@ class TestEGreedy:
 
         with pytest.raises(
             RuntimeError,
-            match="Failed while executing module|spec must be provided to the exploration wrapper",
+            match="Failed while executing module|spec has not been set",
         ):
             explorative_policy(td)
 
@@ -422,9 +422,12 @@ class TestOrnsteinUhlenbeckProcess:
 
     def test_no_spec_error(self, device):
         module = OrnsteinUhlenbeckProcessModule(spec=None, safe=False).to(device)
-        td = TensorDict({"action": torch.randn(3, device=device)}, batch_size=[3], device=device)
+        td = TensorDict(
+            {"action": torch.randn(3, device=device)}, batch_size=[3], device=device
+        )
         out = module(td)
         assert "action" in out.keys()
+
 
 @pytest.mark.parametrize("device", get_default_devices())
 class TestAdditiveGaussian:
@@ -684,7 +687,7 @@ def test_set_exploration_modules_spec_from_env(device, use_batched_env):
     d_obs = env.observation_spec["observation"].shape[-1]
     d_act = expected_spec.shape[-1]
 
-    # Create a policy with exploration module that have spec=None
+    # Create a policy with exploration modules that have spec=None
     net = nn.Sequential(
         nn.Linear(d_obs, 2 * d_act, device=device), NormalParamExtractor()
     )
