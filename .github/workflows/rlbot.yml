@@ -1,0 +1,54 @@
+# @rlbot - PR management bot for torchrl
+#
+# Triggered by PR comments starting with `@rlbot`.
+# See .github/rlbot/README.md for full documentation.
+#
+# Commands:
+#   @rlbot merge [-f 'reason']   Merge a PR (ghstack land or squash merge)
+#   @rlbot rebase [-b BRANCH]    Rebase PR onto a branch (default: main)
+#   @rlbot help                  Show available commands
+
+name: RLBot
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  rlbot:
+    # Only run on PR comments (not issue comments) that mention @rlbot
+    if: >-
+      github.event.issue.pull_request != null &&
+      contains(github.event.comment.body, '@rlbot')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Full history needed for rebase operations
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ghstack
+        run: pip install ghstack
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Run rlbot
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python .github/rlbot/rlbot.py
