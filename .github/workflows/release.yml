@@ -16,10 +16,10 @@
 # - main, nightly, PRs: install from git (latest dev)
 # - Can be overridden with tensordict_source input
 #
-# Wheel Variants:
-# - cpu (default): Recommended for torchrl - avoids duplicate filename conflicts
-# - gpu: Only CUDA builds
-# - all: All variants (with deduplication to prevent corruption)
+# Wheel Variants (selectable via checkboxes):
+# - build_cpu (default: true): Recommended for torchrl - pure Python library
+# - build_cuda (default: false): CUDA builds (Linux, Windows)
+# - build_rocm (default: false): ROCm builds (Linux only)
 #
 # NOTE: This workflow is NOT automatically triggered on tag push to avoid
 # race conditions with wheel builds. Use workflow_dispatch to trigger releases.
@@ -57,15 +57,21 @@ on:
           - 'stable'
           - 'git'
         default: 'auto'
-      wheel_variants:
-        description: 'Which wheel variants to collect (cpu recommended for torchrl)'
+      build_cpu:
+        description: 'Build CPU wheels (recommended for torchrl - pure Python library)'
         required: false
-        type: choice
-        options:
-          - 'cpu'
-          - 'gpu'
-          - 'all'
-        default: 'cpu'
+        type: boolean
+        default: true
+      build_cuda:
+        description: 'Build CUDA wheels'
+        required: false
+        type: boolean
+        default: false
+      build_rocm:
+        description: 'Build ROCm wheels (Linux only)'
+        required: false
+        type: boolean
+        default: false
 
 # Ensure only one release workflow runs at a time
 # cancel-in-progress: true means new runs cancel previous ones
@@ -259,6 +265,9 @@ jobs:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
+      with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
+      with-cuda: ${{ inputs.build_cuda && 'enable' || 'disable' }}
+      with-rocm: ${{ inputs.build_rocm && 'enable' || 'disable' }}
     secrets: inherit
 
   build-windows:
@@ -271,6 +280,8 @@ jobs:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
+      with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
+      with-cuda: ${{ inputs.build_cuda && 'enable' || 'disable' }}
     secrets: inherit
 
   build-macos:
@@ -283,6 +294,7 @@ jobs:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
+      with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
     secrets: inherit
 
   build-aarch64:
@@ -295,6 +307,7 @@ jobs:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
+      with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
     secrets: inherit
 
   # =============================================================================
@@ -330,12 +343,9 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: wheels-raw
-          # Pattern based on wheel_variants input:
-          # - cpu: Only CPU builds (recommended - avoids duplicate wheel conflicts)
-          # - gpu: Only CUDA builds
-          # - all: All variants (requires deduplication)
+          # Download all pytorch_rl artifacts - filtering by selected variants happens below
           # pytorch/test-infra uploads artifacts named like: pytorch_rl__3.11_cpu_x86_64
-          pattern: ${{ inputs.wheel_variants == 'gpu' && 'pytorch_rl__*_cu*' || inputs.wheel_variants == 'all' && 'pytorch_rl*' || 'pytorch_rl__*_cpu_*' }}
+          pattern: pytorch_rl*
           merge-multiple: true
 
       - name: Deduplicate and verify wheels
