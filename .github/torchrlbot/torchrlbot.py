@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""rlbot - A GitHub bot for managing PRs in the torchrl repository.
+"""torchrlbot - A GitHub bot for managing PRs in the torchrl repository.
 
-Triggered by PR comments starting with `@rlbot`. Supports commands:
+Triggered by PR comments starting with `@torchrlbot`. Supports commands:
   - merge: Merge a PR (or ghstack) using ghstack land or gh pr merge
   - rebase: Rebase a PR onto a target branch
 
@@ -123,7 +123,7 @@ class CommandContext:
 
 
 def cmd_merge(ctx: CommandContext, args: argparse.Namespace) -> None:
-    """Handle ``@rlbot merge``."""
+    """Handle ``@torchrlbot merge``."""
     pr = ctx.pr_info
     head = pr["headRefName"]
 
@@ -147,7 +147,7 @@ def cmd_merge(ctx: CommandContext, args: argparse.Namespace) -> None:
                 ctx.pr_number,
                 f"@{ctx.comment_author} this PR has not been approved yet "
                 f"(current status: **{decision or 'REVIEW_REQUIRED'}**). "
-                "Use `@rlbot merge -f 'reason'` to force merge.",
+                "Use `@torchrlbot merge -f 'reason'` to force merge.",
             )
             return
 
@@ -218,7 +218,7 @@ def _merge_regular(ctx: CommandContext, args: argparse.Namespace) -> None:
 
 
 def cmd_rebase(ctx: CommandContext, args: argparse.Namespace) -> None:
-    """Handle ``@rlbot rebase``."""
+    """Handle ``@torchrlbot rebase``."""
     pr = ctx.pr_info
     head = pr["headRefName"]
     target_branch = args.branch
@@ -265,7 +265,7 @@ def cmd_rebase(ctx: CommandContext, args: argparse.Namespace) -> None:
 
 
 def cmd_help(ctx: CommandContext, _args: argparse.Namespace) -> None:
-    """Handle ``@rlbot help``."""
+    """Handle ``@torchrlbot help``."""
     post_comment(ctx.repo, ctx.pr_number, HELP_TEXT)
 
 
@@ -274,17 +274,17 @@ def cmd_help(ctx: CommandContext, _args: argparse.Namespace) -> None:
 # ---------------------------------------------------------------------------
 
 HELP_TEXT = """\
-## @rlbot Help
+## <img src="https://raw.githubusercontent.com/pytorch/rl/main/.github/torchrlbot/icon.png" width="20"> @torchrlbot Help
 
 ```
-usage: @rlbot {merge,rebase,help}
+usage: @torchrlbot {merge,rebase,help}
 ```
 
 ### `merge`
 Merge a PR. For ghstack PRs, uses `ghstack land`; otherwise uses `gh pr merge --squash`.
 
 ```
-@rlbot merge [-f MESSAGE]
+@torchrlbot merge [-f MESSAGE]
 ```
 
 | Flag | Description |
@@ -298,7 +298,7 @@ Merge a PR. For ghstack PRs, uses `ghstack land`; otherwise uses `gh pr merge --
 Rebase the PR branch onto a target branch.
 
 ```
-@rlbot rebase [-b BRANCH]
+@torchrlbot rebase [-b BRANCH]
 ```
 
 | Flag | Description |
@@ -309,13 +309,13 @@ Rebase the PR branch onto a target branch.
 Show this help message.
 
 ```
-@rlbot help
+@torchrlbot help
 ```
 """
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="@rlbot", add_help=False)
+    parser = argparse.ArgumentParser(prog="@torchrlbot", add_help=False)
     sub = parser.add_subparsers(dest="command")
 
     # merge
@@ -357,16 +357,16 @@ COMMAND_HANDLERS = {
 
 
 def parse_command(comment_body: str) -> list[str] | None:
-    """Extract the @rlbot command tokens from a comment body.
+    """Extract the @torchrlbot command tokens from a comment body.
 
-    Scans for the first line that starts with ``@rlbot`` (ignoring leading
-    whitespace) and returns the tokens after ``@rlbot``.
+    Scans for the first line that starts with ``@torchrlbot`` (ignoring leading
+    whitespace) and returns the tokens after ``@torchrlbot``.
     """
     for line in comment_body.splitlines():
         stripped = line.strip()
-        if stripped.lower().startswith("@rlbot"):
-            # Remove the "@rlbot" prefix and tokenise the rest
-            rest = stripped[len("@rlbot") :].strip()
+        if stripped.lower().startswith("@torchrlbot"):
+            # Remove the "@torchrlbot" prefix and tokenise the rest
+            rest = stripped[len("@torchrlbot") :].strip()
             if not rest:
                 return []
             return rest.split()
@@ -394,7 +394,7 @@ def main() -> None:
 
     tokens = parse_command(comment_body)
     if tokens is None:
-        # No @rlbot command found – nothing to do
+        # No @torchrlbot command found – nothing to do
         return
 
     # Acknowledge the command
@@ -403,7 +403,7 @@ def main() -> None:
     parser = build_parser()
 
     if not tokens:
-        # Bare "@rlbot" with no command
+        # Bare "@torchrlbot" with no command
         ctx = CommandContext(
             repo=repo,
             pr_number=pr_number,
@@ -426,8 +426,8 @@ def main() -> None:
             repo,
             pr_number,
             f"@{comment_author} I couldn't parse that command. "
-            f"Run `@rlbot help` to see available commands.\n\n"
-            f"Input: `@rlbot {' '.join(tokens)}`",
+            f"Run `@torchrlbot help` to see available commands.\n\n"
+            f"Input: `@torchrlbot {' '.join(tokens)}`",
         )
         return
 
