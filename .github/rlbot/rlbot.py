@@ -80,17 +80,27 @@ def get_pr_info(repo: str, pr_number: int) -> dict:
     return json.loads(result.stdout)
 
 
-def check_write_permission(repo: str, username: str) -> bool:
-    """Return True if *username* has write (or higher) permission on *repo*."""
+def get_permission(repo: str, username: str) -> str | None:
+    """Return the permission level of *username* on *repo*, or ``None`` on error."""
     try:
         result = gh(
             "api",
             f"repos/{repo}/collaborators/{username}/permission",
         )
         data = json.loads(result.stdout)
-        return data.get("permission") in ("admin", "maintain", "write")
+        return data.get("permission")
     except subprocess.CalledProcessError:
-        return False
+        return None
+
+
+def check_write_permission(repo: str, username: str) -> bool:
+    """Return True if *username* has write (or higher) permission on *repo*."""
+    return get_permission(repo, username) in ("admin", "maintain", "write")
+
+
+def check_admin_permission(repo: str, username: str) -> bool:
+    """Return True if *username* has admin or maintain permission on *repo*."""
+    return get_permission(repo, username) in ("admin", "maintain")
 
 
 def is_ghstack_pr(head_branch: str) -> bool:
@@ -127,8 +137,9 @@ def cmd_merge(ctx: CommandContext, args: argparse.Namespace) -> None:
         )
         return
 
-    # Approval gate (unless forced)
-    if not args.force:
+    # Approval gate (skipped for admins/maintainers and force merges)
+    is_admin = check_admin_permission(ctx.repo, ctx.comment_author)
+    if not args.force and not is_admin:
         decision = pr.get("reviewDecision", "")
         if decision != "APPROVED":
             post_comment(
@@ -279,6 +290,9 @@ Merge a PR. For ghstack PRs, uses `ghstack land`; otherwise uses `gh pr merge --
 | Flag | Description |
 |------|-------------|
 | `-f`, `--force` | Force merge with a reason (bypasses approval check, uses `--admin`) |
+
+> **Note:** Repository admins and maintainers can merge without approval. The
+> approval gate only applies to regular collaborators with write access.
 
 ### `rebase`
 Rebase the PR branch onto a target branch.

@@ -43,6 +43,8 @@ otherwise it performs a squash merge via `gh pr merge --squash`.
 **Requirements:**
 - The commenter must have **write** (or higher) permission on the repository.
 - The PR must be **approved** unless `-f` is used.
+- **Admins and maintainers** can merge without approval (the approval gate is
+  skipped automatically).
 
 #### `rebase`
 
