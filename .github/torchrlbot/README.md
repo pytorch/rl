@@ -1,4 +1,4 @@
-# <img src="https://raw.githubusercontent.com/pytorch/rl/main/docs/source/_static/img/icon.png" width="30"> @torchrlbot
+# <img src="https://raw.githubusercontent.com/pytorch/rl/main/.github/torchrlbot/icon.png" width="30"> @torchrlbot
 
 A GitHub bot for managing Pull Requests in the **torchrl** repository.
 Inspired by PyTorch's [@pytorchbot](https://github.com/pytorch/pytorch/wiki/Bot-commands).
@@ -88,6 +88,7 @@ checks permissions via the GitHub API before executing any action.
 .github/
 ├── torchrlbot/
 │   ├── torchrlbot.py   # Command parser and handler
+│   ├── icon.png        # Bot icon (64x64)
 │   └── README.md       # This file
 └── workflows/
     └── torchrlbot.yml  # GitHub Actions workflow (issue_comment trigger)

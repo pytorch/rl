@@ -274,7 +274,7 @@ def cmd_help(ctx: CommandContext, _args: argparse.Namespace) -> None:
 # ---------------------------------------------------------------------------
 
 HELP_TEXT = """\
-## <img src="https://raw.githubusercontent.com/pytorch/rl/main/docs/source/_static/img/icon.png" width="20"> @torchrlbot Help
+## <img src="https://raw.githubusercontent.com/pytorch/rl/main/.github/torchrlbot/icon.png" width="20"> @torchrlbot Help
 
 ```
 usage: @torchrlbot {merge,rebase,help}
