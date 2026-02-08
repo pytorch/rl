@@ -8,8 +8,19 @@ import math
 import pytest
 import torch
 from tensordict import TensorDict
-from torchrl.modules.mcts.scores import EXP3Score, PUCTScore, UCB1TunedScore, UCBScore
+from torchrl.modules.mcts.scores import (
+    EXP3Score, 
+    PUCTScore, 
+    UCB1TunedScore, 
+    UCBScore
+)
 
+from torchrl.modules.mcts import (
+    AlphaGoPolicy,
+    AlphaStarPolicy,
+    MCTSPolicy,
+    MuZeroPolicy,
+)
 
 # Sample TensorDict for testing
 def create_node(
@@ -294,9 +305,7 @@ class TestEXP3Score:
             (gamma / k) * (reward / prob_i)
         )
 
-        torch.testing.assert_close(
-            updated_weights[action_idx], torch.tensor(expected_new_weight_val)
-        )
+        torch.testing.assert_close(updated_weights[action_idx], expected_new_weight_val)
         torch.testing.assert_close(
             updated_weights[action_idx + 1 :], initial_weights[action_idx + 1 :]
         )
@@ -401,7 +410,7 @@ class TestEXP3Score:
             (gamma / k) * (reward / prob_i)
         )
         torch.testing.assert_close(
-            updated_weights[action_idx], torch.tensor(expected_new_weight_val)
+            updated_weights[action_idx], expected_new_weight_val
         )
 
     @pytest.mark.parametrize(
@@ -478,7 +487,7 @@ class TestEXP3Score:
             (gamma / k) * (reward / prob_i2)
         )
         torch.testing.assert_close(
-            updated_weights2[action_idx], torch.tensor(expected_new_weight_val2)
+            updated_weights2[action_idx], expected_new_weight_val2
         )
 
     def test_forward_raises_error_on_mismatched_num_actions(self, default_scorer):
@@ -1080,3 +1089,35 @@ class TestUCB1TunedScore:
         scores = node.get(default_ucb1_tuned_scorer.score_key)
         # Both should be finite
         assert torch.all(torch.isfinite(scores))
+
+class TestMCTSPolicy:
+    def _node(self, mask=None):
+        data = {
+            "win_count": torch.tensor([0.2, 0.8, 1.0]),
+            "visits": torch.tensor([1.0, 2.0, 10.0]),
+            "total_visits": torch.tensor(13.0),
+            "prior_prob": torch.tensor([0.4, 0.3, 0.3]),
+        }
+        if mask is not None:
+            data["action_mask"] = torch.as_tensor(mask, dtype=torch.bool)
+        return TensorDict(data, batch_size=[])
+
+    def test_mcts_policy_selects_argmax(self):
+        node = self._node()
+        policy = MCTSPolicy(score_module=PUCTScore(c=1.0))
+        out = policy(node)
+
+        assert out.get("action").dtype == torch.long
+        torch.testing.assert_close(out.get("action"), out.get("score").argmax(-1))
+
+    def test_mcts_policy_respects_mask(self):
+        node = self._node(mask=[False, True, False])
+        policy = MCTSPolicy(score_module=PUCTScore(c=1.0))
+        out = policy(node)
+
+        torch.testing.assert_close(out.get("action"), torch.tensor(1))
+
+    def test_specialized_policies_have_expected_defaults(self):
+        assert AlphaGoPolicy().score_module.c == 5.0
+        assert AlphaStarPolicy().score_module.c == 1.0
+        assert MuZeroPolicy().score_module.c == 1.25

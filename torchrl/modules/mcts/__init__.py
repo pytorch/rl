@@ -11,10 +11,23 @@ from .scores import (
     UCBScore,
 )
 
+from .policies import (
+    AlphaGoPolicy,
+    AlphaStarPolicy,
+    MCTSPolicy,
+    MCTSPolicyBase,
+    MuZeroPolicy,
+)
+
 __all__ = [
+    "AlphaGoPolicy",
+    "AlphaStarPolicy",
     "EXP3Score",
+    "MCTSPolicy",
+    "MCTSPolicyBase",
     "MCTSScore",
     "MCTSScores",
+    "MuZeroPolicy",
     "PUCTScore",
     "UCB1TunedScore",
     "UCBScore",

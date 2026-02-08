@@ -16,6 +16,13 @@ from tensordict import NestedKey, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 
 
+class _ScoreFactory:
+    def __init__(self, factory):
+        self.factory = factory
+
+    def __call__(self, *args, **kwargs):
+        return self.factory(*args, **kwargs)
+
 class MCTSScore(TensorDictModuleBase):
     """Abstract base class for MCTS score computation modules."""
 
@@ -571,9 +578,9 @@ class UCB1TunedScore(MCTSScore):
 class MCTSScores(Enum):
     """Enum providing factory functions for common MCTS score configurations."""
 
-    PUCT = functools.partial(PUCTScore, c=5)  # AlphaGo default value
-    UCB = functools.partial(UCBScore, c=math.sqrt(2))  # default from Auer et al. 2002
-    UCB1_TUNED = functools.partial(
-        UCB1TunedScore, exploration_constant=2.0
+    PUCT = _ScoreFactory(functools.partial(PUCTScore, c=5))  # AlphaGo default value
+    UCB = _ScoreFactory(functools.partial(UCBScore, c=math.sqrt(2)))  # default from Auer et al. 2002
+    UCB1_TUNED = _ScoreFactory(
+        functools.partial(UCB1TunedScore, exploration_constant=2.0)
     )  # Auer et al. (2002) C=2 for rewards in [0,1]
-    EXP3 = functools.partial(EXP3Score, gamma=0.1)
+    EXP3 = _ScoreFactory(functools.partial(EXP3Score, gamma=0.1))
