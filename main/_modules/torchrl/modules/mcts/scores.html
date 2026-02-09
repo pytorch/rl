@@ -254,6 +254,13 @@
 <span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 <span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModuleBase</span>
 
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">member</span> <span class="k">as</span> <span class="n">_enum_member</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>  <span class="c1"># Python &lt; 3.11</span>
+
+    <span class="k">def</span> <span class="nf">_enum_member</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">value</span>
+
 
 <div class="viewcode-block" id="MCTSScore">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.mcts.MCTSScore.html#torchrl.modules.mcts.MCTSScore">[docs]</a>
@@ -837,14 +844,26 @@
 <div class="viewcode-block" id="MCTSScores">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.mcts.MCTSScores.html#torchrl.modules.mcts.MCTSScores">[docs]</a>
 <span class="k">class</span> <span class="nc">MCTSScores</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Enum providing factory functions for common MCTS score configurations.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A collection of MCTS score computation modules.</span>
 
-    <span class="n">PUCT</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">PUCTScore</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>  <span class="c1"># AlphaGo default value</span>
-    <span class="n">UCB</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">UCBScore</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>  <span class="c1"># default from Auer et al. 2002</span>
-    <span class="n">UCB1_TUNED</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span>
-        <span class="n">UCB1TunedScore</span><span class="p">,</span> <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">2.0</span>
-    <span class="p">)</span>  <span class="c1"># Auer et al. (2002) C=2 for rewards in [0,1]</span>
-    <span class="n">EXP3</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">EXP3Score</span><span class="p">,</span> <span class="n">gamma</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span></div>
+<span class="sd">    This enum provides a convenient way to create instances of the different MCTS score computation modules.</span>
+<span class="sd">    Each member of the enum is a callable that returns an instance of the corresponding score computation module.</span>
+
+<span class="sd">    Content:</span>
+
+<span class="sd">    - PUCTScore: Computes the PUCT score for MCTS.</span>
+<span class="sd">    - UCBScore: Computes the UCB score for MCTS.</span>
+<span class="sd">    - UCB1TunedScore: Computes the UCB1-Tuned score for MCTS.</span>
+<span class="sd">    - EXP3Score: Computes the EXP3 score for MCTS.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">PUCT</span> <span class="o">=</span> <span class="n">_enum_member</span><span class="p">(</span><span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">PUCTScore</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="mi">5</span><span class="p">))</span>
+    <span class="n">UCB</span> <span class="o">=</span> <span class="n">_enum_member</span><span class="p">(</span><span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">UCBScore</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">)))</span>
+    <span class="n">UCB1_TUNED</span> <span class="o">=</span> <span class="n">_enum_member</span><span class="p">(</span>
+        <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">UCB1TunedScore</span><span class="p">,</span> <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">2.0</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">EXP3</span> <span class="o">=</span> <span class="n">_enum_member</span><span class="p">(</span><span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">EXP3Score</span><span class="p">,</span> <span class="n">gamma</span><span class="o">=</span><span class="mf">0.1</span><span class="p">))</span></div>
 
 </pre></div>
 

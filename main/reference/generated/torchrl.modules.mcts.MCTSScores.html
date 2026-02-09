@@ -252,7 +252,16 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.modules.mcts.MCTSScores">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.mcts.</span></span><span class="sig-name descname"><span class="pre">MCTSScores</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">qualname</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">boundary</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/mcts/scores.html#MCTSScores"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.mcts.MCTSScores" title="Link to this definition">¶</a></dt>
-<dd><p>Enum providing factory functions for common MCTS score configurations.</p>
+<dd><p>A collection of MCTS score computation modules.</p>
+<p>This enum provides a convenient way to create instances of the different MCTS score computation modules.
+Each member of the enum is a callable that returns an instance of the corresponding score computation module.</p>
+<p>Content:</p>
+<ul class="simple">
+<li><p>PUCTScore: Computes the PUCT score for MCTS.</p></li>
+<li><p>UCBScore: Computes the UCB score for MCTS.</p></li>
+<li><p>UCB1TunedScore: Computes the UCB1-Tuned score for MCTS.</p></li>
+<li><p>EXP3Score: Computes the EXP3 score for MCTS.</p></li>
+</ul>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.modules.mcts.MCTSScores.__init__">
 <span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwds</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.modules.mcts.MCTSScores.__init__" title="Link to this definition">¶</a></dt>
