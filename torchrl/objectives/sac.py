@@ -344,6 +344,7 @@ class SACLoss(LossModule):
         skip_done_states: bool = False,
         deactivate_vmap: bool = False,
         use_prioritized_weights: str | bool = "auto",
+        scalar_output_mode: str | None = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -447,6 +448,22 @@ class SACLoss(LossModule):
         self._make_vmap()
         self.reduction = reduction
         self.skip_done_states = skip_done_states
+
+        # Handle scalar_output_mode for reduction="none"
+        if reduction == "none" and scalar_output_mode is None:
+            warnings.warn(
+                "SACLoss with reduction='none' cannot include scalar values (alpha, entropy) "
+                "in the output TensorDict without changing their shape. These values will be "
+                "excluded from the output. You can access them via `loss_module._alpha` and "
+                "compute entropy from the log_prob in the actor loss metadata. "
+                "To suppress this warning, pass `scalar_output_mode='exclude'` to the constructor. "
+                "Alternatively, pass `scalar_output_mode='non_tensor'` to include them as non-tensor data. "
+                "This is a known limitation we're working on improving.",
+                category=UserWarning,
+                stacklevel=2,
+            )
+            scalar_output_mode = "exclude"
+        self.scalar_output_mode = scalar_output_mode
 
         log_prob_keys = getattr(self.actor_network, "log_prob_keys", [])
         action_keys = getattr(self.actor_network, "dist_sample_keys", [])
@@ -680,16 +697,30 @@ class SACLoss(LossModule):
                 f"Losses shape mismatch: {loss_actor.shape}, {loss_qvalue.shape} and {loss_value.shape}"
             )
         entropy = -metadata_actor["log_prob"]
+        # Build output dict with losses
         out = {
             "loss_actor": loss_actor,
             "loss_qvalue": loss_qvalue,
             "loss_alpha": loss_alpha,
-            "alpha": self._alpha,
-            "entropy": entropy.detach().mean(),
         }
         if self._version == 1:
             out["loss_value"] = loss_value
-        td_out = TensorDict(out)
+
+        # Handle batch_size and scalar values (alpha, entropy) based on reduction mode
+        if self.reduction == "none":
+            batch_size = tensordict.batch_size
+            # Create TensorDict with losses only
+            td_out = TensorDict(out, batch_size=batch_size)
+            if self.scalar_output_mode == "non_tensor":
+                # Include scalars as non-tensor data
+                td_out.set_non_tensor("alpha", self._alpha)
+                td_out.set_non_tensor("entropy", entropy.detach().mean())
+            # else "exclude": scalars are not included (warning was raised in __init__)
+        else:
+            batch_size = []
+            out["alpha"] = self._alpha
+            out["entropy"] = entropy.detach().mean()
+            td_out = TensorDict(out, batch_size=batch_size)
         self._clear_weakrefs(
             tensordict,
             td_out,
@@ -1184,6 +1215,7 @@ class DiscreteSACLoss(LossModule):
         skip_done_states: bool = False,
         deactivate_vmap: bool = False,
         use_prioritized_weights: str | bool = "auto",
+        scalar_output_mode: str | None = None,
     ):
         if reduction is None:
             reduction = "mean"
@@ -1270,6 +1302,22 @@ class DiscreteSACLoss(LossModule):
         self.reduction = reduction
         self.skip_done_states = skip_done_states
 
+        # Handle scalar_output_mode for reduction="none"
+        if reduction == "none" and scalar_output_mode is None:
+            warnings.warn(
+                "DiscreteSACLoss with reduction='none' cannot include scalar values (alpha, entropy) "
+                "in the output TensorDict without changing their shape. These values will be "
+                "excluded from the output. You can access them via `loss_module._alpha` and "
+                "compute entropy from the log_prob in the actor loss metadata. "
+                "To suppress this warning, pass `scalar_output_mode='exclude'` to the constructor. "
+                "Alternatively, pass `scalar_output_mode='non_tensor'` to include them as non-tensor data. "
+                "This is a known limitation we're working on improving.",
+                category=UserWarning,
+                stacklevel=2,
+            )
+            scalar_output_mode = "exclude"
+        self.scalar_output_mode = scalar_output_mode
+
     def _make_vmap(self):
         self._vmap_qnetworkN0 = _vmap_func(
             self.qvalue_network,
@@ -1326,14 +1374,29 @@ class DiscreteSACLoss(LossModule):
                 f"Losses shape mismatch: {loss_actor.shape}, and {loss_qvalue.shape}"
             )
         entropy = -metadata_actor["log_prob"]
+        # Build output dict with losses
         out = {
             "loss_actor": loss_actor,
             "loss_qvalue": loss_qvalue,
             "loss_alpha": loss_alpha,
-            "alpha": self._alpha,
-            "entropy": entropy.detach().mean(),
         }
-        td_out = TensorDict(out, [])
+
+        # Handle batch_size and scalar values (alpha, entropy) based on reduction mode
+        if self.reduction == "none":
+            batch_size = tensordict.batch_size
+            # Create TensorDict with losses only
+            td_out = TensorDict(out, batch_size=batch_size)
+            if self.scalar_output_mode == "non_tensor":
+                # Include scalars as non-tensor data
+                td_out.set_non_tensor("alpha", self._alpha)
+                td_out.set_non_tensor("entropy", entropy.detach().mean())
+            # else "exclude": scalars are not included (warning was raised in __init__)
+        else:
+            batch_size = []
+            out["alpha"] = self._alpha
+            out["entropy"] = entropy.detach().mean()
+            td_out = TensorDict(out, batch_size=batch_size)
+
         self._clear_weakrefs(
             tensordict,
             td_out,

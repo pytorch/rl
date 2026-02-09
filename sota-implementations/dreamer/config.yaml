@@ -9,6 +9,9 @@ env:
   image_size : 64
   horizon: 500
   n_parallel_envs: 8
+  # Environment batching mode: "parallel" (default, uses ParallelEnv with IPC)
+  # or "serial" (uses SerialEnv, no IPC overhead, better for cheap envs)
+  parallel_env_mode: serial
   device: cpu
 
 collector:
@@ -18,6 +21,11 @@ collector:
   # On multi-GPU: must be <= num_gpus - 1 (cuda:0 reserved for training)
   num_collectors: 7
   device:
+  # Compile policy for collection (experimental)
+  compile:
+    enabled: True
+    backend: inductor
+    cudagraphs: True
 
 optimization:
   # Total number of optimization steps (the main training target)
@@ -35,11 +43,16 @@ optimization:
   lmbda: 0.95
   imagination_horizon: 15
   compile:
+    # torch.compile settings - optimizes loss functions with Triton kernels
+    # Benchmarked: 32% faster training (529ms -> 358ms per step)
     enabled: True
-    backend: inductor # or cudagraphs
-    mode: reduce-overhead
+    backend: inductor
+    # CUDA graphs disabled - conflicts with dynamic RSSM rollout loop
+    # Note: can't use both mode and options in torch.compile, so we use options
+    cudagraphs: False
     # Which losses to compile (subset of: world_model, actor, value)
-    losses: ["world_model", "actor", "value"]
+    # Note: world_model excluded - CUDA graph tensor overwrite errors due to RSSM loop
+    losses: ["actor", "value"]
   # Autocast options: false, true (=bfloat16), float16, bfloat16
   autocast: bfloat16
 

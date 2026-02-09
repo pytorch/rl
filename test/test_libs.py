@@ -5761,6 +5761,66 @@ class TestIsaacLab:
         # Check that done obs are None
         assert not r["next", "policy"][r["next", "done"].squeeze(-1)].isfinite().any()
 
+    def test_isaaclab_lstm(self, env):
+        """Test that LSTM/RNN works with pre-vectorized IsaacLab environments (Issue #1493).
+
+        This test verifies that TensorDictPrimer correctly expands hidden state specs
+        to match the environment's batch size when using vectorized environments like IsaacLab.
+        """
+        from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
+
+        from torchrl.envs import InitTracker, TransformedEnv
+        from torchrl.modules import LSTMModule, MLP
+
+        # Create a fresh env with InitTracker (required for LSTM)
+        test_env = TransformedEnv(env, InitTracker())
+
+        # Get observation size from the env
+        obs_size = test_env.observation_spec["policy"].shape[-1]
+        action_size = test_env.action_spec.shape[-1]
+
+        # Create LSTM module
+        lstm = LSTMModule(
+            input_size=obs_size,
+            hidden_size=32,
+            in_keys=["policy", "recurrent_state_h", "recurrent_state_c"],
+            out_keys=[
+                "lstm_out",
+                ("next", "recurrent_state_h"),
+                ("next", "recurrent_state_c"),
+            ],
+        )
+
+        # Add the primer transform - this was the original failure point in Issue #1493
+        primer = lstm.make_tensordict_primer()
+        test_env = test_env.append_transform(primer)
+
+        # Verify reset works (this was the original failure point)
+        td = test_env.reset()
+        assert "recurrent_state_h" in td.keys()
+        assert "recurrent_state_c" in td.keys()
+        # Hidden states should have shape (num_envs, num_layers, hidden_size)
+        assert td["recurrent_state_h"].shape[0] == env.batch_size[0]
+        assert td["recurrent_state_c"].shape[0] == env.batch_size[0]
+
+        # Create a simple policy using the LSTM and move to correct device
+        policy = Seq(
+            lstm,
+            Mod(
+                MLP(in_features=32, out_features=action_size, num_cells=[]),
+                in_keys=["lstm_out"],
+                out_keys=["action"],
+            ),
+        ).to(env.device)
+
+        # Verify rollout works with the LSTM policy
+        rollout = test_env.rollout(10, policy=policy, break_when_any_done=False)
+        assert rollout.shape[0] == env.batch_size[0]
+        assert rollout.shape[1] == 10
+        # Verify recurrent states are carried through the rollout
+        assert ("next", "recurrent_state_h") in rollout.keys(True)
+        assert ("next", "recurrent_state_c") in rollout.keys(True)
+
 
 @pytest.mark.skipif(not _has_procgen, reason="Procgen not found")
 class TestProcgen:

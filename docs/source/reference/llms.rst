@@ -12,13 +12,15 @@ Key Components
 --------------
 
 1. **Data Structures**: History class for conversation management, structured output classes
-2. **LLM Wrappers**: Unified interfaces for Transformers, vLLM, and AsyncVLLM  
+2. **LLM Wrappers**: Unified interfaces for Transformers, vLLM, SGLang, and async variants  
 3. **Environments**: ChatEnv, task-specific environments, and transforms
 4. **Collectors**: LLMCollector and RayLLMCollector for data collection
 5. **Objectives**: GRPOLoss, SFTLoss for training
 
 Quick Example
 -------------
+
+**Using vLLM backend:**
 
 .. code-block:: python
 
@@ -29,6 +31,26 @@ Quick Example
     # Create vLLM engine
     engine = AsyncVLLM.from_pretrained("Qwen/Qwen2.5-7B", num_replicas=2)
     policy = vLLMWrapper(engine, input_mode="history")
+    
+    # Create environment
+    env = ChatEnv(tokenizer=tokenizer)
+    
+    # Create collector
+    collector = LLMCollector(env, policy, dialog_turns_per_batch=256)
+
+**Using SGLang backend:**
+
+.. code-block:: python
+
+    from torchrl.modules.llm import SGLangWrapper, AsyncSGLang
+    from torchrl.envs.llm import ChatEnv
+    from torchrl.collectors.llm import LLMCollector
+    
+    # Create SGLang engine (connects to server or launches managed server)
+    engine = AsyncSGLang.from_pretrained("Qwen/Qwen2.5-7B", tp_size=2)
+    # Or connect to existing server:
+    # engine = AsyncSGLang.connect("http://localhost:30000")
+    policy = SGLangWrapper(engine, tokenizer=tokenizer, input_mode="history")
     
     # Create environment
     env = ChatEnv(tokenizer=tokenizer)
@@ -85,6 +107,10 @@ transform, or a boolean to the collector constructor.
     VLLMDoubleBufferWeightReceiver
     VLLMDoubleBufferTransport
     get_model_metadata
+    SGLangWeightSyncScheme
+    SGLangWeightSender
+    SGLangCollectiveTransport
+    get_sglang_model_metadata
 
 Legacy Weight Updaters (Deprecated)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -489,7 +515,7 @@ Objectives
 LLM post-training requires specialized loss functions that are adapted to the unique characteristics of language models.
 
 GRPO, DAPO, CISPO
-^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~
 
 .. currentmodule:: torchrl.objectives.llm
 
@@ -507,7 +533,7 @@ GRPO, DAPO, CISPO
     MCAdvantage
 
 SFT
-^^^
+~~~
 
 .. currentmodule:: torchrl.objectives.llm
 

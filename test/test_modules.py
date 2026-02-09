@@ -1160,6 +1160,7 @@ class TestMultiAgent:
                     assert not torch.allclose(out[..., i, :], out[..., j, :])
 
     def test_multiagent_cnn_lazy(self):
+        torch.manual_seed(42)
         n_agents = 5
         n_channels = 3
         cnn = MultiAgentConvNet(
@@ -1215,6 +1216,7 @@ class TestMultiAgent:
         centralized,
         share_params,
     ):
+        torch.manual_seed(42)
         actor_net = MultiAgentConvNet(
             in_features=4,
             num_cells=[5, 5],

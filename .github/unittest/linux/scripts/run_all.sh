@@ -268,6 +268,22 @@ fi
 # ==================================================================================== #
 # ================================ Run tests ========================================= #
 
+# Flaky test validation: Run flaky tests with repetition to verify fixes.
+# Set TORCHRL_VALIDATE_FLAKY=1 to enable this mode.
+# Usage: Add pytest commands with --count=N to run tests multiple times.
+if [ "${TORCHRL_VALIDATE_FLAKY:-0}" = "1" ]; then
+  echo "=== Validating flaky test fixes ==="
+  
+  # Install pytest-repeat for test repetition
+  uv_pip_install pytest-repeat
+  
+  # Add flaky tests to validate here, e.g.:
+  # pytest test/test_example.py::TestClass::test_method --count=20 -v || exit 1
+  
+  echo "=== All flaky test validations passed! ==="
+  exit 0
+fi
+
 TORCHRL_TEST_SUITE="${TORCHRL_TEST_SUITE:-all}" # all|distributed|nondistributed
 
 # GPU test filtering: Run GPU-only tests on GPU machines, CPU-only tests on CPU machines.

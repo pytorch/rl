@@ -329,14 +329,13 @@ def train(
                 history_str=history_str,
             )
             # Log additional metrics
-            wandb_logger.log_scalar(
-                "learning_rate", float(optimizer.param_groups[0]["lr"]), step=step
-            )
-            wandb_logger.log_scalar("optim_step", optim_step, step=step)
+            queue_logs = {
+                "learning_rate": float(optimizer.param_groups[0]["lr"]),
+                "optim_step": optim_step,
+            }
             while not log_queue.empty():
-                logs = log_queue.get()
-                for k, v in logs.items():
-                    wandb_logger.log_scalar(k, v)
+                queue_logs.update(log_queue.get())
+            wandb_logger.log_metrics(queue_logs, step=step)
 
         # Update policy weights
         if step % cfg.train.weight_update_frequency == 0:
@@ -364,8 +363,9 @@ def train(
 
         if step % cfg.train.weight_update_frequency == 0:
             timeit.print(prefix="timeit")
-            for key, val in timeit.todict().items():
-                wandb_logger.log_scalar(f"timeit/{key}", val)
+            wandb_logger.log_metrics(
+                {f"timeit/{key}": val for key, val in timeit.todict().items()}
+            )
             timeit.reset()
 
         # Clear memory

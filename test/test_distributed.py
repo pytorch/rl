@@ -898,6 +898,7 @@ class TestRayCollector(DistributedCollectorBase):
     )
     @pytest.mark.parametrize("writer", [None, partial(RoundRobinWriter)])
     def test_ray_replaybuffer(self, storage, sampler, writer):
+        torch.manual_seed(42)
         kwargs = self.distributed_kwargs()
         kwargs["remote_config"] = kwargs.pop("remote_configs")
         rb = RayReplayBuffer(
@@ -910,6 +911,8 @@ class TestRayCollector(DistributedCollectorBase):
         td = TensorDict(a=torch.arange(100, 200), batch_size=[100])
         index = rb.extend(td)
         assert (index == torch.arange(100)).all()
+        # Ensure buffer is fully populated before sampling
+        assert len(rb) == 100
         for _ in range(10):
             sample = rb.sample()
             if sampler is SamplerWithoutReplacement:

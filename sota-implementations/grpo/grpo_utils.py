@@ -836,8 +836,7 @@ def log_training_metrics(
             metrics["kl_to_ref, from loss"] = float(loss.kl_to_ref.mean())
             metrics["loss_kl_to_ref, from loss"] = float(loss.loss_kl_to_ref.mean())
 
-        for name, value in metrics.items():
-            wandb_logger.log_scalar(name, value, step=global_step)
+        wandb_logger.log_metrics(metrics, step=global_step)
 
         if history_str is not None:
             wandb_logger.log_str("history", history_str, step=global_step)
