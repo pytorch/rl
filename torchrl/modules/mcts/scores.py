@@ -15,6 +15,13 @@ import torch
 from tensordict import NestedKey, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 
+try:
+    from enum import member as _enum_member
+except ImportError:  # Python < 3.11
+
+    def _enum_member(value):
+        return value
+
 
 class MCTSScore(TensorDictModuleBase):
     """Abstract base class for MCTS score computation modules."""
@@ -569,11 +576,23 @@ class UCB1TunedScore(MCTSScore):
 
 
 class MCTSScores(Enum):
-    """Enum providing factory functions for common MCTS score configurations."""
+    """A collection of MCTS score computation modules.
 
-    PUCT = functools.partial(PUCTScore, c=5)  # AlphaGo default value
-    UCB = functools.partial(UCBScore, c=math.sqrt(2))  # default from Auer et al. 2002
-    UCB1_TUNED = functools.partial(
-        UCB1TunedScore, exploration_constant=2.0
-    )  # Auer et al. (2002) C=2 for rewards in [0,1]
-    EXP3 = functools.partial(EXP3Score, gamma=0.1)
+    This enum provides a convenient way to create instances of the different MCTS score computation modules.
+    Each member of the enum is a callable that returns an instance of the corresponding score computation module.
+
+    Content:
+
+    - PUCTScore: Computes the PUCT score for MCTS.
+    - UCBScore: Computes the UCB score for MCTS.
+    - UCB1TunedScore: Computes the UCB1-Tuned score for MCTS.
+    - EXP3Score: Computes the EXP3 score for MCTS.
+
+    """
+
+    PUCT = _enum_member(functools.partial(PUCTScore, c=5))
+    UCB = _enum_member(functools.partial(UCBScore, c=math.sqrt(2)))
+    UCB1_TUNED = _enum_member(
+        functools.partial(UCB1TunedScore, exploration_constant=2.0)
+    )
+    EXP3 = _enum_member(functools.partial(EXP3Score, gamma=0.1))
