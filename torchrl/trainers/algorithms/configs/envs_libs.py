@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from omegaconf import MISSING
@@ -214,6 +214,27 @@ class MeltingpotEnvConfig(EnvLibsConfig):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for MeltingpotEnv configuration."""
+        super().__post_init__()
+
+
+@dataclass
+class OpenEnvEnvConfig(EnvLibsConfig):
+    """Configuration for OpenEnvEnv environment."""
+
+    env_name: str = MISSING
+    auto_action: bool = True
+    env_kwargs: dict[str, Any] = field(default_factory=dict)
+    action_cls: Any | None = None
+    observation_cls: Any | None = None
+    return_observation_dict: bool = False
+    sync: bool = True
+    device: str = "cpu"
+    batch_size: list[int] | None = None
+    allow_done_after_reset: bool = False
+    _target_: str = "torchrl.envs.libs.openenv.OpenEnvEnv"
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for OpenEnvEnv configuration."""
         super().__post_init__()
 
 

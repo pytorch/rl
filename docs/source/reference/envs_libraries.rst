@@ -98,6 +98,8 @@ Available wrappers
     MOGymWrapper
     MultiThreadedEnv
     MultiThreadedEnvWrapper
+    OpenEnvEnv
+    OpenEnvWrapper
     OpenMLEnv
     OpenSpielWrapper
     OpenSpielEnv
