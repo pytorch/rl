@@ -8,7 +8,7 @@ import functools
 import math
 import warnings
 from abc import abstractmethod
-from enum import Enum, member
+from enum import Enum
 
 import torch
 
@@ -567,13 +567,17 @@ class UCB1TunedScore(MCTSScore):
         node.set(self.score_key, scores)
         return node
 
+try:
+    from enum import member as _enum_member
+except ImportError:  # Python < 3.11
+    def _enum_member(value):
+        return value
+
 
 class MCTSScores(Enum):
-    """Enum providing factory functions for common MCTS score configurations."""
-
-    PUCT = member(functools.partial(PUCTScore, c=5))  # AlphaGo default value
-    UCB = member(functools.partial(UCBScore, c=math.sqrt(2)))  # default from Auer et al. 2002
-    UCB1_TUNED = member(functools.partial(
-        UCB1TunedScore, exploration_constant=2.0
-    ))  # Auer et al. (2002) C=2 for rewards in [0,1]
-    EXP3 = member(functools.partial(EXP3Score, gamma=0.1))
+    PUCT = _enum_member(functools.partial(PUCTScore, c=5))
+    UCB = _enum_member(functools.partial(UCBScore, c=math.sqrt(2)))
+    UCB1_TUNED = _enum_member(
+        functools.partial(UCB1TunedScore, exploration_constant=2.0)
+    )
+    EXP3 = _enum_member(functools.partial(EXP3Score, gamma=0.1))
