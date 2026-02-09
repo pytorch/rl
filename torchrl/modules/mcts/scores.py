@@ -14,11 +14,14 @@ import torch
 
 from tensordict import NestedKey, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
+
 try:
     from enum import member as _enum_member
 except ImportError:  # Python < 3.11
+
     def _enum_member(value):
         return value
+
 
 class MCTSScore(TensorDictModuleBase):
     """Abstract base class for MCTS score computation modules."""
@@ -573,6 +576,20 @@ class UCB1TunedScore(MCTSScore):
 
 
 class MCTSScores(Enum):
+    """A collection of MCTS score computation modules.
+
+    This enum provides a convenient way to create instances of the different MCTS score computation modules.
+    Each member of the enum is a callable that returns an instance of the corresponding score computation module.
+
+    Content:
+
+    - PUCTScore: Computes the PUCT score for MCTS.
+    - UCBScore: Computes the UCB score for MCTS.
+    - UCB1TunedScore: Computes the UCB1-Tuned score for MCTS.
+    - EXP3Score: Computes the EXP3 score for MCTS.
+
+    """
+
     PUCT = _enum_member(functools.partial(PUCTScore, c=5))
     UCB = _enum_member(functools.partial(UCBScore, c=math.sqrt(2)))
     UCB1_TUNED = _enum_member(
