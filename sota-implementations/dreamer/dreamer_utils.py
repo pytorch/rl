@@ -75,6 +75,7 @@ from torchrl.modules import (
     TanhNormal,
     WorldModelWrapper,
 )
+from torchrl.modules.tensordict_module.rnn import GRUCell as PythonGRUCell
 from torchrl.record import VideoRecorder
 
 
@@ -732,8 +733,6 @@ def make_dreamer(
     # When use_scan=True or rssm_rollout.compile=True, replace C++ GRU with Python-based GRU
     # for torch.compile compatibility. The C++ GRU (cuBLAS) cannot be traced by torch.compile.
     if cfg.networks.use_scan or cfg.networks.rssm_rollout.compile:
-        from torchrl.modules.tensordict_module.rnn import GRUCell as PythonGRUCell
-
         old_rnn = rssm_prior.rnn
         python_rnn = PythonGRUCell(
             old_rnn.input_size, old_rnn.hidden_size, device=device
