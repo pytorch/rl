@@ -17,7 +17,8 @@ from tensordict.utils import _zip_strict, is_seq_of_nested_key, logger as torchr
 from torch.nn.utils.rnn import pad_sequence
 from torchrl.data import Composite, Unbounded
 from torchrl.data.tensor_specs import DEVICE_TYPING
-from torchrl.envs import EnvBase, Transform
+from torchrl.envs.common import EnvBase
+from torchrl.envs.transforms import Transform
 from torchrl.envs.transforms.ray_service import _RayServiceMetaClass, RayTransform
 from torchrl.envs.transforms.transforms import Compose
 from torchrl.envs.transforms.utils import _set_missing_tolerance

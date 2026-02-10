@@ -2,15 +2,19 @@ from __future__ import annotations
 
 import importlib.util
 import inspect
+import json
 import warnings
 from typing import Any
 
 import torch
-from tensordict import NonTensorData, TensorDict, TensorDictBase
+from tensordict import NonTensorData, TensorDict, TensorDictBase, lazy_stack
 
+from torchrl.data.llm import History
 from torchrl.data.tensor_specs import Categorical, Composite, NonTensor, Unbounded
-from torchrl.envs.common import _EnvWrapper
+from torchrl.envs.common import EnvBase
+from torchrl.envs.llm.chat import ChatEnv
 from torchrl.envs.utils import _classproperty
+from torchrl.modules.llm.policies.common import ChatHistory
 
 __all__ = ["OpenEnvWrapper", "OpenEnvEnv"]
 
@@ -41,14 +45,35 @@ def _example_from_cls(cls: type | None) -> Any:
     return None
 
 
-class OpenEnvWrapper(_EnvWrapper):
+def _to_history_content(value: Any) -> Any:
+    value = _unwrap_nontensor(value)
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        if all(isinstance(item, str) for item in value):
+            return value
+        try:
+            return json.dumps(value)
+        except Exception:
+            return str(value)
+    if isinstance(value, (dict, tuple)):
+        try:
+            return json.dumps(value)
+        except Exception:
+            return str(value)
+    return str(value)
+
+
+class OpenEnvWrapper(ChatEnv):
     """OpenEnv environment wrapper.
 
     Wraps an existing OpenEnv client instance (sync or async) and exposes it
     under the TorchRL environment API.
 
     Observations and actions are stored as non-tensor data under the
-    ``"observation"`` and ``"action"`` keys.
+    ``"observation"`` and ``"action"`` keys. This wrapper also exposes a
+    chat-style interface (history mode) under the ``"history"`` key to
+    integrate with TorchRL's LLM stack.
 
     Args:
         env: An OpenEnv client instance. If the client is async and exposes
@@ -62,6 +87,19 @@ class OpenEnvWrapper(_EnvWrapper):
             convert Pydantic observation objects to dicts. Defaults to ``False``.
         sync (bool, optional): If ``True`` (default), calls ``env.sync()`` when
             available.
+        input_mode (str, optional): Chat input mode. Only ``"history"`` is
+            supported.
+        system_prompt (str, optional): Optional system prompt prepended to the
+            history.
+        system_role (str, optional): Role name for system messages. Defaults to
+            ``"system"``.
+        user_role (str, optional): Role name for environment observations.
+            Defaults to ``"user"``.
+        policy_role (str, optional): Role name for agent responses. Defaults to
+            ``"assistant"``.
+        tokenizer (optional): Tokenizer stored on the instance for downstream
+            transforms.
+        template_kwargs (dict, optional): Template kwargs stored on the instance.
         device (torch.device | str, optional): device on which tensors are placed.
         batch_size (torch.Size, optional): batch size. OpenEnv environments are
             single-instance; non-empty batch sizes are not supported.
@@ -84,17 +122,91 @@ class OpenEnvWrapper(_EnvWrapper):
         observation_cls: type | None = None,
         return_observation_dict: bool = False,
         sync: bool = True,
+        input_mode: str = "history",
+        system_prompt: str | None = None,
+        system_role: str = "system",
+        user_role: str = "user",
+        policy_role: str | None = "assistant",
+        tokenizer: Any | None = None,
+        template_kwargs: dict[str, Any] | None = None,
+        data_key: str | None = None,
         **kwargs,
     ) -> None:
+        device = kwargs.pop("device", None)
+        batch_size = kwargs.pop("batch_size", None)
+        allow_done_after_reset = kwargs.pop("allow_done_after_reset", False)
+        spec_locked = kwargs.pop("spec_locked", True)
+        frame_skip = kwargs.pop("frame_skip", 1)
+
+        if input_mode != "history":
+            raise ValueError(
+                f"{type(self).__name__} only supports input_mode='history'. Got {input_mode!r}."
+            )
+
+        if batch_size is None:
+            batch_size = torch.Size(())
+        elif isinstance(batch_size, int):
+            batch_size = torch.Size([batch_size])
+        elif isinstance(batch_size, list):
+            batch_size = torch.Size(batch_size)
+        else:
+            batch_size = torch.Size(batch_size)
+
+        EnvBase.__init__(
+            self,
+            device=device,
+            batch_size=batch_size,
+            allow_done_after_reset=allow_done_after_reset,
+            spec_locked=spec_locked,
+        )
+
+        if not isinstance(frame_skip, int):
+            raise ValueError(f"frame_skip must be an integer, got {frame_skip}")
+        self.frame_skip = frame_skip
+        self.wrapper_frame_skip = frame_skip
+
+        if data_key is not None:
+            self.data_key = data_key
+
+        self.input_mode = input_mode
+        self.system_prompt = system_prompt
+        self.system_role = system_role
+        self.user_role = user_role
+        self.policy_role = policy_role
+        self.tokenizer = tokenizer
+        self.template_kwargs = {} if template_kwargs is None else template_kwargs
+
         self._action_cls = action_cls
         self._observation_cls = observation_cls
         self._return_observation_dict = return_observation_dict
         self._sync_env = sync
         self._warned_reward_none = False
-        super().__init__(env=env, **kwargs)
+        self._history_prompt: History | None = None
+
+        self._constructor_kwargs = kwargs
+        self._check_kwargs({"env": env})
+        self._convert_actions_to_numpy = kwargs.pop("convert_actions_to_numpy", True)
+        self._env = self._build_env(env=env, **kwargs)
+        self._make_specs(self._env)
+        self.is_closed = False
+        self._init_env()
+
+    def __getattr__(self, attr: str) -> Any:
+        if attr in self.__dir__():
+            return self.__getattribute__(attr)
+        if attr.startswith("__"):
+            raise AttributeError(
+                "passing built-in private methods is "
+                f"not permitted with type {type(self)}. "
+                f"Got attribute {attr}."
+            )
+        if "_env" in self.__dir__():
+            env = self.__getattribute__("_env")
+            return getattr(env, attr)
+        return super().__getattr__(attr)
 
     def _check_kwargs(self, kwargs: dict) -> None:
-        if "env" not in kwargs:
+        if "env" not in kwargs or kwargs["env"] is None:
             raise TypeError("OpenEnvWrapper requires an 'env' argument.")
 
     def _build_env(self, env, **_) -> Any:
@@ -115,19 +227,34 @@ class OpenEnvWrapper(_EnvWrapper):
         obs_example = _example_from_cls(self._observation_cls)
         act_example = _example_from_cls(self._action_cls)
 
-        self.observation_spec = Composite(
-            observation=NonTensor(
-                shape=self.batch_size, device=self.device, example_data=obs_example
-            ),
-            shape=self.batch_size,
+        observation_leaf = NonTensor(
+            shape=self.batch_size, device=self.device, example_data=obs_example
+        )
+        action_leaf = NonTensor(
+            shape=self.batch_size, device=self.device, example_data=act_example
         )
 
-        self.action_spec = Composite(
-            action=NonTensor(
-                shape=self.batch_size, device=self.device, example_data=act_example
-            ),
-            shape=self.batch_size,
-        )
+        obs_spec = Composite(shape=self.batch_size, device=self.device)
+        obs_spec.set("observation", observation_leaf)
+        if self.input_mode == "history":
+            obs_spec.set(
+                "history",
+                ChatHistory.default_spec(
+                    shape=self.batch_size, keys=["prompt"]
+                ).to(self.device),
+            )
+        self.full_observation_spec = obs_spec
+
+        action_spec = Composite(shape=self.batch_size, device=self.device)
+        action_spec.set("action", action_leaf)
+        if self.input_mode == "history":
+            action_spec.set(
+                "history",
+                ChatHistory.default_spec(shape=self.batch_size, keys=["full"]).to(
+                    self.device
+                ),
+            )
+        self.full_action_spec = action_spec
 
         self.reward_spec = Composite(
             reward=Unbounded(
@@ -206,7 +333,95 @@ class OpenEnvWrapper(_EnvWrapper):
                 return self._action_cls(**action)
             except Exception:
                 pass
+        action_field = self._get_action_field()
+        if action_field is not None:
+            try:
+                return self._action_cls(**{action_field: action})
+            except Exception:
+                pass
         return action
+
+    def _get_action_field(self) -> str | None:
+        cls = self._action_cls
+        if cls is None:
+            return None
+        fields = getattr(cls, "model_fields", None)
+        if fields is None:
+            fields = getattr(cls, "__fields__", None)
+        if fields and len(fields) == 1:
+            return next(iter(fields))
+        return None
+
+    def _broadcast_to_batch(self, value: Any) -> Any:
+        if not self.batch_size:
+            return value
+        if getattr(value, "batch_size", None) == self.batch_size:
+            return value
+        if (
+            isinstance(value, list)
+            and len(self.batch_size) == 1
+            and len(value) == self.batch_size[0]
+        ):
+            return value
+        for s in reversed(self.batch_size):
+            value = [value for _ in range(s)]
+        return value
+
+    def _make_history_message(self, role: str, content: Any) -> History:
+        role = self._broadcast_to_batch(role)
+        content = self._broadcast_to_batch(_to_history_content(content))
+        return History(
+            role=role, content=content, batch_size=self.batch_size, device=self.device
+        )
+
+    def _build_prompt_history(self, obs: Any) -> History:
+        history = self._make_history_message(self.user_role, obs)
+        if self.system_prompt is not None:
+            history_system = self._make_history_message(
+                self.system_role, self.system_prompt
+            )
+            history = lazy_stack([history_system, history], -1)
+        else:
+            history = history.unsqueeze(-1)
+        return history
+
+    def _extract_history_parts(
+        self, chat_history: ChatHistory | None
+    ) -> tuple[History | None, History | None]:
+        if chat_history is None:
+            return None, None
+        prompt = getattr(chat_history, "prompt", None)
+        response = getattr(chat_history, "response", None)
+        full = getattr(chat_history, "full", None)
+        if response is None:
+            if full is not None and prompt is not None:
+                try:
+                    prompt_len = prompt.shape[-1]
+                    if full.shape[-1] >= prompt_len:
+                        response = full[..., prompt_len:]
+                except Exception:
+                    response = None
+            if response is None and full is not None:
+                response = full[..., -1:]
+        return prompt, response
+
+    def _history_to_action(self, response: History | None) -> Any:
+        if response is None:
+            return None
+        try:
+            if response.shape[-1] > 1:
+                response = response[..., -1]
+        except Exception:
+            pass
+        content = getattr(response, "content", response)
+        return _unwrap_nontensor(content)
+
+    def _merge_history(self, prompt: History, new: History) -> History:
+        if new.batch_dims == prompt.batch_dims:
+            return prompt.extend(new, inplace=False, dim=-1)
+        if new.batch_dims == prompt.batch_dims - 1:
+            return prompt.append(new, inplace=False, dim=-1)
+        return prompt.append(new, inplace=False)
 
     def _reward_to_tensor(self, reward: Any) -> torch.Tensor:
         if reward is None:
@@ -236,22 +451,32 @@ class OpenEnvWrapper(_EnvWrapper):
         obs = self._format_observation(result.observation)
         reward = self._reward_to_tensor(getattr(result, "reward", None))
         done = self._done_to_tensor(getattr(result, "done", False))
+        data = {
+            "observation": obs,
+            "reward": reward,
+            "done": done,
+            "terminated": done.clone(),
+            "truncated": torch.zeros_like(done),
+        }
+        if self.input_mode == "history":
+            prompt_history = self._build_prompt_history(obs)
+            self._history_prompt = prompt_history
+            chat_history = ChatHistory._from_tensordict(
+                TensorDict({}, batch_size=self.batch_size, device=self.device)
+            )
+            chat_history.prompt = prompt_history
+            data["history"] = chat_history
 
-        td = TensorDict(
-            {
-                "observation": obs,
-                "reward": reward,
-                "done": done,
-                "terminated": done.clone(),
-                "truncated": torch.zeros_like(done),
-            },
-            batch_size=self.batch_size,
-            device=self.device,
-        )
+        td = TensorDict(data, batch_size=self.batch_size, device=self.device)
         return td
 
     def _step(self, tensordict: TensorDict, **kwargs) -> TensorDict:  # noqa: ARG002
-        action = tensordict.get("action")
+        chat_history = tensordict.get("history", None)
+        prompt_history, response_history = self._extract_history_parts(chat_history)
+        action_from_history = self._history_to_action(response_history)
+        action = action_from_history
+        if action is None:
+            action = tensordict.get("action")
         action = self._format_action(action)
         result = self._env.step(action)
         if inspect.isawaitable(result):
@@ -262,18 +487,36 @@ class OpenEnvWrapper(_EnvWrapper):
         obs = self._format_observation(result.observation)
         reward = self._reward_to_tensor(getattr(result, "reward", None))
         done = self._done_to_tensor(getattr(result, "done", False))
+        data = {
+            "observation": obs,
+            "reward": reward,
+            "done": done,
+            "terminated": done.clone(),
+            "truncated": torch.zeros_like(done),
+        }
+        if self.input_mode == "history":
+            prompt = prompt_history if prompt_history is not None else self._history_prompt
+            if prompt is None:
+                prompt = self._build_prompt_history(obs)
+            else:
+                assistant_history = response_history
+                if assistant_history is None and action_from_history is not None:
+                    role = self.policy_role or "assistant"
+                    assistant_history = self._make_history_message(
+                        role, action_from_history
+                    )
+                if assistant_history is not None:
+                    prompt = self._merge_history(prompt, assistant_history)
+                obs_history = self._make_history_message(self.user_role, obs)
+                prompt = self._merge_history(prompt, obs_history)
+            self._history_prompt = prompt
+            chat_out = ChatHistory._from_tensordict(
+                TensorDict({}, batch_size=self.batch_size, device=self.device)
+            )
+            chat_out.prompt = prompt
+            data["history"] = chat_out
 
-        td = TensorDict(
-            {
-                "observation": obs,
-                "reward": reward,
-                "done": done,
-                "terminated": done.clone(),
-                "truncated": torch.zeros_like(done),
-            },
-            batch_size=self.batch_size,
-            device=self.device,
-        )
+        td = TensorDict(data, batch_size=self.batch_size, device=self.device)
         return td
 
 
