@@ -7,6 +7,7 @@ API Reference
     collectors
     data
     envs
+    eval
     llms
     modules
     objectives
