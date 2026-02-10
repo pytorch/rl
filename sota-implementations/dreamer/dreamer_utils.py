@@ -25,6 +25,7 @@ from torchrl.collectors import MultiCollector
 from torchrl.data import (
     Composite,
     LazyMemmapStorage,
+    LazyTensorStorage,
     SliceSampler,
     TensorDictReplayBuffer,
     Unbounded,
@@ -372,8 +373,12 @@ def _make_env(cfg, device, from_pixels=False):
         "state": Unbounded(shape=(cfg.networks.state_dim,)),
         "belief": Unbounded(shape=(cfg.networks.rssm_hidden_dim,)),
     }
+    # expand_specs=True allows primers to auto-expand to the env's batch_size
+    # (needed for pre-vectorized envs like IsaacLab with batch_size=(4096,))
     env = env.append_transform(
-        TensorDictPrimer(random=False, default_value=0, **default_dict)
+        TensorDictPrimer(
+            random=False, default_value=0, expand_specs=True, **default_dict
+        )
     )
     return env
 
@@ -531,9 +536,11 @@ def make_dreamer(
     use_decoder_in_env: bool = False,
     compile: bool = True,
     logger=None,
+    test_env=None,
 ):
-    test_env = _make_env(cfg, device="cpu")
-    test_env = transform_env(cfg, test_env)
+    if test_env is None:
+        test_env = _make_env(cfg, device="cpu")
+        test_env = transform_env(cfg, test_env)
 
     # Get dimensions for explicit module instantiation (avoids lazy modules)
     state_dim = cfg.networks.state_dim
@@ -545,18 +552,33 @@ def make_dreamer(
         # Determine input channels (1 for grayscale, 3 for RGB)
         in_channels = 1 if cfg.env.grayscale else 3
         image_size = cfg.env.image_size
+        encoder_channels = cfg.networks.get("encoder_channels", 32)
 
         # Compute encoder output size for explicit posterior input
         obs_embed_dim = _compute_encoder_output_size(
-            image_size, channels=32, num_layers=4
+            image_size, channels=encoder_channels, num_layers=4
         )
 
-        encoder = ObsEncoder(in_channels=in_channels, device=device)
-        decoder = ObsDecoder(latent_dim=state_dim + rssm_hidden_dim, device=device)
+        encoder = ObsEncoder(
+            channels=encoder_channels, in_channels=in_channels, device=device
+        )
+        decoder = ObsDecoder(
+            channels=encoder_channels,
+            latent_dim=state_dim + rssm_hidden_dim,
+            out_channels=in_channels,
+            device=device,
+        )
 
         observation_in_key = "pixels"
         observation_out_key = "reco_pixels"
     else:
+        # Determine the observation key name based on backend.
+        # IsaacLab uses "policy" as observation key, others use "observation".
+        observation_in_key = (
+            "policy" if cfg.env.backend == "isaaclab" else "observation"
+        )
+        observation_out_key = f"reco_{observation_in_key}"
+
         obs_embed_dim = 1024  # MLP output size
         encoder = MLP(
             out_features=obs_embed_dim,
@@ -566,15 +588,12 @@ def make_dreamer(
             device=device,
         )
         decoder = MLP(
-            out_features=test_env.observation_spec["observation"].shape[-1],
+            out_features=test_env.observation_spec[observation_in_key].shape[-1],
             depth=2,
             num_cells=cfg.networks.hidden_dim,
             activation_class=get_activation(cfg.networks.activation),
             device=device,
         )
-
-        observation_in_key = "observation"
-        observation_out_key = "reco_observation"
 
     # Make RSSM with explicit input sizes (no lazy modules)
     rssm_prior = RSSMPrior(
@@ -633,9 +652,12 @@ def make_dreamer(
 
     # Initialize world model (already on device)
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        tensordict = (
-            test_env.rollout(5, auto_cast_to_device=True).unsqueeze(-1).to(device)
-        )
+        tensordict = test_env.rollout(5, auto_cast_to_device=True)
+        # For batched envs (e.g., IsaacLab with 4096 parallel envs),
+        # select a single env's trajectory for initialization
+        while len(tensordict.batch_size) > 1:
+            tensordict = tensordict[0]
+        tensordict = tensordict.unsqueeze(-1).to(device)
         tensordict = tensordict.to_tensordict()
         world_model(tensordict)
 
@@ -873,6 +895,7 @@ def make_replay_buffer(
     pixel_obs=True,
     grayscale=True,
     image_size,
+    gpu_storage=False,
 ):
     """Create replay buffer with minimal sample-time transforms.
 
@@ -882,39 +905,55 @@ def make_replay_buffer(
     Note: We don't compile the SliceSampler because:
     1. Sampler operations (index computation) happen on CPU and are already fast
     2. torch.compile with inductor has bugs with the sampler's vectorized int64 operations
+
+    Args:
+        gpu_storage: If True, use LazyTensorStorage on `device` instead of
+            LazyMemmapStorage on CPU.  Eliminates CPU-GPU transfer at sample
+            time (data lives on training GPU) but costs GPU memory.
     """
-    with (
-        tempfile.TemporaryDirectory()
-        if buffer_scratch_dir is None
-        else nullcontext(buffer_scratch_dir)
-    ) as scratch_dir:
-        # Sample-time transforms: only device transfer (fast)
+    use_gpu = device is not None and device.type == "cuda"
+
+    if gpu_storage and use_gpu:
+        # GPU-resident storage: data lives on the training device
+        storage = LazyTensorStorage(
+            buffer_size,
+            device=device,
+            ndim=2,
+        )
+        # No sample transform needed: data is already on the right device
+        sample_transforms = None
+    else:
+        scratch_dir_ctx = (
+            tempfile.TemporaryDirectory()
+            if buffer_scratch_dir is None
+            else nullcontext(buffer_scratch_dir)
+        )
+        scratch_dir = scratch_dir_ctx.__enter__()
+        storage = LazyMemmapStorage(
+            buffer_size,
+            scratch_dir=scratch_dir,
+            device="cpu",
+            ndim=2,
+            shared_init=True,
+        )
         sample_transforms = Compose(
             functools.partial(_to_device, device=device),
         )
 
-        replay_buffer = TensorDictReplayBuffer(
-            prefetch=prefetch,
-            storage=LazyMemmapStorage(
-                buffer_size,
-                scratch_dir=scratch_dir,
-                device="cpu",
-                ndim=2,
-                shared_init=True,  # Allow remote processes to initialize storage
-            ),
-            sampler=SliceSampler(
-                slice_len=batch_seq_len,
-                strict_length=False,
-                traj_key=("collector", "traj_ids"),
-                cache_values=False,  # Disabled for async collection (cache not synced across processes)
-                use_gpu=device.type == "cuda"
-                if device is not None
-                else False,  # Speed up trajectory computation on GPU
-            ),
-            transform=sample_transforms,
-            batch_size=batch_size,
-        )
-        return replay_buffer
+    replay_buffer = TensorDictReplayBuffer(
+        prefetch=prefetch,
+        storage=storage,
+        sampler=SliceSampler(
+            slice_len=batch_seq_len,
+            strict_length=False,
+            traj_key=("collector", "traj_ids"),
+            cache_values=False,
+            use_gpu=use_gpu,
+        ),
+        transform=sample_transforms,
+        batch_size=batch_size,
+    )
+    return replay_buffer
 
 
 def _dreamer_make_value_model(
@@ -1133,6 +1172,23 @@ def _dreamer_make_mbenv(
     )
 
     model_based_env.set_specs_from_env(test_env)
+
+    # For batched envs (e.g., IsaacLab with batch_size=(4096,)),
+    # unbatch the model-based env's specs.  The model-based env is used for
+    # imagination rollouts where the batch comes from sampled replay data,
+    # not from the env structure.  Keeping batched specs causes double-batching
+    # when check_env_specs or rollout samples random actions.
+    batch_size = test_env.batch_size
+    if batch_size:
+        idx = (0,) * len(batch_size)
+        model_based_env.__dict__["_output_spec"] = model_based_env.__dict__[
+            "_output_spec"
+        ][idx]
+        model_based_env.__dict__["_input_spec"] = model_based_env.__dict__[
+            "_input_spec"
+        ][idx]
+        model_based_env.empty_cache()
+
     return model_based_env
 
 
