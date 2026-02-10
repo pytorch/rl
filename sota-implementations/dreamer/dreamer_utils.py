@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import functools
+import importlib
+import os
 import tempfile
 from contextlib import nullcontext
 
@@ -23,6 +25,7 @@ from torchrl._utils import set_profiling_enabled
 from torchrl.collectors import MultiCollector
 
 from torchrl.data import (
+    Bounded,
     Composite,
     LazyMemmapStorage,
     LazyTensorStorage,
@@ -326,8 +329,6 @@ class GPUImageTransform(Transform):
         # Update the spec for the output key
         # Note: Keep spec on CPU to match other specs in Composite
         # The actual transform will put data on GPU, but spec device must be uniform
-        from torchrl.data import Unbounded
-
         in_spec = observation_spec[self.in_key]
         # Output shape: (C, H, W) where C=1 if grayscale else 3
         out_channels = 1 if self.grayscale else 3
@@ -382,8 +383,6 @@ class IsaacCameraReadTransform(Transform):
         return self._call(tensordict_reset)
 
     def transform_observation_spec(self, observation_spec):
-        from torchrl.data import Bounded
-
         # Prepend the Composite's batch shape (e.g., (256,) for 256 envs)
         # so the spec matches the batched output [N, H, W, C].
         observation_spec["pixels"] = Bounded(
@@ -419,10 +418,8 @@ def _make_env(cfg, device, from_pixels=False):
             frame_skip=cfg.env.frame_skip,  # Native frame skip inside worker
         )
     elif lib == "isaaclab":
-        # Local imports required: isaaclab must be imported AFTER AppLauncher init,
-        # and isaaclab is an optional dependency
-        import importlib
-
+        # Local imports: isaaclab is an optional dependency and must be
+        # imported AFTER AppLauncher init (already done by the caller).
         import gymnasium as gym
 
         import isaaclab.sim as sim_utils
@@ -1457,11 +1454,11 @@ def make_isaac_init_fn(gpu_id: int = 2):
         gpu_id: Physical GPU index that the eval actor should use.
             Defaults to 2 (GPU 0 = sim, GPU 1 = train, GPU 2 = eval).
     """
-    import os
-
     dreamer_dir = os.path.dirname(os.path.abspath(__file__))
 
     def _init():
+        # These imports are inside the closure because it runs in a fresh
+        # Ray actor process where the parent module is not loaded.
         import argparse
         import os as _os
         import sys
@@ -1505,6 +1502,9 @@ def make_isaac_eval_env_factory(cfg):
     cfg_container = OmegaConf.to_container(cfg, resolve=True)
 
     def _make():
+        # All imports are local because this closure is serialised by
+        # cloudpickle and runs inside a fresh Ray actor process where
+        # init_fn has already called AppLauncher (torch is safe to import).
         import importlib
 
         import gymnasium as gym
@@ -1512,9 +1512,9 @@ def make_isaac_eval_env_factory(cfg):
         import isaaclab.sim as sim_utils
         import isaaclab_tasks  # noqa: F401 - registers Isaac environments
         import torch
+        from dreamer_utils import GPUImageTransform, IsaacCameraReadTransform
         from isaaclab.sensors import TiledCameraCfg
         from omegaconf import OmegaConf
-
         from torchrl.data import Unbounded
         from torchrl.envs import (
             DoubleToFloat,
@@ -1581,8 +1581,6 @@ def make_isaac_eval_env_factory(cfg):
             env = TransformedEnv(env)
 
         if use_pixels:
-            from dreamer_utils import GPUImageTransform, IsaacCameraReadTransform
-
             env.append_transform(IsaacCameraReadTransform(isaac_scene))
             env.append_transform(
                 RenameTransform(in_keys=["pixels"], out_keys=["pixels_int"])
@@ -1619,6 +1617,8 @@ def make_eval_policy_factory(cfg):
     cfg_container = OmegaConf.to_container(cfg, resolve=True)
 
     def _make(env):
+        # All imports are local because this closure is serialised by
+        # cloudpickle and runs inside a fresh Ray actor process.
         import torch
 
         from dreamer_utils import make_dreamer
