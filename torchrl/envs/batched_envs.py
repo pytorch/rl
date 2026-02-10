@@ -2476,7 +2476,13 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 if self._verbose:
                     torchrl_logger.info(f"closing {i}")
                 channel.send(("close", None))
-            self._wait_for_workers(range(self.num_workers))
+            # Wait on mp.Event (not _wait_for_workers) because the "close"
+            # handler doesn't send data on the pipe — it just closes it — and
+            # connection_wait does not reliably detect socketpair closure
+            # on all platforms (macOS with forked workers).
+            for i in range(self.num_workers):
+                self._events[i].wait(self._timeout)
+                self._events[i].clear()
             if self._use_buffers:
                 del self.shared_tensordicts, self.shared_tensordict_parent
 
@@ -2852,6 +2858,9 @@ def _run_worker_pipe_shared_mem(
                 root_shared_tensordict,
             )
             _signal_done()
+            # Also set mp_event so _shutdown_workers (which waits on events,
+            # not shm flags) can detect completion.
+            mp_event.set()
             child_pipe.close()
             if verbose:
                 torchrl_logger.info(f"{pid} closed")
@@ -2861,6 +2870,9 @@ def _run_worker_pipe_shared_mem(
         elif cmd == "load_state_dict":
             env.load_state_dict(data)
             _signal_done()
+            # Also set mp_event so the parent's load_state_dict (which waits
+            # on events) can detect completion.
+            mp_event.set()
 
         elif cmd == "state_dict":
             state_dict = _recursively_strip_locks_from_state_dict(env.state_dict())

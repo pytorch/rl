@@ -1,0 +1,54 @@
+# @torchrlbot - PR management bot for torchrl
+#
+# Triggered by PR comments starting with `@torchrlbot`.
+# See .github/torchrlbot/README.md for full documentation.
+#
+# Commands:
+#   @torchrlbot merge [-f 'reason']   Merge a PR (ghstack land or squash merge)
+#   @torchrlbot rebase [-b BRANCH]    Rebase PR onto a branch (default: main)
+#   @torchrlbot help                  Show available commands
+
+name: TorchRLBot
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  torchrlbot:
+    # Only run on PR comments (not issue comments) that mention @torchrlbot
+    if: >-
+      github.event.issue.pull_request != null &&
+      contains(github.event.comment.body, '@torchrlbot')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Full history needed for rebase operations
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ghstack
+        run: pip install ghstack
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Run torchrlbot
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python .github/torchrlbot/torchrlbot.py
