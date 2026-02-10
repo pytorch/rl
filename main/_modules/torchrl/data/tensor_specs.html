@@ -1633,7 +1633,7 @@
                             <span class="k">return</span> <span class="bp">self</span>
                         <span class="k">if</span> <span class="n">dim_idx</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">:</span>
                             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                                <span class="sa">f</span><span class="s2">&quot;Indexing occured along dimension </span><span class="si">{</span><span class="n">dim_idx</span><span class="si">}</span><span class="s2"> but stacking was done along dim </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="si">}</span><span class="s2">.&quot;</span>
+                                <span class="sa">f</span><span class="s2">&quot;Indexing occurred along dimension </span><span class="si">{</span><span class="n">dim_idx</span><span class="si">}</span><span class="s2"> but stacking was done along dim </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="si">}</span><span class="s2">.&quot;</span>
                             <span class="p">)</span>
                         <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_specs</span><span class="p">[</span><span class="n">item</span><span class="p">]</span>
                         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">TensorSpec</span><span class="p">):</span>
