@@ -165,7 +165,7 @@ def main(cfg: DictConfig):
     if cfg.logger.video and num_gpus >= 3:
         import ray
 
-        from torchrl.eval import RayEvalWorker
+        from torchrl.collectors.distributed import RayEvalWorker
 
         ray.init(num_gpus=num_gpus - 2)
         eval_worker = RayEvalWorker(
