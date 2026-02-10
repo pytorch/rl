@@ -12,7 +12,7 @@ evaluation should happen concurrently with training on a separate GPU.
 
 Typical usage::
 
-    from torchrl.eval import RayEvalWorker
+    from torchrl.collectors.distributed import RayEvalWorker
 
     worker = RayEvalWorker(
         init_fn=my_init,          # called first in the actor process
