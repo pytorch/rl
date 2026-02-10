@@ -5840,9 +5840,9 @@ class TestRayEvalWorker:
 
         from tensordict import TensorDict
         from tensordict.nn import TensorDictModule
+        from torchrl.collectors.distributed import RayEvalWorker
 
         from torchrl.envs import GymEnv, StepCounter, TransformedEnv
-        from torchrl.eval import RayEvalWorker
 
         def make_env():
             return TransformedEnv(GymEnv("Pendulum-v1"), StepCounter(10))
