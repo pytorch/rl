@@ -10,6 +10,7 @@ from .generic import (
     DistributedWeightUpdater,
 )
 from .ray import RayCollector
+from .ray_eval_worker import RayEvalWorker
 from .rpc import RPCCollector, RPCDataCollector, RPCWeightUpdater
 from .sync import DistributedSyncCollector, DistributedSyncDataCollector
 from .utils import submitit_delayed_launcher
@@ -28,5 +29,6 @@ __all__ = [
     "DistributedWeightUpdater",
     "RPCWeightUpdater",
     "RayCollector",
+    "RayEvalWorker",
     "submitit_delayed_launcher",
 ]
