@@ -25,6 +25,7 @@ from torchrl.collectors import MultiCollector
 from torchrl.data import (
     Composite,
     LazyMemmapStorage,
+    LazyTensorStorage,
     SliceSampler,
     TensorDictReplayBuffer,
     Unbounded,
@@ -344,6 +345,57 @@ class GPUImageTransform(Transform):
         return observation_spec
 
 
+class IsaacCameraReadTransform(Transform):
+    """Read TiledCamera data from an IsaacLab scene and inject as ``"pixels"``.
+
+    This transform is added *before* the pixel-processing pipeline
+    (``RenameTransform`` -> ``GPUImageTransform``) so that the image
+    coming out of the Isaac renderer enters the standard Dreamer
+    ``from_pixels`` data path.
+
+    The camera is expected to exist in the scene under *camera_name*
+    (default ``"tiled_camera"``).  Its output tensor has shape
+    ``[N, H, W, C]``, dtype ``uint8``, on GPU -- exactly what the
+    downstream ``GPUImageTransform`` consumes.
+    """
+
+    def __init__(
+        self, scene, camera_name: str = "tiled_camera", data_type: str = "rgb"
+    ):
+        super().__init__(in_keys=[], out_keys=["pixels"])
+        self._scene = scene
+        self._camera_name = camera_name
+        self._data_type = data_type
+        # Cache camera dimensions for spec generation
+        camera = scene[camera_name]
+        self._h = camera.cfg.height
+        self._w = camera.cfg.width
+        self._c = 3 if data_type == "rgb" else 1
+
+    def _call(self, tensordict):
+        camera = self._scene[self._camera_name]
+        pixels = camera.data.output[self._data_type]  # [N, H, W, C], uint8, GPU
+        tensordict.set("pixels", pixels)
+        return tensordict
+
+    def _reset(self, tensordict, tensordict_reset):
+        return self._call(tensordict_reset)
+
+    def transform_observation_spec(self, observation_spec):
+        from torchrl.data import Bounded
+
+        # Prepend the Composite's batch shape (e.g., (256,) for 256 envs)
+        # so the spec matches the batched output [N, H, W, C].
+        observation_spec["pixels"] = Bounded(
+            low=0,
+            high=255,
+            shape=(*observation_spec.shape, self._h, self._w, self._c),
+            dtype=torch.uint8,
+            device=observation_spec.device,
+        )
+        return observation_spec
+
+
 def _make_env(cfg, device, from_pixels=False):
     lib = cfg.env.backend
     if lib in ("gym", "gymnasium"):
@@ -366,14 +418,87 @@ def _make_env(cfg, device, from_pixels=False):
             device=device,
             frame_skip=cfg.env.frame_skip,  # Native frame skip inside worker
         )
+    elif lib == "isaaclab":
+        # Local imports required: isaaclab must be imported AFTER AppLauncher init,
+        # and isaaclab is an optional dependency
+        import importlib
+
+        import gymnasium as gym
+
+        import isaaclab.sim as sim_utils
+        import isaaclab_tasks  # noqa: F401 - registers Isaac environments
+        from isaaclab.sensors import TiledCameraCfg
+        from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
+
+        # IsaacLab envs are GPU-native (cuda:0) and pre-vectorized.
+        # Resolve the env config class from the gymnasium registry.
+        # IsaacLab registers `env_cfg_entry_point` as "module.path:ClassName".
+        spec = gym.spec(cfg.env.name)
+        env_cfg_entry = spec.kwargs["env_cfg_entry_point"]
+        module_path, class_name = env_cfg_entry.rsplit(":", 1)
+        env_cfg_cls = getattr(importlib.import_module(module_path), class_name)
+        env_cfg = env_cfg_cls()
+
+        use_pixels = cfg.env.from_pixels or from_pixels
+        if use_pixels:
+            # Add TiledCamera to the scene for per-env pixel observations.
+            # Rendering is expensive: reduce num_envs (default 4096 -> num_envs).
+            image_size = cfg.env.image_size
+            env_cfg.scene.num_envs = cfg.env.num_envs
+            env_cfg.scene.env_spacing = (
+                8.0  # wider spacing to avoid cross-env camera bleed
+            )
+            env_cfg.scene.tiled_camera = TiledCameraCfg(
+                prim_path="{ENV_REGEX_NS}/Camera",
+                offset=TiledCameraCfg.OffsetCfg(
+                    # Third-person rear-elevated view of the quadruped
+                    pos=(-3.0, 0.0, 2.0),
+                    rot=(0.9945, 0.0, 0.1045, 0.0),
+                    convention="world",
+                ),
+                data_types=["rgb"],
+                spawn=sim_utils.PinholeCameraCfg(
+                    focal_length=24.0,
+                    focus_distance=400.0,
+                    horizontal_aperture=20.955,
+                    clipping_range=(0.1, 20.0),
+                ),
+                width=image_size,
+                height=image_size,
+            )
+
+        env = gym.make(cfg.env.name, cfg=env_cfg)
+
+        if use_pixels:
+            # Stash the Isaac scene reference before wrapping, so
+            # IsaacCameraReadTransform can read camera data each step.
+            isaac_scene = env.unwrapped.scene
+
+        # missing_obs_value=0: IsaacLab auto-resets internally and returns
+        # the correct post-reset observation directly. It does NOT provide
+        # terminal observations in info["final_observation"]. The default
+        # VecGymEnvTransform fills next obs with np.nan for done envs when
+        # final obs are missing, which poisons the replay buffer.
+        env = IsaacLabWrapper(env, missing_obs_value=0)
+
+        if use_pixels:
+            # Inject camera pixels into the TensorDict on every step/reset.
+            # Must come before RenameTransform -> GPUImageTransform in
+            # transform_env() so the standard pixel pipeline applies.
+            env = TransformedEnv(env) if not isinstance(env, TransformedEnv) else env
+            env.append_transform(IsaacCameraReadTransform(isaac_scene))
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")
     default_dict = {
         "state": Unbounded(shape=(cfg.networks.state_dim,)),
         "belief": Unbounded(shape=(cfg.networks.rssm_hidden_dim,)),
     }
+    # expand_specs=True allows primers to auto-expand to the env's batch_size
+    # (needed for pre-vectorized envs like IsaacLab with batch_size=(4096,))
     env = env.append_transform(
-        TensorDictPrimer(random=False, default_value=0, **default_dict)
+        TensorDictPrimer(
+            random=False, default_value=0, expand_specs=True, **default_dict
+        )
     )
     return env
 
@@ -531,9 +656,11 @@ def make_dreamer(
     use_decoder_in_env: bool = False,
     compile: bool = True,
     logger=None,
+    test_env=None,
 ):
-    test_env = _make_env(cfg, device="cpu")
-    test_env = transform_env(cfg, test_env)
+    if test_env is None:
+        test_env = _make_env(cfg, device="cpu")
+        test_env = transform_env(cfg, test_env)
 
     # Get dimensions for explicit module instantiation (avoids lazy modules)
     state_dim = cfg.networks.state_dim
@@ -545,18 +672,33 @@ def make_dreamer(
         # Determine input channels (1 for grayscale, 3 for RGB)
         in_channels = 1 if cfg.env.grayscale else 3
         image_size = cfg.env.image_size
+        encoder_channels = cfg.networks.get("encoder_channels", 32)
 
         # Compute encoder output size for explicit posterior input
         obs_embed_dim = _compute_encoder_output_size(
-            image_size, channels=32, num_layers=4
+            image_size, channels=encoder_channels, num_layers=4
         )
 
-        encoder = ObsEncoder(in_channels=in_channels, device=device)
-        decoder = ObsDecoder(latent_dim=state_dim + rssm_hidden_dim, device=device)
+        encoder = ObsEncoder(
+            channels=encoder_channels, in_channels=in_channels, device=device
+        )
+        decoder = ObsDecoder(
+            channels=encoder_channels,
+            latent_dim=state_dim + rssm_hidden_dim,
+            out_channels=in_channels,
+            device=device,
+        )
 
         observation_in_key = "pixels"
         observation_out_key = "reco_pixels"
     else:
+        # Determine the observation key name based on backend.
+        # IsaacLab uses "policy" as observation key, others use "observation".
+        observation_in_key = (
+            "policy" if cfg.env.backend == "isaaclab" else "observation"
+        )
+        observation_out_key = f"reco_{observation_in_key}"
+
         obs_embed_dim = 1024  # MLP output size
         encoder = MLP(
             out_features=obs_embed_dim,
@@ -566,15 +708,12 @@ def make_dreamer(
             device=device,
         )
         decoder = MLP(
-            out_features=test_env.observation_spec["observation"].shape[-1],
+            out_features=test_env.observation_spec[observation_in_key].shape[-1],
             depth=2,
             num_cells=cfg.networks.hidden_dim,
             activation_class=get_activation(cfg.networks.activation),
             device=device,
         )
-
-        observation_in_key = "observation"
-        observation_out_key = "reco_observation"
 
     # Make RSSM with explicit input sizes (no lazy modules)
     rssm_prior = RSSMPrior(
@@ -633,9 +772,12 @@ def make_dreamer(
 
     # Initialize world model (already on device)
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        tensordict = (
-            test_env.rollout(5, auto_cast_to_device=True).unsqueeze(-1).to(device)
-        )
+        tensordict = test_env.rollout(5, auto_cast_to_device=True)
+        # For batched envs (e.g., IsaacLab with 4096 parallel envs),
+        # select a single env's trajectory for initialization
+        while len(tensordict.batch_size) > 1:
+            tensordict = tensordict[0]
+        tensordict = tensordict.unsqueeze(-1).to(device)
         tensordict = tensordict.to_tensordict()
         world_model(tensordict)
 
@@ -873,6 +1015,7 @@ def make_replay_buffer(
     pixel_obs=True,
     grayscale=True,
     image_size,
+    gpu_storage=False,
 ):
     """Create replay buffer with minimal sample-time transforms.
 
@@ -882,39 +1025,55 @@ def make_replay_buffer(
     Note: We don't compile the SliceSampler because:
     1. Sampler operations (index computation) happen on CPU and are already fast
     2. torch.compile with inductor has bugs with the sampler's vectorized int64 operations
+
+    Args:
+        gpu_storage: If True, use LazyTensorStorage on `device` instead of
+            LazyMemmapStorage on CPU.  Eliminates CPU-GPU transfer at sample
+            time (data lives on training GPU) but costs GPU memory.
     """
-    with (
-        tempfile.TemporaryDirectory()
-        if buffer_scratch_dir is None
-        else nullcontext(buffer_scratch_dir)
-    ) as scratch_dir:
-        # Sample-time transforms: only device transfer (fast)
+    use_gpu = device is not None and device.type == "cuda"
+
+    if gpu_storage and use_gpu:
+        # GPU-resident storage: data lives on the training device
+        storage = LazyTensorStorage(
+            buffer_size,
+            device=device,
+            ndim=2,
+        )
+        # No sample transform needed: data is already on the right device
+        sample_transforms = None
+    else:
+        scratch_dir_ctx = (
+            tempfile.TemporaryDirectory()
+            if buffer_scratch_dir is None
+            else nullcontext(buffer_scratch_dir)
+        )
+        scratch_dir = scratch_dir_ctx.__enter__()
+        storage = LazyMemmapStorage(
+            buffer_size,
+            scratch_dir=scratch_dir,
+            device="cpu",
+            ndim=2,
+            shared_init=True,
+        )
         sample_transforms = Compose(
             functools.partial(_to_device, device=device),
         )
 
-        replay_buffer = TensorDictReplayBuffer(
-            prefetch=prefetch,
-            storage=LazyMemmapStorage(
-                buffer_size,
-                scratch_dir=scratch_dir,
-                device="cpu",
-                ndim=2,
-                shared_init=True,  # Allow remote processes to initialize storage
-            ),
-            sampler=SliceSampler(
-                slice_len=batch_seq_len,
-                strict_length=False,
-                traj_key=("collector", "traj_ids"),
-                cache_values=False,  # Disabled for async collection (cache not synced across processes)
-                use_gpu=device.type == "cuda"
-                if device is not None
-                else False,  # Speed up trajectory computation on GPU
-            ),
-            transform=sample_transforms,
-            batch_size=batch_size,
-        )
-        return replay_buffer
+    replay_buffer = TensorDictReplayBuffer(
+        prefetch=prefetch,
+        storage=storage,
+        sampler=SliceSampler(
+            slice_len=batch_seq_len,
+            strict_length=False,
+            traj_key=("collector", "traj_ids"),
+            cache_values=False,
+            use_gpu=use_gpu,
+        ),
+        transform=sample_transforms,
+        batch_size=batch_size,
+    )
+    return replay_buffer
 
 
 def _dreamer_make_value_model(
@@ -1133,6 +1292,23 @@ def _dreamer_make_mbenv(
     )
 
     model_based_env.set_specs_from_env(test_env)
+
+    # For batched envs (e.g., IsaacLab with batch_size=(4096,)),
+    # unbatch the model-based env's specs.  The model-based env is used for
+    # imagination rollouts where the batch comes from sampled replay data,
+    # not from the env structure.  Keeping batched specs causes double-batching
+    # when check_env_specs or rollout samples random actions.
+    batch_size = test_env.batch_size
+    if batch_size:
+        idx = (0,) * len(batch_size)
+        model_based_env.__dict__["_output_spec"] = model_based_env.__dict__[
+            "_output_spec"
+        ][idx]
+        model_based_env.__dict__["_input_spec"] = model_based_env.__dict__[
+            "_input_spec"
+        ][idx]
+        model_based_env.empty_cache()
+
     return model_based_env
 
 
@@ -1258,3 +1434,215 @@ def _default_device(device=None):
             return torch.device("cuda")
         return torch.device("cpu")
     return torch.device(device)
+
+
+# =========================================================================
+# Isaac Lab async-eval factory functions
+# =========================================================================
+# These return *closures* whose bodies use only local imports so that
+# cloudpickle (used by Ray) can serialise them without pulling in torch or
+# IsaacLab at deserialisation time.  The closures run inside the Ray actor
+# process AFTER ``init_fn`` has initialised AppLauncher.
+
+
+def make_isaac_init_fn(gpu_id: int = 2):
+    """Return a callable that initialises Isaac Lab's ``AppLauncher``.
+
+    The returned callable must be executed as the **very first thing** in a
+    new Python process -- before any ``torch`` import.  It also adds the
+    dreamer directory to ``sys.path`` so that ``dreamer_utils`` is importable
+    in the actor process.
+
+    Args:
+        gpu_id: Physical GPU index that the eval actor should use.
+            Defaults to 2 (GPU 0 = sim, GPU 1 = train, GPU 2 = eval).
+    """
+    import os
+
+    dreamer_dir = os.path.dirname(os.path.abspath(__file__))
+
+    def _init():
+        import argparse
+        import os as _os
+        import sys
+
+        # Pin the eval actor to a specific GPU *before* AppLauncher and
+        # torch can read CUDA_VISIBLE_DEVICES.
+        _os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+
+        from isaaclab.app import AppLauncher
+
+        parser = argparse.ArgumentParser()
+        AppLauncher.add_app_launcher_args(parser)
+        args, _ = parser.parse_known_args(["--headless", "--enable_cameras"])
+        AppLauncher(args)
+
+        # Make dreamer_utils importable inside the actor process.
+        if dreamer_dir not in sys.path:
+            sys.path.insert(0, dreamer_dir)
+
+    return _init
+
+
+def make_isaac_eval_env_factory(cfg):
+    """Return a callable that creates an Isaac Lab eval env with rendering.
+
+    The eval env differs from the training env in two ways:
+
+    * Fewer parallel sub-environments (``cfg.logger.eval_num_envs``).
+    * Created with ``render_mode="rgb_array"`` so that the actor can call
+      ``env.render()`` to capture viewport frames.
+
+    For pixel-based training, a TiledCamera is also added to the scene
+    so that the eval policy receives the same pixel observations as
+    during training.
+
+    Args:
+        cfg: Hydra config.
+    """
+    from omegaconf import OmegaConf
+
+    cfg_container = OmegaConf.to_container(cfg, resolve=True)
+
+    def _make():
+        import importlib
+
+        import gymnasium as gym
+
+        import isaaclab.sim as sim_utils
+        import isaaclab_tasks  # noqa: F401 - registers Isaac environments
+        import torch
+        from isaaclab.sensors import TiledCameraCfg
+        from omegaconf import OmegaConf
+
+        from torchrl.data import Unbounded
+        from torchrl.envs import (
+            DoubleToFloat,
+            RenameTransform,
+            RewardSum,
+            StepCounter,
+            TensorDictPrimer,
+            TransformedEnv,
+        )
+        from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
+
+        cfg = OmegaConf.create(cfg_container)
+
+        # Resolve the env-config class from the gymnasium registry.
+        spec = gym.spec(cfg["env"]["name"])
+        env_cfg_entry = spec.kwargs["env_cfg_entry_point"]
+        module_path, class_name = env_cfg_entry.rsplit(":", 1)
+        env_cfg_cls = getattr(importlib.import_module(module_path), class_name)
+        env_cfg = env_cfg_cls()
+
+        # Use fewer envs for evaluation to save GPU memory.
+        env_cfg.scene.num_envs = cfg["logger"]["eval_num_envs"]
+
+        use_pixels = cfg["env"].get("from_pixels", False)
+        if use_pixels:
+            image_size = cfg["env"]["image_size"]
+            env_cfg.scene.env_spacing = 8.0
+            env_cfg.scene.tiled_camera = TiledCameraCfg(
+                prim_path="{ENV_REGEX_NS}/Camera",
+                offset=TiledCameraCfg.OffsetCfg(
+                    pos=(-3.0, 0.0, 2.0),
+                    rot=(0.9945, 0.0, 0.1045, 0.0),
+                    convention="world",
+                ),
+                data_types=["rgb"],
+                spawn=sim_utils.PinholeCameraCfg(
+                    focal_length=24.0,
+                    focus_distance=400.0,
+                    horizontal_aperture=20.955,
+                    clipping_range=(0.1, 20.0),
+                ),
+                width=image_size,
+                height=image_size,
+            )
+
+        # render_mode="rgb_array" enables viewport rendering via env.render().
+        env = gym.make(cfg["env"]["name"], cfg=env_cfg, render_mode="rgb_array")
+
+        isaac_scene = env.unwrapped.scene if use_pixels else None
+
+        env = IsaacLabWrapper(env, missing_obs_value=0)
+
+        # --- same transforms as the training env (see _make_env / transform_env) ---
+        default_dict = {
+            "state": Unbounded(shape=(cfg["networks"]["state_dim"],)),
+            "belief": Unbounded(shape=(cfg["networks"]["rssm_hidden_dim"],)),
+        }
+        env = env.append_transform(
+            TensorDictPrimer(
+                random=False, default_value=0, expand_specs=True, **default_dict
+            )
+        )
+        if not isinstance(env, TransformedEnv):
+            env = TransformedEnv(env)
+
+        if use_pixels:
+            from dreamer_utils import GPUImageTransform, IsaacCameraReadTransform
+
+            env.append_transform(IsaacCameraReadTransform(isaac_scene))
+            env.append_transform(
+                RenameTransform(in_keys=["pixels"], out_keys=["pixels_int"])
+            )
+            env.append_transform(
+                GPUImageTransform(
+                    device=torch.device("cuda:0"),
+                    image_size=image_size,
+                    grayscale=cfg["env"].get("grayscale", False),
+                    in_key="pixels_int",
+                    out_key="pixels",
+                )
+            )
+
+        env.append_transform(DoubleToFloat())
+        env.append_transform(RewardSum())
+        env.append_transform(StepCounter(cfg["env"]["horizon"]))
+
+        return env
+
+    return _make
+
+
+def make_eval_policy_factory(cfg):
+    """Return a callable ``(env) -> policy`` that builds the Dreamer policy.
+
+    The returned callable runs inside the Ray actor process after
+    ``init_fn`` and ``env_maker``.  It calls :func:`make_dreamer` to
+    construct the full Dreamer stack and returns only the real-world policy
+    (``actor_realworld`` with exploration noise).
+    """
+    from omegaconf import OmegaConf
+
+    cfg_container = OmegaConf.to_container(cfg, resolve=True)
+
+    def _make(env):
+        import torch
+
+        from dreamer_utils import make_dreamer
+        from omegaconf import OmegaConf
+
+        cfg = OmegaConf.create(cfg_container)
+        device = torch.device("cuda:0")
+
+        (
+            _world_model,
+            _model_based_env,
+            _model_based_env_eval,
+            _actor_simulator,
+            _value_model,
+            policy,
+        ) = make_dreamer(
+            cfg=cfg,
+            device=device,
+            action_key="action",
+            value_key="state_value",
+            use_decoder_in_env=False,
+            logger=None,
+            test_env=env,
+        )
+        return policy
+
+    return _make
