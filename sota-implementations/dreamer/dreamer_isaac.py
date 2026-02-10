@@ -223,7 +223,7 @@ def main(cfg: DictConfig):
         pixel_obs=cfg.env.from_pixels,
         grayscale=cfg.env.get("grayscale", False),
         image_size=cfg.env.get("image_size", 64),
-        gpu_storage=False,
+        gpu_storage=cfg.replay_buffer.get("gpu_storage", False),
     )
     torchrl_logger.info(
         f"Replay buffer: batch_size={batch_size}, batch_length={batch_length}, "
