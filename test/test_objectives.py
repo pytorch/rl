@@ -15105,7 +15105,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
             assert upd.counter == i
             upd.step()
         assert upd.counter == 0
-        # test that a new update has occured
+        # test that a new update has occurred
         d1 = 0.0
         for key, source_val in upd._sources.items(True, True):
             if not isinstance(key, tuple):
