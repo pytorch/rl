@@ -14802,6 +14802,28 @@ class TestVideoRecorder:
 
         assert recorder is not None
 
+    def test_video_recorder_grayscale(self):
+        """Test that VideoRecorder handles 1-channel (grayscale) observations."""
+        recorder = VideoRecorder(None, None, fps=30)
+        # Simulate a grayscale observation: (1, H, W) — single channel
+        obs = torch.randint(0, 255, (1, 64, 64), dtype=torch.uint8)
+        recorder._apply_transform(obs)
+        # The stored frame should be expanded to 3-channel for video codecs
+        assert len(recorder.obs) == 1
+        stored = recorder.obs[0]
+        assert stored.shape == (3, 64, 64)
+
+    def test_video_recorder_grayscale_batched(self):
+        """Test that VideoRecorder handles batched grayscale observations."""
+        recorder = VideoRecorder(None, None, fps=30)
+        # Batched grayscale: (B, 1, H, W)
+        obs = torch.randint(0, 255, (4, 1, 64, 64), dtype=torch.uint8)
+        recorder._apply_transform(obs)
+        # Batched observations get flattened into individual frames
+        assert len(recorder.obs) == 4
+        for frame in recorder.obs:
+            assert frame.shape == (3, 64, 64)
+
 
 class TestConditionalPolicySwitch(TransformBase):
     def test_single_trans_env_check(self):
