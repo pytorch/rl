@@ -5822,7 +5822,9 @@ class TestIsaacLab:
         assert ("next", "recurrent_state_c") in rollout.keys(True)
 
 
-@pytest.mark.skipif(not _has_ray, reason="Ray not found")
+@pytest.mark.skipif(
+    not _has_ray or not _has_gymnasium, reason="Ray or Gymnasium not found"
+)
 class TestRayEvalWorker:
     """Tests for the RayEvalWorker async evaluation helper."""
 
