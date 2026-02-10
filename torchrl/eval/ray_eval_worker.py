@@ -19,23 +19,32 @@ Typical usage::
         env_maker=make_eval_env,  # returns a TorchRL env
         policy_maker=make_policy, # returns a TorchRL policy module
         num_gpus=1,
+        name="my_eval_worker",    # optional: allows others to connect
     )
 
     # Non-blocking: submit weights and start a rollout
     weights = TensorDict.from_module(policy).data.detach().cpu()
     worker.submit(weights, max_steps=500)
 
-    # Later – check if the rollout finished
+    # Later -- check if the rollout finished
     result = worker.poll()       # None while still running
     if result is not None:
         print(result["reward"])  # scalar mean episode reward
         print(result["frames"]) # (T, H, W, 3) uint8 tensor or None
+
+    # From another process, connect to the same actor by name:
+    worker2 = RayEvalWorker.from_name("my_eval_worker")
 """
 from __future__ import annotations
 
+import importlib
 import logging
 from collections.abc import Callable
 from typing import Any
+
+import numpy as np
+
+_has_ray = importlib.util.find_spec("ray") is not None
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +64,10 @@ class RayEvalWorker:
     video frames) when the rollout finishes, or ``None`` if it is still
     running.
 
+    If a *name* is provided the actor is registered with Ray under that name,
+    allowing other processes (or a later session) to reconnect to the same
+    running actor via :meth:`from_name`.
+
     Args:
         init_fn: Optional callable invoked at the very start of the actor
             process, before *env_maker* or *policy_maker*.  All imports should
@@ -71,6 +84,9 @@ class RayEvalWorker:
             Defaults to 1.
         reward_keys: Nested key(s) used to read the reward from the rollout
             tensordict.  Defaults to ``("next", "reward")``.
+        name: Optional name for the Ray actor.  When set, the actor is
+            registered under this name and can be retrieved later with
+            :meth:`from_name`.
         **remote_kwargs: Extra keyword arguments forwarded to
             ``ray.remote()`` when creating the actor class (e.g.
             ``num_cpus``, ``runtime_env``).
@@ -84,8 +100,14 @@ class RayEvalWorker:
         *,
         num_gpus: int = 1,
         reward_keys: tuple[str, ...] = ("next", "reward"),
+        name: str | None = None,
         **remote_kwargs: Any,
     ) -> None:
+        if not _has_ray:
+            raise RuntimeError(
+                "Ray is required for RayEvalWorker but could not be found. "
+                "Install it with: pip install ray"
+            )
         import ray
 
         self._reward_keys = reward_keys
@@ -94,8 +116,49 @@ class RayEvalWorker:
         # need to depend on Ray at import time.
         actor_cls = ray.remote(num_gpus=num_gpus, **remote_kwargs)(_EvalActor)
 
-        self._actor = actor_cls.remote(init_fn, env_maker, policy_maker)
+        actor_kwargs = {}
+        if name is not None:
+            actor_kwargs["name"] = name
+            actor_kwargs["lifetime"] = "detached"
+        self._actor = actor_cls.options(**actor_kwargs).remote(
+            init_fn, env_maker, policy_maker
+        )
         self._pending_ref: ray.ObjectRef | None = None
+
+    # ------------------------------------------------------------------
+    # Alternative constructors
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_name(
+        cls,
+        name: str,
+        *,
+        reward_keys: tuple[str, ...] = ("next", "reward"),
+    ) -> RayEvalWorker:
+        """Connect to an existing named :class:`RayEvalWorker` actor.
+
+        This is useful when one process creates the worker (with a *name*)
+        and another process wants to submit evaluations or poll results on
+        the same actor.
+
+        Args:
+            name: The actor name that was passed to the constructor.
+            reward_keys: Nested key(s) used to read the reward from the
+                rollout tensordict.  Defaults to ``("next", "reward")``.
+        """
+        if not _has_ray:
+            raise RuntimeError(
+                "Ray is required for RayEvalWorker but could not be found. "
+                "Install it with: pip install ray"
+            )
+        import ray
+
+        worker = object.__new__(cls)
+        worker._reward_keys = reward_keys
+        worker._actor = ray.get_actor(name)
+        worker._pending_ref = None
+        return worker
 
     # ------------------------------------------------------------------
     # Public API
@@ -178,8 +241,13 @@ class RayEvalWorker:
 class _EvalActor:
     """Plain class turned into a Ray actor by :class:`RayEvalWorker`.
 
-    All heavy imports happen inside methods so that the module-level import
-    of this file does **not** pull in torch, torchrl, or any simulator SDK.
+    **Why local imports?**  Environments like Isaac Lab **require** their
+    ``AppLauncher`` to be initialised before ``import torch`` even happens.
+    The *init_fn* callback (called first in ``__init__``) takes care of that.
+    Every ``import torch`` and ``from torchrl ...`` therefore lives inside a
+    method body so that the actor process can control import order via
+    *init_fn*.  Only stdlib / pure-Python imports (``numpy``, ``logging``,
+    etc.) are safe at module level.
     """
 
     def __init__(
@@ -188,11 +256,15 @@ class _EvalActor:
         env_maker: Callable[[], Any],
         policy_maker: Callable[[Any], Any],
     ) -> None:
-        # --- process-level initialisation (e.g. AppLauncher) ---
+        # --- process-level initialisation ---
+        # This MUST run before any torch import.  For Isaac Lab the init_fn
+        # calls AppLauncher which configures the GPU, the Omniverse runtime,
+        # and various environment variables that torch and CUDA rely on.
         if init_fn is not None:
             init_fn()
 
         # --- now safe to import torch / torchrl ---
+        # (kept local: see class docstring for rationale)
         import torch  # noqa: F401
 
         self.env = env_maker()
@@ -210,6 +282,8 @@ class _EvalActor:
         break_when_any_done: bool,
     ) -> dict:
         """Run an evaluation rollout with the given weights."""
+        # Local imports: torch/torchrl must not be imported before init_fn
+        # has run (see class docstring -- this is critical for Isaac Lab).
         import torch
 
         from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
@@ -259,7 +333,8 @@ class _EvalActor:
         and returns the result as a ``(C, H, W)`` uint8 tensor, or
         ``None`` if rendering is unavailable.
         """
-        import numpy as np
+        # Local import: torch must not be imported at module level
+        # (see class docstring -- this is critical for Isaac Lab).
         import torch
 
         # Walk through TransformedEnv / wrapper chain to the base env.
