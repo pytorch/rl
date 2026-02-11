@@ -1,0 +1,914 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.collectors.distributed.ray_eval_worker &mdash; torchrl main documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../../_static/pytorch.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+
+  
+  <script src="../../../../_static/js/modernizr.min.js"></script>
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+  <div>
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.11.0) &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.collectors.distributed.ray_eval_worker</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
+        </div>
+
+        <div class="pytorch-content-left">
+    
+    
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" class="pytorch-article">
+              
+  <h1>Source code for torchrl.collectors.distributed.ray_eval_worker</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="sd">&quot;&quot;&quot;Ray-based asynchronous evaluation worker.</span>
+
+<span class="sd">This module provides :class:`RayEvalWorker`, a generic helper that runs an</span>
+<span class="sd">environment and policy inside a dedicated Ray actor process.  This is useful</span>
+<span class="sd">when the evaluation environment requires special process-level initialisation</span>
+<span class="sd">(e.g. Isaac Lab&#39;s ``AppLauncher`` must run before ``import torch``) or when</span>
+<span class="sd">evaluation should happen concurrently with training on a separate GPU.</span>
+
+<span class="sd">Typical usage::</span>
+
+<span class="sd">    from torchrl.collectors.distributed import RayEvalWorker</span>
+
+<span class="sd">    worker = RayEvalWorker(</span>
+<span class="sd">        init_fn=my_init,          # called first in the actor process</span>
+<span class="sd">        env_maker=make_eval_env,  # returns a TorchRL env</span>
+<span class="sd">        policy_maker=make_policy, # returns a TorchRL policy module</span>
+<span class="sd">        num_gpus=1,</span>
+<span class="sd">        name=&quot;my_eval_worker&quot;,    # optional: allows others to connect</span>
+<span class="sd">    )</span>
+
+<span class="sd">    # Non-blocking: submit weights and start a rollout</span>
+<span class="sd">    weights = TensorDict.from_module(policy).data.detach().cpu()</span>
+<span class="sd">    worker.submit(weights, max_steps=500)</span>
+
+<span class="sd">    # Later -- check if the rollout finished</span>
+<span class="sd">    result = worker.poll()       # None while still running</span>
+<span class="sd">    if result is not None:</span>
+<span class="sd">        print(result[&quot;reward&quot;])  # scalar mean episode reward</span>
+<span class="sd">        print(result[&quot;frames&quot;]) # (T, H, W, 3) uint8 tensor or None</span>
+
+<span class="sd">    # From another process, connect to the same actor by name:</span>
+<span class="sd">    worker2 = RayEvalWorker.from_name(&quot;my_eval_worker&quot;)</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">importlib</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<span class="n">_has_ray</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;ray&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="RayEvalWorker">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayEvalWorker.html#torchrl.collectors.distributed.RayEvalWorker">[docs]</a>
+<span class="k">class</span> <span class="nc">RayEvalWorker</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Asynchronous evaluation worker backed by a Ray actor.</span>
+
+<span class="sd">    The worker creates a **new Python process** (via Ray) and inside it:</span>
+
+<span class="sd">    1. Calls *init_fn* -- use this for any process-level setup that must happen</span>
+<span class="sd">       before other imports (e.g. Isaac Lab ``AppLauncher``).</span>
+<span class="sd">    2. Creates the environment via *env_maker*.</span>
+<span class="sd">    3. Creates the policy via *policy_maker(env)*.</span>
+
+<span class="sd">    Thereafter, :meth:`submit` sends new policy weights and triggers an</span>
+<span class="sd">    evaluation rollout.  :meth:`poll` returns the result (reward and optional</span>
+<span class="sd">    video frames) when the rollout finishes, or ``None`` if it is still</span>
+<span class="sd">    running.</span>
+
+<span class="sd">    If a *name* is provided the actor is registered with Ray under that name,</span>
+<span class="sd">    allowing other processes (or a later session) to reconnect to the same</span>
+<span class="sd">    running actor via :meth:`from_name`.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        init_fn: Optional callable invoked at the very start of the actor</span>
+<span class="sd">            process, before *env_maker* or *policy_maker*.  All imports should</span>
+<span class="sd">            be **local** inside this callable so that the actor&#39;s fresh Python</span>
+<span class="sd">            process can control import order.  Set to ``None`` to skip.</span>
+<span class="sd">        env_maker: Callable that returns a TorchRL environment.  Called once</span>
+<span class="sd">            inside the actor after *init_fn*.  If the underlying environment</span>
+<span class="sd">            supports ``render_mode=&quot;rgb_array&quot;``, the actor will call</span>
+<span class="sd">            ``render()`` on each evaluation step and return the frames.</span>
+<span class="sd">        policy_maker: Callable ``(env) -&gt; policy`` that builds the policy</span>
+<span class="sd">            module given the environment.  Called once inside the actor after</span>
+<span class="sd">            the environment has been created.</span>
+<span class="sd">        num_gpus: Number of GPUs to request from Ray for this actor.</span>
+<span class="sd">            Defaults to 1.</span>
+<span class="sd">        reward_keys: Nested key(s) used to read the reward from the rollout</span>
+<span class="sd">            tensordict.  Defaults to ``(&quot;next&quot;, &quot;reward&quot;)``.</span>
+<span class="sd">        name: Optional name for the Ray actor.  When set, the actor is</span>
+<span class="sd">            registered under this name and can be retrieved later with</span>
+<span class="sd">            :meth:`from_name`.</span>
+<span class="sd">        **remote_kwargs: Extra keyword arguments forwarded to</span>
+<span class="sd">            ``ray.remote()`` when creating the actor class (e.g.</span>
+<span class="sd">            ``num_cpus``, ``runtime_env``).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">init_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">env_maker</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">policy_maker</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">num_gpus</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">reward_keys</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">),</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">remote_kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_ray</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Ray is required for RayEvalWorker but could not be found. &quot;</span>
+                <span class="s2">&quot;Install it with: pip install ray&quot;</span>
+            <span class="p">)</span>
+        <span class="kn">import</span> <span class="nn">ray</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reward_keys</span> <span class="o">=</span> <span class="n">reward_keys</span>
+
+        <span class="c1"># Build the remote actor class dynamically so that the caller does not</span>
+        <span class="c1"># need to depend on Ray at import time.</span>
+        <span class="n">actor_cls</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">num_gpus</span><span class="o">=</span><span class="n">num_gpus</span><span class="p">,</span> <span class="o">**</span><span class="n">remote_kwargs</span><span class="p">)(</span><span class="n">_EvalActor</span><span class="p">)</span>
+
+        <span class="n">actor_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">actor_kwargs</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">name</span>
+            <span class="n">actor_kwargs</span><span class="p">[</span><span class="s2">&quot;lifetime&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;detached&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_actor</span> <span class="o">=</span> <span class="n">actor_cls</span><span class="o">.</span><span class="n">options</span><span class="p">(</span><span class="o">**</span><span class="n">actor_kwargs</span><span class="p">)</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+            <span class="n">init_fn</span><span class="p">,</span> <span class="n">env_maker</span><span class="p">,</span> <span class="n">policy_maker</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pending_ref</span><span class="p">:</span> <span class="n">ray</span><span class="o">.</span><span class="n">ObjectRef</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Alternative constructors</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="RayEvalWorker.from_name">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayEvalWorker.html#torchrl.collectors.distributed.RayEvalWorker.from_name">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_name</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">reward_keys</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">),</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RayEvalWorker</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Connect to an existing named :class:`RayEvalWorker` actor.</span>
+
+<span class="sd">        This is useful when one process creates the worker (with a *name*)</span>
+<span class="sd">        and another process wants to submit evaluations or poll results on</span>
+<span class="sd">        the same actor.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            name: The actor name that was passed to the constructor.</span>
+<span class="sd">            reward_keys: Nested key(s) used to read the reward from the</span>
+<span class="sd">                rollout tensordict.  Defaults to ``(&quot;next&quot;, &quot;reward&quot;)``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_ray</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Ray is required for RayEvalWorker but could not be found. &quot;</span>
+                <span class="s2">&quot;Install it with: pip install ray&quot;</span>
+            <span class="p">)</span>
+        <span class="kn">import</span> <span class="nn">ray</span>
+
+        <span class="n">worker</span> <span class="o">=</span> <span class="nb">object</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
+        <span class="n">worker</span><span class="o">.</span><span class="n">_reward_keys</span> <span class="o">=</span> <span class="n">reward_keys</span>
+        <span class="n">worker</span><span class="o">.</span><span class="n">_actor</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get_actor</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="n">worker</span><span class="o">.</span><span class="n">_pending_ref</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">worker</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Public API</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="RayEvalWorker.submit">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayEvalWorker.html#torchrl.collectors.distributed.RayEvalWorker.submit">[docs]</a>
+    <span class="k">def</span> <span class="nf">submit</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">deterministic</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">break_when_any_done</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Start an asynchronous evaluation rollout.</span>
+
+<span class="sd">        If a previous rollout is still running its result is silently</span>
+<span class="sd">        discarded (fire-and-forget semantics).</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            weights: Policy weights, typically obtained via</span>
+<span class="sd">                ``TensorDict.from_module(policy).data.detach().cpu()``.</span>
+<span class="sd">            max_steps: Maximum number of environment steps per rollout.</span>
+<span class="sd">            deterministic: If ``True``, use deterministic exploration.</span>
+<span class="sd">            break_when_any_done: If ``True``, stop the rollout as soon as</span>
+<span class="sd">                any sub-environment reports ``done``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Discard any previous un-polled result</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pending_ref</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="n">eval</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+            <span class="n">weights</span><span class="p">,</span>
+            <span class="n">max_steps</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_reward_keys</span><span class="p">,</span>
+            <span class="n">deterministic</span><span class="p">,</span>
+            <span class="n">break_when_any_done</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RayEvalWorker.poll">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayEvalWorker.html#torchrl.collectors.distributed.RayEvalWorker.poll">[docs]</a>
+    <span class="k">def</span> <span class="nf">poll</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the evaluation result if ready, otherwise ``None``.</span>
+
+<span class="sd">        The returned dict contains:</span>
+
+<span class="sd">        - ``&quot;reward&quot;`` -- scalar mean episode reward.</span>
+<span class="sd">        - ``&quot;frames&quot;`` -- ``(T, H, W, 3)`` uint8 CPU tensor of rendered</span>
+<span class="sd">          frames, or ``None`` if the environment does not render.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            timeout: Seconds to wait for the result.  ``0`` means</span>
+<span class="sd">                non-blocking (return immediately if not ready).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending_ref</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="kn">import</span> <span class="nn">ray</span>
+
+        <span class="n">ready</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">wait</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">_pending_ref</span><span class="p">],</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">ready</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="n">result</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_pending_ref</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pending_ref</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">result</span></div>
+
+
+<div class="viewcode-block" id="RayEvalWorker.shutdown">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayEvalWorker.html#torchrl.collectors.distributed.RayEvalWorker.shutdown">[docs]</a>
+    <span class="k">def</span> <span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Close the environment and kill the actor.&quot;&quot;&quot;</span>
+        <span class="kn">import</span> <span class="nn">ray</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="n">shutdown</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;RayEvalWorker: error during shutdown&quot;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">ray</span><span class="o">.</span><span class="n">kill</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_actor</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pending_ref</span> <span class="o">=</span> <span class="kc">None</span></div>
+</div>
+
+
+
+<span class="c1"># ======================================================================</span>
+<span class="c1"># Inner actor -- runs inside the Ray worker process</span>
+<span class="c1"># ======================================================================</span>
+
+
+<span class="k">class</span> <span class="nc">_EvalActor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Plain class turned into a Ray actor by :class:`RayEvalWorker`.</span>
+
+<span class="sd">    **Why local imports?**  Environments like Isaac Lab **require** their</span>
+<span class="sd">    ``AppLauncher`` to be initialised before ``import torch`` even happens.</span>
+<span class="sd">    The *init_fn* callback (called first in ``__init__``) takes care of that.</span>
+<span class="sd">    Every ``import torch`` and ``from torchrl ...`` therefore lives inside a</span>
+<span class="sd">    method body so that the actor process can control import order via</span>
+<span class="sd">    *init_fn*.  Only stdlib / pure-Python imports (``numpy``, ``logging``,</span>
+<span class="sd">    etc.) are safe at module level.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">init_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">env_maker</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">policy_maker</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># --- process-level initialisation ---</span>
+        <span class="c1"># This MUST run before any torch import.  For Isaac Lab the init_fn</span>
+        <span class="c1"># calls AppLauncher which configures the GPU, the Omniverse runtime,</span>
+        <span class="c1"># and various environment variables that torch and CUDA rely on.</span>
+        <span class="k">if</span> <span class="n">init_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">init_fn</span><span class="p">()</span>
+
+        <span class="c1"># --- now safe to import torch / torchrl ---</span>
+        <span class="c1"># (kept local: see class docstring for rationale)</span>
+        <span class="kn">import</span> <span class="nn">torch</span>  <span class="c1"># noqa: F401</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">env</span> <span class="o">=</span> <span class="n">env_maker</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy</span> <span class="o">=</span> <span class="n">policy_maker</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">)</span>
+        <span class="c1"># Cache device before any to_module call can replace nn.Parameter</span>
+        <span class="c1"># with plain tensors (which makes .parameters() empty).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span><span class="o">.</span><span class="n">device</span>
+
+    <span class="k">def</span> <span class="nf">eval</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">,</span>
+        <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">reward_keys</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span>
+        <span class="n">deterministic</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+        <span class="n">break_when_any_done</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run an evaluation rollout with the given weights.&quot;&quot;&quot;</span>
+        <span class="c1"># Local imports: torch/torchrl must not be imported before init_fn</span>
+        <span class="c1"># has run (see class docstring -- this is critical for Isaac Lab).</span>
+        <span class="kn">import</span> <span class="nn">torch</span>
+
+        <span class="kn">from</span> <span class="nn">torchrl.envs.utils</span> <span class="kn">import</span> <span class="n">ExplorationType</span><span class="p">,</span> <span class="n">set_exploration_type</span><span class="p">,</span> <span class="n">step_mdp</span>
+
+        <span class="c1"># Load weights into the eval policy (move to policy device first)</span>
+        <span class="n">weights</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_device</span><span class="p">)</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">)</span>
+
+        <span class="n">frames</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">total_reward</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="n">num_steps</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="n">exploration</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">ExplorationType</span><span class="o">.</span><span class="n">DETERMINISTIC</span> <span class="k">if</span> <span class="n">deterministic</span> <span class="k">else</span> <span class="n">ExplorationType</span><span class="o">.</span><span class="n">RANDOM</span>
+        <span class="p">)</span>
+        <span class="k">with</span> <span class="n">set_exploration_type</span><span class="p">(</span><span class="n">exploration</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="n">td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">_i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_steps</span><span class="p">):</span>
+                <span class="n">td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+                <span class="n">td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+
+                <span class="n">total_reward</span> <span class="o">+=</span> <span class="n">td</span><span class="p">[</span><span class="n">reward_keys</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+                <span class="n">num_steps</span> <span class="o">+=</span> <span class="mi">1</span>
+
+                <span class="n">frame</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_try_render</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">frame</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">frames</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">frame</span><span class="p">)</span>
+
+                <span class="n">done</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">break_when_any_done</span> <span class="ow">and</span> <span class="n">done</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">done</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                    <span class="k">break</span>
+
+                <span class="n">td</span> <span class="o">=</span> <span class="n">step_mdp</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+
+        <span class="n">mean_reward</span> <span class="o">=</span> <span class="n">total_reward</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">num_steps</span><span class="p">)</span>
+
+        <span class="c1"># Format video: (1, T, C, H, W) uint8 CPU tensor</span>
+        <span class="n">video</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">frames</span><span class="p">:</span>
+            <span class="n">video</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">frames</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="n">mean_reward</span><span class="p">,</span> <span class="s2">&quot;frames&quot;</span><span class="p">:</span> <span class="n">video</span><span class="p">}</span>
+
+    <span class="k">def</span> <span class="nf">_try_render</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Render one frame from the underlying environment.</span>
+
+<span class="sd">        Walks the wrapper chain to find a callable ``render()`` method</span>
+<span class="sd">        and returns the result as a ``(C, H, W)`` uint8 tensor, or</span>
+<span class="sd">        ``None`` if rendering is unavailable.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Local import: torch must not be imported at module level</span>
+        <span class="c1"># (see class docstring -- this is critical for Isaac Lab).</span>
+        <span class="kn">import</span> <span class="nn">torch</span>
+
+        <span class="c1"># Walk through TransformedEnv / wrapper chain to the base env.</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span>
+        <span class="k">while</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="s2">&quot;base_env&quot;</span><span class="p">):</span>
+            <span class="n">env</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">base_env</span>
+        <span class="n">render_fn</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="s2">&quot;render&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="c1"># If the base env delegates to a gymnasium env, prefer that.</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="s2">&quot;_env&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">_env</span><span class="p">,</span> <span class="s2">&quot;render&quot;</span><span class="p">):</span>
+            <span class="n">render_fn</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">render</span>
+        <span class="k">if</span> <span class="n">render_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="n">raw</span> <span class="o">=</span> <span class="n">render_fn</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">raw</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">raw</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+            <span class="n">raw</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">raw</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+
+        <span class="c1"># (H, W, C) -&gt; (C, H, W)</span>
+        <span class="k">if</span> <span class="n">raw</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span> <span class="ow">and</span> <span class="n">raw</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">):</span>
+            <span class="n">raw</span> <span class="o">=</span> <span class="n">raw</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">3</span><span class="p">]</span>
+            <span class="n">raw</span> <span class="o">=</span> <span class="n">raw</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">raw</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Shut down the environment.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;env&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">is_closed</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../../../',
+            VERSION:'main',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../../../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+      <script type="text/javascript" src="../../../../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../../../../_static/design-tabs.js"></script>
+
+  
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="#">Get Started</a>
+          </li>
+
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+    })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
+  </script>
+</body>
+</html>

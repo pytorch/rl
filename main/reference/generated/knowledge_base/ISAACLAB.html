@@ -1,0 +1,811 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>IsaacLab Guide &mdash; torchrl main documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../_static/pytorch.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Working with MuJoCo-based environments" href="MUJOCO_INSTALLATION.html" />
+    <link rel="prev" title="Working with habitat-lab" href="HABITAT.html" /> 
+
+  
+  <script src="../../../_static/js/modernizr.min.js"></script>
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+  <div>
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.11.0) &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../index.html">API Reference</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../../knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../knowledge_base.html">Knowledge Base</a> &gt;</li>
+        
+      <li>IsaacLab Guide</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../../../_sources/reference/generated/knowledge_base/ISAACLAB.rst.txt" rel="nofollow"><img src="../../../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
+        </div>
+
+        <div class="pytorch-content-left">
+    
+    
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" class="pytorch-article">
+              
+  <section id="isaaclab-guide">
+<h1>IsaacLab Guide<a class="headerlink" href="#isaaclab-guide" title="Link to this heading">¶</a></h1>
+<p>This document covers how to install, run, and debug IsaacLab on a cluster, plus common pitfalls.</p>
+<section id="what-is-isaaclab">
+<h2>What is IsaacLab?<a class="headerlink" href="#what-is-isaaclab" title="Link to this heading">¶</a></h2>
+<p>IsaacLab (formerly Isaac Gym) is NVIDIA’s GPU-accelerated robotics simulation platform built on Omniverse. It runs thousands of parallel environments on a single GPU, giving orders-of-magnitude higher throughput than CPU-based simulators like MuJoCo/DMControl.</p>
+<ul class="simple">
+<li><p><strong>Docker image</strong>: <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/isaac-lab:2.3.0</span></code></p></li>
+<li><p><strong>Python env</strong>: Inside the Docker image at <code class="docutils literal notranslate"><span class="pre">/workspace/isaaclab/isaaclab.sh</span></code></p></li>
+<li><p><strong>Docs</strong>: https://isaac-sim.github.io/IsaacLab/v2.3.0/</p></li>
+</ul>
+</section>
+<section id="critical-import-order">
+<h2>Critical: Import Order<a class="headerlink" href="#critical-import-order" title="Link to this heading">¶</a></h2>
+<p><strong>The single most important thing to know</strong>: IsaacLab’s <code class="docutils literal notranslate"><span class="pre">AppLauncher</span></code> MUST be initialized BEFORE importing <code class="docutils literal notranslate"><span class="pre">torch</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># CORRECT -- AppLauncher first, then torch</span>
+<span class="kn">from</span> <span class="nn">isaaclab.app</span> <span class="kn">import</span> <span class="n">AppLauncher</span>
+<span class="kn">import</span> <span class="nn">argparse</span>
+
+<span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">()</span>
+<span class="n">AppLauncher</span><span class="o">.</span><span class="n">add_app_launcher_args</span><span class="p">(</span><span class="n">parser</span><span class="p">)</span>
+<span class="n">args_cli</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_known_args</span><span class="p">([</span><span class="s2">&quot;--headless&quot;</span><span class="p">])</span>
+<span class="n">AppLauncher</span><span class="p">(</span><span class="n">args_cli</span><span class="p">)</span>
+
+<span class="c1"># NOW safe to import torch</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># WRONG -- will cause mysterious errors or crashes</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">isaaclab.app</span> <span class="kn">import</span> <span class="n">AppLauncher</span>  <span class="c1"># too late!</span>
+</pre></div>
+</div>
+</section>
+<section id="key-properties-of-isaaclab-environments">
+<h2>Key Properties of IsaacLab Environments<a class="headerlink" href="#key-properties-of-isaaclab-environments" title="Link to this heading">¶</a></h2>
+<section id="pre-vectorized">
+<h3>Pre-vectorized<a class="headerlink" href="#pre-vectorized" title="Link to this heading">¶</a></h3>
+<p>IsaacLab environments are already batched internally. A single <code class="docutils literal notranslate"><span class="pre">gym.make(&quot;Isaac-Ant-v0&quot;)</span></code> creates ~4096 parallel environments running on the GPU. There is <strong>no need</strong> to wrap with <code class="docutils literal notranslate"><span class="pre">ParallelEnv</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">env</span> <span class="o">=</span> <span class="n">gym</span><span class="o">.</span><span class="n">make</span><span class="p">(</span><span class="s2">&quot;Isaac-Ant-v0&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">num_envs</span><span class="p">)</span>  <span class="c1"># 4096</span>
+</pre></div>
+</div>
+</section>
+<section id="gpu-native">
+<h3>GPU-native<a class="headerlink" href="#gpu-native" title="Link to this heading">¶</a></h3>
+<p>All computation happens on <code class="docutils literal notranslate"><span class="pre">cuda:0</span></code>. The environment does NOT support CPU execution.</p>
+</section>
+<section id="state-based-observations">
+<h3>State-based observations<a class="headerlink" href="#state-based-observations" title="Link to this heading">¶</a></h3>
+<p>Standard IsaacLab environments use vector observations, not pixels. The observation key is <code class="docutils literal notranslate"><span class="pre">&quot;policy&quot;</span></code> (not <code class="docutils literal notranslate"><span class="pre">&quot;observation&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;pixels&quot;</span></code>).</p>
+<p>Some environments (e.g., <code class="docutils literal notranslate"><span class="pre">Isaac-Cartpole-RGB-v0</span></code>) support pixel observations, but these require <code class="docutils literal notranslate"><span class="pre">--enable_cameras</span></code> and are not the default.</p>
+</section>
+<section id="auto-reset">
+<h3>Auto-reset<a class="headerlink" href="#auto-reset" title="Link to this heading">¶</a></h3>
+<p>IsaacLab environments auto-reset individual sub-environments when they reach a terminal state. Done can be reported immediately after reset.</p>
+</section>
+<section id="in-place-tensor-modification">
+<h3>In-place tensor modification<a class="headerlink" href="#in-place-tensor-modification" title="Link to this heading">¶</a></h3>
+<p>IsaacLab modifies <code class="docutils literal notranslate"><span class="pre">terminated</span></code> and <code class="docutils literal notranslate"><span class="pre">truncated</span></code> tensors in-place. Downstream code should clone these tensors to prevent data corruption.</p>
+</section>
+</section>
+<section id="pixel-based-observations-tiledcamera">
+<h2>Pixel-Based Observations (TiledCamera)<a class="headerlink" href="#pixel-based-observations-tiledcamera" title="Link to this heading">¶</a></h2>
+<p>IsaacLab’s default ManagerBased environments only provide state vectors. For pixel-based RL you need to add a <code class="docutils literal notranslate"><span class="pre">TiledCamera</span></code> sensor.</p>
+<section id="how-it-works">
+<h3>How It Works<a class="headerlink" href="#how-it-works" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">TiledCamera</span></code> renders all environments in a single batched pass on the GPU, producing <code class="docutils literal notranslate"><span class="pre">[num_envs,</span> <span class="pre">H,</span> <span class="pre">W,</span> <span class="pre">C]</span></code> uint8 tensors efficiently.</p>
+</section>
+<section id="setup-steps">
+<h3>Setup Steps<a class="headerlink" href="#setup-steps" title="Link to this heading">¶</a></h3>
+<ol class="arabic">
+<li><p><strong>Enable cameras</strong>: Pass <code class="docutils literal notranslate"><span class="pre">--enable_cameras</span></code> to <code class="docutils literal notranslate"><span class="pre">AppLauncher</span></code>. Without this, rendering APIs are not initialised.</p></li>
+<li><p><strong>Add TiledCameraCfg to the scene config</strong> before calling <code class="docutils literal notranslate"><span class="pre">gym.make</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">isaaclab.sensors</span> <span class="kn">import</span> <span class="n">TiledCameraCfg</span>
+<span class="kn">import</span> <span class="nn">isaaclab.sim</span> <span class="k">as</span> <span class="nn">sim_utils</span>
+
+<span class="n">env_cfg</span><span class="o">.</span><span class="n">scene</span><span class="o">.</span><span class="n">tiled_camera</span> <span class="o">=</span> <span class="n">TiledCameraCfg</span><span class="p">(</span>
+    <span class="n">prim_path</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">{ENV_REGEX_NS}</span><span class="s2">/Camera&quot;</span><span class="p">,</span>
+    <span class="n">offset</span><span class="o">=</span><span class="n">TiledCameraCfg</span><span class="o">.</span><span class="n">OffsetCfg</span><span class="p">(</span>
+        <span class="n">pos</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">),</span>  <span class="c1"># behind and above the robot</span>
+        <span class="n">rot</span><span class="o">=</span><span class="p">(</span><span class="mf">0.9945</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.1045</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="n">convention</span><span class="o">=</span><span class="s2">&quot;world&quot;</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">data_types</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;rgb&quot;</span><span class="p">],</span>
+    <span class="n">spawn</span><span class="o">=</span><span class="n">sim_utils</span><span class="o">.</span><span class="n">PinholeCameraCfg</span><span class="p">(</span>
+        <span class="n">focal_length</span><span class="o">=</span><span class="mf">24.0</span><span class="p">,</span> <span class="n">focus_distance</span><span class="o">=</span><span class="mf">400.0</span><span class="p">,</span>
+        <span class="n">horizontal_aperture</span><span class="o">=</span><span class="mf">20.955</span><span class="p">,</span> <span class="n">clipping_range</span><span class="o">=</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">20.0</span><span class="p">),</span>
+    <span class="p">),</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">height</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</li>
+<li><p><strong>Read camera data</strong>: After each <code class="docutils literal notranslate"><span class="pre">env.step()</span></code>, read from <code class="docutils literal notranslate"><span class="pre">scene[&quot;tiled_camera&quot;].data.output[&quot;rgb&quot;]</span></code>.</p></li>
+<li><p><strong>Reduce num_envs</strong>: Rendering is expensive. 256 envs is a safe starting point for 64×64 images on A100/H100.</p></li>
+<li><p><strong>Increase env_spacing</strong>: Set <code class="docutils literal notranslate"><span class="pre">env_cfg.scene.env_spacing</span> <span class="pre">=</span> <span class="pre">8.0</span></code> or higher to prevent the camera from seeing neighbouring environments.</p></li>
+</ol>
+</section>
+<section id="camera-position-for-anymal-c">
+<h3>Camera Position for ANYmal-C<a class="headerlink" href="#camera-position-for-anymal-c" title="Link to this heading">¶</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">offset.pos</span></code> is in world coordinates relative to the environment origin. For the ANYmal-C quadruped (base at ~0.5m height):</p>
+<ul class="simple">
+<li><p><strong>Rear-elevated</strong>: <code class="docutils literal notranslate"><span class="pre">pos=(-3.0,</span> <span class="pre">0.0,</span> <span class="pre">2.0)</span></code> – sees the full body from behind</p></li>
+<li><p><strong>Side view</strong>: <code class="docutils literal notranslate"><span class="pre">pos=(0.0,</span> <span class="pre">-3.0,</span> <span class="pre">1.5)</span></code> – captures gait from the side</p></li>
+<li><p><strong>Top-down</strong>: <code class="docutils literal notranslate"><span class="pre">pos=(0.0,</span> <span class="pre">0.0,</span> <span class="pre">5.0)</span></code> – overhead view</p></li>
+</ul>
+<p>The rotation quaternion <code class="docutils literal notranslate"><span class="pre">(w,</span> <span class="pre">x,</span> <span class="pre">y,</span> <span class="pre">z)</span> <span class="pre">=</span> <span class="pre">(0.9945,</span> <span class="pre">0.0,</span> <span class="pre">0.1045,</span> <span class="pre">0.0)</span></code> applies a slight downward pitch (≈12°).</p>
+</section>
+</section>
+<section id="available-environments">
+<h2>Available Environments<a class="headerlink" href="#available-environments" title="Link to this heading">¶</a></h2>
+<p>List environments by running (inside the Isaac container):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./isaaclab.sh<span class="w"> </span>-p<span class="w"> </span>scripts/environments/list_envs.py
+</pre></div>
+</div>
+<section id="classic-mujoco-style">
+<h3>Classic (MuJoCo-style)<a class="headerlink" href="#classic-mujoco-style" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Isaac-Ant-v0</span></code> – Ant locomotion (good for validation, tested in CI)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Isaac-Humanoid-v0</span></code> – Humanoid locomotion</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Isaac-Cartpole-v0</span></code> – Cart-pole balance</p></li>
+</ul>
+</section>
+<section id="locomotion-quadruped-biped">
+<h3>Locomotion (quadruped/biped)<a class="headerlink" href="#locomotion-quadruped-biped" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Isaac-Velocity-Flat-Anymal-C-v0</span></code> – Anymal-C on flat terrain</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Isaac-Velocity-Rough-Anymal-C-v0</span></code> – Anymal-C on rough terrain</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Isaac-Velocity-Flat-Unitree-Go2-v0</span></code> – Unitree Go2 on flat terrain</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Isaac-Velocity-Flat-H1-v0</span></code> – Unitree H1 humanoid</p></li>
+</ul>
+</section>
+<section id="manipulation">
+<h3>Manipulation<a class="headerlink" href="#manipulation" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Isaac-Reach-Franka-v0</span></code> – Franka reach</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Isaac-Lift-Cube-Franka-v0</span></code> – Franka lift cube</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Isaac-Open-Drawer-Franka-v0</span></code> – Franka open drawer</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Isaac-Repose-Cube-Allegro-v0</span></code> – Allegro hand in-hand manipulation</p></li>
+</ul>
+</section>
+</section>
+<section id="running-on-steve">
+<h2>Running on Steve<a class="headerlink" href="#running-on-steve" title="Link to this heading">¶</a></h2>
+<section id="create-a-job-with-isaac-docker-image">
+<h3>1) Create a job with Isaac Docker image<a class="headerlink" href="#create-a-job-with-isaac-docker-image" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">JOBID</span><span class="o">=</span><span class="k">$(</span>steve<span class="w"> </span>job<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--partition<span class="w"> </span>h200-high<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--gpus-per-task<span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--ntasks<span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--time<span class="w"> </span><span class="m">24</span>:00:00<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--job-name<span class="w"> </span><span class="s2">&quot;dreamer-isaac&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--container-image<span class="w"> </span>nvcr.io/nvidia/isaac-lab:2.3.0<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--jobid-only<span class="k">)</span>
+</pre></div>
+</div>
+</section>
+<section id="copy-and-run-setup">
+<h3>2) Copy and run setup<a class="headerlink" href="#copy-and-run-setup" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>steve<span class="w"> </span>cp<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$JOBID</span><span class="s2">&quot;</span><span class="w"> </span>./setup-and-run.sh<span class="w"> </span>:/root/setup-and-run.sh
+steve<span class="w"> </span>step<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$JOBID</span><span class="s2">&quot;</span><span class="w"> </span><span class="s1">&#39;bash /root/setup-and-run.sh --build-only&#39;</span>
+</pre></div>
+</div>
+</section>
+<section id="run-training-detached">
+<h3>3) Run training (detached)<a class="headerlink" href="#run-training-detached" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>steve<span class="w"> </span>step<span class="w"> </span>-d<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$JOBID</span><span class="s2">&quot;</span><span class="w"> </span><span class="s1">&#39;WANDB_MODE=online bash /root/setup-and-run.sh&#39;</span>
+</pre></div>
+</div>
+</section>
+<section id="override-the-task">
+<h3>4) Override the task<a class="headerlink" href="#override-the-task" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>steve<span class="w"> </span>step<span class="w"> </span>-d<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$JOBID</span><span class="s2">&quot;</span><span class="w"> </span><span class="s1">&#39;WANDB_MODE=online bash /root/setup-and-run.sh env.name=Isaac-Ant-v0&#39;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="environment-variables">
+<h2>Environment Variables<a class="headerlink" href="#environment-variables" title="Link to this heading">¶</a></h2>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Variable</p></th>
+<th class="head"><p>Value</p></th>
+<th class="head"><p>Purpose</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">OMNI_KIT_ACCEPT_EULA</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">yes</span></code></p></td>
+<td><p>Accept IsaacLab EULA (required)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">PYTHONNOUSERSITE</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1</span></code></p></td>
+<td><p>Avoid user-site packages conflicting</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">WANDB_MODE</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">online</span></code></p></td>
+<td><p>Weights &amp; Biases logging mode</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="gotchas-and-pitfalls">
+<h2>Gotchas and Pitfalls<a class="headerlink" href="#gotchas-and-pitfalls" title="Link to this heading">¶</a></h2>
+<ol class="arabic">
+<li><p><strong>Import order</strong>: AppLauncher MUST be initialized before <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">torch</span></code>. This cannot be stressed enough.</p></li>
+<li><p><strong>Single simulation per process</strong>: Don’t try to create two IsaacLab environments in the same process.</p></li>
+<li><p><strong>EULA acceptance</strong>: Set <code class="docutils literal notranslate"><span class="pre">OMNI_KIT_ACCEPT_EULA=yes</span></code> or the simulation won’t start.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">--headless</span></code> flag</strong>: Always pass <code class="docutils literal notranslate"><span class="pre">--headless</span></code> for server/cluster training (no display).</p></li>
+<li><p><strong>Zombie processes</strong>: IsaacLab can leave orphan processes. Always <code class="docutils literal notranslate"><span class="pre">pkill</span> <span class="pre">-9</span> <span class="pre">python</span></code> before relaunching.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">TERM</span></code> environment variable</strong>: The Isaac container may not have <code class="docutils literal notranslate"><span class="pre">TERM</span></code> set, causing <code class="docutils literal notranslate"><span class="pre">isaaclab.sh</span></code> to print <code class="docutils literal notranslate"><span class="pre">'':</span> <span class="pre">unknown</span> <span class="pre">terminal</span> <span class="pre">type</span></code>. <strong>Fix</strong>: <code class="docutils literal notranslate"><span class="pre">export</span> <span class="pre">TERM=&quot;${TERM:-xterm}&quot;</span></code>.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">rsync</span></code> not installed</strong>: The IsaacLab container does not ship with <code class="docutils literal notranslate"><span class="pre">rsync</span></code>. Install with <code class="docutils literal notranslate"><span class="pre">apt-get</span> <span class="pre">install</span> <span class="pre">-y</span> <span class="pre">rsync</span></code> if needed.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">gym.make</span></code> requires <code class="docutils literal notranslate"><span class="pre">cfg</span></code> argument</strong>: IsaacLab environments require an explicit configuration object. Resolve it dynamically:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">spec</span> <span class="o">=</span> <span class="n">gymnasium</span><span class="o">.</span><span class="n">spec</span><span class="p">(</span><span class="n">env_name</span><span class="p">)</span>
+<span class="n">entry</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;env_cfg_entry_point&quot;</span><span class="p">]</span>
+<span class="n">module_path</span><span class="p">,</span> <span class="n">class_name</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">rsplit</span><span class="p">(</span><span class="s2">&quot;:&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="n">env_cfg</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">module_path</span><span class="p">),</span> <span class="n">class_name</span><span class="p">)()</span>
+<span class="n">env</span> <span class="o">=</span> <span class="n">gymnasium</span><span class="o">.</span><span class="n">make</span><span class="p">(</span><span class="n">env_name</span><span class="p">,</span> <span class="n">cfg</span><span class="o">=</span><span class="n">env_cfg</span><span class="p">)</span>
+</pre></div>
+</div>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">from_pixels</span></code> ignored for IsaacLab</strong>: The <code class="docutils literal notranslate"><span class="pre">from_pixels</span></code> parameter in <code class="docutils literal notranslate"><span class="pre">GymEnv</span></code> does NOT add pixel observations. You must add a TiledCamera sensor to the scene config manually.</p></li>
+<li><p><strong>Camera data is NOT in the observation manager</strong>: ManagerBased envs don’t include camera data in their observation groups. The camera data must be read separately from <code class="docutils literal notranslate"><span class="pre">scene[&quot;tiled_camera&quot;].data.output[...]</span></code>.</p></li>
+<li><p><strong>Memory</strong>: Pixel replay buffers are large. 500K frames at 64×64×3 float32 ≈ 24 GB on disk (memmap).</p></li>
+<li><p><strong>Installing torchrl in Isaac container</strong>: Use <code class="docutils literal notranslate"><span class="pre">--no-build-isolation</span> <span class="pre">--no-deps</span></code> to avoid conflicts with Isaac’s pre-installed torch/numpy.</p></li>
+</ol>
+</section>
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="MUJOCO_INSTALLATION.html" class="btn btn-neutral float-right" title="Working with MuJoCo-based environments" accesskey="n" rel="next">Next <img src="../../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="HABITAT.html" class="btn btn-neutral" title="Working with habitat-lab" accesskey="p" rel="prev"><img src="../../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">IsaacLab Guide</a><ul>
+<li><a class="reference internal" href="#what-is-isaaclab">What is IsaacLab?</a></li>
+<li><a class="reference internal" href="#critical-import-order">Critical: Import Order</a></li>
+<li><a class="reference internal" href="#key-properties-of-isaaclab-environments">Key Properties of IsaacLab Environments</a><ul>
+<li><a class="reference internal" href="#pre-vectorized">Pre-vectorized</a></li>
+<li><a class="reference internal" href="#gpu-native">GPU-native</a></li>
+<li><a class="reference internal" href="#state-based-observations">State-based observations</a></li>
+<li><a class="reference internal" href="#auto-reset">Auto-reset</a></li>
+<li><a class="reference internal" href="#in-place-tensor-modification">In-place tensor modification</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#pixel-based-observations-tiledcamera">Pixel-Based Observations (TiledCamera)</a><ul>
+<li><a class="reference internal" href="#how-it-works">How It Works</a></li>
+<li><a class="reference internal" href="#setup-steps">Setup Steps</a></li>
+<li><a class="reference internal" href="#camera-position-for-anymal-c">Camera Position for ANYmal-C</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#available-environments">Available Environments</a><ul>
+<li><a class="reference internal" href="#classic-mujoco-style">Classic (MuJoCo-style)</a></li>
+<li><a class="reference internal" href="#locomotion-quadruped-biped">Locomotion (quadruped/biped)</a></li>
+<li><a class="reference internal" href="#manipulation">Manipulation</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#running-on-steve">Running on Steve</a><ul>
+<li><a class="reference internal" href="#create-a-job-with-isaac-docker-image">1) Create a job with Isaac Docker image</a></li>
+<li><a class="reference internal" href="#copy-and-run-setup">2) Copy and run setup</a></li>
+<li><a class="reference internal" href="#run-training-detached">3) Run training (detached)</a></li>
+<li><a class="reference internal" href="#override-the-task">4) Override the task</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#environment-variables">Environment Variables</a></li>
+<li><a class="reference internal" href="#gotchas-and-pitfalls">Gotchas and Pitfalls</a></li>
+</ul>
+</li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../../',
+            VERSION:'main',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../../../_static/doctools.js"></script>
+      <script type="text/javascript" src="../../../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../../../_static/design-tabs.js"></script>
+
+  
+
+  <script type="text/javascript" src="../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="#">Get Started</a>
+          </li>
+
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+    })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
+  </script>
+</body>
+</html>

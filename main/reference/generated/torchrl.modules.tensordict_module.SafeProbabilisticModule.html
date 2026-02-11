@@ -420,7 +420,7 @@ to create multi-head policies.</p>
 <span class="go">tensor([ 1., -1., -1.,  1., -1., -1.,  1.,  1., -1., -1.],</span>
 <span class="go">       grad_fn=&lt;ClampBackward0&gt;)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">grad</span><span class="p">)</span> <span class="c1"># clamp anihilates gradients</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">grad</span><span class="p">)</span> <span class="c1"># clamp annihilates gradients</span>
 <span class="go">tensor([0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])</span>
 </pre></div>
 </div>

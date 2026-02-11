@@ -271,7 +271,7 @@ operations that is to be computed.</p>
 <p>A great advantage of environment wrappers is that one can consult the environment up to that wrapper.
 The same can be achieved with TorchRL transformed environments: the <code class="docutils literal notranslate"><span class="pre">parent</span></code> attribute will
 return a new <a class="reference internal" href="generated/torchrl.envs.transforms.TransformedEnv.html#torchrl.envs.transforms.TransformedEnv" title="torchrl.envs.transforms.TransformedEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">TransformedEnv</span></code></a> with all the transforms up to the transform of interest.
-Re-using the example above:</p>
+Reusing the example above:</p>
 <div class="literal-block-wrapper docutils container" id="id3">
 <div class="code-block-caption"><span class="caption-text">Transform parent</span><a class="headerlink" href="#id3" title="Link to this code">¶</a></div>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>     <span class="o">&gt;&gt;&gt;</span> <span class="n">resize_parent</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">transform</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">parent</span>  <span class="c1"># returns the same as TransformedEnv(base_env, transform[:-1])</span>
@@ -438,7 +438,7 @@ this transform will keep its parent:</p>
 </div>
 <p>This means that using this transform for another environment is prohibited, as
 the other environment would replace the parent and this may lead to unexpected
-behviours. Fortunately, the <a class="reference internal" href="generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.Transform"><code class="xref py py-class docutils literal notranslate"><span class="pre">Transform</span></code></a> class comes with a <code class="xref py py-func docutils literal notranslate"><span class="pre">clone()</span></code>
+behaviours. Fortunately, the <a class="reference internal" href="generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.Transform"><code class="xref py py-class docutils literal notranslate"><span class="pre">Transform</span></code></a> class comes with a <code class="xref py py-func docutils literal notranslate"><span class="pre">clone()</span></code>
 method that will erase the parent while keeping the identity of all the
 registered buffers:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">TransformedEnv</span><span class="p">(</span><span class="n">base_env</span><span class="p">,</span> <span class="n">third_transform</span><span class="p">)</span>  <span class="c1"># raises an Exception as third_transform already has a parent</span>

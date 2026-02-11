@@ -281,7 +281,7 @@ or its subclass, responsible for updating the policy weights on remote inference
 <li><p><strong>remote_config</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>]</em><em>, </em><em>optional</em>) – keyword arguments to pass to cls.as_remote().</p></li>
 <li><p><strong>num_cpus</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of CPUs of the actor. Defaults to <cite>None</cite> (taken from remote_config).</p></li>
 <li><p><strong>num_gpus</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of GPUs of the actor. Defaults to <cite>None</cite> (taken from remote_config).</p></li>
-<li><p><strong>sync_iter</strong> (<em>bool</em><em>, </em><em>optional</em>) – <p>if <cite>True</cite>, items yeilded by the collector will be synced to the local process.
+<li><p><strong>sync_iter</strong> (<em>bool</em><em>, </em><em>optional</em>) – <p>if <cite>True</cite>, items yielded by the collector will be synced to the local process.
 If <cite>False</cite>, the collector will collect the next batch of data in between yielding.
 This has no effect when data is collected through the <a class="reference internal" href="#torchrl.collectors.llm.RayLLMCollector.start" title="torchrl.collectors.llm.RayLLMCollector.start"><code class="xref py py-meth docutils literal notranslate"><span class="pre">start()</span></code></a> method.
 For example:</p>
@@ -293,7 +293,7 @@ For example:</p>
 <span class="gp">... </span>    <span class="c1"># expensive operation - collector is collecting data</span>
 </pre></div>
 </div>
-<p>This is somehwat equivalent to using <a class="reference internal" href="torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector" title="torchrl.collectors.MultiSyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncCollector</span></code></a> (<cite>sync_iter=True</cite>) or
+<p>This is somewhat equivalent to using <a class="reference internal" href="torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector" title="torchrl.collectors.MultiSyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncCollector</span></code></a> (<cite>sync_iter=True</cite>) or
 <code class="xref py py-class docutils literal notranslate"><span class="pre">MultiAsyncDataCollector</span></code> (<cite>sync_iter=False</cite>).
 Defaults to <cite>True</cite>.</p>
 </p></li>

@@ -572,7 +572,7 @@
 <span class="sd">    .. note::</span>
 <span class="sd">      This class can handle multiple consecutive trajectories along the time dimension</span>
 <span class="sd">      *but* the final hidden values should not be trusted in those cases (ie. they</span>
-<span class="sd">      should not be re-used for a consecutive trajectory).</span>
+<span class="sd">      should not be reused for a consecutive trajectory).</span>
 <span class="sd">      The reason is that LSTM returns only the last hidden value, which for the</span>
 <span class="sd">      padded inputs we provide can correspond to a 0-filled input.</span>
 
@@ -1738,7 +1738,7 @@
     <span class="k">def</span> <span class="nf">set_recurrent_mode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
             <span class="s2">&quot;The gru.set_recurrent_mode() API has been removed in v0.8. &quot;</span>
-            <span class="s2">&quot;To set the recurent mode, use the :class:`~torchrl.modules.set_recurrent_mode` context manager or &quot;</span>
+            <span class="s2">&quot;To set the recurrent mode, use the :class:`~torchrl.modules.set_recurrent_mode` context manager or &quot;</span>
             <span class="s2">&quot;the `default_recurrent_mode` keyword argument in the constructor.&quot;</span><span class="p">,</span>
         <span class="p">)</span></div>
 

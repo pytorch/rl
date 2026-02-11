@@ -1850,7 +1850,12 @@
             <span class="n">new_traj</span> <span class="o">=</span> <span class="n">pool</span><span class="o">.</span><span class="n">get_traj_and_increment</span><span class="p">(</span>
                 <span class="n">traj_sop</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span> <span class="n">device</span><span class="o">=</span><span class="n">traj_sop</span><span class="o">.</span><span class="n">device</span>
             <span class="p">)</span>
-            <span class="n">traj_ids</span> <span class="o">=</span> <span class="n">traj_ids</span><span class="o">.</span><span class="n">masked_scatter</span><span class="p">(</span><span class="n">traj_sop</span><span class="p">,</span> <span class="n">new_traj</span><span class="p">)</span>
+            <span class="c1"># masked_scatter on MPS may incorrectly change the shape from [] to [1],</span>
+            <span class="c1"># so we preserve the original shape and reshape after the operation.</span>
+            <span class="n">original_shape</span> <span class="o">=</span> <span class="n">traj_ids</span><span class="o">.</span><span class="n">shape</span>
+            <span class="n">traj_ids</span> <span class="o">=</span> <span class="n">traj_ids</span><span class="o">.</span><span class="n">masked_scatter</span><span class="p">(</span><span class="n">traj_sop</span><span class="p">,</span> <span class="n">new_traj</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
+                <span class="n">original_shape</span>
+            <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="o">.</span><span class="n">set</span><span class="p">((</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">),</span> <span class="n">traj_ids</span><span class="p">)</span>
 
 <div class="viewcode-block" id="Collector.rollout">

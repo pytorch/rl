@@ -927,7 +927,7 @@
 <div class="viewcode-block" id="VecNormV2.transform_output_spec">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2.transform_output_spec">[docs]</a>
     <span class="k">def</span> <span class="nf">transform_output_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output_spec</span><span class="p">:</span> <span class="n">Composite</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
-        <span class="c1"># This is a copy-paste of the parent methd to ensure that we correct the reward spec properly</span>
+        <span class="c1"># This is a copy-paste of the parent method to ensure that we correct the reward spec properly</span>
         <span class="n">output_spec</span> <span class="o">=</span> <span class="n">output_spec</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
         <span class="n">observation_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transform_observation_spec</span><span class="p">(</span>
             <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_observation_spec&quot;</span><span class="p">]</span>

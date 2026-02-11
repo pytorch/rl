@@ -718,7 +718,7 @@ argument that allows the user to quickly ask for image-based environments:
  .. code-block:: none
 
 
-    <matplotlib.image.AxesImage object at 0x7f15fc436410>
+    <matplotlib.image.AxesImage object at 0x7fb4fc6dbc90>
 
 
 
@@ -1244,7 +1244,7 @@ at random in that environment.
 Environment device
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Transforms can work on device, which can bring a significant speedup when
-operations are moderetely or highly computationally demanding. These include
+operations are moderately or highly computationally demanding. These include
 ``ToTensorImage``, ``Resize``, ``GrayScale`` etc.
 
 One could legitimately ask what that implies on the wrapped environment
@@ -1524,7 +1524,7 @@ to access this attribute. Here's an example:
  .. code-block:: none
 
 
-    'bar_756ca814-0695-11f1-9b83-0242ac110002'
+    'bar_5f840cce-06f2-11f1-ac18-0242ac110002'
 
 
 
@@ -1576,7 +1576,7 @@ to access this attribute. Here's an example:
  .. code-block:: none
 
 
-    <torchrl.envs.batched_envs._dispatch_caller_parallel object at 0x7f15fd403690>
+    <torchrl.envs.batched_envs._dispatch_caller_parallel object at 0x7fb4fe028d10>
 
 
 
@@ -1596,7 +1596,7 @@ to access this attribute. Here's an example:
  .. code-block:: none
 
 
-    ['bar_76b223e8-0695-11f1-84fa-0242ac110002', 'bar_76bda0ba-0695-11f1-af6b-0242ac110002', 'bar_76bda0ba-0695-11f1-8085-0242ac110002']
+    ['bar_60dde608-06f2-11f1-985e-0242ac110002', 'bar_60d74c76-06f2-11f1-8513-0242ac110002', 'bar_60d7589c-06f2-11f1-8726-0242ac110002']
 
 
 
@@ -1815,8 +1815,8 @@ In regular setting, using VecNorm is quite easy:
 
  .. code-block:: none
 
-    mean: : tensor([-0.2858, -0.1205,  0.1698])
-    std: : tensor([1.2104, 1.2876, 1.2210])
+    mean: : tensor([ 0.0839, -0.2450, -0.0714])
+    std: : tensor([1.1507, 1.1362, 1.1644])
 
 
 
@@ -1898,8 +1898,8 @@ once created:
         batch_size=torch.Size([3, 5]),
         device=None,
         is_shared=False)
-    mean: : tensor([-0.1672,  0.1207, -0.1553])
-    std: : tensor([1.1987, 1.2726, 1.2760])
+    mean: : tensor([-0.2093,  0.1447, -0.0059])
+    std: : tensor([1.1821, 1.2398, 1.2933])
 
 
 

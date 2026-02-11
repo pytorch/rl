@@ -583,7 +583,7 @@
             <span class="p">(</span><span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span> <span class="n">ProbabilisticTensorDictModule</span><span class="p">),</span>
         <span class="p">)</span> <span class="ow">or</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="p">,</span> <span class="s2">&quot;get_dist&quot;</span><span class="p">):</span>
             <span class="c1"># Use the specified masking strategy</span>
-            <span class="c1">#  dists are always defined over the whole sequence, so we can re-use the mask as the dist will always</span>
+            <span class="c1">#  dists are always defined over the whole sequence, so we can reuse the mask as the dist will always</span>
             <span class="c1">#  be a MaskedCategorical</span>
             <span class="c1"># TODO: eventually, we want to always use `get_dist` and just pass the key of the mask</span>
             <span class="c1">#  Masks should contain: prompt and response masks, assistant, and attention.</span>

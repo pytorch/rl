@@ -295,7 +295,7 @@ Defaults to <cite>{“return_assistant_tokens_mask”: True, “tokenize”: Tru
 onto which the tensors will be moved. It allows to keep the model on a different device
 than the upcoming data itself. When using Ray service, this device will be used on the remote actor.
 Defaults to <cite>None</cite>.</p></li>
-<li><p><strong>tokenizer</strong> (<em>transformers.AutoTokenizer</em>) – the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the <cite>actor</cite>.</p></li>
+<li><p><strong>tokenizer</strong> (<em>transformers.AutoTokenizer</em>) – the tokenizer to be used to tokenize the input and compute the assistant mask. If not provided, the tokenizer will be inferred from the <cite>actor</cite>.</p></li>
 <li><p><strong>padding_side</strong> (<em>str</em>) – the side of the padding when using pad_sequence. Defaults to <cite>“left”</cite>.</p></li>
 <li><p><strong>kl_key</strong> (<em>NestedKey</em>) – the key where the KL divergence is stored. Defaults to <cite>“kl_penalty”</cite>.</p></li>
 <li><p><strong>add_to_reward</strong> (<em>bool</em>) – whether to add the KL divergence to the reward. Defaults to <cite>True</cite>.</p></li>

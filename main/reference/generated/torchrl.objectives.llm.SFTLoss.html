@@ -256,7 +256,7 @@
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>actor_network</strong> (<em>TensorDictModule</em>) – the actor network. Usually a <a class="reference internal" href="torchrl.modules.llm.TransformersWrapper.html#torchrl.modules.llm.TransformersWrapper" title="torchrl.modules.llm.TransformersWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">TransformersWrapper</span></code></a> instance,
 with <cite>return_log_prob=True</cite> and <cite>from_text=True</cite>.</p></li>
-<li><p><strong>tokenizer</strong> (<cite>Tokenizer</cite>) – the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the <cite>actor_network</cite>.</p></li>
+<li><p><strong>tokenizer</strong> (<cite>Tokenizer</cite>) – the tokenizer to be used to tokenize the input and compute the assistant mask. If not provided, the tokenizer will be inferred from the <cite>actor_network</cite>.</p></li>
 <li><p><strong>tokenizer_kwargs</strong> (<em>dict</em><em>, </em><em>optional</em>) – keyword arguments to pass to the tokenizer during <code class="xref py py-meth docutils literal notranslate"><span class="pre">apply_chat_template()</span></code>.
 This can be used to override arguments such as the <cite>chat_template</cite> or <cite>chat_template_name</cite>.</p></li>
 <li><p><strong>reduction</strong> (<em>Literal</em><em>[</em><em>&quot;mean&quot;</em><em>, </em><em>&quot;sum&quot;</em><em>, </em><em>&quot;none&quot;</em><em>]</em><em>, </em><em>optional</em>) – the reduction to apply to the loss. Defaults to <cite>“mean”</cite>.</p></li>

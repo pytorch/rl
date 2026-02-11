@@ -409,6 +409,9 @@
 <span class="sd">            Defaults to ``[5, 5, 6, 6]`` if num_layers if 4, else ``[5] * num_layers``.</span>
 <span class="sd">        latent_dim (int, optional): Input dimension (state_dim + rnn_hidden_dim).</span>
 <span class="sd">            If None, uses LazyLinear. Defaults to None for backward compatibility.</span>
+<span class="sd">        out_channels (int, optional): Number of output channels in the final</span>
+<span class="sd">            ConvTranspose2d layer.  Defaults to 3 (RGB).  Set to 1 for</span>
+<span class="sd">            grayscale.</span>
 <span class="sd">        device (torch.device, optional): Device to create the module on.</span>
 <span class="sd">            Defaults to None (uses default device).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -419,6 +422,7 @@
         <span class="n">num_layers</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
         <span class="n">kernel_sizes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">latent_dim</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">out_channels</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
         <span class="n">depth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
@@ -452,7 +456,9 @@
             <span class="n">kernel_sizes</span> <span class="o">=</span> <span class="p">[</span><span class="n">kernel_sizes</span><span class="p">]</span> <span class="o">*</span> <span class="n">num_layers</span>
         <span class="n">layers</span> <span class="o">=</span> <span class="p">[</span>
             <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">(),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">ConvTranspose2d</span><span class="p">(</span><span class="n">channels</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">kernel_sizes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ConvTranspose2d</span><span class="p">(</span>
+                <span class="n">channels</span><span class="p">,</span> <span class="n">out_channels</span><span class="p">,</span> <span class="n">kernel_sizes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+            <span class="p">),</span>
         <span class="p">]</span>
         <span class="n">kernel_sizes</span> <span class="o">=</span> <span class="n">kernel_sizes</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
         <span class="n">k</span> <span class="o">=</span> <span class="mi">1</span>

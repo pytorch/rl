@@ -307,7 +307,7 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_mlflow</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="s2">&quot;MLFlow is not installed&quot;</span><span class="p">)</span>
 
-        <span class="c1"># Only create experiment if it doesnt exist</span>
+        <span class="c1"># Only create experiment if it doesn&#39;t exist</span>
         <span class="n">experiment</span> <span class="o">=</span> <span class="n">mlflow</span><span class="o">.</span><span class="n">get_experiment_by_name</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_mlflow_kwargs</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">])</span>
         <span class="k">if</span> <span class="n">experiment</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">id</span> <span class="o">=</span> <span class="n">mlflow</span><span class="o">.</span><span class="n">create_experiment</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_mlflow_kwargs</span><span class="p">)</span>

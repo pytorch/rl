@@ -259,7 +259,7 @@
 <li><p><strong>in_keys</strong> (<em>sequence</em><em> of </em><em>NestedKey</em>) – the keys of inputs to the unary operation.</p></li>
 <li><p><strong>out_keys</strong> (<em>sequence</em><em> of </em><em>NestedKey</em>) – the keys of the outputs of the unary operation.</p></li>
 <li><p><strong>in_keys_inv</strong> (<em>sequence</em><em> of </em><em>NestedKey</em><em>, </em><em>optional</em>) – the keys of inputs to the unary operation during inverse call.</p></li>
-<li><p><strong>out_keys_inv</strong> (<em>sequence</em><em> of </em><em>NestedKey</em><em>, </em><em>optional</em>) – the keys of the outputs of the unary operation durin inverse call.</p></li>
+<li><p><strong>out_keys_inv</strong> (<em>sequence</em><em> of </em><em>NestedKey</em><em>, </em><em>optional</em>) – the keys of the outputs of the unary operation during inverse call.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
@@ -268,7 +268,7 @@
 a non-tensor input, it must also accept <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>inv_fn</strong> (<em>Callable</em><em>[</em><em>[</em><em>Any</em><em>]</em><em>, </em><em>Any</em><em>]</em><em>, </em><em>optional</em>) – the function to use as the unary operation during inverse calls.
 If it accepts a non-tensor input, it must also accept <code class="docutils literal notranslate"><span class="pre">None</span></code>.
-Can be ommitted, in which case <code class="xref py py-attr docutils literal notranslate"><span class="pre">fn</span></code> will be used for inverse maps.</p></li>
+Can be omitted, in which case <code class="xref py py-attr docutils literal notranslate"><span class="pre">fn</span></code> will be used for inverse maps.</p></li>
 <li><p><strong>use_raw_nontensor</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, data is extracted from
 <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a>/<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a> inputs before <code class="docutils literal notranslate"><span class="pre">fn</span></code> is called
 on them. If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the raw <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a>/<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a>

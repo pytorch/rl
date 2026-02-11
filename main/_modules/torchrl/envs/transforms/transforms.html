@@ -5632,14 +5632,14 @@
 <span class="sd">        in_keys (sequence of NestedKey): the keys of inputs to the unary operation.</span>
 <span class="sd">        out_keys (sequence of NestedKey): the keys of the outputs of the unary operation.</span>
 <span class="sd">        in_keys_inv (sequence of NestedKey, optional): the keys of inputs to the unary operation during inverse call.</span>
-<span class="sd">        out_keys_inv (sequence of NestedKey, optional): the keys of the outputs of the unary operation durin inverse call.</span>
+<span class="sd">        out_keys_inv (sequence of NestedKey, optional): the keys of the outputs of the unary operation during inverse call.</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        fn (Callable[[Any], Tensor | TensorDictBase]): the function to use as the unary operation. If it accepts</span>
 <span class="sd">            a non-tensor input, it must also accept ``None``.</span>
 <span class="sd">        inv_fn (Callable[[Any], Any], optional): the function to use as the unary operation during inverse calls.</span>
 <span class="sd">            If it accepts a non-tensor input, it must also accept ``None``.</span>
-<span class="sd">            Can be ommitted, in which case :attr:`fn` will be used for inverse maps.</span>
+<span class="sd">            Can be omitted, in which case :attr:`fn` will be used for inverse maps.</span>
 <span class="sd">        use_raw_nontensor (bool, optional): if ``False``, data is extracted from</span>
 <span class="sd">            :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack` inputs before ``fn`` is called</span>
 <span class="sd">            on them. If ``True``, the raw :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack`</span>
@@ -7904,7 +7904,7 @@
 <span class="sd">            keys (sequence of NestedKey, optional): keys that</span>
 <span class="sd">                have to be normalized. Default is `[&quot;next&quot;, &quot;reward&quot;]`</span>
 <span class="sd">            memmap (bool): if ``True``, the resulting tensordict will be cast into</span>
-<span class="sd">                memmory map (using `memmap_()`). Otherwise, the tensordict</span>
+<span class="sd">                memory map (using `memmap_()`). Otherwise, the tensordict</span>
 <span class="sd">                will be placed in shared memory.</span>
 
 <span class="sd">        Returns:</span>
@@ -12032,7 +12032,7 @@
 <span class="sd">    `&quot;_step&quot;` signal accordingly.</span>
 
 <span class="sd">    .. note:: The skip will affect transforms that modify the environment output too, i.e., any transform</span>
-<span class="sd">        that is to be exectued on the tensordict returned by :meth:`~torchrl.envs.EnvBase.step` will be</span>
+<span class="sd">        that is to be executed on the tensordict returned by :meth:`~torchrl.envs.EnvBase.step` will be</span>
 <span class="sd">        skipped if the condition is met. To palliate this effect if it is not desirable, one can wrap</span>
 <span class="sd">        the transformed env in another transformed env, since the skip only affects the first-degree parent</span>
 <span class="sd">        of the ``ConditionalSkip`` transform. See example below.</span>

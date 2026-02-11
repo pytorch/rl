@@ -263,7 +263,7 @@ value in <cite>“_step”</cite> is <code class="docutils literal notranslate">
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>The skip will affect transforms that modify the environment output too, i.e., any transform
-that is to be exectued on the tensordict returned by <a class="reference internal" href="torchrl.envs.EnvBase.html#id4" title="torchrl.envs.EnvBase.step"><code class="xref py py-meth docutils literal notranslate"><span class="pre">step()</span></code></a> will be
+that is to be executed on the tensordict returned by <a class="reference internal" href="torchrl.envs.EnvBase.html#id4" title="torchrl.envs.EnvBase.step"><code class="xref py py-meth docutils literal notranslate"><span class="pre">step()</span></code></a> will be
 skipped if the condition is met. To palliate this effect if it is not desirable, one can wrap
 the transformed env in another transformed env, since the skip only affects the first-degree parent
 of the <code class="docutils literal notranslate"><span class="pre">ConditionalSkip</span></code> transform. See example below.</p>

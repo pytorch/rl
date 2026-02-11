@@ -640,7 +640,7 @@ argument that allows the user to quickly ask for image-based environments:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.get" title="tensordict.TensorDict.get" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-method"><span class="n">data</span><span class="o">.</span><span class="n">get</span></a><span class="p">(</span><span class="s2">&quot;pixels&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">numpy</span><span class="p">())</span>
 </pre></div>
 </div>
-<img src="../_images/sphx_glr_torchrl_envs_001.png" srcset="../_images/sphx_glr_torchrl_envs_001.png" alt="torchrl envs" class = "sphx-glr-single-img"/><div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>&lt;matplotlib.image.AxesImage object at 0x7f15fc436410&gt;
+<img src="../_images/sphx_glr_torchrl_envs_001.png" srcset="../_images/sphx_glr_torchrl_envs_001.png" alt="torchrl envs" class = "sphx-glr-single-img"/><div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>&lt;matplotlib.image.AxesImage object at 0x7fb4fc6dbc90&gt;
 </pre></div>
 </div>
 <p>Let’s have a look at what the tensordict contains:</p>
@@ -955,7 +955,7 @@ CatTensors transform parent env:
 <section id="environment-device">
 <h2>Environment device<a class="headerlink" href="#environment-device" title="Link to this heading">¶</a></h2>
 <p>Transforms can work on device, which can bring a significant speedup when
-operations are moderetely or highly computationally demanding. These include
+operations are moderately or highly computationally demanding. These include
 <code class="docutils literal notranslate"><span class="pre">ToTensorImage</span></code>, <code class="docutils literal notranslate"><span class="pre">Resize</span></code>, <code class="docutils literal notranslate"><span class="pre">GrayScale</span></code> etc.</p>
 <p>One could legitimately ask what that implies on the wrapped environment
 side. Very little for regular environments: the operations will still happen
@@ -1107,7 +1107,7 @@ to access this attribute. Here’s an example:</p>
 <span class="n">env</span><span class="o">.</span><span class="n">foo</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>&#39;bar_756ca814-0695-11f1-9b83-0242ac110002&#39;
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>&#39;bar_5f840cce-06f2-11f1-ac18-0242ac110002&#39;
 </pre></div>
 </div>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">parallel_env</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ParallelEnv</span></a><span class="p">(</span>
@@ -1131,13 +1131,13 @@ to access this attribute. Here’s an example:</p>
 <span class="n">foo_list</span>  <span class="c1"># needs to be instantiated, for instance using list</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>&lt;torchrl.envs.batched_envs._dispatch_caller_parallel object at 0x7f15fd403690&gt;
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>&lt;torchrl.envs.batched_envs._dispatch_caller_parallel object at 0x7fb4fe028d10&gt;
 </pre></div>
 </div>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">list</span><span class="p">(</span><span class="n">foo_list</span><span class="p">)</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>[&#39;bar_76b223e8-0695-11f1-84fa-0242ac110002&#39;, &#39;bar_76bda0ba-0695-11f1-af6b-0242ac110002&#39;, &#39;bar_76bda0ba-0695-11f1-8085-0242ac110002&#39;]
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>[&#39;bar_60dde608-06f2-11f1-985e-0242ac110002&#39;, &#39;bar_60d74c76-06f2-11f1-8513-0242ac110002&#39;, &#39;bar_60d7589c-06f2-11f1-8726-0242ac110002&#39;]
 </pre></div>
 </div>
 <p>Similarly, methods can also be accessed:</p>
@@ -1273,8 +1273,8 @@ it with data normalizing given a fixed version of the normalizing constants.</p>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;std: :&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.get" title="tensordict.TensorDict.get" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-method"><span class="n">data</span><span class="o">.</span><span class="n">get</span></a><span class="p">(</span><span class="s2">&quot;observation&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>  <span class="c1"># Approx 1</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>mean: : tensor([-0.2858, -0.1205,  0.1698])
-std: : tensor([1.2104, 1.2876, 1.2210])
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>mean: : tensor([ 0.0839, -0.2450, -0.0714])
+std: : tensor([1.1507, 1.1362, 1.1644])
 </pre></div>
 </div>
 <p>In <strong>parallel envs</strong> things are slightly more complicated, as we need to
@@ -1339,8 +1339,8 @@ data:  TensorDict(
     batch_size=torch.Size([3, 5]),
     device=None,
     is_shared=False)
-mean: : tensor([-0.1672,  0.1207, -0.1553])
-std: : tensor([1.1987, 1.2726, 1.2760])
+mean: : tensor([-0.2093,  0.1447, -0.0059])
+std: : tensor([1.1821, 1.2398, 1.2933])
 </pre></div>
 </div>
 <p>The count is slightly higher than the number of steps (since we

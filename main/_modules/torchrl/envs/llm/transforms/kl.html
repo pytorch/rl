@@ -832,7 +832,7 @@
 <span class="sd">        tokenizer_kwargs (dict): the keyword arguments to pass to the tokenizer to be used to apply the chat template to the history when `assistant_only` is `True`.</span>
 <span class="sd">            To control the tokenization in the ref_model, pass the tokenizer kwargs to the ref_model constructor.</span>
 <span class="sd">            Defaults to `{&quot;return_assistant_tokens_mask&quot;: True, &quot;tokenize&quot;: True, &quot;return_dict&quot;: True, &quot;padding&quot;: False, &quot;add_generation_prompt&quot;: False}`.</span>
-<span class="sd">        tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the `ref_model`.</span>
+<span class="sd">        tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assistant mask. If not provided, the tokenizer will be inferred from the `ref_model`.</span>
 <span class="sd">        detach (bool): whether to exclude the log-probs from the gradient computation. Defaults to `True`.</span>
 <span class="sd">        device (torch.device): the device to use for tensor creation. Defaults to `None`.</span>
 <span class="sd">        padding_side (str): the side of the padding when using pad_sequence. Defaults to `&quot;left&quot;`.</span>
@@ -1251,7 +1251,7 @@
 <span class="sd">            onto which the tensors will be moved. It allows to keep the model on a different device</span>
 <span class="sd">            than the upcoming data itself. When using Ray service, this device will be used on the remote actor.</span>
 <span class="sd">            Defaults to `None`.</span>
-<span class="sd">        tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the `actor`.</span>
+<span class="sd">        tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assistant mask. If not provided, the tokenizer will be inferred from the `actor`.</span>
 <span class="sd">        padding_side (str): the side of the padding when using pad_sequence. Defaults to `&quot;left&quot;`.</span>
 <span class="sd">        kl_key (NestedKey): the key where the KL divergence is stored. Defaults to `&quot;kl_penalty&quot;`.</span>
 <span class="sd">        add_to_reward (bool): whether to add the KL divergence to the reward. Defaults to `True`.</span>

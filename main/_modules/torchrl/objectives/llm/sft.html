@@ -351,7 +351,7 @@
 <span class="sd">    Args:</span>
 <span class="sd">        actor_network (TensorDictModule): the actor network. Usually a :class:`~torchrl.modules.llm.TransformersWrapper` instance,</span>
 <span class="sd">            with `return_log_prob=True` and `from_text=True`.</span>
-<span class="sd">        tokenizer (`Tokenizer`): the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the `actor_network`.</span>
+<span class="sd">        tokenizer (`Tokenizer`): the tokenizer to be used to tokenize the input and compute the assistant mask. If not provided, the tokenizer will be inferred from the `actor_network`.</span>
 <span class="sd">        tokenizer_kwargs (dict, optional): keyword arguments to pass to the tokenizer during :meth:`~torchrl.data.llm.chat.History.apply_chat_template`.</span>
 <span class="sd">            This can be used to override arguments such as the `chat_template` or `chat_template_name`.</span>
 <span class="sd">        reduction (Literal[&quot;mean&quot;, &quot;sum&quot;, &quot;none&quot;], optional): the reduction to apply to the loss. Defaults to `&quot;mean&quot;`.</span>
