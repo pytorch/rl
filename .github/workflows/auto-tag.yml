@@ -18,6 +18,7 @@
 #  - [Performance], [Perf] → Performance
 #  - [BC-Breaking], [BCBreaking] → bc breaking
 #  - [Deprecation], [Deprecated] → Deprecation
+#  - [Quality] → Quality
 #------------------------------------------------------------
 
 name: PR Label
@@ -70,6 +71,7 @@ jobs:
           | `[Performance]` or `[Perf]` | Performance | `[Performance] Optimize tensor ops` |
           | `[BC-Breaking]` | bc breaking | `[BC-Breaking] Remove deprecated API` |
           | `[Deprecation]` | Deprecation | `[Deprecation] Mark old function` |
+          | `[Quality]` | Quality | `[Quality] Fix typos and add codespell` |
 
           **Note:** Common variations like singular/plural are supported (e.g., `[Doc]` or `[Docs]`).
           COMMENT_EOF
@@ -128,6 +130,9 @@ jobs:
               ;;
             Deprecation|Deprecated|deprecation|deprecated)
               LABEL="Deprecation"
+              ;;
+            Quality|quality)
+              LABEL="Quality"
               ;;
             *)
               echo "::error::Unknown or invalid prefix '[$PREFIX]'."
