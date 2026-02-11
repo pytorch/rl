@@ -60,7 +60,7 @@ class RayLLMCollector(LLMCollector):
         remote_config (dict[str, Any], optional): keyword arguments to pass to cls.as_remote().
         num_cpus (int, optional): Number of CPUs of the actor. Defaults to `None` (taken from remote_config).
         num_gpus (int, optional): Number of GPUs of the actor. Defaults to `None` (taken from remote_config).
-        sync_iter (bool, optional): if `True`, items yeilded by the collector will be synced to the local process.
+        sync_iter (bool, optional): if `True`, items yielded by the collector will be synced to the local process.
             If `False`, the collector will collect the next batch of data in between yielding.
             This has no effect when data is collected through the :meth:`start` method.
             For example:
@@ -72,7 +72,7 @@ class RayLLMCollector(LLMCollector):
                >>> for data in collector:  # non-blocking
                ...     # expensive operation - collector is collecting data
 
-            This is somehwat equivalent to using :class:`~torchrl.collectors.MultiSyncCollector` (`sync_iter=True`) or
+            This is somewhat equivalent to using :class:`~torchrl.collectors.MultiSyncCollector` (`sync_iter=True`) or
             :class:`~torchrl.collectors.MultiAsyncDataCollector` (`sync_iter=False`).
             Defaults to `True`.
         verbose (bool, optional): if ``True``, the collector will print progress information.

@@ -330,7 +330,7 @@ class GRPOLoss(LossModule):
             (ProbabilisticTensorDictSequential, ProbabilisticTensorDictModule),
         ) or hasattr(self.actor_network, "get_dist"):
             # Use the specified masking strategy
-            #  dists are always defined over the whole sequence, so we can re-use the mask as the dist will always
+            #  dists are always defined over the whole sequence, so we can reuse the mask as the dist will always
             #  be a MaskedCategorical
             # TODO: eventually, we want to always use `get_dist` and just pass the key of the mask
             #  Masks should contain: prompt and response masks, assistant, and attention.

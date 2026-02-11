@@ -5,7 +5,7 @@ torchrl.trainers package
 
 .. _ref_trainers:
 
-The trainer package provides utilities to write re-usable training scripts. The core idea is to use a
+The trainer package provides utilities to write reusable training scripts. The core idea is to use a
 trainer that implements a nested loop, where the outer loop runs the data collection steps and the inner
 loop the optimization steps.
 

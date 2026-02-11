@@ -248,7 +248,7 @@ class BatchedEnvBase(EnvBase):
             from the sub-environment device(s). In that case, the data will be
             automatically cast to the appropriate device during collection.
             This can be used to speed up collection in case casting to device
-            introduces an overhead (eg, numpy-based environents etc.): by using
+            introduces an overhead (eg, numpy-based environments etc.): by using
             a ``"cuda"`` device for the batched environment but a ``"cpu"``
             device for the nested environments, one can keep the overhead to a
             minimum.

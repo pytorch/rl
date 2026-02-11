@@ -168,7 +168,7 @@ def main():
     assert "shared_tokenizer" in services
     try:
         services.register("shared_tokenizer", TokenizerService, vocab_size=1000)
-        raise RuntimeError("Registed twice! Should not happen!")
+        raise RuntimeError("Registered twice! Should not happen!")
     except ValueError:
         print("shared_tokenizer already registered")
 

@@ -10012,7 +10012,7 @@ class TestVecNormV2:
         transform1 = transform0.clone()
         assert transform0[0]._loc.is_shared() is transform1[0]._loc.is_shared()
 
-        # A clone does not have hte the same data ptr
+        # A clone does not have the same data ptr
         def assert_differs(a, b):
             assert a.untyped_storage().data_ptr() != b.untyped_storage().data_ptr()
 
