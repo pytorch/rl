@@ -177,7 +177,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         tensor([ 1., -1., -1.,  1., -1., -1.,  1.,  1., -1., -1.],
                grad_fn=<ClampBackward0>)
         >>> data["action"].mean().backward()
-        >>> print(data["loc"].grad) # clamp anihilates gradients
+        >>> print(data["loc"].grad) # clamp annihilates gradients
         tensor([0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
     """
 

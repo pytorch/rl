@@ -213,7 +213,7 @@ class set_gym_backend(_DecoratorContextManager):
 
 
 def gym_backend(submodule=None):
-    """Returns the gym backend, or a sumbodule of it.
+    """Returns the gym backend, or a submodule of it.
 
     Args:
         submodule (str): the submodule to import. If ``None``, the backend

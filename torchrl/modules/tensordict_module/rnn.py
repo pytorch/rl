@@ -331,7 +331,7 @@ class LSTMModule(ModuleBase):
     .. note::
       This class can handle multiple consecutive trajectories along the time dimension
       *but* the final hidden values should not be trusted in those cases (ie. they
-      should not be re-used for a consecutive trajectory).
+      should not be reused for a consecutive trajectory).
       The reason is that LSTM returns only the last hidden value, which for the
       padded inputs we provide can correspond to a 0-filled input.
 
@@ -1468,7 +1468,7 @@ class GRUModule(ModuleBase):
     def set_recurrent_mode(self, mode: bool = True):
         raise RuntimeError(
             "The gru.set_recurrent_mode() API has been removed in v0.8. "
-            "To set the recurent mode, use the :class:`~torchrl.modules.set_recurrent_mode` context manager or "
+            "To set the recurrent mode, use the :class:`~torchrl.modules.set_recurrent_mode` context manager or "
             "the `default_recurrent_mode` keyword argument in the constructor.",
         )
 
