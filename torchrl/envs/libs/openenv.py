@@ -11,7 +11,6 @@ from tensordict import NonTensorData, TensorDict, TensorDictBase, lazy_stack
 
 from torchrl.data.llm import History
 from torchrl.data.tensor_specs import Categorical, Composite, NonTensor, Unbounded
-from torchrl.envs.common import EnvBase
 from torchrl.envs.llm.chat import ChatEnv
 from torchrl.envs.utils import _classproperty
 from torchrl.modules.llm.policies.common import ChatHistory
@@ -102,7 +101,8 @@ class OpenEnvWrapper(ChatEnv):
         template_kwargs (dict, optional): Template kwargs stored on the instance.
         device (torch.device | str, optional): device on which tensors are placed.
         batch_size (torch.Size, optional): batch size. OpenEnv environments are
-            single-instance; non-empty batch sizes are not supported.
+            single-instance; only ``(1,)`` is supported to match the ChatEnv
+            contract. Use ParallelEnv to create multiple OpenEnv instances.
         allow_done_after_reset (bool, optional): tolerate done right after reset.
     """
 
@@ -135,7 +135,6 @@ class OpenEnvWrapper(ChatEnv):
         device = kwargs.pop("device", None)
         batch_size = kwargs.pop("batch_size", None)
         allow_done_after_reset = kwargs.pop("allow_done_after_reset", False)
-        spec_locked = kwargs.pop("spec_locked", True)
         frame_skip = kwargs.pop("frame_skip", 1)
 
         if input_mode != "history":
@@ -144,7 +143,7 @@ class OpenEnvWrapper(ChatEnv):
             )
 
         if batch_size is None:
-            batch_size = torch.Size(())
+            batch_size = torch.Size((1,))
         elif isinstance(batch_size, int):
             batch_size = torch.Size([batch_size])
         elif isinstance(batch_size, list):
@@ -152,29 +151,11 @@ class OpenEnvWrapper(ChatEnv):
         else:
             batch_size = torch.Size(batch_size)
 
-        EnvBase.__init__(
-            self,
-            device=device,
-            batch_size=batch_size,
-            allow_done_after_reset=allow_done_after_reset,
-            spec_locked=spec_locked,
-        )
-
-        if not isinstance(frame_skip, int):
-            raise ValueError(f"frame_skip must be an integer, got {frame_skip}")
-        self.frame_skip = frame_skip
-        self.wrapper_frame_skip = frame_skip
-
-        if data_key is not None:
-            self.data_key = data_key
-
-        self.input_mode = input_mode
-        self.system_prompt = system_prompt
-        self.system_role = system_role
-        self.user_role = user_role
-        self.policy_role = policy_role
-        self.tokenizer = tokenizer
-        self.template_kwargs = {} if template_kwargs is None else template_kwargs
+        if batch_size != torch.Size((1,)):
+            raise ValueError(
+                "OpenEnvWrapper only supports batch_size=(1,) to match ChatEnv. "
+                "Use ParallelEnv to create multiple OpenEnv instances."
+            )
 
         self._action_cls = action_cls
         self._observation_cls = observation_cls
@@ -183,11 +164,29 @@ class OpenEnvWrapper(ChatEnv):
         self._warned_reward_none = False
         self._history_prompt: History | None = None
 
+        super().__init__(
+            input_mode=input_mode,
+            batch_size=batch_size,
+            system_prompt=system_prompt,
+            tokenizer=tokenizer,
+            template_kwargs=template_kwargs,
+            system_role=system_role,
+            user_role=user_role,
+            policy_role=policy_role,
+            data_key=data_key,
+            device=device,
+        )
+        self._allow_done_after_reset = allow_done_after_reset
+
+        if not isinstance(frame_skip, int):
+            raise ValueError(f"frame_skip must be an integer, got {frame_skip}")
+        self.frame_skip = frame_skip
+        self.wrapper_frame_skip = frame_skip
+
         self._constructor_kwargs = kwargs
         self._check_kwargs({"env": env})
         self._convert_actions_to_numpy = kwargs.pop("convert_actions_to_numpy", True)
         self._env = self._build_env(env=env, **kwargs)
-        self._make_specs(self._env)
         self.is_closed = False
         self._init_env()
 
@@ -211,16 +210,13 @@ class OpenEnvWrapper(ChatEnv):
 
     def _build_env(self, env, **_) -> Any:
         if self._sync_env and hasattr(env, "sync") and callable(env.sync):
-            try:
-                env = env.sync()
-            except Exception:
-                pass
+            env = env.sync()
         return env
 
-    def _make_specs(self, env) -> None:  # noqa: ARG002
-        if len(self.batch_size):
+    def _make_specs(self, env: Any | None = None) -> None:  # noqa: ARG002
+        if self.batch_size != torch.Size((1,)):
             raise ValueError(
-                "OpenEnvWrapper does not support batched environments. "
+                "OpenEnvWrapper only supports batch_size=(1,) to match ChatEnv. "
                 "Use ParallelEnv to create multiple OpenEnv instances."
             )
 
@@ -276,19 +272,13 @@ class OpenEnvWrapper(ChatEnv):
     def _init_env(self) -> None:
         connect = getattr(self._env, "connect", None)
         if callable(connect) and not inspect.iscoroutinefunction(connect):
-            try:
-                connect()
-            except Exception:
-                pass
+            connect()
 
     def close(self, *, raise_if_closed: bool = True) -> None:
         self.is_closed = True
         disconnect = getattr(self._env, "disconnect", None)
         if callable(disconnect):
-            try:
-                disconnect()
-            except Exception:
-                pass
+            disconnect()
             return
         super().close(raise_if_closed=raise_if_closed)
 
@@ -298,27 +288,24 @@ class OpenEnvWrapper(ChatEnv):
         for method in ("seed", "set_seed"):
             setter = getattr(self._env, method, None)
             if callable(setter):
-                try:
-                    setter(seed)
-                    return
-                except Exception:
-                    warnings.warn("OpenEnvWrapper: seeding failed (best-effort).")
-                    return
+                setter(seed)
+                return
         warnings.warn("OpenEnvWrapper: seeding is not supported by this client.")
 
     def _format_observation(self, obs: Any) -> Any:
         if self._return_observation_dict:
             if hasattr(obs, "model_dump"):
-                try:
-                    return obs.model_dump()
-                except Exception:
-                    pass
-            if hasattr(obs, "dict"):
-                try:
-                    return obs.dict()
-                except Exception:
-                    pass
-        return obs
+                obs = obs.model_dump()
+            elif hasattr(obs, "dict"):
+                obs = obs.dict()
+        return self._wrap_nontensor(obs)
+
+    def _wrap_nontensor(self, value: Any) -> NonTensorData:
+        if isinstance(value, NonTensorData):
+            if value.batch_size == self.batch_size and value.device == self.device:
+                return value
+            value = value.data
+        return NonTensorData(value, batch_size=self.batch_size, device=self.device)
 
     def _format_action(self, action: Any) -> Any:
         action = _unwrap_nontensor(action)

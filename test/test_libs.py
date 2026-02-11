@@ -4717,50 +4717,34 @@ class TestOpenEnv:
         return value
 
     def test_wrapper_basic(self):
-        try:
             env = OpenEnvEnv("openenv/echo-env", return_observation_dict=True)
             td = env.reset()
-        except Exception as exc:
-            pytest.skip(f"OpenEnv echo-env not available: {exc}")
-        try:
             assert "observation" in td.keys()
-            action_td = TensorDict({"action": {"message": "ping"}}, batch_size=[])
+            action_td = TensorDict({"action": {"message": "ping"}}, batch_size=(1,))
             td_next = env.step(action_td)
             assert td_next["next", "reward"].numel() == 1
             assert td_next["next", "done"].dtype == torch.bool
-        finally:
             env.close()
 
     def test_wrapper_action_cls(self):
-        try:
             env = OpenEnvEnv("openenv/echo-env", return_observation_dict=True)
             env.reset()
-        except Exception as exc:
-            pytest.skip(f"OpenEnv echo-env not available: {exc}")
-        try:
-            action_td = TensorDict({"action": {"message": "hello"}}, batch_size=[])
+            action_td = TensorDict({"action": {"message": "hello"}}, batch_size=(1,))
             td_next = env.step(action_td)
             obs = self._unwrap_observation(td_next["next", "observation"])
             assert obs is not None
             if isinstance(obs, dict) and "echoed_message" in obs:
                 assert obs["echoed_message"] == "hello"
-        finally:
             env.close()
 
     def test_wrapper_observation_dict(self):
-        try:
             env = OpenEnvEnv("openenv/echo-env", return_observation_dict=True)
             td = env.reset()
-        except Exception as exc:
-            pytest.skip(f"OpenEnv echo-env not available: {exc}")
-        try:
             obs = self._unwrap_observation(td["observation"])
             assert obs is not None
             if isinstance(obs, dict):
                 assert "echoed_message" in obs
-        finally:
             env.close()
-
 
 @pytest.mark.skipif(not _has_sklearn, reason="Scikit-learn not found")
 @pytest.mark.parametrize(
