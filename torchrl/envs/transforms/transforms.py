@@ -5068,7 +5068,7 @@ class UnaryTransform(Transform):
             a non-tensor input, it must also accept ``None``.
         inv_fn (Callable[[Any], Any], optional): the function to use as the unary operation during inverse calls.
             If it accepts a non-tensor input, it must also accept ``None``.
-            Can be ommitted, in which case :attr:`fn` will be used for inverse maps.
+            Can be omitted, in which case :attr:`fn` will be used for inverse maps.
         use_raw_nontensor (bool, optional): if ``False``, data is extracted from
             :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack` inputs before ``fn`` is called
             on them. If ``True``, the raw :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack`
