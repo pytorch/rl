@@ -27,7 +27,7 @@ class IFEvalData(TensorClass["nocast"]):
     kwargs: list[dict]
     query: str
 
-    # Reponses and additional fields
+    # Responses and additional fields
     response: str | None = None
     tokens: torch.Tensor | None = None
     tokens_response: torch.Tensor | None = None

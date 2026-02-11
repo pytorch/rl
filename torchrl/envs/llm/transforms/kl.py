@@ -583,7 +583,7 @@ class RetrieveLogProb(Transform):
         tokenizer_kwargs (dict): the keyword arguments to pass to the tokenizer to be used to apply the chat template to the history when `assistant_only` is `True`.
             To control the tokenization in the ref_model, pass the tokenizer kwargs to the ref_model constructor.
             Defaults to `{"return_assistant_tokens_mask": True, "tokenize": True, "return_dict": True, "padding": False, "add_generation_prompt": False}`.
-        tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the `ref_model`.
+        tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assistant mask. If not provided, the tokenizer will be inferred from the `ref_model`.
         detach (bool): whether to exclude the log-probs from the gradient computation. Defaults to `True`.
         device (torch.device): the device to use for tensor creation. Defaults to `None`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
@@ -993,7 +993,7 @@ class RetrieveKL(Compose, metaclass=_RayServiceMetaClass):
             onto which the tensors will be moved. It allows to keep the model on a different device
             than the upcoming data itself. When using Ray service, this device will be used on the remote actor.
             Defaults to `None`.
-        tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the `actor`.
+        tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assistant mask. If not provided, the tokenizer will be inferred from the `actor`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
         kl_key (NestedKey): the key where the KL divergence is stored. Defaults to `"kl_penalty"`.
         add_to_reward (bool): whether to add the KL divergence to the reward. Defaults to `True`.

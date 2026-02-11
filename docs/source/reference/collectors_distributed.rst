@@ -50,6 +50,7 @@ node or across multiple nodes.
     DistributedSyncDataCollector
     submitit_delayed_launcher
     RayCollector
+    RayEvalWorker
 
 Legacy names
 ------------
