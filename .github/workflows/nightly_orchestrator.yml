@@ -1,0 +1,116 @@
+name: Nightly Orchestrator
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # 6AM UTC daily
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  test-linux:
+    uses: ./.github/workflows/test-linux.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+      contents: read
+
+  test-linux-llm:
+    uses: ./.github/workflows/test-linux-llm.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+      contents: read
+
+  test-linux-habitat:
+    uses: ./.github/workflows/test-linux-habitat.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+      contents: read
+
+  test-linux-tutorials:
+    uses: ./.github/workflows/test-linux-tutorials.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+      contents: read
+
+  test-linux-sota:
+    uses: ./.github/workflows/test-linux-sota.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+      contents: read
+
+  test-linux-libs:
+    uses: ./.github/workflows/test-linux-libs.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+      contents: read
+
+  test-windows-optdepts:
+    uses: ./.github/workflows/test-windows-optdepts.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+      contents: read
+
+  lint:
+    uses: ./.github/workflows/lint.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+      contents: read
+
+  docs:
+    uses: ./.github/workflows/docs.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+      contents: write
+
+  benchmarks:
+    uses: ./.github/workflows/benchmarks.yml
+    with:
+      skip-upload: true
+    secrets: inherit
+    permissions:
+      id-token: write
+      contents: write
+      deployments: write
+      pull-requests: write
+
+  # =============================================================================
+  # Status collector - updates the nightly dashboard after all workflows complete
+  # =============================================================================
+  update-status-dashboard:
+    name: Update Status Dashboard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    needs:
+      - test-linux
+      - test-linux-llm
+      - test-linux-habitat
+      - test-linux-tutorials
+      - test-linux-sota
+      - test-linux-libs
+      - test-windows-optdepts
+      - lint
+      - docs
+      - benchmarks
+    if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    steps:
+      - name: Trigger status collector
+        uses: peter-evans/repository-dispatch@v4
+        with:
+          event-type: nightly-orchestrator-completed
+          client-payload: |
+            {
+              "run_id": "${{ github.run_id }}",
+              "triggered_at": "${{ github.event.repository.updated_at }}"
+            }
