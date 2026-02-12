@@ -158,7 +158,7 @@ The same restrictions of partial steps apply to partial resets.
 Likewise, partial resets are an essential feature of :meth:`~torchrl.envs.EnvBase.rollout` when `break_when_any_done` is `True`,
 as the environments with a `True` done state will need to be reset, but not others.
 
-See te following paragraph for a deep dive in partial resets within batched and vectorized environments.
+See the following paragraph for a deep dive in partial resets within batched and vectorized environments.
 
 Partial resets in detail
 ~~~~~~~~~~~~~~~~~~~~~~~~

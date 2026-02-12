@@ -520,7 +520,7 @@ class LLMEnv(EnvBase):
                 if not isinstance(obs, str) or not isinstance(action, str):
                     raise TypeError(
                         "The tensordict is batchless, yet the action and/or observations are not "
-                        f"strings but {type(action)} and {type(obs)}, respectivly."
+                        f"strings but {type(action)} and {type(obs)}, respectively."
                     )
                 observation = self._check_obs_act_and_cat(
                     obs, action, device=self.device

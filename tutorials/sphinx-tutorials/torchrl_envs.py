@@ -408,7 +408,7 @@ print("CatTensors transform parent env: \n", env.transform[0].parent)
 # Environment device
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # Transforms can work on device, which can bring a significant speedup when
-# operations are moderetely or highly computationally demanding. These include
+# operations are moderately or highly computationally demanding. These include
 # ``ToTensorImage``, ``Resize``, ``GrayScale`` etc.
 #
 # One could legitimately ask what that implies on the wrapped environment

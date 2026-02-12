@@ -148,7 +148,7 @@ class Trainer:
         save_trainer_file (path, optional): path where to save the trainer.
             Default is None (no saving)
         async_collection (bool, optional): Whether to collect data asynchronously.
-            This will only work if the replay buffer is registed within the data collector.
+            This will only work if the replay buffer is registered within the data collector.
             If using this, the UTD ratio (Update to Data) will be logged under the key "utd_ratio".
             Default is False.
         log_timings (bool, optional): If True, automatically register a LogTiming hook to log

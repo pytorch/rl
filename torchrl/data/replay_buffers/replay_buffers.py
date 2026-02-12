@@ -522,7 +522,7 @@ class ReplayBuffer:
     def batch_size(self):
         """The batch size of the replay buffer.
 
-        The batch size can be overriden by setting the `batch_size` parameter in the :meth:`sample` method.
+        The batch size can be overridden by setting the `batch_size` parameter in the :meth:`sample` method.
 
         It defines both the number of samples returned by :meth:`sample` and the number of samples that are
         yielded by the :class:`ReplayBuffer` iterator.

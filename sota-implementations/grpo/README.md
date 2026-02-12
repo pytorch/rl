@@ -118,7 +118,7 @@ Key differences:
    - Async: Each piece of data is processed a non-deterministic number of times.
 
 4. **Weight updates**:
-   - Sync: Weights are updated befor every collection of data.
+   - Sync: Weights are updated before every collection of data.
    - Async: Weights are updated at a given interval (in gradient steps). This will require a synchronization between the training
      and inference processes, and frequent updates will cause both workers to often wait for each other.
 

@@ -29,7 +29,7 @@ data utilities (e.g. collectors and containers), etc.
 TorchRL aims at having as few dependencies as possible (python standard library, numpy and pytorch).
 Common environment libraries (e.g. OpenAI gym) are only optional.
 
-On the low-level end, torchrl comes with a set of highly re-usable functionals
+On the low-level end, torchrl comes with a set of highly reusable functionals
 for :ref:`cost functions <ref_objectives>`, :ref:`returns <ref_returns>` and data processing.
 
 TorchRL aims at a high modularity and good runtime performance.

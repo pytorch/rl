@@ -92,6 +92,10 @@
   description: "Code formatting changes"
   color: "FEF2C0"
 
+- name: Quality
+  description: "Code quality improvements (spelling, linting, style)"
+  color: "C2E0C6"
+
 - name: dependencies
   description: "Pull requests that update a dependency file"
   color: "0366D6"
