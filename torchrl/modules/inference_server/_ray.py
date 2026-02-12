@@ -32,13 +32,22 @@ class _RayFuture:
         self._req_id = req_id
         self._result: Any = _SENTINEL
 
+    def done(self) -> bool:
+        """Return ``True`` if the result is available without blocking."""
+        if self._result is not _SENTINEL:
+            return True
+        try:
+            self._result = self._client._get_result(self._req_id, timeout=0)
+        except queue.Empty:
+            return False
+        return True
+
     def result(self, timeout: float | None = None) -> TensorDictBase:
         """Block until the result is available."""
         if self._result is _SENTINEL:
-            item = self._client._get_result(self._req_id, timeout=timeout)
-            if isinstance(item, BaseException):
-                raise item
-            self._result = item
+            self._result = self._client._get_result(self._req_id, timeout=timeout)
+        if isinstance(self._result, BaseException):
+            raise self._result
         return self._result
 
 
