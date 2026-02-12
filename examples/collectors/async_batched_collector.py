@@ -4,12 +4,20 @@ Demonstrates how to use :class:`~torchrl.collectors.AsyncBatchedCollector` to
 run many environments in parallel while automatically batching policy inference
 through an :class:`~torchrl.modules.InferenceServer`.
 
+Architecture:
+  - An :class:`~torchrl.envs.AsyncEnvPool` runs environments in parallel using
+    the chosen backend (``"multiprocessing"`` by default for true parallelism,
+    or ``"threading"``/``"asyncio"``).
+  - An :class:`~torchrl.modules.InferenceServer` batches incoming observations
+    and runs a single forward pass.
+  - A lightweight coordinator thread bridges the two: when an env finishes
+    stepping its observation is submitted to the server, and when an action is
+    ready the env is sent back for stepping -- all without synchronisation
+    barriers.
+
 The user only supplies:
   - A list of environment factories
   - A policy (or policy factory)
-
-The collector creates the ``AsyncEnvPool``, ``InferenceServer``, and
-``ThreadingTransport`` internally -- no manual wiring required.
 """
 import torch.nn as nn
 from tensordict.nn import TensorDictModule
