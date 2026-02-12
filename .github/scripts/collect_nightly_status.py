@@ -32,6 +32,12 @@ NIGHTLY_WORKFLOWS = [
     "lint.yml",
     "docs.yml",
     "benchmarks.yml",
+    "validate-test-partitioning.yml",
+    "nightly_build.yml",
+    "build-wheels-linux.yml",
+    "build-wheels-m1.yml",
+    "build-wheels-windows.yml",
+    "build-wheels-aarch64-linux.yml",
 ]
 
 # Display names for workflows
@@ -46,6 +52,12 @@ WORKFLOW_DISPLAY_NAMES = {
     "lint.yml": "Lint",
     "docs.yml": "Documentation",
     "benchmarks.yml": "Benchmarks",
+    "validate-test-partitioning.yml": "Test Partitioning",
+    "nightly_build.yml": "Nightly Build",
+    "build-wheels-linux.yml": "Wheels (Linux)",
+    "build-wheels-m1.yml": "Wheels (M1)",
+    "build-wheels-windows.yml": "Wheels (Windows)",
+    "build-wheels-aarch64-linux.yml": "Wheels (Aarch64)",
 }
 
 # Job name prefixes for each workflow (used in orchestrator jobs).
@@ -62,6 +74,12 @@ WORKFLOW_JOB_PREFIXES = {
     "lint.yml": "lint",
     "docs.yml": "docs",
     "benchmarks.yml": "benchmarks",
+    "validate-test-partitioning.yml": "validate-test-partitioning",
+    "nightly_build.yml": "nightly-build",
+    "build-wheels-linux.yml": "build-wheels-linux",
+    "build-wheels-m1.yml": "build-wheels-m1",
+    "build-wheels-windows.yml": "build-wheels-windows",
+    "build-wheels-aarch64-linux.yml": "build-wheels-aarch64-linux",
 }
 
 
