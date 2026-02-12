@@ -12,7 +12,7 @@ import torch
 from tensordict import lazy_stack, TensorDictBase
 from tensordict.utils import _zip_strict
 from torch.utils.data import DataLoader
-from torchrl.data import Composite, NonTensor
+from torchrl.data.tensor_specs import Composite, NonTensor
 from torchrl.data.llm.history import History
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import TransformedEnv
