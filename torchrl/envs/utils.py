@@ -1006,7 +1006,7 @@ class MarlGroupMapType(Enum):
 
     As a feature of torchrl multiagent, you are able to control the grouping of agents in your environment.
     You can group agents together (stacking their tensors) to leverage vectorization when passing them through the same
-    neural network. You can split agents in different groups where they are heterogenous or should be processed by
+    neural network. You can split agents in different groups where they are heterogeneous or should be processed by
     different neural networks. To group, you just need to pass a ``group_map`` at env constructiuon time.
 
     Otherwise, you can choose one of the premade grouping strategies from this class.

@@ -161,8 +161,17 @@ def main(cfg: DictConfig):  # noqa: F821
     # This tracks policy versions so we can correlate collected data with policy updates
     policy_version = PolicyVersion(version_type="int")
 
+    # Log collector compilation settings (compilation happens in worker if enabled)
+    collector_compile_cfg = cfg.collector.compile
+    if collector_compile_cfg.enabled:
+        torchrl_logger.info(
+            f"Collector policy compilation enabled: backend={collector_compile_cfg.backend}, "
+            f"cudagraphs={collector_compile_cfg.cudagraphs} (will compile in workers)"
+        )
+
     # Make async multi-collector with replay buffer for true async collection
     # Device allocation: cuda:0 for training, cuda:1+ for collectors (if multi-GPU)
+    # Note: collector.compile settings are passed via cfg and handled in make_collector
     collector = make_collector(
         cfg,
         train_env_factory,

@@ -60,3 +60,4 @@ Documentation Sections
    envs_multiagent
    envs_libraries
    envs_recorders
+   isaaclab

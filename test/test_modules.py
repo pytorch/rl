@@ -466,6 +466,19 @@ class TestDreamerComponents:
         obs = decoder(stoch_state, det_state)
         assert obs.shape == (*batch_size, *temporal_size, 3, 64, 64)
 
+    @pytest.mark.parametrize("depth", [32, 64])
+    @pytest.mark.parametrize("out_channels", [1, 3])
+    @pytest.mark.parametrize("stoch_size", [10])
+    @pytest.mark.parametrize("deter_size", [20])
+    def test_dreamer_decoder_out_channels(
+        self, device, batch_size, depth, out_channels, stoch_size, deter_size
+    ):
+        decoder = ObsDecoder(channels=depth, out_channels=out_channels).to(device)
+        stoch_state = torch.randn(*batch_size, stoch_size, device=device)
+        det_state = torch.randn(*batch_size, deter_size, device=device)
+        obs = decoder(stoch_state, det_state)
+        assert obs.shape == (*batch_size, out_channels, 64, 64)
+
     @pytest.mark.parametrize("stoch_size", [10, 20])
     @pytest.mark.parametrize("deter_size", [20, 30])
     @pytest.mark.parametrize("action_size", [3, 6])

@@ -298,7 +298,7 @@ class MultiSyncCollector(MultiCollector):
                     if cat_results != "stack":
                         buffers = [None] * self.num_workers
                         for worker_idx, buffer in enumerate(self.buffers):
-                            # Skip pre-empted envs:
+                            # Skip preempted envs:
                             if buffer is None:
                                 continue
                             valid = buffer.get(("collector", "traj_ids")) != -1

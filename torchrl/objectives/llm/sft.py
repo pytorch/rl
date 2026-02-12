@@ -107,7 +107,7 @@ class SFTLoss(LossModule):
     Args:
         actor_network (TensorDictModule): the actor network. Usually a :class:`~torchrl.modules.llm.TransformersWrapper` instance,
             with `return_log_prob=True` and `from_text=True`.
-        tokenizer (`Tokenizer`): the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the `actor_network`.
+        tokenizer (`Tokenizer`): the tokenizer to be used to tokenize the input and compute the assistant mask. If not provided, the tokenizer will be inferred from the `actor_network`.
         tokenizer_kwargs (dict, optional): keyword arguments to pass to the tokenizer during :meth:`~torchrl.data.llm.chat.History.apply_chat_template`.
             This can be used to override arguments such as the `chat_template` or `chat_template_name`.
         reduction (Literal["mean", "sum", "none"], optional): the reduction to apply to the loss. Defaults to `"mean"`.

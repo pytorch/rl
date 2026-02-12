@@ -174,6 +174,15 @@ exclude = [
 "*" = ["*.txt", "*.md"]
 "torchrl" = ["csrc/*.h"]
 
+[tool.codespell]
+skip = ".git,*.svg,*.png,*.jpg,*.css,*.js,*.tmp,docs/_local_build,docs/source/reference/generated,torchrl/_version.py,.worktrees,0.9"
+# multicat: multi-categorical variable name
+# nd: n-dimensional variable name/abbreviation
+# splitted: used as variable name
+# te: Telugu language code in ifeval
+# uncompressible: used as class/function name in benchmarks
+ignore-words-list = "multicat,nd,splitted,te,uncompressible"
+
 [tool.usort]
 first_party_detection = false
 
