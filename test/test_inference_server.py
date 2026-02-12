@@ -733,6 +733,7 @@ class TestAsyncBatchedCollector:
             frames_per_batch=frames_per_batch,
             total_frames=total_frames,
             max_batch_size=num_envs,
+            env_backend="threading",
         )
         total_collected = 0
         for batch in collector:
@@ -750,6 +751,7 @@ class TestAsyncBatchedCollector:
             frames_per_batch=10,
             total_frames=20,
             max_batch_size=num_envs,
+            env_backend="threading",
         )
         total_collected = 0
         for batch in collector:
@@ -789,6 +791,7 @@ class TestAsyncBatchedCollector:
             total_frames=30,
             yield_completed_trajectories=True,
             max_batch_size=num_envs,
+            env_backend="threading",
         )
         count = 0
         for batch in collector:
@@ -806,6 +809,7 @@ class TestAsyncBatchedCollector:
             policy=policy,
             frames_per_batch=10,
             total_frames=10,
+            env_backend="threading",
         )
         # Consume one batch to start
         for _batch in collector:
@@ -821,6 +825,7 @@ class TestAsyncBatchedCollector:
             policy=policy,
             frames_per_batch=10,
             total_frames=-1,
+            env_backend="threading",
         )
         collected = 0
         for batch in collector:
@@ -830,10 +835,8 @@ class TestAsyncBatchedCollector:
         collector.shutdown()
         assert collected >= 50
 
-    def test_env_property(self):
-        """The env property returns an AsyncEnvPool."""
-        from torchrl.envs import AsyncEnvPool
-
+    def test_num_envs(self):
+        """The collector knows the number of environments."""
         policy = _make_counting_policy()
         collector = AsyncBatchedCollector(
             create_env_fn=[_counting_env_factory] * 2,
@@ -841,7 +844,7 @@ class TestAsyncBatchedCollector:
             frames_per_batch=10,
             total_frames=10,
         )
-        assert isinstance(collector.env, AsyncEnvPool)
+        assert collector._num_envs == 2
         collector.shutdown()
 
     def test_postproc(self):
@@ -859,6 +862,7 @@ class TestAsyncBatchedCollector:
             frames_per_batch=10,
             total_frames=20,
             postproc=postproc,
+            env_backend="threading",
         )
         for _ in collector:
             pass
