@@ -42,8 +42,10 @@ from torchrl.trainers.trainers import (
     _has_ts,
     BatchSubSampler,
     CountFramesLog,
+    DefaultOptimizationStepper,
     LogScalar,
     mask_batch,
+    OptimizationStepper,
     OptimizerHook,
     ReplayBufferTrainer,
     REWARD_KEY,
@@ -1075,6 +1077,137 @@ class TestCountFrames:
             assert load_state_dict_has_been_called[0]
         CountFramesLog.state_dict = CountFramesLog_state_dict
         CountFramesLog.load_state_dict = CountFramesLog_load_state_dict
+
+
+class _CountingLossModule(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.forward_calls = 0
+
+    def forward(self, td: TensorDict):
+        self.forward_calls += 1
+        return TensorDict({"loss": torch.zeros(())}, [])
+
+
+class _CountingStepper(OptimizationStepper):
+    def __init__(self):
+        self.calls = 0
+
+    def step(self, trainer: Trainer, sub_batch: TensorDict) -> TensorDict:
+        self.calls += 1
+        return TensorDict({"loss": torch.zeros(())}, [])
+
+    def state_dict(self):
+        return {"calls": self.calls}
+
+    def load_state_dict(self, state_dict):
+        self.calls = state_dict["calls"]
+
+
+class TestOptimizationStepper:
+    def _make_trainer(self, loss_module, optimization_stepper=None, optimizer=None):
+        trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=None,
+            frame_skip=None,
+            optim_steps_per_batch=1,
+            loss_module=loss_module,
+            optimizer=optimizer,
+            optimization_stepper=optimization_stepper,
+        )
+        trainer._pbar_str = OrderedDict()
+        return trainer
+
+    def test_custom_stepper_used(self):
+        loss_module = _CountingLossModule()
+        stepper = _CountingStepper()
+        trainer = self._make_trainer(
+            loss_module=loss_module,
+            optimization_stepper=stepper,
+        )
+        td = TensorDict({"x": torch.randn(3)}, [])
+        trainer.optim_steps(td)
+        assert stepper.calls == 1
+        assert loss_module.forward_calls == 0
+
+    def test_stepper_checkpoint_roundtrip(self, tmp_path):
+        """Stepper state survives save/load via Trainer checkpointing."""
+        import os
+
+        os.environ["CKPT_BACKEND"] = "torch"
+
+        loss_module = _CountingLossModule()
+        stepper = _CountingStepper()
+        trainer1 = self._make_trainer(
+            loss_module=loss_module,
+            optimization_stepper=stepper,
+            optimizer=None,
+        )
+        stepper.calls = 5
+
+        file = str(tmp_path / "trainer.pt")
+        trainer1.save_trainer_file = file
+        trainer1.save_trainer(force_save=True)
+
+        stepper2 = _CountingStepper()
+        trainer2 = self._make_trainer(
+            loss_module=_CountingLossModule(),
+            optimization_stepper=stepper2,
+            optimizer=None,
+        )
+        trainer2.load_from_file(file)
+
+        assert stepper2.calls == 5
+        sd = torch.load(file)
+        assert "optimization_stepper" in sd
+
+
+class TestDefaultOptimizationStepper:
+    def test_loss_components_partial(self):
+        torch.manual_seed(0)
+        x = torch.randn(5, 10)
+        model1 = nn.Linear(10, 20)
+        model2 = nn.Linear(10, 20)
+        all_params = list(model1.parameters()) + list(model2.parameters())
+        optimizer = torch.optim.SGD(all_params, lr=1e-3)
+
+        class TwoLossModule(nn.Module):
+            def forward(self, td):
+                return TensorDict(
+                    {
+                        "loss_actor": model1(x).sum(),
+                        "loss_critic": model2(x).sum(),
+                    },
+                    [],
+                )
+
+        loss_module = TwoLossModule()
+        stepper = DefaultOptimizationStepper(loss_components=["loss_actor"])
+
+        trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=None,
+            frame_skip=None,
+            optim_steps_per_batch=None,
+            loss_module=loss_module,
+            optimizer=optimizer,
+            optimization_stepper=stepper,
+        )
+        trainer._pbar_str = OrderedDict()
+
+        model1_before = [p.clone() for p in model1.parameters()]
+        model2_before = [p.clone() for p in model2.parameters()]
+
+        td = TensorDict({"x": torch.randn(3)}, [])
+        losses = stepper.step(trainer, td)
+
+        assert "grad_norm" in losses.keys()
+        assert all(
+            not torch.equal(b, a) for b, a in zip(model1_before, model1.parameters())
+        )
+        assert all(
+            torch.equal(b, a) for b, a in zip(model2_before, model2.parameters())
+        )
 
 
 class TestProcessLossHook:
