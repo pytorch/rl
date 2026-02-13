@@ -12,9 +12,10 @@ on:
   push:
     branches: [main, nightly]
   workflow_dispatch:
+  workflow_call:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: validate-test-partitioning-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
