@@ -18,6 +18,10 @@ on:
         description: 'Force recollection even if data already exists'
         type: boolean
         default: false
+      skip-deploy:
+        description: 'Collect status but skip deploying to gh-pages (dry-run)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -26,7 +30,29 @@ permissions:
 jobs:
   collect-status:
     runs-on: ubuntu-latest
+    outputs:
+      should-deploy: ${{ steps.resolve-deploy.outputs.deploy }}
     steps:
+      - name: Resolve deploy flag
+        id: resolve-deploy
+        run: |
+          # repository_dispatch: read from client payload
+          # workflow_dispatch: read from inputs
+          # schedule: always deploy
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            DEPLOY="${{ github.event.client_payload.deploy }}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ inputs.skip-deploy }}" = "true" ]; then
+              DEPLOY="false"
+            else
+              DEPLOY="true"
+            fi
+          else
+            DEPLOY="true"
+          fi
+          echo "deploy=${DEPLOY:-true}" >> "$GITHUB_OUTPUT"
+          echo "Deploy dashboard: ${DEPLOY:-true}"
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -40,7 +66,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
-          enable-cache: true
+          enable-cache: false
 
       - name: Collect nightly status
         env:
@@ -80,6 +106,7 @@ jobs:
           cp .github/nightly-dashboard/index.html nightly-status/
 
       - name: Deploy nightly-status to GitHub Pages
+        if: steps.resolve-deploy.outputs.deploy == 'true'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -87,6 +114,20 @@ jobs:
           destination_dir: nightly-status
           keep_files: true
           commit_message: 'Update nightly status dashboard'
+
+      - name: Dry-run summary
+        if: steps.resolve-deploy.outputs.deploy != 'true'
+        run: |
+          echo "### Dry-run: skipped dashboard deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "Collected status data is available in the workflow artifacts below." >> "$GITHUB_STEP_SUMMARY"
+          head -50 nightly-status/history.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload collected data (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-status-data
+          path: nightly-status/
+          retention-days: 7
 
   notify-if-degraded:
     runs-on: ubuntu-latest
