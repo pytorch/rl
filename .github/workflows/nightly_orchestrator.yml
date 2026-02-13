@@ -84,6 +84,45 @@ jobs:
       deployments: write
       pull-requests: write
 
+  validate-test-partitioning:
+    uses: ./.github/workflows/validate-test-partitioning.yml
+    secrets: inherit
+
+  nightly-build:
+    uses: ./.github/workflows/nightly_build.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+      contents: read
+
+  build-wheels-linux:
+    uses: ./.github/workflows/build-wheels-linux.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+      contents: read
+
+  build-wheels-m1:
+    uses: ./.github/workflows/build-wheels-m1.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+      contents: read
+
+  build-wheels-windows:
+    uses: ./.github/workflows/build-wheels-windows.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+      contents: read
+
+  build-wheels-aarch64-linux:
+    uses: ./.github/workflows/build-wheels-aarch64-linux.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+      contents: read
+
   # =============================================================================
   # Status collector - updates the nightly dashboard after all workflows complete
   # =============================================================================
@@ -103,6 +142,12 @@ jobs:
       - lint
       - docs
       - benchmarks
+      - validate-test-partitioning
+      - nightly-build
+      - build-wheels-linux
+      - build-wheels-m1
+      - build-wheels-windows
+      - build-wheels-aarch64-linux
     if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
     steps:
       - name: Trigger status collector
