@@ -2077,6 +2077,30 @@ def test_shared_storage_prioritized_sampler():
     assert rb1._sampler._sum_tree.query(0, 70) == 50
 
 
+def test_prioritized_sampler_mark_update_is_lazy():
+    rb = ReplayBuffer(
+        storage=LazyTensorStorage(10),
+        sampler=PrioritizedSampler(max_capacity=10, alpha=1.0, beta=1.0),
+        batch_size=2,
+    )
+    rb.extend(torch.arange(4))
+
+    # Priorities are lazily materialized from mark_update.
+    assert rb._sampler._sum_tree.query(0, 4) == pytest.approx(0.0)
+
+    rb.sample()
+    assert rb._sampler._sum_tree.query(0, 4) == pytest.approx(4.0)
+
+    rb = ReplayBuffer(
+        storage=LazyTensorStorage(10),
+        sampler=PrioritizedSampler(max_capacity=10, alpha=1.0, beta=1.0),
+        batch_size=2,
+    )
+    idx = rb.extend(torch.arange(4))
+    rb.update_priority(idx, 2)
+    assert rb._sampler._sum_tree.query(0, 4) == pytest.approx(8.0)
+
+
 class TestTransforms:
     def test_append_transform(self):
         rb = ReplayBuffer(collate_fn=lambda x: torch.stack(x, 0), batch_size=1)
@@ -3360,6 +3384,7 @@ class TestSamplers:
         )
         data = TensorDict({"a": torch.arange(10), "p": torch.ones(10) / 2}, [10])
         idx = rb.extend(data)
+        rb.sample()
         assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 1).all()
         rb.update_priority(idx, 2)
         assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 2).all()
@@ -3378,6 +3403,7 @@ class TestSamplers:
         )
         data = TensorDict({"a": torch.arange(10), "p": torch.ones(10) / 2}, [10])
         idx = rb.extend(data)
+        rb.sample()
         assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 1).all()
         rb.update_priority(idx, 2)
         assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 2).all()
@@ -3423,6 +3449,7 @@ class TestSamplers:
             {"a": torch.arange(5).expand(2, 5), "p": torch.ones(2, 5) / 2}, [2, 5]
         )
         idx = rb.extend(data)
+        rb.sample()
         assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 1).all()
         rb.update_priority(idx, 2)
         assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 2).all()
@@ -3445,6 +3472,7 @@ class TestSamplers:
             {"a": torch.arange(5).expand(2, 5), "p": torch.ones(2, 5) / 2}, [2, 5]
         )
         idx = rb.extend(data)
+        rb.sample()
         assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 1).all()
         rb.update_priority(idx, 2)
         assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 2).all()
