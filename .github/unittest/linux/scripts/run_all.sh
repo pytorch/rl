@@ -156,7 +156,7 @@ fi
 # Install mujoco for Python < 3.14 (mujoco doesn't have Python 3.14 wheels yet)
 if [[ "$PYTHON_VERSION" != "3.14" ]]; then
   echo "installing mujoco"
-  uv_pip_install "mujoco>=3.3.7"
+  uv_pip_install "mujoco>=3.3.7,<3.5"
 fi
 
 # Install gymnasium
@@ -431,6 +431,10 @@ fi
 
 coverage combine -q
 coverage xml -i
+
+# Copy coverage report for Codecov artifact upload
+mkdir -p artifacts-to-be-uploaded
+cp coverage.xml artifacts-to-be-uploaded/ || true
 
 # ==================================================================================== #
 # ================================ Upload test results for flaky tracking ============ #

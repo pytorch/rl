@@ -7,6 +7,12 @@ on:
     branches:
       - "*"
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      skip-upload:
+        description: 'Skip benchmark upload to gh-pages'
+        type: boolean
+        default: false
 
 permissions:
   id-token: write
@@ -17,7 +23,7 @@ permissions:
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
   # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
-  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  group: benchmarks-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
   cancel-in-progress: true
 
 jobs:
@@ -81,7 +87,7 @@ jobs:
           ${{ matrix.device == 'CPU' && 'export CUDA_VISIBLE_DEVICES=' || '' }}
 
           python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128 -U
-          python3.10 -m pip install ninja pytest pytest-benchmark mujoco dm_control "gym[accept-rom-license,atari]" transformers
+          python3.10 -m pip install ninja pytest pytest-benchmark "mujoco<3.5" dm_control "gym[accept-rom-license,atari]" transformers
           python -m pip install "pybind11[global]"
           python3.10 -m pip install git+https://github.com/pytorch/tensordict 
           python3.10 -m pip install safetensors tqdm pandas numpy matplotlib ray
@@ -101,7 +107,7 @@ jobs:
       # Upload benchmark results for main branch, manual dispatch, or PRs with 'benchmarks/upload' label
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
-        if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmarks/upload')) }}
+        if: ${{ !inputs.skip-upload && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmarks/upload'))) }}
         with:
           name: ${{ matrix.device }}-benchmark-results
           path: benchmarks/output.json
@@ -111,7 +117,7 @@ jobs:
     name: Upload benchmark results
     runs-on: ubuntu-latest
     needs: benchmark
-    if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmarks/upload')) }}
+    if: ${{ !inputs.skip-upload && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmarks/upload'))) }}
     steps:
       - name: Show upload trigger reason
         run: |
