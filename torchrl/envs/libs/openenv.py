@@ -7,7 +7,7 @@ import warnings
 from typing import Any
 
 import torch
-from tensordict import NonTensorData, TensorDict, TensorDictBase, lazy_stack
+from tensordict import lazy_stack, NonTensorData, TensorDict, TensorDictBase
 
 from torchrl.data.llm import History
 from torchrl.data.tensor_specs import Categorical, Composite, NonTensor, Unbounded
@@ -36,11 +36,9 @@ def _example_from_cls(cls: type | None) -> Any:
     if cls is None:
         return None
     for method in ("model_construct", "construct"):
-        if hasattr(cls, method):
-            try:
-                return getattr(cls, method)()
-            except Exception:
-                continue
+        fn = getattr(cls, method, None)
+        if fn is not None:
+            return fn()
     return None
 
 
@@ -48,18 +46,10 @@ def _to_history_content(value: Any) -> Any:
     value = _unwrap_nontensor(value)
     if isinstance(value, str):
         return value
-    if isinstance(value, list):
-        if all(isinstance(item, str) for item in value):
-            return value
-        try:
-            return json.dumps(value)
-        except Exception:
-            return str(value)
-    if isinstance(value, (dict, tuple)):
-        try:
-            return json.dumps(value)
-        except Exception:
-            return str(value)
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return value
+    if isinstance(value, (list, dict, tuple)):
+        return json.dumps(value)
     return str(value)
 
 
@@ -135,7 +125,6 @@ class OpenEnvWrapper(ChatEnv):
         device = kwargs.pop("device", None)
         batch_size = kwargs.pop("batch_size", None)
         allow_done_after_reset = kwargs.pop("allow_done_after_reset", False)
-        frame_skip = kwargs.pop("frame_skip", 1)
 
         if input_mode != "history":
             raise ValueError(
@@ -178,14 +167,8 @@ class OpenEnvWrapper(ChatEnv):
         )
         self._allow_done_after_reset = allow_done_after_reset
 
-        if not isinstance(frame_skip, int):
-            raise ValueError(f"frame_skip must be an integer, got {frame_skip}")
-        self.frame_skip = frame_skip
-        self.wrapper_frame_skip = frame_skip
-
         self._constructor_kwargs = kwargs
         self._check_kwargs({"env": env})
-        self._convert_actions_to_numpy = kwargs.pop("convert_actions_to_numpy", True)
         self._env = self._build_env(env=env, **kwargs)
         self.is_closed = False
         self._init_env()
@@ -235,9 +218,9 @@ class OpenEnvWrapper(ChatEnv):
         if self.input_mode == "history":
             obs_spec.set(
                 "history",
-                ChatHistory.default_spec(
-                    shape=self.batch_size, keys=["prompt"]
-                ).to(self.device),
+                ChatHistory.default_spec(shape=self.batch_size, keys=["prompt"]).to(
+                    self.device
+                ),
             )
         self.full_observation_spec = obs_spec
 
@@ -316,16 +299,10 @@ class OpenEnvWrapper(ChatEnv):
         if isinstance(action, self._action_cls):
             return action
         if isinstance(action, dict):
-            try:
-                return self._action_cls(**action)
-            except Exception:
-                pass
+            return self._action_cls(**action)
         action_field = self._get_action_field()
         if action_field is not None:
-            try:
-                return self._action_cls(**{action_field: action})
-            except Exception:
-                pass
+            return self._action_cls(**{action_field: action})
         return action
 
     def _get_action_field(self) -> str | None:
@@ -382,12 +359,9 @@ class OpenEnvWrapper(ChatEnv):
         full = getattr(chat_history, "full", None)
         if response is None:
             if full is not None and prompt is not None:
-                try:
-                    prompt_len = prompt.shape[-1]
-                    if full.shape[-1] >= prompt_len:
-                        response = full[..., prompt_len:]
-                except Exception:
-                    response = None
+                prompt_len = prompt.shape[-1]
+                if full.shape[-1] >= prompt_len:
+                    response = full[..., prompt_len:]
             if response is None and full is not None:
                 response = full[..., -1:]
         return prompt, response
@@ -395,12 +369,9 @@ class OpenEnvWrapper(ChatEnv):
     def _history_to_action(self, response: History | None) -> Any:
         if response is None:
             return None
-        try:
-            if response.shape[-1] > 1:
-                response = response[..., -1]
-        except Exception:
-            pass
-        content = getattr(response, "content", response)
+        if response.shape[-1] > 1:
+            response = response[..., -1]
+        content = response.content
         return _unwrap_nontensor(content)
 
     def _merge_history(self, prompt: History, new: History) -> History:
@@ -419,9 +390,9 @@ class OpenEnvWrapper(ChatEnv):
                 )
                 self._warned_reward_none = True
             reward = 0.0
-        return torch.as_tensor(
-            reward, dtype=torch.float32, device=self.device
-        ).view(*self.batch_size, 1)
+        return torch.as_tensor(reward, dtype=torch.float32, device=self.device).view(
+            *self.batch_size, 1
+        )
 
     def _done_to_tensor(self, done: Any) -> torch.Tensor:
         return torch.as_tensor(done, dtype=torch.bool, device=self.device).view(
@@ -482,7 +453,9 @@ class OpenEnvWrapper(ChatEnv):
             "truncated": torch.zeros_like(done),
         }
         if self.input_mode == "history":
-            prompt = prompt_history if prompt_history is not None else self._history_prompt
+            prompt = (
+                prompt_history if prompt_history is not None else self._history_prompt
+            )
             if prompt is None:
                 prompt = self._build_prompt_history(obs)
             else:
@@ -558,13 +531,7 @@ class OpenEnvEnv(OpenEnvWrapper):
         env = AutoEnv.from_env(env_name, **env_kwargs)
 
         if auto_action and action_cls is None:
-            try:
-                action_cls = AutoAction.from_env(env_name)
-            except Exception:
-                warnings.warn(
-                    "OpenEnvEnv: failed to auto-load action class; "
-                    "actions will be passed through as-is."
-                )
+            action_cls = AutoAction.from_env(env_name)
 
         self.env_name = env_name
         super().__init__(

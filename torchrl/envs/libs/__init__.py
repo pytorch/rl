@@ -20,7 +20,6 @@ from .isaac_lab import IsaacLabWrapper
 from .isaacgym import IsaacGymEnv, IsaacGymWrapper
 from .jumanji import JumanjiEnv, JumanjiWrapper
 from .meltingpot import MeltingpotEnv, MeltingpotWrapper
-from .openenv import OpenEnvEnv, OpenEnvWrapper
 from .openml import OpenMLEnv
 from .openspiel import OpenSpielEnv, OpenSpielWrapper
 from .pettingzoo import PettingZooEnv, PettingZooWrapper
@@ -69,3 +68,17 @@ __all__ = [
     "register_gym_spec_conversion",
     "set_gym_backend",
 ]
+
+
+def __getattr__(name):
+    # Lazy import for OpenEnv to avoid circular imports: openenv imports from
+    # torchrl.envs.llm which eventually imports from torchrl.data, which may
+    # not be fully initialised yet.
+    if name in ("OpenEnvEnv", "OpenEnvWrapper"):
+        from .openenv import OpenEnvEnv, OpenEnvWrapper
+
+        _globals = globals()
+        _globals["OpenEnvEnv"] = OpenEnvEnv
+        _globals["OpenEnvWrapper"] = OpenEnvWrapper
+        return _globals[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
