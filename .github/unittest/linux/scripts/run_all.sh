@@ -432,6 +432,10 @@ fi
 coverage combine -q
 coverage xml -i
 
+# Copy coverage report for Codecov artifact upload
+mkdir -p artifacts-to-be-uploaded
+cp coverage.xml artifacts-to-be-uploaded/ || true
+
 # ==================================================================================== #
 # ================================ Upload test results for flaky tracking ============ #
 
