@@ -8,6 +8,7 @@ on:
       - main
       - release/*
   workflow_dispatch:
+  workflow_call:
 
 env:
   CHANNEL: "nightly"
@@ -15,7 +16,7 @@ env:
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
   # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
-  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  group: test-linux-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
   cancel-in-progress: true
 
 permissions:
@@ -319,3 +320,31 @@ jobs:
 
         ## setup_env.sh
         bash .github/unittest/linux/scripts/run_all.sh
+
+  upload-codecov:
+    needs:
+      - tests-cpu
+      - tests-gpu
+      - tests-gpu-distributed
+      - tests-optdeps
+      - tests-stable-gpu
+      - tests-stable-gpu-distributed
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Download all test artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          pattern: test-results-*
+      - name: List coverage files
+        run: find artifacts/ -name "coverage.xml" -type f
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          directory: artifacts/
+          flags: unittests
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}

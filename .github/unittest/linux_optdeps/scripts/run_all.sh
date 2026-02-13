@@ -175,6 +175,10 @@ python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
 coverage combine -q
 coverage xml -i
 
+# Copy coverage report for Codecov artifact upload
+mkdir -p artifacts-to-be-uploaded
+cp coverage.xml artifacts-to-be-uploaded/ || true
+
 # ==================================================================================== #
 # ================================ Post-proc ========================================= #
 
