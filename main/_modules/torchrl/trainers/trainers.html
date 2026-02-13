@@ -348,6 +348,122 @@
 
 
 
+<span class="k">class</span> <span class="nc">OptimizationStepper</span><span class="p">(</span><span class="n">TrainerHookBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Performs a single optimization step in a Trainer.</span>
+
+<span class="sd">    The optimization stepper encapsulates the logic executed for each ``sub_batch``</span>
+<span class="sd">    during training. This is useful for algorithms that require multiple optimizers,</span>
+<span class="sd">    delayed updates (e.g. TD3, where critics are updated every step while the actor</span>
+<span class="sd">    and target networks are updated less frequently), or multiple backward passes</span>
+<span class="sd">    within one training iteration.</span>
+
+<span class="sd">    The :class:`~torchrl.trainers.Trainer` calls :meth:`step` inside its optimization</span>
+<span class="sd">    loop and handles post-optimization hooks (e.g. target network updates, priority</span>
+<span class="sd">    updates, schedulers) and logging around this call.</span>
+
+<span class="sd">    Subclasses should return a :class:`~tensordict.TensorDictBase` of detached scalar</span>
+<span class="sd">    values suitable for logging.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_trainer</span><span class="p">:</span> <span class="n">Trainer</span>
+
+    <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">:</span> <span class="n">Trainer</span><span class="p">,</span> <span class="n">sub_batch</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Perform one optimization step on a ``sub_batch``.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            trainer (Trainer): The trainer executing the optimization loop.</span>
+<span class="sd">            sub_batch (TensorDictBase): Batch used for this optimization step.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A TensorDict containing detached scalar metrics for logging.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span> <span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">{}</span>
+
+    <span class="k">def</span> <span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span>
+
+    <span class="k">def</span> <span class="nf">register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">:</span> <span class="n">Trainer</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;optimization_stepper&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Register the stepper with a Trainer for checkpointing.&quot;&quot;&quot;</span>
+        <span class="c1"># Register as a module so it is included in Trainer checkpoints.</span>
+        <span class="c1"># This is not a hook stage (i.e., it is not registered via ``register_op``).</span>
+        <span class="n">trainer</span><span class="o">.</span><span class="n">register_module</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_trainer</span> <span class="o">=</span> <span class="n">trainer</span>
+
+
+<span class="k">class</span> <span class="nc">DefaultOptimizationStepper</span><span class="p">(</span><span class="n">OptimizationStepper</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Default optimization step implementation.</span>
+
+<span class="sd">    This stepper computes losses via ``trainer.loss_module(sub_batch)`` and applies a</span>
+<span class="sd">    single optimizer update with ``trainer.optimizer`` (including gradient clipping</span>
+<span class="sd">    when configured).</span>
+
+<span class="sd">    Optionally, a subset of loss entries can be selected via ``loss_components``.</span>
+<span class="sd">    In that case, only the selected keys contribute to the backward pass.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">loss_components</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">loss_components</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">loss_components</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;loss_components list cannot be empty. &quot;</span>
+                <span class="s2">&quot;Set to None to act on all components of the loss.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">loss_components</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="nb">set</span><span class="p">(</span><span class="n">loss_components</span><span class="p">)</span> <span class="k">if</span> <span class="n">loss_components</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_compute_and_clip_grad_norm</span><span class="p">(</span>
+        <span class="n">optimizer</span><span class="p">:</span> <span class="n">optim</span><span class="o">.</span><span class="n">Optimizer</span><span class="p">,</span>
+        <span class="n">clip_grad_norm</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+        <span class="n">clip_norm</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">param_group</span> <span class="ow">in</span> <span class="n">optimizer</span><span class="o">.</span><span class="n">param_groups</span><span class="p">:</span>
+            <span class="n">params</span> <span class="o">+=</span> <span class="n">param_group</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">clip_grad_norm</span> <span class="ow">and</span> <span class="n">clip_norm</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">gn</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">clip_grad_norm_</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">clip_norm</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">gn</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">([</span><span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">params</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">grad</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">])</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">clip_norm</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">nn</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">clip_grad_value_</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">clip_norm</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">gn</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">:</span> <span class="n">Trainer</span><span class="p">,</span> <span class="n">sub_batch</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">losses_td</span> <span class="o">=</span> <span class="n">trainer</span><span class="o">.</span><span class="n">loss_module</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">trainer</span><span class="o">.</span><span class="n">optimizer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;DefaultOptimizationStepper requires an optimizer. &quot;</span>
+                <span class="s2">&quot;Pass `optimizer=` to Trainer or use a custom &quot;</span>
+                <span class="s2">&quot;OptimizationStepper that owns its optimizer(s).&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_components</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">items</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">item</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">losses_td</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_components</span>
+            <span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">items</span> <span class="o">=</span> <span class="p">[</span><span class="n">item</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">losses_td</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;loss&quot;</span><span class="p">)]</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">items</span><span class="p">)</span>
+        <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+
+        <span class="n">gn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_and_clip_grad_norm</span><span class="p">(</span>
+            <span class="n">trainer</span><span class="o">.</span><span class="n">optimizer</span><span class="p">,</span>
+            <span class="n">trainer</span><span class="o">.</span><span class="n">clip_grad_norm</span><span class="p">,</span>
+            <span class="n">trainer</span><span class="o">.</span><span class="n">clip_norm</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">losses_td</span><span class="p">[</span><span class="s2">&quot;grad_norm&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">gn</span><span class="p">)</span>
+
+        <span class="n">trainer</span><span class="o">.</span><span class="n">optimizer</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+        <span class="n">trainer</span><span class="o">.</span><span class="n">optimizer</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">losses_td</span>
+
+
 <div class="viewcode-block" id="Trainer">
 <a class="viewcode-back" href="../../../reference/generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer">[docs]</a>
 <span class="k">class</span> <span class="nc">Trainer</span><span class="p">:</span>
@@ -428,6 +544,7 @@
         <span class="n">optim_steps_per_batch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">loss_module</span><span class="p">:</span> <span class="n">LossModule</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">],</span>
         <span class="n">optimizer</span><span class="p">:</span> <span class="n">optim</span><span class="o">.</span><span class="n">Optimizer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">optimization_stepper</span><span class="p">:</span> <span class="n">OptimizationStepper</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">clip_grad_norm</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">clip_norm</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -520,8 +637,18 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_modules</span> <span class="o">=</span> <span class="p">{}</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">optimizer_hook</span> <span class="o">=</span> <span class="n">OptimizerHook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">optimization_stepper</span> <span class="o">=</span> <span class="n">optimization_stepper</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">optimization_stepper</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">optimization_stepper</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;optimization_stepper&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">optimization_stepper</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Only auto-create the OptimizerHook when no stepper is</span>
+            <span class="c1"># provided.  When a stepper is present it may access</span>
+            <span class="c1"># trainer.optimizer directly, so creating the hook would leave a</span>
+            <span class="c1"># dead hook in _optimizer_ops that never fires.</span>
+            <span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">():</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">,</span> <span class="ne">FutureWarning</span><span class="p">)</span>
+                <span class="n">optimizer_hook</span> <span class="o">=</span> <span class="n">OptimizerHook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="p">)</span>
             <span class="n">optimizer_hook</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">log_timings</span><span class="p">:</span>
@@ -717,18 +844,39 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_process_optim_batch_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;post_loss&quot;</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;The &#39;post_loss&#39; hook stage will be replaced by OptimizationStepper &quot;</span>
+                <span class="s2">&quot;in a future release. Use &#39;post_optim&#39; for post-optimization hooks &quot;</span>
+                <span class="s2">&quot;(e.g. priority updates), or provide a custom OptimizationStepper.&quot;</span><span class="p">,</span>
+                <span class="ne">FutureWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span>
                 <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="n">TensorDictBase</span>
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_post_loss_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;process_loss&quot;</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;The &#39;process_loss&#39; hook stage will be replaced by OptimizationStepper &quot;</span>
+                <span class="s2">&quot;in a future release. Move loss-transformation logic into a custom &quot;</span>
+                <span class="s2">&quot;OptimizationStepper.&quot;</span><span class="p">,</span>
+                <span class="ne">FutureWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span>
                 <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="n">TensorDictBase</span>
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_process_loss_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;optimizer&quot;</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;The &#39;optimizer&#39; hook stage will be replaced by OptimizationStepper &quot;</span>
+                <span class="s2">&quot;in a future release. Use DefaultOptimizationStepper for equivalent &quot;</span>
+                <span class="s2">&quot;behaviour.&quot;</span><span class="p">,</span>
+                <span class="ne">FutureWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span>
                 <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="nb">bool</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="n">output</span><span class="o">=</span><span class="n">TensorDictBase</span>
             <span class="p">)</span>
@@ -1038,13 +1186,19 @@
                     <span class="k">break</span>
                 <span class="k">if</span> <span class="n">sub_batch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="k">break</span>
-                <span class="n">losses_td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_post_loss_hook</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">)</span>
 
-                <span class="n">losses_td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_loss_hook</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">,</span> <span class="n">losses_td</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">optimization_stepper</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">losses_detached</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">optimization_stepper</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sub_batch</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_hook</span><span class="p">()</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">losses_td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_post_loss_hook</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">)</span>
 
-                <span class="n">losses_detached</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_optimizer_hook</span><span class="p">(</span><span class="n">losses_td</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_hook</span><span class="p">()</span>
+                    <span class="n">losses_td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_loss_hook</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">,</span> <span class="n">losses_td</span><span class="p">)</span>
+
+                    <span class="n">losses_detached</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_optimizer_hook</span><span class="p">(</span><span class="n">losses_td</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_hook</span><span class="p">()</span>
+                    <span class="k">del</span> <span class="n">losses_td</span>
 
                 <span class="c1"># LOGGING POINT 4: Post-optimization step logging (e.g., gradient norms, step-specific metrics)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_log</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">)</span>
@@ -1055,7 +1209,7 @@
                     <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">losses_detached</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
                         <span class="n">val</span> <span class="o">=</span> <span class="n">average_losses</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
                         <span class="n">average_losses</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="o">*</span> <span class="n">j</span> <span class="o">/</span> <span class="p">(</span><span class="n">j</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="n">item</span> <span class="o">/</span> <span class="p">(</span><span class="n">j</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
-                <span class="k">del</span> <span class="n">sub_batch</span><span class="p">,</span> <span class="n">losses_td</span><span class="p">,</span> <span class="n">losses_detached</span>
+                <span class="k">del</span> <span class="n">sub_batch</span><span class="p">,</span> <span class="n">losses_detached</span>
 
             <span class="c1"># LOGGING POINT 5: Post-epoch logging (e.g., epoch completion metrics)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_post_epoch_log_hook</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
@@ -1338,6 +1492,10 @@
 <span class="k">class</span> <span class="nc">OptimizerHook</span><span class="p">(</span><span class="n">TrainerHookBase</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Add an optimizer for one or more loss components.</span>
 
+<span class="sd">    .. deprecated::</span>
+<span class="sd">        ``OptimizerHook`` will be replaced by</span>
+<span class="sd">        :class:`~torchrl.trainers.DefaultOptimizationStepper` in a future release.</span>
+
 <span class="sd">    Args:</span>
 <span class="sd">        optimizer (optim.Optimizer): An optimizer to apply to the loss_components.</span>
 <span class="sd">        loss_components (Sequence[str], optional): The keys in the loss TensorDict</span>
@@ -1356,6 +1514,12 @@
         <span class="n">optimizer</span><span class="p">:</span> <span class="n">optim</span><span class="o">.</span><span class="n">Optimizer</span><span class="p">,</span>
         <span class="n">loss_components</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;OptimizerHook will be replaced by DefaultOptimizationStepper &quot;</span>
+            <span class="s2">&quot;in a future release.&quot;</span><span class="p">,</span>
+            <span class="ne">FutureWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
         <span class="k">if</span> <span class="n">loss_components</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">loss_components</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">&quot;loss_components list cannot be empty. &quot;</span>
