@@ -89,7 +89,7 @@ uv pip install \
   hydra-core \
   "imageio==2.26.0" \
   dm_control \
-  "mujoco<3.3.6" \
+  "mujoco<3.5" \
   av \
   coverage \
   vmas \

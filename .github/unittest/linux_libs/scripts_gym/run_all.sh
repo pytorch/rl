@@ -279,13 +279,13 @@ done
 
 # Test gymnasium >=1.1.0 (supports mujoco 3.x with v5 environments)
 printf "* Testing gymnasium >=1.1.0\n"
-uv pip install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics mujoco
+uv pip install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics "mujoco<3.5"
 run_tests "gymnasium>=1.1.0" || true
 uv pip uninstall gymnasium mo-gymnasium gymnasium-robotics ale-py mujoco || true
 
 # Test latest gymnasium (supports mujoco 3.x with v5 environments)
 printf "* Testing latest gymnasium\n"
-uv pip install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics mujoco
+uv pip install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics "mujoco<3.5"
 run_tests "gymnasium-latest" || true
 
 # =============================================================================
