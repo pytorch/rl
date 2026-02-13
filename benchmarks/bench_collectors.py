@@ -368,7 +368,7 @@ def main():
         )
     )
 
-    # 5. AsyncBatchedCollector (threading envs)
+    # 5. AsyncBatchedCollector (threading backend)
     results.append(
         bench(
             f"AsyncBatchedCollector threading (x{num_envs})",
@@ -378,13 +378,13 @@ def main():
                 frames_per_batch=frames_per_batch,
                 total_frames=-1,
                 max_batch_size=num_envs,
-                env_backend="threading",
+                backend="threading",
             ),
             target_frames=total_frames,
         )
     )
 
-    # 6. AsyncBatchedCollector (multiprocessing envs)
+    # 6. AsyncBatchedCollector (multiprocessing backend)
     results.append(
         bench(
             f"AsyncBatchedCollector mp (x{num_envs})",
@@ -394,23 +394,7 @@ def main():
                 frames_per_batch=frames_per_batch,
                 total_frames=-1,
                 max_batch_size=num_envs,
-                env_backend="multiprocessing",
-            ),
-            target_frames=total_frames,
-        )
-    )
-
-    # 7. AsyncBatchedCollector (direct submission, no coordinator)
-    results.append(
-        bench(
-            f"AsyncBatchedCollector direct (x{num_envs})",
-            lambda: AsyncBatchedCollector(
-                create_env_fn=[make_env_fn] * num_envs,
-                policy=policy_factory(),
-                frames_per_batch=frames_per_batch,
-                total_frames=-1,
-                max_batch_size=num_envs,
-                direct=True,
+                backend="multiprocessing",
             ),
             target_frames=total_frames,
         )

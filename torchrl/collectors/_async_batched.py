@@ -4,48 +4,42 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import multiprocessing as mp
 import queue
 import threading
 from collections import deque, OrderedDict
 from collections.abc import Callable, Iterator, Sequence
+from typing import Literal
 
 import torch
 from tensordict import lazy_stack, TensorDictBase
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors._base import BaseCollector
-from torchrl.envs import AsyncEnvPool, EnvBase
+from torchrl.data.utils import CloudpickleWrapper
+from torchrl.envs import EnvBase
 from torchrl.modules.inference_server import InferenceServer, ThreadingTransport
+from torchrl.modules.inference_server._mp import MPTransport
 from torchrl.modules.inference_server._transport import InferenceTransport
 
-
-def _extract_env_ids(td: TensorDictBase, env_idx_key: str) -> list[int]:
-    """Extract scalar env indices from a batched TensorDict returned by AsyncEnvPool."""
-    raw = td.get(env_idx_key).tolist()
-    ids = []
-    for eid in raw:
-        while isinstance(eid, list) and len(eid) == 1:
-            eid = eid[0]
-        ids.append(int(eid))
-    return ids
+_ENV_IDX_KEY = "env_index"
 
 
-def _direct_env_loop(
+def _threading_env_loop(
     env_factory: Callable,
     create_env_kwargs: dict,
     transport: InferenceTransport,
     result_queue: queue.Queue,
     shutdown_event: threading.Event,
+    env_id: int,
 ):
-    """Per-env worker that submits directly to the InferenceServer.
+    """Per-env worker thread that submits directly to the InferenceServer.
 
     Each worker owns one environment and one inference client.  The
     client blocks until the server has batched and processed the
     observation, so the worker loop is simply:
 
         reset -> infer (blocking) -> step -> put transition -> infer -> ...
-
-    This eliminates the coordinator thread and its serialization overhead.
     """
     env = env_factory(**create_env_kwargs)
     client = transport.client()
@@ -56,6 +50,7 @@ def _direct_env_loop(
 
         while not shutdown_event.is_set():
             cur_td, next_obs = env.step_and_maybe_reset(action_td)
+            cur_td.set(_ENV_IDX_KEY, env_id)
             result_queue.put(cur_td)
             if shutdown_event.is_set():
                 break
@@ -67,113 +62,60 @@ def _direct_env_loop(
         env.close()
 
 
-def _coordinator_loop(
-    pool: AsyncEnvPool,
-    transport: InferenceTransport,
-    result_queue: queue.Queue,
-    shutdown_event: threading.Event,
-    num_envs: int,
+def _mp_env_loop(
+    env_factory: Callable,
+    create_env_kwargs: dict,
+    client,
+    result_queue,
+    shutdown_event,
+    env_id: int,
 ):
-    """Single-threaded coordinator that pipelines env stepping and batched inference.
+    """Per-env worker process that submits directly to the InferenceServer.
 
-    Architecture
-    ------------
-    ``AsyncEnvPool`` manages N envs in whatever backend the user chose
-    (multiprocessing, threading, asyncio).  This coordinator thread bridges
-    the pool with the ``InferenceServer``:
-
-    * When an env finishes stepping (``recv``), its observation is submitted
-      to the server via ``client.submit()`` (non-blocking ``Future``).
-    * When a ``Future`` resolves (action ready), the action is sent back to
-      the pool so the env can step again.
-    * The server thread batches all pending observations into efficient
-      forward passes -- this is where the throughput comes from.
-    * Transitions are pushed to ``result_queue`` for the main thread to drain.
-
-    The coordinator never lets *all* envs wait on inference with none stepping,
-    which would deadlock the ``recv`` call.  When that edge case arises it
-    explicitly waits for an inference ``Future`` to complete first.
+    Identical to :func:`_threading_env_loop` but designed for
+    :class:`multiprocessing.Process` workers.  The ``client`` is a
+    pre-created :class:`_MPInferenceClient` whose underlying
+    ``mp.Queue`` handles are inherited by the child process.
     """
-    # One client per env so that submit() calls are independent
-    clients = {i: transport.client() for i in range(num_envs)}
-    # pending[env_id] = Future  -- envs waiting for inference results
-    pending: dict[int, object] = {}
-    num_stepping = 0
+    if isinstance(env_factory, CloudpickleWrapper):
+        env_factory = env_factory.fn
+    env = env_factory(**create_env_kwargs)
 
-    def _send_action(pool, action_td, env_id):
-        """Send an action back to the pool, ensuring correct batch shape."""
-        pool.async_step_and_maybe_reset_send(action_td.unsqueeze(0), env_index=env_id)
+    try:
+        obs = env.reset()
+        action_td = client(obs)
 
-    # ---- Prime: reset all envs, run initial inference, send for stepping -----
-    initial_obs = pool.reset()
-    for i, obs in enumerate(initial_obs.unbind(0)):
-        pending[i] = clients[i].submit(obs)
-
-    # Wait for all initial actions and kick off stepping
-    while pending:
-        done_ids = [eid for eid, f in pending.items() if f.done()]
-        for eid in done_ids:
-            action_td = pending.pop(eid).result()
-            _send_action(pool, action_td, eid)
-            num_stepping += 1
-        if not done_ids:
-            # Busy-wait briefly (all futures are still being processed)
-            threading.Event().wait(0.0001)
-
-    # ---- Main loop -----------------------------------------------------------
-    while not shutdown_event.is_set():
-        # Safety: if every env is waiting on inference and none is stepping,
-        # recv() would block forever.  Drain at least one future first.
-        while num_stepping == 0 and pending:
-            done_ids = [eid for eid, f in pending.items() if f.done()]
-            for eid in done_ids:
-                action_td = pending.pop(eid).result()
-                _send_action(pool, action_td, eid)
-                num_stepping += 1
-            if not done_ids:
-                threading.Event().wait(0.0001)
-
-        if num_stepping == 0:
-            break  # nothing in-flight -- shutdown or error
-
-        # 1. Recv completed env steps (blocks until >= 1 is ready)
-        cur_output, next_output = pool.async_step_and_maybe_reset_recv(
-            min_get=1,
-        )
-        env_ids = _extract_env_ids(cur_output, pool._env_idx_key)
-        num_stepping -= len(env_ids)
-
-        # 2. Record transitions & submit observations to the server
-        for eid, cur_td, next_td in zip(
-            env_ids, cur_output.unbind(0), next_output.unbind(0)
-        ):
+        while not shutdown_event.is_set():
+            cur_td, next_obs = env.step_and_maybe_reset(action_td)
+            cur_td.set(_ENV_IDX_KEY, env_id)
             result_queue.put(cur_td)
-            pending[eid] = clients[eid].submit(next_td)
-
-        # 3. Send back every env whose inference already completed
-        done_ids = [eid for eid, f in pending.items() if f.done()]
-        for eid in done_ids:
-            action_td = pending.pop(eid).result()
-            _send_action(pool, action_td, eid)
-            num_stepping += 1
+            if shutdown_event.is_set():
+                break
+            action_td = client(next_obs)
+    except Exception:
+        if not shutdown_event.is_set():
+            raise
+    finally:
+        env.close()
 
 
 class AsyncBatchedCollector(BaseCollector):
-    """Asynchronous collector that pairs :class:`~torchrl.envs.AsyncEnvPool` with an :class:`~torchrl.modules.InferenceServer`.
+    """Asynchronous collector that pairs per-env workers with an :class:`~torchrl.modules.InferenceServer`.
 
     Unlike :class:`~torchrl.collectors.Collector`, this collector fully
     decouples environment stepping from policy inference:
 
-    * An :class:`~torchrl.envs.AsyncEnvPool` runs *N* environments in
-      parallel using whatever backend the user chooses (``"multiprocessing"``,
-      ``"threading"``, ``"asyncio"``).
+    * Each environment runs in its own worker (thread or process) and
+      submits observations directly to the inference server.
     * An :class:`~torchrl.modules.InferenceServer` running in a background
       thread continuously drains observation submissions, batches them, runs
       a single forward pass, and fans actions back out.
-    * A lightweight coordinator thread bridges the two: whenever an env
-      finishes stepping its observation is submitted to the server
-      (non-blocking), and whenever an action is ready the env is sent back
-      for stepping -- all without a global synchronisation barrier.
+    * Workers block on a ``Future`` while waiting for inference, releasing
+      the GIL so other workers and the server can proceed.
+
+    There is **no global synchronisation barrier**: fast environments keep
+    stepping while slow ones wait for inference, and the server always
+    processes whatever observations have accumulated.
 
     The user simply provides env factories and a policy; the collector
     handles all wiring internally.
@@ -200,14 +142,18 @@ class AsyncBatchedCollector(BaseCollector):
         server_timeout (float, optional): seconds the server waits for work
             before dispatching a partial batch.  Defaults to ``0.01``.
         transport (InferenceTransport, optional): a pre-built transport
-            backend.  When ``None`` (default) a
-            :class:`~torchrl.modules.ThreadingTransport` is created
-            automatically.
+            backend.  When ``None`` (default) one is created automatically
+            to match the ``backend`` (``ThreadingTransport`` for
+            ``"threading"``, ``MPTransport`` for ``"multiprocessing"``).
+            Pass a :class:`~torchrl.modules.RayTransport` or
+            :class:`~torchrl.modules.MonarchTransport` for distributed
+            setups (workers will be spawned as threads that hold
+            Ray/Monarch clients).
         device (torch.device or str, optional): device for policy inference.
             Passed to the inference server.  Defaults to ``None``.
-        env_backend (str, optional): backend for :class:`AsyncEnvPool`.
-            One of ``"threading"``, ``"multiprocessing"`` or ``"asyncio"``.
-            Defaults to ``"multiprocessing"``.
+        backend (str, optional): how to run per-env workers.  One of
+            ``"threading"`` or ``"multiprocessing"``.  Defaults to
+            ``"threading"``.
         reset_at_each_iter (bool, optional): whether to reset all envs at the
             start of every collection batch.  Defaults to ``False``.
         postproc (Callable, optional): post-processing transform applied to
@@ -241,7 +187,6 @@ class AsyncBatchedCollector(BaseCollector):
         ...     policy=policy,
         ...     frames_per_batch=200,
         ...     total_frames=1000,
-        ...     env_backend="threading",
         ... )
         >>> for batch in collector:
         ...     print(batch.shape)
@@ -261,7 +206,7 @@ class AsyncBatchedCollector(BaseCollector):
         server_timeout: float = 0.01,
         transport: InferenceTransport | None = None,
         device: torch.device | str | None = None,
-        env_backend: str = "multiprocessing",
+        backend: Literal["threading", "multiprocessing"] = "threading",
         reset_at_each_iter: bool = False,
         postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
         yield_completed_trajectories: bool = False,
@@ -269,7 +214,6 @@ class AsyncBatchedCollector(BaseCollector):
         weight_sync_model_id: str = "policy",
         verbose: bool = False,
         create_env_kwargs: dict | list[dict] | None = None,
-        direct: bool = False,
     ):
         if policy is not None and policy_factory is not None:
             raise TypeError("policy and policy_factory are mutually exclusive.")
@@ -281,9 +225,19 @@ class AsyncBatchedCollector(BaseCollector):
             policy = policy_factory()
         self._policy = policy
 
+        # ---- env config -------------------------------------------------------
+        if not isinstance(create_env_fn, Sequence):
+            raise TypeError("create_env_fn must be a list of env factories.")
+        self._create_env_fn = list(create_env_fn)
+        self._num_envs = len(create_env_fn)
+        self._backend = backend
+        self._create_env_kwargs = create_env_kwargs
+
         # ---- build transport --------------------------------------------------
         if transport is None:
-            transport = ThreadingTransport()
+            transport = (
+                MPTransport() if backend == "multiprocessing" else ThreadingTransport()
+            )
         self._transport = transport
 
         # ---- build inference server -------------------------------------------
@@ -296,14 +250,6 @@ class AsyncBatchedCollector(BaseCollector):
             weight_sync=weight_sync,
             weight_sync_model_id=weight_sync_model_id,
         )
-
-        # ---- env config -------------------------------------------------------
-        if not isinstance(create_env_fn, Sequence):
-            raise TypeError("create_env_fn must be a list of env factories.")
-        self._create_env_fn = list(create_env_fn)
-        self._num_envs = len(create_env_fn)
-        self._env_backend = env_backend
-        self._create_env_kwargs = create_env_kwargs
 
         # ---- collector settings -----------------------------------------------
         self.requested_frames_per_batch = frames_per_batch
@@ -318,12 +264,9 @@ class AsyncBatchedCollector(BaseCollector):
         self._iter = -1
 
         # ---- runtime state (created lazily) -----------------------------------
-        self._shutdown_event = threading.Event()
-        self._result_queue: queue.Queue | None = None
-        self._coordinator: threading.Thread | None = None
-        self._env_pool: AsyncEnvPool | None = None
-        self._workers: list[threading.Thread] = []
-        self._direct = direct
+        self._shutdown_event: threading.Event | mp.Event = None
+        self._result_queue: queue.Queue | mp.Queue = None
+        self._workers: list = []
 
         # Per-env trajectory accumulators (for yield_completed_trajectories)
         self._yield_queues: list[deque] = [deque() for _ in range(self._num_envs)]
@@ -333,81 +276,82 @@ class AsyncBatchedCollector(BaseCollector):
     # Lifecycle
     # ------------------------------------------------------------------
 
+    def _normalise_env_kwargs(self) -> list[dict]:
+        env_kwargs = self._create_env_kwargs
+        if env_kwargs is None:
+            return [{}] * self._num_envs
+        if isinstance(env_kwargs, dict):
+            return [env_kwargs] * self._num_envs
+        return list(env_kwargs)
+
     def _ensure_started(self) -> None:
-        """Create the env pool, start the server and coordinator/worker threads."""
-        if self._direct:
-            if self._workers and all(w.is_alive() for w in self._workers):
-                return
-
-            if not self._server.is_alive:
-                self._server.start()
-
-            self._result_queue = queue.Queue()
-            self._shutdown_event.clear()
-
-            env_kwargs = self._create_env_kwargs
-            if env_kwargs is None:
-                env_kwargs = [{}] * self._num_envs
-            elif isinstance(env_kwargs, dict):
-                env_kwargs = [env_kwargs] * self._num_envs
-
-            self._workers = []
-            for i in range(self._num_envs):
-                t = threading.Thread(
-                    target=_direct_env_loop,
-                    kwargs={
-                        "env_factory": self._create_env_fn[i],
-                        "create_env_kwargs": env_kwargs[i],
-                        "transport": self._transport,
-                        "result_queue": self._result_queue,
-                        "shutdown_event": self._shutdown_event,
-                    },
-                    daemon=True,
-                    name=f"AsyncBatchedCollector-env-{i}",
-                )
-                self._workers.append(t)
-                t.start()
+        """Start the inference server and spawn per-env workers."""
+        if self._workers and all(
+            (w.is_alive() if hasattr(w, "is_alive") else True) for w in self._workers
+        ):
             return
 
-        if self._coordinator is not None and self._coordinator.is_alive():
-            return
-
-        # Build env pool
-        kwargs = {}
-        if self._create_env_kwargs is not None:
-            kwargs["create_env_kwargs"] = self._create_env_kwargs
-        self._env_pool = AsyncEnvPool(
-            self._create_env_fn,
-            backend=self._env_backend,
-            **kwargs,
-        )
-
-        # Start inference server
         if not self._server.is_alive:
             self._server.start()
 
-        # Start coordinator thread
-        self._result_queue = queue.Queue()
-        self._shutdown_event.clear()
-        self._coordinator = threading.Thread(
-            target=_coordinator_loop,
-            kwargs={
-                "pool": self._env_pool,
-                "transport": self._transport,
-                "result_queue": self._result_queue,
-                "shutdown_event": self._shutdown_event,
-                "num_envs": self._num_envs,
-            },
-            daemon=True,
-            name="AsyncBatchedCollector-coordinator",
-        )
-        self._coordinator.start()
+        env_kwargs = self._normalise_env_kwargs()
 
-    @property
-    def env(self) -> AsyncEnvPool:
-        """The underlying :class:`AsyncEnvPool`."""
-        self._ensure_started()
-        return self._env_pool
+        if self._backend == "multiprocessing":
+            self._start_mp_workers(env_kwargs)
+        else:
+            self._start_threading_workers(env_kwargs)
+
+    def _start_threading_workers(self, env_kwargs: list[dict]) -> None:
+        self._result_queue = queue.Queue()
+        self._shutdown_event = threading.Event()
+
+        self._workers = []
+        for i in range(self._num_envs):
+            t = threading.Thread(
+                target=_threading_env_loop,
+                kwargs={
+                    "env_factory": self._create_env_fn[i],
+                    "create_env_kwargs": env_kwargs[i],
+                    "transport": self._transport,
+                    "result_queue": self._result_queue,
+                    "shutdown_event": self._shutdown_event,
+                    "env_id": i,
+                },
+                daemon=True,
+                name=f"AsyncBatchedCollector-env-{i}",
+            )
+            self._workers.append(t)
+            t.start()
+
+    def _start_mp_workers(self, env_kwargs: list[dict]) -> None:
+        ctx = mp.get_context("spawn")
+        self._result_queue = ctx.Queue()
+        self._shutdown_event = ctx.Event()
+
+        # Pre-create one client per env before spawning (queues are inherited)
+        clients = [self._transport.client() for _ in range(self._num_envs)]
+
+        self._workers = []
+        for i in range(self._num_envs):
+            env_fn = self._create_env_fn[i]
+            if not isinstance(env_fn, EnvBase) and env_fn.__class__.__name__ != "EnvCreator":
+                env_fn = CloudpickleWrapper(env_fn)
+
+            p = ctx.Process(
+                target=_mp_env_loop,
+                kwargs={
+                    "env_factory": env_fn,
+                    "create_env_kwargs": env_kwargs[i],
+                    "client": clients[i],
+                    "result_queue": self._result_queue,
+                    "shutdown_event": self._shutdown_event,
+                    "env_id": i,
+                },
+                daemon=True,
+                name=f"AsyncBatchedCollector-env-{i}",
+            )
+            self._workers.append(p)
+            p.start()
 
     @property
     def policy(self) -> Callable:
@@ -419,7 +363,7 @@ class AsyncBatchedCollector(BaseCollector):
     # ------------------------------------------------------------------
 
     def _rollout_frames(self) -> TensorDictBase:
-        """Drain ``frames_per_batch`` transitions from the coordinator."""
+        """Drain ``frames_per_batch`` transitions from the workers."""
         rq = self._result_queue
         collected = 0
         transitions: list[TensorDictBase] = []
@@ -441,17 +385,15 @@ class AsyncBatchedCollector(BaseCollector):
 
         while not self._trajectory_queue:
             td = rq.get()
-            # Infer worker id from the env_index key if present, else round-robin
             env_id = 0
-            if self._env_pool is not None:
-                eid = td.get(self._env_pool._env_idx_key, default=None)
-                if eid is not None:
-                    # Unwrap NonTensorData / NonTensorStack / list wrappers
-                    if hasattr(eid, "data"):
-                        eid = eid.data
-                    while isinstance(eid, (list,)) and len(eid) == 1:
-                        eid = eid[0]
-                    env_id = int(eid)
+            eid = td.get(_ENV_IDX_KEY, default=None)
+            if eid is not None:
+                # Unwrap NonTensorData / NonTensorStack / list wrappers
+                if hasattr(eid, "data"):
+                    eid = eid.data
+                while isinstance(eid, (list,)) and len(eid) == 1:
+                    eid = eid[0]
+                env_id = int(eid)
 
             self._yield_queues[env_id].append(td)
             if td["next", "done"].any():
@@ -492,23 +434,21 @@ class AsyncBatchedCollector(BaseCollector):
         close_env: bool = True,
         raise_on_error: bool = True,
     ) -> None:
-        """Shut down the collector, inference server, coordinator and env pool."""
-        self._shutdown_event.set()
-        if self._direct:
-            for w in self._workers:
-                w.join(timeout=timeout or 5.0)
-            self._workers = []
-        else:
-            if self._coordinator is not None:
-                self._coordinator.join(timeout=timeout or 5.0)
-                self._coordinator = None
-            if close_env and self._env_pool is not None:
-                self._env_pool.close(raise_if_closed=raise_on_error)
-                self._env_pool = None
-        self._server.shutdown(timeout=timeout or 5.0)
+        """Shut down the collector, inference server and workers."""
+        if self._shutdown_event is not None:
+            self._shutdown_event.set()
+        _timeout = timeout or 5.0
+        for w in self._workers:
+            w.join(timeout=_timeout)
+        # Terminate any stragglers (multiprocessing only)
+        for w in self._workers:
+            if hasattr(w, "terminate") and w.is_alive():
+                w.terminate()
+        self._workers = []
+        self._server.shutdown(timeout=_timeout)
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
-        """Set the seed (no-op; envs are created inside the pool)."""
+        """Set the seed (no-op; envs are created inside workers)."""
         return seed
 
     def state_dict(self) -> OrderedDict:
@@ -518,7 +458,7 @@ class AsyncBatchedCollector(BaseCollector):
         pass
 
     def __del__(self) -> None:
-        if getattr(self, "_coordinator", None) is not None:
+        if getattr(self, "_workers", None):
             try:
                 self.shutdown(timeout=2.0, raise_on_error=False)
             except Exception:
