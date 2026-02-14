@@ -603,6 +603,8 @@
             <span class="n">params</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_modules</span><span class="p">(</span>
                 <span class="o">*</span><span class="n">module</span><span class="p">,</span> <span class="n">as_module</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">expand_identical</span><span class="o">=</span><span class="kc">True</span>
             <span class="p">)</span>
+            <span class="c1"># Use the first module as the functional forward reference.</span>
+            <span class="n">module</span> <span class="o">=</span> <span class="n">module</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">params</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">as_module</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 

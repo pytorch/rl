@@ -314,12 +314,15 @@
 
 <span class="sd">    Args:</span>
 <span class="sd">        actor_network (ProbabilisticTensorDictSequential): stochastic actor</span>
-<span class="sd">        qvalue_network (TensorDictModule): Q(s, a) parametric model.</span>
+<span class="sd">        qvalue_network (TensorDictModule | list[TensorDictModule]): Q(s, a) parametric model.</span>
 <span class="sd">            This module typically outputs a ``&quot;state_action_value&quot;`` entry.</span>
 <span class="sd">            If a single instance of `qvalue_network` is provided, it will be duplicated ``num_qvalue_nets``</span>
 <span class="sd">            times. If a list of modules is passed, their</span>
 <span class="sd">            parameters will be stacked unless they share the same identity (in which case</span>
 <span class="sd">            the original parameter will be expanded).</span>
+<span class="sd">            When a list is provided, the first module is used as the functional forward</span>
+<span class="sd">            reference (its ``in_keys``/``out_keys`` are used), so all modules must share</span>
+<span class="sd">            the same signature.</span>
 
 <span class="sd">            .. warning:: When a list of parameters if passed, it will **not** be compared against the policy parameters</span>
 <span class="sd">              and all the parameters will be considered as untied.</span>

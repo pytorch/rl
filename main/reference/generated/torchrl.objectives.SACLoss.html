@@ -260,12 +260,15 @@ and “Soft Actor-Critic Algorithms and Applications” <a class="reference exte
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>actor_network</strong> (<em>ProbabilisticTensorDictSequential</em>) – stochastic actor</p></li>
-<li><p><strong>qvalue_network</strong> (<em>TensorDictModule</em>) – <p>Q(s, a) parametric model.
+<li><p><strong>qvalue_network</strong> (<em>TensorDictModule</em><em> | </em><em>list</em><em>[</em><em>TensorDictModule</em><em>]</em>) – <p>Q(s, a) parametric model.
 This module typically outputs a <code class="docutils literal notranslate"><span class="pre">&quot;state_action_value&quot;</span></code> entry.
 If a single instance of <cite>qvalue_network</cite> is provided, it will be duplicated <code class="docutils literal notranslate"><span class="pre">num_qvalue_nets</span></code>
 times. If a list of modules is passed, their
 parameters will be stacked unless they share the same identity (in which case
-the original parameter will be expanded).</p>
+the original parameter will be expanded).
+When a list is provided, the first module is used as the functional forward
+reference (its <code class="docutils literal notranslate"><span class="pre">in_keys</span></code>/<code class="docutils literal notranslate"><span class="pre">out_keys</span></code> are used), so all modules must share
+the same signature.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>When a list of parameters if passed, it will <strong>not</strong> be compared against the policy parameters
