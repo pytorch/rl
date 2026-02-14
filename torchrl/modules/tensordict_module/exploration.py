@@ -93,7 +93,7 @@ class EGreedyModule(TensorDictModuleBase):
 
     def __init__(
         self,
-        spec: TensorSpec,
+        spec: TensorSpec | None,
         eps_init: float = 1.0,
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
@@ -123,16 +123,21 @@ class EGreedyModule(TensorDictModuleBase):
             "eps", torch.as_tensor(eps_init, dtype=torch.float32, device=device)
         )
 
-        if spec is not None:
-            if not isinstance(spec, Composite) and len(self.out_keys) >= 1:
-                spec = Composite({action_key: spec}, shape=spec.shape[:-1])
-            if device is not None:
-                spec = spec.to(device)
-        self._spec = spec
+        self.spec = spec
 
     @property
     def spec(self):
         return self._spec
+
+    @spec.setter
+    def spec(self, value: TensorSpec | None) -> None:
+        if value is not None:
+            if not isinstance(value, Composite) and len(self.out_keys) >= 1:
+                value = Composite({self.action_key: value}, shape=value.shape[:-1])
+                if self.eps.device is not None:
+                    value = value.to(self.eps.device)
+
+        self._spec = value
 
     def step(self, frames: int = 1) -> None:
         """A step of epsilon decay.
@@ -203,7 +208,10 @@ class EGreedyModule(TensorDictModuleBase):
                     r = r.to(device)
                 action = torch.where(cond, r, action)
             else:
-                raise RuntimeError("spec must be provided to the exploration wrapper.")
+                raise RuntimeError(
+                    "spec has not been set. Pass spec at construction time or set it via "
+                    "the `spec` property before calling forward()."
+                )
             action_tensordict.set(action_key, action)
         return tensordict
 
@@ -518,7 +526,7 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
 
     def __init__(
         self,
-        spec: TensorSpec,
+        spec: TensorSpec | None,
         eps_init: float = 1.0,
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
@@ -564,20 +572,7 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
         self.in_keys = [self.ou.key]
         self.out_keys = [self.ou.key] + self.ou.out_keys
         self.is_init_key = is_init_key
-        noise_key = self.ou.noise_key
-        steps_key = self.ou.steps_key
-
-        if spec is not None:
-            if not isinstance(spec, Composite) and len(self.out_keys) >= 1:
-                spec = Composite({action_key: spec}, shape=spec.shape[:-1])
-            self._spec = spec
-        else:
-            raise RuntimeError("spec cannot be None.")
-        ou_specs = {
-            noise_key: None,
-            steps_key: None,
-        }
-        self._spec.update(ou_specs)
+        self.spec = spec
         if len(set(self.out_keys)) != len(self.out_keys):
             raise RuntimeError(f"Got multiple identical output keys: {self.out_keys}")
         self.safe = safe
@@ -587,6 +582,21 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
     @property
     def spec(self):
         return self._spec
+
+    @spec.setter
+    def spec(self, value: TensorSpec | None) -> None:
+        if value is None:
+            self._spec = None
+            return
+        if not isinstance(value, Composite) and len(self.out_keys) >= 1:
+            value = Composite({self.ou.key: value}, shape=value.shape[:-1])
+        ou_specs = {
+            self.ou.noise_key: None,
+            self.ou.steps_key: None,
+        }
+        value = value.clone()
+        value.update(ou_specs)
+        self._spec = value
 
     def step(self, frames: int = 1) -> None:
         """Updates the eps noise factor.
@@ -799,8 +809,8 @@ class RandomPolicy:
 def set_exploration_modules_spec_from_env(policy: nn.Module, env: EnvBase) -> None:
     """Sets exploration module specs from an environment action spec.
 
-    This is intended for cases where exploration modules (e.g. AdditiveGaussianModule)
-    are instantiated with ``spec=None`` and must be configured once the environment
+    This is intended for cases where exploration modules (e.g. AdditiveGaussianModule,
+    EGreedyModule, OrnsteinUhlenbeckProcessModule) are instantiated with ``spec=None`` and must be configured once the environment
     is known (e.g. inside a collector).
     """
     action_spec = (
@@ -809,6 +819,13 @@ def set_exploration_modules_spec_from_env(policy: nn.Module, env: EnvBase) -> No
         else env.action_spec
     )
 
+    exploration_modules = (
+        AdditiveGaussianModule,
+        EGreedyModule,
+        OrnsteinUhlenbeckProcessModule,
+    )
+
     for submodule in policy.modules():
-        if isinstance(submodule, AdditiveGaussianModule) and submodule._spec is None:
-            submodule.spec = action_spec
+        if isinstance(submodule, exploration_modules):
+            if submodule.spec is None:
+                submodule.spec = action_spec
