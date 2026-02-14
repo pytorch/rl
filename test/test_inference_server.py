@@ -19,6 +19,7 @@ from torchrl.modules.inference_server import (
     InferenceClient,
     InferenceServer,
     InferenceTransport,
+    MPTransport,
     ThreadingTransport,
 )
 
@@ -315,4 +316,85 @@ class TestThreadingTransport:
             client = transport.client()
             td = TensorDict({"observation": torch.randn(4)})
             with pytest.raises(ValueError, match="model error"):
+                client(td)
+
+
+# =============================================================================
+# Tests: MPTransport (Commit 3)
+# =============================================================================
+
+
+def _mp_actor_fn(client, obs_size, act_size, n_requests, result_queue):
+    """Actor function that runs in a child process."""
+    for _ in range(n_requests):
+        td = TensorDict({"observation": torch.randn(obs_size)})
+        result = client(td)
+        assert "action" in result.keys()
+        assert result["action"].shape == (act_size,)
+    result_queue.put(True)
+
+
+class TestMPTransport:
+    @pytest.mark.slow
+    def test_single_request_in_process(self):
+        """MPTransport client works from the parent process."""
+        import multiprocessing as mp
+
+        ctx = mp.get_context("spawn")
+        transport = MPTransport(ctx=ctx)
+        client = transport.client()
+        policy = _make_policy()
+        with InferenceServer(policy, transport, max_batch_size=4):
+            td = TensorDict({"observation": torch.randn(4)})
+            result = client(td)
+            assert "action" in result.keys()
+            assert result["action"].shape == (2,)
+
+    @pytest.mark.slow
+    def test_cross_process_actors(self):
+        """Actors in separate processes get correct results."""
+        import multiprocessing as mp
+
+        ctx = mp.get_context("spawn")
+        transport = MPTransport(ctx=ctx)
+        policy = _make_policy()
+        n_actors = 2
+        n_requests = 10
+
+        result_queue = ctx.Queue()
+        # Create clients before spawning (queues inherited)
+        clients = [transport.client() for _ in range(n_actors)]
+
+        with InferenceServer(policy, transport, max_batch_size=8):
+            procs = []
+            for i in range(n_actors):
+                p = ctx.Process(
+                    target=_mp_actor_fn,
+                    args=(clients[i], 4, 2, n_requests, result_queue),
+                )
+                p.start()
+                procs.append(p)
+
+            for p in procs:
+                p.join(timeout=30.0)
+                assert p.exitcode == 0
+
+        # All actors reported success
+        for _ in range(n_actors):
+            assert result_queue.get(timeout=1.0) is True
+
+    @pytest.mark.slow
+    def test_mp_exception_propagates(self):
+        """Model exceptions propagate through MPTransport."""
+        import multiprocessing as mp
+
+        def bad_model(td):
+            raise ValueError("mp model error")
+
+        ctx = mp.get_context("spawn")
+        transport = MPTransport(ctx=ctx)
+        client = transport.client()
+        with InferenceServer(bad_model, transport, max_batch_size=4):
+            td = TensorDict({"observation": torch.randn(4)})
+            with pytest.raises(ValueError, match="mp model error"):
                 client(td)
