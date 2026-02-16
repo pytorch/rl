@@ -4,103 +4,50 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import queue
 import threading
-import time
-from typing import Any
 
-from tensordict.base import TensorDictBase
-
-from torchrl.modules.inference_server._transport import InferenceTransport
-
-_SENTINEL = object()
+from torchrl.modules.inference_server._queue_transport import (
+    _QueueInferenceClient,
+    QueueBasedTransport,
+)
 
 
-class _MonarchFuture:
-    """Future-like object for Monarch transport results.
+class _MonarchRequestQueue:
+    """Wrapper around ``MonarchQueue`` that signals a :class:`threading.Event` on put.
 
-    Args:
-        client: the :class:`_MonarchInferenceClient` that created this future.
-        req_id: the unique request identifier within that client.
+    Also adapts the Monarch queue API (``get(block=False)``) to the standard
+    ``get_nowait()`` expected by :class:`QueueBasedTransport`.
     """
 
-    def __init__(self, client: _MonarchInferenceClient, req_id: int):
-        self._client = client
-        self._req_id = req_id
-        self._result: Any = _SENTINEL
+    def __init__(self, monarch_queue, has_work: threading.Event):
+        self._queue = monarch_queue
+        self._has_work = has_work
 
-    def done(self) -> bool:
-        """Return ``True`` if the result is available without blocking."""
-        if self._result is not _SENTINEL:
-            return True
-        try:
-            self._result = self._client._get_result(self._req_id, timeout=0)
-        except queue.Empty:
-            return False
-        return True
+    def put(self, item):
+        self._queue.put(item)
+        self._has_work.set()
 
-    def result(self, timeout: float | None = None) -> TensorDictBase:
-        """Block until the result is available."""
-        if self._result is _SENTINEL:
-            self._result = self._client._get_result(self._req_id, timeout=timeout)
-        if isinstance(self._result, BaseException):
-            raise self._result
-        return self._result
+    def get(self, timeout=None):
+        return self._queue.get(timeout=timeout)
+
+    def get_nowait(self):
+        return self._queue.get(block=False)
 
 
-class _MonarchInferenceClient:
-    """Actor-side client for :class:`MonarchTransport`.
+class _MonarchResponseQueue:
+    """Thin wrapper adapting the MonarchQueue get API."""
 
-    Each client owns a dedicated response queue and routes results by
-    request-id.
+    def __init__(self, monarch_queue):
+        self._queue = monarch_queue
 
-    Args:
-        request_queue: the shared Monarch queue for requests.
-        response_queue: this client's dedicated response queue.
-        actor_id: the unique identifier assigned by the transport.
-    """
+    def put(self, item):
+        self._queue.put(item)
 
-    def __init__(self, request_queue, response_queue, actor_id: int):
-        self._request_queue = request_queue
-        self._response_queue = response_queue
-        self._actor_id = actor_id
-        self._next_req_id = 0
-        self._buffered: dict[int, Any] = {}
-
-    def __call__(self, td: TensorDictBase) -> TensorDictBase:
-        """Submit a request and block until the result is ready."""
-        return self.submit(td).result()
-
-    def submit(self, td: TensorDictBase) -> _MonarchFuture:
-        """Submit a request and return a :class:`_MonarchFuture`."""
-        req_id = self._next_req_id
-        self._next_req_id += 1
-        self._request_queue.put((self._actor_id, req_id, td))
-        return _MonarchFuture(self, req_id)
-
-    # -- internal -------------------------------------------------------------
-
-    def _get_result(self, req_id: int, timeout: float | None = None) -> Any:
-        """Return the result for *req_id*, buffering any earlier arrivals."""
-        if req_id in self._buffered:
-            return self._buffered.pop(req_id)
-        deadline = None if timeout is None else time.monotonic() + timeout
-        while True:
-            remaining = None
-            if deadline is not None:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise queue.Empty(f"Timeout waiting for result of request {req_id}")
-            try:
-                rid, result = self._response_queue.get(timeout=remaining)
-            except Exception:
-                raise queue.Empty(f"Timeout waiting for result of request {req_id}")
-            if rid == req_id:
-                return result
-            self._buffered[rid] = result
+    def get(self, timeout=None):
+        return self._queue.get(timeout=timeout)
 
 
-class MonarchTransport(InferenceTransport):
+class MonarchTransport(QueueBasedTransport):
     """Transport using Monarch for distributed inference on GPU clusters.
 
     Uses Monarch's actor model and RDMA-capable channels for efficient
@@ -118,6 +65,7 @@ class MonarchTransport(InferenceTransport):
     """
 
     def __init__(self, *, max_queue_size: int = 1000):
+        super().__init__()
         try:
             import monarch  # noqa: F401
             from monarch.tools.queue import MonarchQueue
@@ -126,66 +74,21 @@ class MonarchTransport(InferenceTransport):
                 "Monarch is required for MonarchTransport. "
                 "Install it following the Monarch documentation."
             )
-        self._request_queue = MonarchQueue(maxsize=max_queue_size)
-        self._response_queues: dict[int, Any] = {}
-        self._lock = threading.Lock()
-        self._next_actor_id = 0
+        self._has_work = threading.Event()
+        self._request_queue = _MonarchRequestQueue(
+            MonarchQueue(maxsize=max_queue_size), self._has_work
+        )
+        self._response_queues: dict[int, _MonarchResponseQueue] = {}
         self._MonarchQueue = MonarchQueue
 
-    # -- actor API ------------------------------------------------------------
+    def _make_response_queue(self) -> _MonarchResponseQueue:
+        return _MonarchResponseQueue(self._MonarchQueue(maxsize=1000))
 
-    def client(self) -> _MonarchInferenceClient:
+    def client(self) -> _QueueInferenceClient:
         """Create an actor-side client with a dedicated response queue.
 
         Returns:
-            A :class:`_MonarchInferenceClient` that can be passed to a Monarch
+            A :class:`_QueueInferenceClient` that can be passed to a Monarch
             actor.
         """
-        with self._lock:
-            actor_id = self._next_actor_id
-            self._next_actor_id += 1
-        response_queue = self._MonarchQueue(maxsize=1000)
-        self._response_queues[actor_id] = response_queue
-        return _MonarchInferenceClient(self._request_queue, response_queue, actor_id)
-
-    def submit(self, td: TensorDictBase):
-        """Not supported -- use :meth:`client` to obtain an actor handle."""
-        raise RuntimeError(
-            "MonarchTransport.submit() is not supported. "
-            "Call transport.client() to create a _MonarchInferenceClient."
-        )
-
-    # -- server API -----------------------------------------------------------
-
-    def drain(
-        self, max_items: int
-    ) -> tuple[list[TensorDictBase], list[tuple[int, int]]]:
-        """Dequeue up to *max_items* pending requests (non-blocking)."""
-        items: list[TensorDictBase] = []
-        callbacks: list[tuple[int, int]] = []
-        for _ in range(max_items):
-            try:
-                actor_id, req_id, td = self._request_queue.get(block=False)
-                items.append(td)
-                callbacks.append((actor_id, req_id))
-            except Exception:
-                break
-        return items, callbacks
-
-    def wait_for_work(self, timeout: float) -> None:
-        """Block until at least one request is available or *timeout* elapses."""
-        try:
-            item = self._request_queue.get(timeout=timeout)
-            self._request_queue.put(item)
-        except Exception:
-            pass
-
-    def resolve(self, callback: tuple[int, int], result: TensorDictBase) -> None:
-        """Route the result to the correct actor's response queue."""
-        actor_id, req_id = callback
-        self._response_queues[actor_id].put((req_id, result))
-
-    def resolve_exception(self, callback: tuple[int, int], exc: BaseException) -> None:
-        """Route an exception to the correct actor's response queue."""
-        actor_id, req_id = callback
-        self._response_queues[actor_id].put((req_id, exc))
+        return super().client()
