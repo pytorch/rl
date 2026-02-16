@@ -6,13 +6,14 @@
 
 from torchrl.modules.tensordict_module.exploration import RandomPolicy
 
+from ._async_batched import AsyncBatchedCollector
+
 from ._base import BaseCollector, DataCollectorBase, ProfileConfig
 
 from ._multi_async import MultiAsyncCollector, MultiaSyncDataCollector
 from ._multi_base import MultiCollector, MultiCollector as _MultiDataCollector
 from ._multi_sync import MultiSyncCollector, MultiSyncDataCollector
 from ._single import Collector, SyncDataCollector
-
 from ._single_async import AsyncCollector, aSyncDataCollector
 from .weight_update import (
     MultiProcessedWeightUpdater,
@@ -29,6 +30,7 @@ __all__ = [
     "AsyncCollector",
     "MultiCollector",
     "MultiSyncCollector",
+    "AsyncBatchedCollector",
     "MultiAsyncCollector",
     "ProfileConfig",
     # Legacy names (backward-compatible aliases)
