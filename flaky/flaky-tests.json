@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-02-15T06:25:14.945866+00:00",
+  "generated_at": "2026-02-16T06:32:50.259516+00:00",
   "analysis_period": {
     "start": "2026-02-04",
     "end": "2026-02-14",
@@ -8,7 +8,7 @@
   "summary": {
     "total_tests": 26799,
     "flaky_count": 12,
-    "new_flaky_count": 12,
+    "new_flaky_count": 0,
     "resolved_count": 0
   },
   "flaky_tests": [
@@ -31,7 +31,7 @@
         "2026-02-13T02:03:01Z"
       ],
       "first_seen_flaky": "2026-02-08T07:16:52Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[None-None-storage1]",
@@ -52,7 +52,7 @@
         "2026-02-13T02:03:01Z"
       ],
       "first_seen_flaky": "2026-02-08T07:16:52Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[None-sampler1-None]",
@@ -73,7 +73,7 @@
         "2026-02-13T02:03:01Z"
       ],
       "first_seen_flaky": "2026-02-08T07:16:52Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[None-sampler1-storage1]",
@@ -94,7 +94,7 @@
         "2026-02-13T02:03:01Z"
       ],
       "first_seen_flaky": "2026-02-08T07:16:52Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[None-SamplerWithoutReplacement-None]",
@@ -115,7 +115,7 @@
         "2026-02-13T02:03:01Z"
       ],
       "first_seen_flaky": "2026-02-08T07:16:52Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[None-SamplerWithoutReplacement-storage1]",
@@ -136,7 +136,7 @@
         "2026-02-13T02:03:01Z"
       ],
       "first_seen_flaky": "2026-02-08T07:16:52Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[writer1-None-None]",
@@ -157,7 +157,7 @@
         "2026-02-13T02:03:01Z"
       ],
       "first_seen_flaky": "2026-02-08T07:16:52Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[writer1-None-storage1]",
@@ -178,7 +178,7 @@
         "2026-02-13T02:03:01Z"
       ],
       "first_seen_flaky": "2026-02-08T07:16:52Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[writer1-sampler1-None]",
@@ -199,7 +199,7 @@
         "2026-02-13T02:03:01Z"
       ],
       "first_seen_flaky": "2026-02-08T07:16:52Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[writer1-sampler1-storage1]",
@@ -220,7 +220,7 @@
         "2026-02-13T02:03:01Z"
       ],
       "first_seen_flaky": "2026-02-08T07:16:52Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[writer1-SamplerWithoutReplacement-None]",
@@ -241,7 +241,7 @@
         "2026-02-13T02:03:01Z"
       ],
       "first_seen_flaky": "2026-02-08T07:16:52Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[writer1-SamplerWithoutReplacement-storage1]",
@@ -262,7 +262,7 @@
         "2026-02-13T02:03:01Z"
       ],
       "first_seen_flaky": "2026-02-08T07:16:52Z",
-      "is_new": true
+      "is_new": false
     }
   ],
   "thresholds": {

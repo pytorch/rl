@@ -1,9 +1,9 @@
-# Flaky Test Report - 2026-02-15
+# Flaky Test Report - 2026-02-16
 
 ## Summary
 
 - **Flaky tests**: 12
-- **Newly flaky** (last 7 days): 12
+- **Newly flaky** (last 7 days): 0
 - **Resolved**: 0
 - **Total tests analyzed**: 26799
 - **CI runs analyzed**: 180
@@ -14,34 +14,19 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...::TestRayCollector::test_ray_replaybuffer[None-None-None]` 🆕 | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
-| `...stRayCollector::test_ray_replaybuffer[None-None-storage1]` 🆕 | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
-| `...stRayCollector::test_ray_replaybuffer[None-sampler1-None]` 🆕 | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
-| `...yCollector::test_ray_replaybuffer[None-sampler1-storage1]` 🆕 | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
-| `...est_ray_replaybuffer[None-SamplerWithoutReplacement-None]` 🆕 | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
-| `...ray_replaybuffer[None-SamplerWithoutReplacement-storage1]` 🆕 | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
-| `...estRayCollector::test_ray_replaybuffer[writer1-None-None]` 🆕 | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
-| `...ayCollector::test_ray_replaybuffer[writer1-None-storage1]` 🆕 | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
-| `...ayCollector::test_ray_replaybuffer[writer1-sampler1-None]` 🆕 | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
-| `...llector::test_ray_replaybuffer[writer1-sampler1-storage1]` 🆕 | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
-| `..._ray_replaybuffer[writer1-SamplerWithoutReplacement-None]` 🆕 | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
-| `..._replaybuffer[writer1-SamplerWithoutReplacement-storage1]` 🆕 | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
+| `...::TestRayCollector::test_ray_replaybuffer[None-None-None]` | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
+| `...stRayCollector::test_ray_replaybuffer[None-None-storage1]` | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
+| `...stRayCollector::test_ray_replaybuffer[None-sampler1-None]` | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
+| `...yCollector::test_ray_replaybuffer[None-sampler1-storage1]` | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
+| `...est_ray_replaybuffer[None-SamplerWithoutReplacement-None]` | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
+| `...ray_replaybuffer[None-SamplerWithoutReplacement-storage1]` | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
+| `...estRayCollector::test_ray_replaybuffer[writer1-None-None]` | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
+| `...ayCollector::test_ray_replaybuffer[writer1-None-storage1]` | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
+| `...ayCollector::test_ray_replaybuffer[writer1-sampler1-None]` | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
+| `...llector::test_ray_replaybuffer[writer1-sampler1-storage1]` | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
+| `..._ray_replaybuffer[writer1-SamplerWithoutReplacement-None]` | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
+| `..._replaybuffer[writer1-SamplerWithoutReplacement-storage1]` | 13.6% (12/88) | 12 | 0.27 | 2026-02-13 |
 
-
-### Newly Flaky Tests
-
-- `test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[None-None-None]`
-- `test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[None-None-storage1]`
-- `test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[None-sampler1-None]`
-- `test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[None-sampler1-storage1]`
-- `test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[None-SamplerWithoutReplacement-None]`
-- `test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[None-SamplerWithoutReplacement-storage1]`
-- `test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[writer1-None-None]`
-- `test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[writer1-None-storage1]`
-- `test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[writer1-sampler1-None]`
-- `test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[writer1-sampler1-storage1]`
-- `test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[writer1-SamplerWithoutReplacement-None]`
-- `test/test_distributed.py::TestRayCollector::test_ray_replaybuffer[writer1-SamplerWithoutReplacement-storage1]`
 
 ---
 
@@ -54,4 +39,4 @@
 
 ---
 
-*Generated at 2026-02-15T06:25:14.945866+00:00*
+*Generated at 2026-02-16T06:32:50.259516+00:00*
