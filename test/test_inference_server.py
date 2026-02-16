@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import threading
+import time
 
 import pytest
 import torch
@@ -606,8 +607,6 @@ class TestWeightSyncIntegration:
 
         with InferenceServer(policy, transport, weight_sync=ws):
             # Give the worker thread a moment to start
-            import time
-
             time.sleep(0.1)
             assert ws.initialized_on_receiver
             assert ws.synchronized_on_receiver
@@ -634,8 +633,6 @@ class TestWeightSyncIntegration:
             ws.push(new_weights)
 
             # Give the server loop a chance to apply the update
-            import time
-
             time.sleep(0.2)
 
             # Now inference should reflect zero weights
@@ -661,8 +658,6 @@ class TestWeightSyncIntegration:
             # Push weight update
             new_weights = TensorDict.from_module(policy)
             ws.push(new_weights)
-
-            import time
 
             time.sleep(0.1)
 
