@@ -673,9 +673,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         for _env_idx, local_td in _zip_strict(env_idx, local_tds):
             if not _per_env:
                 self._current_step_reset = self._current_step_reset + 1
-            self.input_queue[_env_idx].put(
-                ("step_and_maybe_reset", local_td, _per_env)
-            )
+            self.input_queue[_env_idx].put(("step_and_maybe_reset", local_td, _per_env))
 
     def async_step_and_maybe_reset_recv(
         self, min_get: int = 1, env_index: int | None = None
@@ -807,29 +805,29 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             elif msg == "batch_size":
                 output_queue.put(env.batch_size)
             elif msg == "reset":
-                data = env.reset(data.copy())
+                # No .copy() needed: data was deserialized from the queue
+                # and is not referenced after this call.
+                data = env.reset(data)
                 data.set(cls._env_idx_key, NonTensorData(i))
                 target = per_env_reset_queue if per_env else reset_queue
                 target.put(data)
             elif msg == "_reset":
-                data = env._reset(data.copy())
+                data = env._reset(data)
                 data.set(cls._env_idx_key, NonTensorData(i))
                 reset_queue.put(data)
             elif msg == "step_and_maybe_reset":
-                data, data_ = env.step_and_maybe_reset(data.copy())
+                data, data_ = env.step_and_maybe_reset(data)
                 data.set(cls._env_idx_key, NonTensorData(i))
                 data_.set(cls._env_idx_key, NonTensorData(i))
-                target = (
-                    per_env_step_reset_queue if per_env else step_reset_queue
-                )
+                target = per_env_step_reset_queue if per_env else step_reset_queue
                 target.put((data, data_))
             elif msg == "step":
-                data = env.step(data.copy())
+                data = env.step(data)
                 data.set(cls._env_idx_key, NonTensorData(i))
                 target = per_env_step_queue if per_env else step_queue
                 target.put(data)
             elif msg == "_step":
-                data = env._step(data.copy())
+                data = env._step(data)
                 data.set(cls._env_idx_key, NonTensorData(i))
                 step_queue.put(data)
             elif msg == "shutdown":

@@ -733,7 +733,7 @@ class TestAsyncBatchedCollector:
             frames_per_batch=frames_per_batch,
             total_frames=total_frames,
             max_batch_size=num_envs,
-            backend="threading",
+            env_backend="threading",
         )
         total_collected = 0
         for batch in collector:
@@ -751,7 +751,7 @@ class TestAsyncBatchedCollector:
             frames_per_batch=10,
             total_frames=20,
             max_batch_size=num_envs,
-            backend="threading",
+            env_backend="threading",
         )
         total_collected = 0
         for batch in collector:
@@ -791,7 +791,7 @@ class TestAsyncBatchedCollector:
             total_frames=30,
             yield_completed_trajectories=True,
             max_batch_size=num_envs,
-            backend="threading",
+            env_backend="threading",
         )
         count = 0
         for batch in collector:
@@ -809,7 +809,7 @@ class TestAsyncBatchedCollector:
             policy=policy,
             frames_per_batch=10,
             total_frames=10,
-            backend="threading",
+            env_backend="threading",
         )
         # Consume one batch to start
         for _batch in collector:
@@ -825,7 +825,7 @@ class TestAsyncBatchedCollector:
             policy=policy,
             frames_per_batch=10,
             total_frames=-1,
-            backend="threading",
+            env_backend="threading",
         )
         collected = 0
         for batch in collector:
@@ -862,7 +862,7 @@ class TestAsyncBatchedCollector:
             frames_per_batch=10,
             total_frames=20,
             postproc=postproc,
-            backend="threading",
+            env_backend="threading",
         )
         for _ in collector:
             pass
