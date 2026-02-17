@@ -73,12 +73,15 @@ class SACLoss(LossModule):
 
     Args:
         actor_network (ProbabilisticTensorDictSequential): stochastic actor
-        qvalue_network (TensorDictModule): Q(s, a) parametric model.
+        qvalue_network (TensorDictModule | list[TensorDictModule]): Q(s, a) parametric model.
             This module typically outputs a ``"state_action_value"`` entry.
             If a single instance of `qvalue_network` is provided, it will be duplicated ``num_qvalue_nets``
             times. If a list of modules is passed, their
             parameters will be stacked unless they share the same identity (in which case
             the original parameter will be expanded).
+            When a list is provided, the first module is used as the functional forward
+            reference (its ``in_keys``/``out_keys`` are used), so all modules must share
+            the same signature.
 
             .. warning:: When a list of parameters if passed, it will **not** be compared against the policy parameters
               and all the parameters will be considered as untied.
