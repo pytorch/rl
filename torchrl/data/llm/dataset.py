@@ -255,7 +255,7 @@ class TokenizedDatasetLoader:
                 (ie number of dimensions along which the tensordict can be indexed).
                 Defaults to 1.
             valid_mask_key (NestedKey, optional): if provided, this entry will be
-                tentatively gathered and used to filder the data. Defaults to
+                tentatively gathered and used to filter the data. Defaults to
                 ``None`` (ie, no filter key).
 
         Returns: a TensorDict containing memory-mapped tensors with the dataset.

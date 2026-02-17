@@ -66,7 +66,7 @@ class MLFlowLogger(Logger):
         if not _has_mlflow:
             raise ImportError("MLFlow is not installed")
 
-        # Only create experiment if it doesnt exist
+        # Only create experiment if it doesn't exist
         experiment = mlflow.get_experiment_by_name(self._mlflow_kwargs["name"])
         if experiment is None:
             self.id = mlflow.create_experiment(**self._mlflow_kwargs)

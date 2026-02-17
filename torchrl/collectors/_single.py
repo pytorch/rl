@@ -1594,7 +1594,12 @@ class Collector(BaseCollector):
             new_traj = pool.get_traj_and_increment(
                 traj_sop.sum(), device=traj_sop.device
             )
-            traj_ids = traj_ids.masked_scatter(traj_sop, new_traj)
+            # masked_scatter on MPS may incorrectly change the shape from [] to [1],
+            # so we preserve the original shape and reshape after the operation.
+            original_shape = traj_ids.shape
+            traj_ids = traj_ids.masked_scatter(traj_sop, new_traj).reshape(
+                original_shape
+            )
             self._carrier.set(("collector", "traj_ids"), traj_ids)
 
     @torch.no_grad()

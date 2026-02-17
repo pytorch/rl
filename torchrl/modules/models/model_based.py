@@ -156,6 +156,9 @@ class ObsDecoder(nn.Module):
             Defaults to ``[5, 5, 6, 6]`` if num_layers if 4, else ``[5] * num_layers``.
         latent_dim (int, optional): Input dimension (state_dim + rnn_hidden_dim).
             If None, uses LazyLinear. Defaults to None for backward compatibility.
+        out_channels (int, optional): Number of output channels in the final
+            ConvTranspose2d layer.  Defaults to 3 (RGB).  Set to 1 for
+            grayscale.
         device (torch.device, optional): Device to create the module on.
             Defaults to None (uses default device).
     """
@@ -166,6 +169,7 @@ class ObsDecoder(nn.Module):
         num_layers=4,
         kernel_sizes=None,
         latent_dim=None,
+        out_channels=3,
         depth=None,
         device=None,
     ):
@@ -199,7 +203,9 @@ class ObsDecoder(nn.Module):
             kernel_sizes = [kernel_sizes] * num_layers
         layers = [
             nn.ReLU(),
-            nn.ConvTranspose2d(channels, 3, kernel_sizes[-1], stride=2, device=device),
+            nn.ConvTranspose2d(
+                channels, out_channels, kernel_sizes[-1], stride=2, device=device
+            ),
         ]
         kernel_sizes = kernel_sizes[:-1]
         k = 1

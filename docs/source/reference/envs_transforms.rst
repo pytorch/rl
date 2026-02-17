@@ -32,7 +32,7 @@ operations that is to be computed.
 A great advantage of environment wrappers is that one can consult the environment up to that wrapper.
 The same can be achieved with TorchRL transformed environments: the ``parent`` attribute will
 return a new :class:`TransformedEnv` with all the transforms up to the transform of interest.
-Re-using the example above:
+Reusing the example above:
 
 .. code-block::
    :caption: Transform parent
@@ -208,7 +208,7 @@ this transform will keep its parent:
 
 This means that using this transform for another environment is prohibited, as
 the other environment would replace the parent and this may lead to unexpected
-behviours. Fortunately, the :class:`Transform` class comes with a :func:`clone`
+behaviours. Fortunately, the :class:`Transform` class comes with a :func:`clone`
 method that will erase the parent while keeping the identity of all the
 registered buffers:
 

@@ -1295,7 +1295,7 @@ class _LazyStackedMixin(Generic[T]):
                             return self
                         if dim_idx != self.dim:
                             raise RuntimeError(
-                                f"Indexing occured along dimension {dim_idx} but stacking was done along dim {self.dim}."
+                                f"Indexing occurred along dimension {dim_idx} but stacking was done along dim {self.dim}."
                             )
                         out = self._specs[item]
                         if isinstance(out, TensorSpec):
