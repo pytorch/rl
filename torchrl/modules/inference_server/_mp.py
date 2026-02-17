@@ -5,34 +5,11 @@
 from __future__ import annotations
 
 import multiprocessing as mp
-import threading
 
 from torchrl.modules.inference_server._queue_transport import (
     _QueueInferenceClient,
     QueueBasedTransport,
 )
-
-
-class _MPRequestQueue:
-    """Wrapper around ``mp.Queue`` that signals a :class:`threading.Event` on put.
-
-    This avoids the get-then-put anti-pattern in ``wait_for_work``: instead of
-    consuming an item just to peek, callers wait on the event.
-    """
-
-    def __init__(self, ctx: mp.context.BaseContext, has_work: threading.Event):
-        self._queue: mp.Queue = ctx.Queue()
-        self._has_work = has_work
-
-    def put(self, item):
-        self._queue.put(item)
-        self._has_work.set()
-
-    def get(self, timeout=None):
-        return self._queue.get(timeout=timeout)
-
-    def get_nowait(self):
-        return self._queue.get_nowait()
 
 
 class MPTransport(QueueBasedTransport):
@@ -58,8 +35,7 @@ class MPTransport(QueueBasedTransport):
     def __init__(self, ctx: mp.context.BaseContext | None = None):
         super().__init__()
         self._ctx = ctx if ctx is not None else mp.get_context("spawn")
-        self._has_work = threading.Event()
-        self._request_queue = _MPRequestQueue(self._ctx, self._has_work)
+        self._request_queue: mp.Queue = self._ctx.Queue()
         self._response_queues: dict[int, mp.Queue] = {}
 
     def _make_response_queue(self) -> mp.Queue:
