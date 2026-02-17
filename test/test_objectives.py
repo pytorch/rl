@@ -1614,7 +1614,7 @@ class TestQMixer(LossModuleTestBase):
 
         SoftUpdate(loss, eps=0.5)
 
-        # Wthout etting the keys
+        # Without setting the keys
         if mixer_local_chosen_action_value_key != ("agents", "chosen_action_value"):
             with pytest.raises(KeyError):
                 loss(td)
@@ -4397,6 +4397,28 @@ class TestSAC(LossModuleTestBase):
             value_network=value,
         )
         self.reset_parameters_recursive_test(loss_fn)
+
+    def test_sac_list_qvalue_networks(self, version):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_sac()
+        actor = self._create_mock_actor()
+        qvalue1 = self._create_mock_qvalue()
+        qvalue2 = self._create_mock_qvalue()
+        if version == 1:
+            value = self._create_mock_value()
+        else:
+            value = None
+        loss_fn = SACLoss(
+            actor_network=actor,
+            qvalue_network=[qvalue1, qvalue2],
+            value_network=value,
+            num_qvalue_nets=2,
+        )
+        with pytest.warns(
+            UserWarning, match="No target network updater has been associated"
+        ) if rl_warnings() else contextlib.nullcontext():
+            loss = loss_fn(td)
+        assert "loss_qvalue" in loss.keys()
 
     @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
@@ -15089,7 +15111,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
     assert d0 > 0
     if mode == "hard":
         for i in range(value_network_update_interval + 1):
-            # test that no update is occuring until value_network_update_interval
+            # test that no update is occurring until value_network_update_interval
             d1 = 0.0
             for key, source_val in upd._sources.items(True, True):
                 if not isinstance(key, tuple):
@@ -15105,7 +15127,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
             assert upd.counter == i
             upd.step()
         assert upd.counter == 0
-        # test that a new update has occured
+        # test that a new update has occurred
         d1 = 0.0
         for key, source_val in upd._sources.items(True, True):
             if not isinstance(key, tuple):

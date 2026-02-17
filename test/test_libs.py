@@ -5597,7 +5597,7 @@ class TestIsaacLab:
         # check that rb["step_count"].flatten() is made of sequences of 4 consecutive numbers
         flat_ranges = rb.sample()["step_count"]
         flat_ranges = flat_ranges.view(-1, 4)
-        flat_ranges = flat_ranges - flat_ranges[:, :1]  # substract baseline
+        flat_ranges = flat_ranges - flat_ranges[:, :1]  # subtract baseline
         flat_ranges = flat_ranges.flatten()
         arange = torch.arange(flat_ranges.numel(), device=flat_ranges.device) % 4
         assert (flat_ranges == arange).all()
@@ -5820,6 +5820,111 @@ class TestIsaacLab:
         # Verify recurrent states are carried through the rollout
         assert ("next", "recurrent_state_h") in rollout.keys(True)
         assert ("next", "recurrent_state_c") in rollout.keys(True)
+
+
+@pytest.mark.skipif(
+    not _has_ray or not _has_gymnasium, reason="Ray or Gymnasium not found"
+)
+class TestRayEvalWorker:
+    """Tests for the RayEvalWorker async evaluation helper."""
+
+    @pytest.fixture(autouse=True)
+    def _setup_ray(self):
+        import ray
+
+        ray.init(ignore_reinit_error=True, num_gpus=0)
+        yield
+        ray.shutdown()
+
+    def test_ray_eval_worker_basic(self):
+        """Test submit/poll cycle with a simple environment."""
+        import torch.nn as nn
+
+        from tensordict import TensorDict
+        from tensordict.nn import TensorDictModule
+        from torchrl.collectors.distributed import RayEvalWorker
+
+        from torchrl.envs import GymEnv, StepCounter, TransformedEnv
+
+        def make_env():
+            return TransformedEnv(GymEnv("Pendulum-v1"), StepCounter(10))
+
+        def make_policy(env):
+            action_dim = env.action_spec.shape[-1]
+            obs_dim = env.observation_spec["observation"].shape[-1]
+            return TensorDictModule(
+                nn.Linear(obs_dim, action_dim),
+                in_keys=["observation"],
+                out_keys=["action"],
+            )
+
+        worker = RayEvalWorker(
+            init_fn=None,
+            env_maker=make_env,
+            policy_maker=make_policy,
+            num_gpus=0,
+        )
+        try:
+            # Before submit, poll returns None
+            assert worker.poll() is None
+
+            weights = (
+                TensorDict.from_module(make_policy(make_env())).data.detach().cpu()
+            )
+            worker.submit(weights, max_steps=5)
+
+            # Wait for result (blocking poll)
+            result = worker.poll(timeout=30)
+            assert result is not None
+            assert "reward" in result
+            assert "frames" in result
+        finally:
+            worker.shutdown()
+
+    def test_ray_eval_worker_from_name(self):
+        """Test that from_name can reconnect to a named actor."""
+        import torch.nn as nn
+
+        from tensordict import TensorDict
+        from tensordict.nn import TensorDictModule
+        from torchrl.collectors.distributed import RayEvalWorker
+
+        from torchrl.envs import GymEnv, StepCounter, TransformedEnv
+
+        def make_env():
+            return TransformedEnv(GymEnv("Pendulum-v1"), StepCounter(10))
+
+        def make_policy(env):
+            action_dim = env.action_spec.shape[-1]
+            obs_dim = env.observation_spec["observation"].shape[-1]
+            return TensorDictModule(
+                nn.Linear(obs_dim, action_dim),
+                in_keys=["observation"],
+                out_keys=["action"],
+            )
+
+        worker = RayEvalWorker(
+            init_fn=None,
+            env_maker=make_env,
+            policy_maker=make_policy,
+            num_gpus=0,
+            name="test_eval_worker",
+        )
+        try:
+            # Reconnect via from_name
+            worker2 = RayEvalWorker.from_name("test_eval_worker")
+
+            weights = (
+                TensorDict.from_module(make_policy(make_env())).data.detach().cpu()
+            )
+            # Submit through the reconnected handle
+            worker2.submit(weights, max_steps=5)
+
+            result = worker2.poll(timeout=30)
+            assert result is not None
+            assert "reward" in result
+        finally:
+            worker.shutdown()
 
 
 @pytest.mark.skipif(not _has_procgen, reason="Procgen not found")

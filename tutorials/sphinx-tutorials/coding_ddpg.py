@@ -135,7 +135,7 @@ collector_device = torch.device("cpu")  # Change the device to ``cuda`` to use C
 # As many other components of the library, its :meth:`~torchrl.objectives.LossModule.forward` method expects
 # as input a :class:`tensordict.TensorDict` instance sampled from an experience
 # replay buffer, or any similar data structure. Using this format makes it
-# possible to re-use the module across
+# possible to reuse the module across
 # modalities, or in complex settings where the model needs to read multiple
 # entries for instance. In other words, it allows us to code a loss module that
 # is oblivious to the data type that is being given to is and that focuses on

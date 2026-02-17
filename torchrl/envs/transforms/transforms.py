@@ -5061,14 +5061,14 @@ class UnaryTransform(Transform):
         in_keys (sequence of NestedKey): the keys of inputs to the unary operation.
         out_keys (sequence of NestedKey): the keys of the outputs of the unary operation.
         in_keys_inv (sequence of NestedKey, optional): the keys of inputs to the unary operation during inverse call.
-        out_keys_inv (sequence of NestedKey, optional): the keys of the outputs of the unary operation durin inverse call.
+        out_keys_inv (sequence of NestedKey, optional): the keys of the outputs of the unary operation during inverse call.
 
     Keyword Args:
         fn (Callable[[Any], Tensor | TensorDictBase]): the function to use as the unary operation. If it accepts
             a non-tensor input, it must also accept ``None``.
         inv_fn (Callable[[Any], Any], optional): the function to use as the unary operation during inverse calls.
             If it accepts a non-tensor input, it must also accept ``None``.
-            Can be ommitted, in which case :attr:`fn` will be used for inverse maps.
+            Can be omitted, in which case :attr:`fn` will be used for inverse maps.
         use_raw_nontensor (bool, optional): if ``False``, data is extracted from
             :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack` inputs before ``fn`` is called
             on them. If ``True``, the raw :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack`
@@ -7217,7 +7217,7 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
             keys (sequence of NestedKey, optional): keys that
                 have to be normalized. Default is `["next", "reward"]`
             memmap (bool): if ``True``, the resulting tensordict will be cast into
-                memmory map (using `memmap_()`). Otherwise, the tensordict
+                memory map (using `memmap_()`). Otherwise, the tensordict
                 will be placed in shared memory.
 
         Returns:
@@ -11152,7 +11152,7 @@ class ConditionalSkip(Transform):
     `"_step"` signal accordingly.
 
     .. note:: The skip will affect transforms that modify the environment output too, i.e., any transform
-        that is to be exectued on the tensordict returned by :meth:`~torchrl.envs.EnvBase.step` will be
+        that is to be executed on the tensordict returned by :meth:`~torchrl.envs.EnvBase.step` will be
         skipped if the condition is met. To palliate this effect if it is not desirable, one can wrap
         the transformed env in another transformed env, since the skip only affects the first-degree parent
         of the ``ConditionalSkip`` transform. See example below.

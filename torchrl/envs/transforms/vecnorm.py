@@ -663,7 +663,7 @@ class VecNormV2(Transform):
         return self._transform_spec(reward_spec, observation_spec)
 
     def transform_output_spec(self, output_spec: Composite) -> Composite:
-        # This is a copy-paste of the parent methd to ensure that we correct the reward spec properly
+        # This is a copy-paste of the parent method to ensure that we correct the reward spec properly
         output_spec = output_spec.clone()
         observation_spec = self.transform_observation_spec(
             output_spec["full_observation_spec"]

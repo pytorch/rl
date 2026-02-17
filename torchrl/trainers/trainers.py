@@ -103,6 +103,122 @@ class TrainerHookBase:
         raise NotImplementedError
 
 
+class OptimizationStepper(TrainerHookBase):
+    """Performs a single optimization step in a Trainer.
+
+    The optimization stepper encapsulates the logic executed for each ``sub_batch``
+    during training. This is useful for algorithms that require multiple optimizers,
+    delayed updates (e.g. TD3, where critics are updated every step while the actor
+    and target networks are updated less frequently), or multiple backward passes
+    within one training iteration.
+
+    The :class:`~torchrl.trainers.Trainer` calls :meth:`step` inside its optimization
+    loop and handles post-optimization hooks (e.g. target network updates, priority
+    updates, schedulers) and logging around this call.
+
+    Subclasses should return a :class:`~tensordict.TensorDictBase` of detached scalar
+    values suitable for logging.
+    """
+
+    _trainer: Trainer
+
+    def step(self, trainer: Trainer, sub_batch: TensorDictBase) -> TensorDictBase:
+        """Perform one optimization step on a ``sub_batch``.
+
+        Args:
+            trainer (Trainer): The trainer executing the optimization loop.
+            sub_batch (TensorDictBase): Batch used for this optimization step.
+
+        Returns:
+            A TensorDict containing detached scalar metrics for logging.
+        """
+        raise NotImplementedError
+
+    def state_dict(self) -> dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        return
+
+    def register(self, trainer: Trainer, name: str = "optimization_stepper") -> None:
+        """Register the stepper with a Trainer for checkpointing."""
+        # Register as a module so it is included in Trainer checkpoints.
+        # This is not a hook stage (i.e., it is not registered via ``register_op``).
+        trainer.register_module(name, self)
+        self._trainer = trainer
+
+
+class DefaultOptimizationStepper(OptimizationStepper):
+    """Default optimization step implementation.
+
+    This stepper computes losses via ``trainer.loss_module(sub_batch)`` and applies a
+    single optimizer update with ``trainer.optimizer`` (including gradient clipping
+    when configured).
+
+    Optionally, a subset of loss entries can be selected via ``loss_components``.
+    In that case, only the selected keys contribute to the backward pass.
+    """
+
+    def __init__(self, loss_components: Sequence[str] | None = None) -> None:
+        if loss_components is not None and not loss_components:
+            raise ValueError(
+                "loss_components list cannot be empty. "
+                "Set to None to act on all components of the loss."
+            )
+        self.loss_components = (
+            set(loss_components) if loss_components is not None else None
+        )
+
+    @staticmethod
+    def _compute_and_clip_grad_norm(
+        optimizer: optim.Optimizer,
+        clip_grad_norm: bool,
+        clip_norm: float | None,
+    ) -> float:
+        params = []
+        for param_group in optimizer.param_groups:
+            params += param_group["params"]
+
+        if clip_grad_norm and clip_norm is not None:
+            gn = nn.utils.clip_grad_norm_(params, clip_norm)
+        else:
+            gn = sum([p.grad.pow(2).sum() for p in params if p.grad is not None]).sqrt()
+            if clip_norm is not None:
+                nn.utils.clip_grad_value_(params, clip_norm)
+        return float(gn)
+
+    def step(self, trainer: Trainer, sub_batch: TensorDictBase) -> TensorDictBase:
+        losses_td = trainer.loss_module(sub_batch)
+
+        if trainer.optimizer is None:
+            raise RuntimeError(
+                "DefaultOptimizationStepper requires an optimizer. "
+                "Pass `optimizer=` to Trainer or use a custom "
+                "OptimizationStepper that owns its optimizer(s)."
+            )
+
+        if self.loss_components is not None:
+            items = [
+                item for key, item in losses_td.items() if key in self.loss_components
+            ]
+        else:
+            items = [item for key, item in losses_td.items() if key.startswith("loss")]
+        loss = sum(items)
+        loss.backward()
+
+        gn = self._compute_and_clip_grad_norm(
+            trainer.optimizer,
+            trainer.clip_grad_norm,
+            trainer.clip_norm,
+        )
+        losses_td["grad_norm"] = torch.tensor(gn)
+
+        trainer.optimizer.step()
+        trainer.optimizer.zero_grad()
+
+        return losses_td
+
+
 class Trainer:
     """A generic Trainer class.
 
@@ -148,7 +264,7 @@ class Trainer:
         save_trainer_file (path, optional): path where to save the trainer.
             Default is None (no saving)
         async_collection (bool, optional): Whether to collect data asynchronously.
-            This will only work if the replay buffer is registed within the data collector.
+            This will only work if the replay buffer is registered within the data collector.
             If using this, the UTD ratio (Update to Data) will be logged under the key "utd_ratio".
             Default is False.
         log_timings (bool, optional): If True, automatically register a LogTiming hook to log
@@ -181,6 +297,7 @@ class Trainer:
         optim_steps_per_batch: int,
         loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase],
         optimizer: optim.Optimizer | None = None,
+        optimization_stepper: OptimizationStepper | None = None,
         logger: Logger | None = None,
         clip_grad_norm: bool = True,
         clip_norm: float | None = None,
@@ -273,8 +390,18 @@ class Trainer:
 
         self._modules = {}
 
-        if self.optimizer is not None:
-            optimizer_hook = OptimizerHook(self.optimizer)
+        self.optimization_stepper = optimization_stepper
+        if self.optimization_stepper is not None:
+            self.optimization_stepper.register(self, name="optimization_stepper")
+
+        if self.optimizer is not None and self.optimization_stepper is None:
+            # Only auto-create the OptimizerHook when no stepper is
+            # provided.  When a stepper is present it may access
+            # trainer.optimizer directly, so creating the hook would leave a
+            # dead hook in _optimizer_ops that never fires.
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", FutureWarning)
+                optimizer_hook = OptimizerHook(self.optimizer)
             optimizer_hook.register(self)
 
         if log_timings:
@@ -467,18 +594,39 @@ class Trainer:
             self._process_optim_batch_ops.append((timed_op, kwargs))
 
         elif dest == "post_loss":
+            warnings.warn(
+                "The 'post_loss' hook stage will be replaced by OptimizationStepper "
+                "in a future release. Use 'post_optim' for post-optimization hooks "
+                "(e.g. priority updates), or provide a custom OptimizationStepper.",
+                FutureWarning,
+                stacklevel=2,
+            )
             _check_input_output_typehint(
                 op, input=TensorDictBase, output=TensorDictBase
             )
             self._post_loss_ops.append((timed_op, kwargs))
 
         elif dest == "process_loss":
+            warnings.warn(
+                "The 'process_loss' hook stage will be replaced by OptimizationStepper "
+                "in a future release. Move loss-transformation logic into a custom "
+                "OptimizationStepper.",
+                FutureWarning,
+                stacklevel=2,
+            )
             _check_input_output_typehint(
                 op, input=TensorDictBase, output=TensorDictBase
             )
             self._process_loss_ops.append((timed_op, kwargs))
 
         elif dest == "optimizer":
+            warnings.warn(
+                "The 'optimizer' hook stage will be replaced by OptimizationStepper "
+                "in a future release. Use DefaultOptimizationStepper for equivalent "
+                "behaviour.",
+                FutureWarning,
+                stacklevel=2,
+            )
             _check_input_output_typehint(
                 op, input=[TensorDictBase, bool, float, int], output=TensorDictBase
             )
@@ -788,13 +936,19 @@ class Trainer:
                     break
                 if sub_batch is None:
                     break
-                losses_td = self.loss_module(sub_batch)
-                self._post_loss_hook(sub_batch)
 
-                losses_td = self._process_loss_hook(sub_batch, losses_td)
+                if self.optimization_stepper is not None:
+                    losses_detached = self.optimization_stepper.step(self, sub_batch)
+                    self._post_optim_hook()
+                else:
+                    losses_td = self.loss_module(sub_batch)
+                    self._post_loss_hook(sub_batch)
 
-                losses_detached = self._optimizer_hook(losses_td)
-                self._post_optim_hook()
+                    losses_td = self._process_loss_hook(sub_batch, losses_td)
+
+                    losses_detached = self._optimizer_hook(losses_td)
+                    self._post_optim_hook()
+                    del losses_td
 
                 # LOGGING POINT 4: Post-optimization step logging (e.g., gradient norms, step-specific metrics)
                 self._post_optim_log(sub_batch)
@@ -805,7 +959,7 @@ class Trainer:
                     for key, item in losses_detached.items():
                         val = average_losses.get(key)
                         average_losses.set(key, val * j / (j + 1) + item / (j + 1))
-                del sub_batch, losses_td, losses_detached
+                del sub_batch, losses_detached
 
             # LOGGING POINT 5: Post-epoch logging (e.g., epoch completion metrics)
             self._post_epoch_log_hook(batch)
@@ -1073,6 +1227,10 @@ class ReplayBufferTrainer(TrainerHookBase):
 class OptimizerHook(TrainerHookBase):
     """Add an optimizer for one or more loss components.
 
+    .. deprecated::
+        ``OptimizerHook`` will be replaced by
+        :class:`~torchrl.trainers.DefaultOptimizationStepper` in a future release.
+
     Args:
         optimizer (optim.Optimizer): An optimizer to apply to the loss_components.
         loss_components (Sequence[str], optional): The keys in the loss TensorDict
@@ -1091,6 +1249,12 @@ class OptimizerHook(TrainerHookBase):
         optimizer: optim.Optimizer,
         loss_components: Sequence[str] | None = None,
     ):
+        warnings.warn(
+            "OptimizerHook will be replaced by DefaultOptimizationStepper "
+            "in a future release.",
+            FutureWarning,
+            stacklevel=2,
+        )
         if loss_components is not None and not loss_components:
             raise ValueError(
                 "loss_components list cannot be empty. "

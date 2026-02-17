@@ -908,7 +908,7 @@ class History(TensorClass["nocast"]):
         if not parsed_messages:
             raise RuntimeError(
                 f"Couldn't get a single item out of text {text}. A common cause "
-                f"if that special tokens should not be ommitted, did you set include_stop_str_in_output/skip_special_tokens=False?"
+                f"if that special tokens should not be omitted, did you set include_stop_str_in_output/skip_special_tokens=False?"
             )
 
         return lazy_stack(parsed_messages)
@@ -978,7 +978,7 @@ class History(TensorClass["nocast"]):
         if not parsed_messages:
             raise RuntimeError(
                 f"Couldn't get a single item out of text {template}. A common cause "
-                f"if that special tokens should not be ommitted, did you set include_stop_str_in_output/skip_special_tokens=False?"
+                f"if that special tokens should not be omitted, did you set include_stop_str_in_output/skip_special_tokens=False?"
             )
 
         return lazy_stack(parsed_messages)

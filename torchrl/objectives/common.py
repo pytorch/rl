@@ -348,6 +348,8 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             params = TensorDict.from_modules(
                 *module, as_module=True, expand_identical=True
             )
+            # Use the first module as the functional forward reference.
+            module = module[0]
         else:
             params = TensorDict.from_module(module, as_module=True)
 

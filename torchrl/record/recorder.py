@@ -174,13 +174,18 @@ class VideoRecorder(ObservationTransform):
         if self.count % self.skip == 0:
             if (
                 observation_trsf.ndim >= 3
-                and observation_trsf.shape[-3] == 3
+                and observation_trsf.shape[-3] in (1, 3)
                 and observation_trsf.shape[-2] > 3
                 and observation_trsf.shape[-1] > 3
             ):
                 # permute the channels to the last dim
                 observation_trsf = observation_trsf.permute(
                     *range(observation_trsf.ndim - 3), -2, -1, -3
+                )
+            # Handle grayscale (1-channel) by expanding to 3-channel for video
+            if observation_trsf.ndim >= 3 and observation_trsf.shape[-1] == 1:
+                observation_trsf = observation_trsf.expand(
+                    *observation_trsf.shape[:-1], 3
                 )
             if not (
                 observation_trsf.shape[-1] == 3 or observation_trsf.ndimension() == 2
