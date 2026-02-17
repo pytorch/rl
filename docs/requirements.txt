@@ -15,7 +15,7 @@ sphinx_design
 
 torchvision
 dm_control>=1.0.0
-mujoco>=3.0.0,<3.5
+mujoco>=3.0.0
 gymnasium[classic_control,atari,mujoco]
 pygame
 tqdm

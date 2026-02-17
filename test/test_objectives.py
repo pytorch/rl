@@ -4398,6 +4398,28 @@ class TestSAC(LossModuleTestBase):
         )
         self.reset_parameters_recursive_test(loss_fn)
 
+    def test_sac_list_qvalue_networks(self, version):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_sac()
+        actor = self._create_mock_actor()
+        qvalue1 = self._create_mock_qvalue()
+        qvalue2 = self._create_mock_qvalue()
+        if version == 1:
+            value = self._create_mock_value()
+        else:
+            value = None
+        loss_fn = SACLoss(
+            actor_network=actor,
+            qvalue_network=[qvalue1, qvalue2],
+            value_network=value,
+            num_qvalue_nets=2,
+        )
+        with pytest.warns(
+            UserWarning, match="No target network updater has been associated"
+        ) if rl_warnings() else contextlib.nullcontext():
+            loss = loss_fn(td)
+        assert "loss_qvalue" in loss.keys()
+
     @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
