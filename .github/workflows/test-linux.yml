@@ -348,3 +348,4 @@ jobs:
           flags: unittests
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
+          slug: pytorch/rl
