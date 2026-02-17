@@ -582,15 +582,15 @@ class PrioritizedSampler(Sampler):
     @torch.no_grad()
     def _update_priority_tree(
         self,
-        index: int | torch.Tensor,
-        priority: float | torch.Tensor,
-        *,
-        storage: TensorStorage | None = None,
+        index: torch.Tensor,
+        priority: torch.Tensor,
     ) -> None:
-        priority = torch.as_tensor(priority, device=torch.device("cpu")).detach()
-        index = self._normalize_index(index, storage=storage)
-        if _is_int(index):
-            index = index.reshape(1)
+        """Write priorities into the sum/min trees for the given flat 1-d index.
+
+        Both ``index`` and ``priority`` must already be tensors on CPU.
+        ``index`` must be a 1-d long tensor (as returned by :meth:`_normalize_index`),
+        and negative indices must already be filtered out by the caller.
+        """
         # we need to reshape priority if it has more than one element or if it has
         # a different shape than index
         if priority.numel() > 1 and priority.shape != index.shape:
@@ -604,16 +604,6 @@ class PrioritizedSampler(Sampler):
                 ) from err
         elif priority.numel() <= 1:
             priority = priority.squeeze()
-
-        # MaxValueWriter will set -1 for items in the data that we don't want
-        # to update. We therefore have to keep only the non-negative indices.
-        valid_index = index >= 0
-        if not valid_index.any():
-            return
-        if not valid_index.all():
-            index = index[valid_index]
-            if priority.ndim:
-                priority = priority[valid_index]
 
         max_p, max_p_idx = priority.max(dim=0)
         cur_max_priority, cur_max_priority_index = self._max_priority
@@ -715,11 +705,34 @@ class PrioritizedSampler(Sampler):
 
         """
         self._flush_pending_updates()
-        self._update_priority_tree(index, priority, storage=storage)
+        priority = torch.as_tensor(priority, device=torch.device("cpu")).detach()
+        index = self._normalize_index(index, storage=storage)
+        # MaxValueWriter will set -1 for items in the data that we don't want
+        # to update. We therefore have to keep only the non-negative indices.
+        valid_index = index >= 0
+        if not valid_index.any():
+            return
+        if not valid_index.all():
+            index = index[valid_index]
+            if priority.ndim:
+                priority = priority[valid_index]
+        self._update_priority_tree(index, priority)
 
     def mark_update(
         self, index: int | torch.Tensor, *, storage: Storage | None = None
     ) -> None:
+        """Marks the given indices for a default-priority update.
+
+        The update is **lazy**: the priority tree is not written to immediately.
+        Instead the (index, default_priority) pair is appended to an internal
+        pending-updates list and flushed the next time the tree is read
+        (e.g. on :meth:`sample`, :meth:`update_priority`, :meth:`state_dict`,
+        or :meth:`dumps`).
+
+        If :meth:`update_priority` is called for the same indices before the
+        flush, the pending defaults are applied first and then overwritten by
+        the explicit priorities.
+        """
         index = self._normalize_index(index, storage=storage)
         valid_index = index >= 0
         if not valid_index.any():
