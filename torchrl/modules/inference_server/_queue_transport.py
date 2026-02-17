@@ -74,7 +74,7 @@ class _QueueInferenceClient:
     request-id.
 
     Args:
-        request_queue: the shared request queue.
+        request_queue: the shared request queue (any object with ``.put()``).
         response_queue: this client's dedicated response queue.
         actor_id: the unique identifier assigned by the transport.
     """
@@ -122,18 +122,23 @@ class _QueueInferenceClient:
 class QueueBasedTransport(InferenceTransport):
     """Base class for transports that use a request queue and per-actor response queues.
 
-    Subclasses must set the following attributes before calling ``super().__init__()``:
+    Subclasses must set the following attributes in ``__init__`` (before or
+    after calling ``super().__init__()``):
 
-    * ``_request_queue`` -- the shared request queue (any object with ``.put()``,
-      ``.get(timeout=...)``, and ``.get_nowait()`` / ``.get(block=False)``).
+    * ``_request_queue`` -- the shared request queue (any object with
+      ``.put()``, ``.get(timeout=...)``, and ``.get(block=False)``).
     * ``_response_queues`` -- a ``dict[int, <queue>]`` mapping actor ids to
       per-actor response queues.
-    * ``_has_work`` -- a :class:`threading.Event` that is set whenever a new
-      request is enqueued (used for non-blocking ``wait_for_work``).
 
     Subclasses must implement:
 
     * :meth:`_make_response_queue` -- factory for creating a new response queue.
+
+    .. note::
+        ``wait_for_work`` uses a blocking ``get`` followed by ``put`` to peek
+        at the request queue.  This is safe because a single server thread
+        calls both ``wait_for_work`` and ``drain`` sequentially -- there is no
+        concurrent consumer that could miss the re-enqueued item.
     """
 
     def __init__(self):
@@ -178,7 +183,7 @@ class QueueBasedTransport(InferenceTransport):
         callbacks: list[tuple[int, int]] = []
         for _ in range(max_items):
             try:
-                actor_id, req_id, td = self._request_queue.get_nowait()
+                actor_id, req_id, td = self._request_queue.get(block=False)
             except Exception:
                 break
             items.append(td)
@@ -187,8 +192,12 @@ class QueueBasedTransport(InferenceTransport):
 
     def wait_for_work(self, timeout: float) -> None:
         """Block until at least one request is available or *timeout* elapses."""
-        self._has_work.wait(timeout=timeout)
-        self._has_work.clear()
+        try:
+            item = self._request_queue.get(timeout=timeout)
+            # Put it back so drain() can consume it.
+            self._request_queue.put(item)
+        except Exception:
+            pass
 
     def resolve(self, callback: tuple[int, int], result: TensorDictBase) -> None:
         """Route the result to the correct actor's response queue."""
