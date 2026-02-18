@@ -156,7 +156,7 @@ fi
 # Install mujoco for Python < 3.14 (mujoco doesn't have Python 3.14 wheels yet)
 if [[ "$PYTHON_VERSION" != "3.14" ]]; then
   echo "installing mujoco"
-  uv_pip_install "mujoco>=3.3.7,<3.5"
+  uv_pip_install "mujoco>=3.3.7"
 fi
 
 # Install gymnasium

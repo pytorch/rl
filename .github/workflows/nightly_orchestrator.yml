@@ -4,13 +4,58 @@ on:
   schedule:
     - cron: '0 6 * * *'  # 6AM UTC daily
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Run mode: full (run tests + deploy dashboard), dry-run (run tests, skip dashboard deploy), smoke-test (skip tests, validate CI plumbing only)'
+        type: choice
+        options:
+          - full
+          - dry-run
+          - smoke-test
+        default: full
 
 concurrency:
   group: nightly-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
+  # =============================================================================
+  # Resolve the effective mode (schedule always uses "full")
+  # =============================================================================
+  config:
+    name: Configure
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.resolve.outputs.mode }}
+      run_tests: ${{ steps.resolve.outputs.run_tests }}
+      deploy_dashboard: ${{ steps.resolve.outputs.deploy_dashboard }}
+    steps:
+      - name: Resolve mode
+        id: resolve
+        run: |
+          MODE="${{ inputs.mode || 'full' }}"
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+
+          if [ "$MODE" = "smoke-test" ]; then
+            echo "run_tests=false" >> "$GITHUB_OUTPUT"
+            echo "deploy_dashboard=true" >> "$GITHUB_OUTPUT"
+          elif [ "$MODE" = "dry-run" ]; then
+            echo "run_tests=true" >> "$GITHUB_OUTPUT"
+            echo "deploy_dashboard=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_tests=true" >> "$GITHUB_OUTPUT"
+            echo "deploy_dashboard=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "### Nightly Orchestrator Configuration" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Mode**: $MODE" >> "$GITHUB_STEP_SUMMARY"
+
+  # =============================================================================
+  # Test workflows (skipped in smoke-test mode)
+  # =============================================================================
   test-linux:
+    needs: config
+    if: needs.config.outputs.run_tests == 'true'
     uses: ./.github/workflows/test-linux.yml
     secrets: inherit
     permissions:
@@ -18,6 +63,8 @@ jobs:
       contents: read
 
   test-linux-llm:
+    needs: config
+    if: needs.config.outputs.run_tests == 'true'
     uses: ./.github/workflows/test-linux-llm.yml
     secrets: inherit
     permissions:
@@ -25,6 +72,8 @@ jobs:
       contents: read
 
   test-linux-habitat:
+    needs: config
+    if: needs.config.outputs.run_tests == 'true'
     uses: ./.github/workflows/test-linux-habitat.yml
     secrets: inherit
     permissions:
@@ -32,6 +81,8 @@ jobs:
       contents: read
 
   test-linux-tutorials:
+    needs: config
+    if: needs.config.outputs.run_tests == 'true'
     uses: ./.github/workflows/test-linux-tutorials.yml
     secrets: inherit
     permissions:
@@ -39,6 +90,8 @@ jobs:
       contents: read
 
   test-linux-sota:
+    needs: config
+    if: needs.config.outputs.run_tests == 'true'
     uses: ./.github/workflows/test-linux-sota.yml
     secrets: inherit
     permissions:
@@ -46,6 +99,8 @@ jobs:
       contents: read
 
   test-linux-libs:
+    needs: config
+    if: needs.config.outputs.run_tests == 'true'
     uses: ./.github/workflows/test-linux-libs.yml
     secrets: inherit
     permissions:
@@ -53,6 +108,8 @@ jobs:
       contents: read
 
   test-windows-optdepts:
+    needs: config
+    if: needs.config.outputs.run_tests == 'true'
     uses: ./.github/workflows/test-windows-optdepts.yml
     secrets: inherit
     permissions:
@@ -60,6 +117,8 @@ jobs:
       contents: read
 
   lint:
+    needs: config
+    if: needs.config.outputs.run_tests == 'true'
     uses: ./.github/workflows/lint.yml
     secrets: inherit
     permissions:
@@ -67,6 +126,8 @@ jobs:
       contents: read
 
   docs:
+    needs: config
+    if: needs.config.outputs.run_tests == 'true'
     uses: ./.github/workflows/docs.yml
     secrets: inherit
     permissions:
@@ -74,6 +135,8 @@ jobs:
       contents: write
 
   benchmarks:
+    needs: config
+    if: needs.config.outputs.run_tests == 'true'
     uses: ./.github/workflows/benchmarks.yml
     with:
       skip-upload: true
@@ -85,10 +148,14 @@ jobs:
       pull-requests: write
 
   validate-test-partitioning:
+    needs: config
+    if: needs.config.outputs.run_tests == 'true'
     uses: ./.github/workflows/validate-test-partitioning.yml
     secrets: inherit
 
   nightly-build:
+    needs: config
+    if: needs.config.outputs.run_tests == 'true'
     uses: ./.github/workflows/nightly_build.yml
     secrets: inherit
     permissions:
@@ -96,6 +163,8 @@ jobs:
       contents: read
 
   build-wheels-linux:
+    needs: config
+    if: needs.config.outputs.run_tests == 'true'
     uses: ./.github/workflows/build-wheels-linux.yml
     secrets: inherit
     permissions:
@@ -103,6 +172,8 @@ jobs:
       contents: read
 
   build-wheels-m1:
+    needs: config
+    if: needs.config.outputs.run_tests == 'true'
     uses: ./.github/workflows/build-wheels-m1.yml
     secrets: inherit
     permissions:
@@ -110,6 +181,8 @@ jobs:
       contents: read
 
   build-wheels-windows:
+    needs: config
+    if: needs.config.outputs.run_tests == 'true'
     uses: ./.github/workflows/build-wheels-windows.yml
     secrets: inherit
     permissions:
@@ -117,6 +190,8 @@ jobs:
       contents: read
 
   build-wheels-aarch64-linux:
+    needs: config
+    if: needs.config.outputs.run_tests == 'true'
     uses: ./.github/workflows/build-wheels-aarch64-linux.yml
     secrets: inherit
     permissions:
@@ -132,6 +207,7 @@ jobs:
     permissions:
       contents: write
     needs:
+      - config
       - test-linux
       - test-linux-llm
       - test-linux-habitat
@@ -148,7 +224,7 @@ jobs:
       - build-wheels-m1
       - build-wheels-windows
       - build-wheels-aarch64-linux
-    if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    if: always()
     steps:
       - name: Trigger status collector
         uses: peter-evans/repository-dispatch@v4
@@ -157,5 +233,6 @@ jobs:
           client-payload: |
             {
               "run_id": "${{ github.run_id }}",
-              "triggered_at": "${{ github.event.repository.updated_at }}"
+              "triggered_at": "${{ github.event.repository.updated_at }}",
+              "deploy": ${{ needs.config.outputs.deploy_dashboard }}
             }
