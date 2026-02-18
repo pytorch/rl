@@ -8635,8 +8635,12 @@
             <span class="k">for</span> <span class="n">parent_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">truncated_keys</span><span class="p">:</span>
                 <span class="n">parent_truncated</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">parent_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">parent_truncated</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="c1"># Expand parent truncated to match nested shape and apply OR</span>
-                    <span class="n">expanded</span> <span class="o">=</span> <span class="n">parent_truncated</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">nested_truncated</span><span class="p">)</span>
+                    <span class="c1"># Insert extra dims (e.g. agent dims) so the parent is</span>
+                    <span class="c1"># broadcastable to the nested agent-level shape.</span>
+                    <span class="n">parent_val</span> <span class="o">=</span> <span class="n">parent_truncated</span>
+                    <span class="k">while</span> <span class="n">parent_val</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&lt;</span> <span class="n">nested_truncated</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+                        <span class="n">parent_val</span> <span class="o">=</span> <span class="n">parent_val</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">)</span>
+                    <span class="n">expanded</span> <span class="o">=</span> <span class="n">parent_val</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">nested_truncated</span><span class="p">)</span>
                     <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">nested_key</span><span class="p">,</span> <span class="n">nested_truncated</span> <span class="o">|</span> <span class="n">expanded</span><span class="p">)</span>
                     <span class="k">break</span>
 
@@ -8652,8 +8656,10 @@
                 <span class="k">for</span> <span class="n">parent_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_keys</span><span class="p">:</span>
                     <span class="n">parent_done</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">parent_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
                     <span class="k">if</span> <span class="n">parent_done</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                        <span class="c1"># Expand parent done to match nested shape and apply OR</span>
-                        <span class="n">expanded</span> <span class="o">=</span> <span class="n">parent_done</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">nested_done</span><span class="p">)</span>
+                        <span class="n">parent_val</span> <span class="o">=</span> <span class="n">parent_done</span>
+                        <span class="k">while</span> <span class="n">parent_val</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&lt;</span> <span class="n">nested_done</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+                            <span class="n">parent_val</span> <span class="o">=</span> <span class="n">parent_val</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">)</span>
+                        <span class="n">expanded</span> <span class="o">=</span> <span class="n">parent_val</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">nested_done</span><span class="p">)</span>
                         <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">nested_key</span><span class="p">,</span> <span class="n">nested_done</span> <span class="o">|</span> <span class="n">expanded</span><span class="p">)</span>
                         <span class="k">break</span>
 
