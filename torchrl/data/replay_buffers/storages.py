@@ -733,6 +733,7 @@ class TensorStorage(Storage):
         )
         self._storage = storage
         self._last_cursor = None
+        self._last_checkpoint_cursor = None
         self.__dict__["_storage_keys"] = None
 
     @property
