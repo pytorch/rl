@@ -64,6 +64,7 @@ from torchrl.data import (
     OneHot,
     ReplayBuffer,
     ReplayBufferEnsemble,
+    TensorDictReplayBuffer,
     Unbounded,
     UnboundedDiscrete,
 )
@@ -5127,6 +5128,34 @@ class TestPettingZoo:
         )
         for _ in collector:
             break
+
+    def test_single_agent_group_replay_buffer(self):
+        """Regression test for gh#3515 - shape mismatch with single-agent group."""
+        env = PettingZooEnv(
+            task="simple_v3",
+            parallel=True,
+            seed=0,
+            use_mask=False,
+        )
+        group = list(env.group_map.keys())[0]
+        assert len(env.group_map[group]) == 1
+
+        rollout = env.rollout(10)
+        T = rollout.shape[0]
+        n_agents = 1
+
+        # Reshape to (1, T, n_agents) to reproduce the scenario from gh#3515
+        # where a replay buffer Transform reshapes collector output to
+        # (n_envs, traj_len, n_agents). When n_agents=1 the trailing dim of 1
+        # caused _set_index_in_td to match the wrong number of batch dims.
+        td = rollout.unsqueeze(0).unsqueeze(-1)
+        assert td.shape == torch.Size([1, T, n_agents])
+
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10_000, ndim=3),
+            batch_size=4,
+        )
+        rb.extend(td)
 
 
 @pytest.mark.skipif(not _has_robohive, reason="RoboHive not found")
