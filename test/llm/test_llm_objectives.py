@@ -14,6 +14,7 @@ import torch
 from tensordict import lazy_stack, TensorDict
 from torchrl._utils import logger
 from torchrl.data import History, LazyStackStorage, ReplayBuffer
+from torchrl.envs.llm.transforms.feedback import AddFeedbackContext
 from torchrl.envs.llm.transforms.kl import RetrieveLogProb
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from torchrl.modules.llm.policies.common import ChatHistory, Masks, Text, Tokens
@@ -24,6 +25,7 @@ from torchrl.objectives.llm.grpo import (
     GRPOLossOutput,
     MCAdvantage,
 )
+from torchrl.objectives.llm.sdpo import SDPOLoss, SDPOLossOutput
 from torchrl.objectives.llm.sft import SFTLoss
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
@@ -425,6 +427,301 @@ class TestLosses:
         assert (
             0 <= loss_vals.clip_fraction <= 1
         ), f"clip_fraction out of range: {loss_vals.clip_fraction}"
+
+
+def _mock_data_sdpo(vocab_size: int, device: torch.device | str = "cpu") -> TensorDict:
+    """Create mock data for SDPO testing."""
+    from transformers import AutoTokenizer
+
+    device = torch.device(device)
+
+    tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+    prompt = History(
+        role=["system", "user"],
+        content=["You are a useful assistant.", "What is 2+2?"],
+        batch_size=(2,),
+        device=device,
+    )
+    response = History(
+        role=["assistant"],
+        content=["2 + 2 = 4."],
+        batch_size=(1,),
+        device=device,
+    )
+    full_history = prompt.extend(response, inplace=False)
+    history = ChatHistory(
+        prompt=prompt,
+        response=response,
+        full=full_history,
+        device=device,
+    )
+    batch_size = 1
+
+    # Expand history to match batch size
+    history = history.expand((batch_size,))
+    next_history = ChatHistory(
+        prompt=full_history,
+        device=device,
+    )
+    next_history = next_history.expand((batch_size,))
+
+    # Get tokens
+    tokens_full = history.to_tokens(tokenizer)
+    next_tokens = next_history.to_tokens(tokenizer)
+
+    tokens_input_ids = tokens_full.get(
+        "full", as_padded_tensor=True, padding_side="left", padding_value=0
+    )
+    seq_len = tokens_input_ids.shape[-1]
+
+    # Create tensors
+    reward = torch.randn(batch_size, seq_len, 1, device=device)
+    done = torch.zeros(batch_size, seq_len, 1, dtype=torch.bool, device=device)
+    log_probs = torch.randn_like(tokens_full, dtype=torch.float32, device=device)
+    attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool, device=device)
+
+    from tensordict import MetaData
+
+    masks = Masks(
+        all_attention_mask=attention_mask,
+        all_assistant_mask=None,
+        padded=MetaData(True),
+        device=device,
+    )
+
+    # Create teacher context (feedback-augmented prompt for self-teacher)
+    # In real usage, this would be constructed by AddFeedbackContext transform
+    teacher_context = {
+        "history": history,
+        "env_feedback": "The solution is correct.",
+    }
+
+    data = TensorDict(
+        {
+            "history": history,
+            "tokens": tokens_full % vocab_size,
+            "masks": masks,
+            "teacher_context": teacher_context,
+            "next": {
+                "history": next_history,
+                "tokens": next_tokens % vocab_size,
+                "reward": reward,
+                "done": done,
+            },
+            "log_probs": log_probs,
+        },
+        batch_size=(batch_size,),
+    )
+    return data
+
+
+class TestSDPO:
+    """Test suite for Self-Distillation Policy Optimization (SDPO) loss."""
+
+    @pytest.mark.parametrize(
+        "divergence_type", ["kl", "reverse_kl", "js"], ids=["kl", "reverse_kl", "js"]
+    )
+    def test_sdpo_basic(self, mock_transformer_model, divergence_type):
+        """Test basic SDPO loss computation with different divergence types."""
+        vocab_size = 1024
+        device = torch.device("cpu")
+
+        # Create mock model and wrap it
+        model = mock_transformer_model(vocab_size=vocab_size, device=device)
+        actor_network = TransformersWrapper(
+            model,
+            generate=False,
+            pad_output=True,
+            input_mode="history",
+        )
+
+        # Create loss module
+        loss_fn = SDPOLoss(
+            actor_network,
+            divergence_type=divergence_type,
+            entropy_bonus=True,
+            entropy_coeff=0.01,
+        )
+
+        # Create fake data
+        data = _mock_data_sdpo(vocab_size=vocab_size, device=device)
+
+        # Compute loss
+        loss_vals = loss_fn(data)
+
+        # Assertions: Check output type and structure
+        assert isinstance(
+            loss_vals, SDPOLossOutput
+        ), f"Expected SDPOLossOutput, got {type(loss_vals)}"
+
+        # Check that all expected keys are present
+        assert hasattr(loss_vals, "loss_objective"), "Missing loss_objective"
+        assert hasattr(loss_vals, "divergence"), "Missing divergence"
+        assert hasattr(loss_vals, "kl_approx"), "Missing kl_approx"
+        assert hasattr(loss_vals, "entropy"), "Missing entropy"
+        assert hasattr(loss_vals, "loss_entropy"), "Missing loss_entropy"
+
+        # Check tensor shapes (all losses should be scalars after reduction)
+        assert (
+            loss_vals.loss_objective.shape == ()
+        ), f"loss_objective should be scalar, got {loss_vals.loss_objective.shape}"
+        assert (
+            loss_vals.divergence.shape == ()
+        ), f"divergence should be scalar, got {loss_vals.divergence.shape}"
+        assert (
+            loss_vals.kl_approx.shape == ()
+        ), f"kl_approx should be scalar, got {loss_vals.kl_approx.shape}"
+
+        # Check that losses are finite
+        assert torch.isfinite(loss_vals.loss_objective), "loss_objective is not finite"
+        assert torch.isfinite(loss_vals.divergence), "divergence is not finite"
+
+        # Divergence should be non-negative
+        assert (
+            loss_vals.divergence >= 0
+        ), f"divergence should be non-negative: {loss_vals.divergence}"
+
+    @pytest.mark.parametrize("topk", [None, 50, 100], ids=["full", "topk50", "topk100"])
+    def test_sdpo_topk(self, mock_transformer_model, topk):
+        """Test SDPO with top-K logit distillation for memory efficiency."""
+        vocab_size = 1024
+        device = torch.device("cpu")
+
+        model = mock_transformer_model(vocab_size=vocab_size, device=device)
+        actor_network = TransformersWrapper(
+            model,
+            generate=False,
+            pad_output=True,
+            input_mode="history",
+        )
+
+        # Create loss with top-K
+        loss_fn = SDPOLoss(
+            actor_network,
+            divergence_type="js",
+            topk=topk,
+        )
+
+        data = _mock_data_sdpo(vocab_size=vocab_size, device=device)
+        loss_vals = loss_fn(data)
+
+        assert isinstance(loss_vals, SDPOLossOutput)
+        assert torch.isfinite(loss_vals.loss_objective)
+        assert loss_vals.divergence >= 0
+
+    def test_sdpo_ema_teacher(self, mock_transformer_model):
+        """Test SDPO with EMA teacher regularization."""
+        vocab_size = 1024
+        device = torch.device("cpu")
+
+        model = mock_transformer_model(vocab_size=vocab_size, device=device)
+        actor_network = TransformersWrapper(
+            model,
+            generate=False,
+            pad_output=True,
+            input_mode="history",
+        )
+
+        # Create loss with EMA teacher
+        loss_fn = SDPOLoss(
+            actor_network,
+            divergence_type="js",
+            use_ema_teacher=True,
+            ema_decay=0.99,
+        )
+
+        # Check that EMA params were initialized
+        assert loss_fn._ema_teacher_params is not None
+        assert len(loss_fn._ema_teacher_params) > 0
+
+        data = _mock_data_sdpo(vocab_size=vocab_size, device=device)
+        loss_vals = loss_fn(data)
+
+        assert isinstance(loss_vals, SDPOLossOutput)
+        assert torch.isfinite(loss_vals.loss_objective)
+
+        # Test EMA update
+        loss_fn.update_ema_teacher()
+        # Should still work after update
+        loss_vals_after = loss_fn(data)
+        assert torch.isfinite(loss_vals_after.loss_objective)
+
+    def test_sdpo_no_entropy(self, mock_transformer_model):
+        """Test SDPO without entropy bonus."""
+        vocab_size = 1024
+        device = torch.device("cpu")
+
+        model = mock_transformer_model(vocab_size=vocab_size, device=device)
+        actor_network = TransformersWrapper(
+            model,
+            generate=False,
+            pad_output=True,
+            input_mode="history",
+        )
+
+        loss_fn = SDPOLoss(
+            actor_network,
+            divergence_type="js",
+            entropy_bonus=False,
+        )
+
+        data = _mock_data_sdpo(vocab_size=vocab_size, device=device)
+        loss_vals = loss_fn(data)
+
+        assert isinstance(loss_vals, SDPOLossOutput)
+        assert torch.isfinite(loss_vals.loss_objective)
+        # Entropy should be None when entropy_bonus is False
+        assert loss_vals.entropy is None
+        assert loss_vals.loss_entropy is None
+
+
+class TestAddFeedbackContext:
+    """Test suite for AddFeedbackContext transform."""
+
+    def test_add_feedback_direct(self):
+        """Test adding feedback context in direct mode."""
+        transform = AddFeedbackContext()
+
+        td = TensorDict(
+            {
+                "query": "What is 2+2?",
+                ("text", "response"): "The answer is 5.",
+                "env_feedback": "Wrong answer. The correct answer is 4.",
+                ("next", "reward"): torch.tensor([0.0]),
+                ("next", "done"): torch.tensor([True]),
+            },
+            batch_size=(),
+        )
+
+        td_out = transform(td)
+
+        # Check that teacher_context was added
+        assert "teacher_context" in td_out.keys()
+        teacher_context = td_out.get("teacher_context")
+        assert teacher_context is not None
+
+    def test_add_feedback_with_success(self):
+        """Test adding feedback context with successful rollout."""
+        transform = AddFeedbackContext()
+
+        td = TensorDict(
+            {
+                "query": "What is 2+2?",
+                ("text", "response"): "The answer is 5.",
+                "env_feedback": "Wrong answer.",
+                "_successful_rollout": "The answer is 4.",
+                ("next", "reward"): torch.tensor([0.0]),
+                ("next", "done"): torch.tensor([True]),
+            },
+            batch_size=(),
+        )
+
+        td_out = transform(td)
+
+        assert "teacher_context" in td_out.keys()
+        teacher_context = td_out.get("teacher_context")
+        # Should contain both the successful solution and feedback
+        assert teacher_context is not None
 
 
 class TestSFT:
