@@ -5,8 +5,9 @@ Run with:
     pytest test/test_benchmark_store_storage.py --benchmark-only --benchmark-group-by=param:storage_type
 """
 
+import importlib
+
 import pytest
-import redis
 import torch
 from tensordict import TensorDict
 
@@ -14,6 +15,9 @@ from torchrl.data import ReplayBuffer
 from torchrl.data.replay_buffers import LazyTensorStorage, StoreStorage
 from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
+
+_has_redis = importlib.util.find_spec("redis") is not None
+pytestmark = pytest.mark.skipif(not _has_redis, reason="redis not available")
 
 BUFFER_SIZE = 10_000
 OBS_DIM = 64
@@ -23,6 +27,8 @@ FILL_CHUNK = 500
 
 
 def _flush_redis():
+    import redis
+
     r = redis.Redis()
     r.flushdb()
     r.close()
