@@ -24,7 +24,8 @@ from tensordict.tensorclass import is_non_tensor
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data import Choice, Composite, NonTensor
 from torchrl.data.llm import History
-from torchrl.envs import ConditionalSkip, GymWrapper, Transform, TransformedEnv
+from torchrl.envs.libs.gym import GymWrapper
+from torchrl.envs.transforms import ConditionalSkip, Transform, TransformedEnv
 
 if TYPE_CHECKING:
     import mlgym

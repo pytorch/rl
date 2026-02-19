@@ -204,6 +204,8 @@ __all__ = [
     "ObservationNorm",
     "ObservationTransform",
     "OpenMLEnv",
+    "OpenEnvEnv",
+    "OpenEnvWrapper",
     "OpenSpielEnv",
     "OpenSpielWrapper",
     "ParallelEnv",
@@ -270,3 +272,14 @@ __all__ = [
     "step_mdp",
     "terminated_or_truncated",
 ]
+
+
+def __getattr__(name):
+    if name in ("OpenEnvEnv", "OpenEnvWrapper"):
+        from torchrl.envs.libs.openenv import OpenEnvEnv, OpenEnvWrapper
+
+        _globals = globals()
+        _globals["OpenEnvEnv"] = OpenEnvEnv
+        _globals["OpenEnvWrapper"] = OpenEnvWrapper
+        return _globals[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -32,7 +32,7 @@ from tensordict.tensorclass import is_non_tensor
 from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.tensor_specs import Composite, Unbounded
-from torchrl.envs import Transform
+from torchrl.envs.transforms import Transform
 
 _has_langdetect = importlib.util.find_spec("langdetect") is not None
 _has_nltk = importlib.util.find_spec("nltk") is not None

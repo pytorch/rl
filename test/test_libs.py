@@ -40,7 +40,9 @@ from tensordict import (
     assert_allclose_td,
     is_tensor_collection,
     LazyStackedTensorDict,
+    NonTensorData,
     TensorDict,
+    TensorDictBase,
 )
 from tensordict.nn import (
     ProbabilisticTensorDictModule,
@@ -111,6 +113,7 @@ from torchrl.envs.libs.gym import (
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.meltingpot import MeltingpotEnv, MeltingpotWrapper
+from torchrl.envs.libs.openenv import _has_openenv, OpenEnvEnv
 from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.libs.openspiel import _has_pyspiel, OpenSpielEnv, OpenSpielWrapper
 from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
@@ -4703,6 +4706,46 @@ class TestOpenX:
         assert ("next", "state") in sample.keys(True)
         assert sample["pixels"].shape == torch.Size([32, 3, 64, 64])
 
+
+@pytest.mark.skipif(not _has_openenv, reason="openenv not found")
+class TestOpenEnv:
+    @staticmethod
+    def _unwrap_observation(value):
+        if isinstance(value, TensorDictBase):
+            return value.to_dict()
+        if isinstance(value, NonTensorData):
+            return value.data
+        return value
+
+    def test_wrapper_basic(self):
+            env = OpenEnvEnv("openenv/echo-env", return_observation_dict=True)
+            td = env.reset()
+            assert "observation" in td.keys()
+            action_td = TensorDict({"action": {"message": "ping"}}, batch_size=(1,))
+            td_next = env.step(action_td)
+            assert td_next["next", "reward"].numel() == 1
+            assert td_next["next", "done"].dtype == torch.bool
+            env.close()
+
+    def test_wrapper_action_cls(self):
+            env = OpenEnvEnv("openenv/echo-env", return_observation_dict=True)
+            env.reset()
+            action_td = TensorDict({"action": {"message": "hello"}}, batch_size=(1,))
+            td_next = env.step(action_td)
+            obs = self._unwrap_observation(td_next["next", "observation"])
+            assert obs is not None
+            if isinstance(obs, dict) and "echoed_message" in obs:
+                assert obs["echoed_message"] == "hello"
+            env.close()
+
+    def test_wrapper_observation_dict(self):
+            env = OpenEnvEnv("openenv/echo-env", return_observation_dict=True)
+            td = env.reset()
+            obs = self._unwrap_observation(td["observation"])
+            assert obs is not None
+            if isinstance(obs, dict):
+                assert "echoed_message" in obs
+            env.close()
 
 @pytest.mark.skipif(not _has_sklearn, reason="Scikit-learn not found")
 @pytest.mark.parametrize(

@@ -91,6 +91,7 @@ offline-data = [
 ]
 marl = ["vmas>=1.2.10", "pettingzoo>=1.24.1", "dm-meltingpot; python_version>='3.11'"]
 open_spiel = ["open_spiel>=1.5"]
+openenv = ["openenv-core"]
 brax = ["jax>=0.7.0; python_version>='3.11'", "brax; python_version>='3.11'"]
 procgen = ["procgen"]
 # Base LLM dependencies (no inference backend - use llm-vllm or llm-sglang)

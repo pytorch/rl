@@ -15,7 +15,7 @@ from tensordict.utils import _zip_strict, NestedKey
 from torch import Tensor
 from torchrl._utils import _replace_last
 from torchrl.data.tensor_specs import Bounded, Composite, TensorSpec
-from torchrl.envs import Transform, UnaryTransform
+from torchrl.envs.transforms import Transform, UnaryTransform
 from torchrl.envs.transforms.utils import _set_missing_tolerance
 
 if TYPE_CHECKING:
