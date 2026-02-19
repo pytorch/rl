@@ -40,6 +40,7 @@ from .storages import (
     ListStorage,
     Storage,
     StorageEnsemble,
+    StoreStorage,
     TensorStorage,
 )
 from .utils import Flat2TED, H5Combine, H5Split, Nested2TED, TED2Flat, TED2Nested
@@ -83,6 +84,7 @@ __all__ = [
     "ListStorage",
     "Storage",
     "StorageEnsemble",
+    "StoreStorage",
     "TensorStorage",
     "Flat2TED",
     "H5Combine",
