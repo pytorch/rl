@@ -89,6 +89,7 @@ Available wrappers
     HabitatEnv
     IsaacGymEnv
     IsaacGymWrapper
+    IsaacLabEnv
     IsaacLabWrapper
     JumanjiEnv
     JumanjiWrapper

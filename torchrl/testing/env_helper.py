@@ -23,13 +23,10 @@ def make_isaac_env(env_name: str = "Isaac-Ant-v0"):
     AppLauncher(args_cli)
 
     # Imports and env
-    import gymnasium as gym
     import isaaclab_tasks  # noqa: F401
     from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
-    from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
+    from torchrl.envs.libs.isaac_lab import IsaacLabEnv
 
     torchrl_logger.info("Making IsaacLab env...")
-    env = gym.make(env_name, cfg=AntEnvCfg())
-    torchrl_logger.info("Wrapping IsaacLab env...")
-    env = IsaacLabWrapper(env)
+    env = IsaacLabEnv(env_name, cfg=AntEnvCfg())
     return env

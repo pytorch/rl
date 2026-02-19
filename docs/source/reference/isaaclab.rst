@@ -12,6 +12,26 @@ This guide covers how to use TorchRL components with
 For general IsaacLab installation and cluster setup (not specific to TorchRL), see the
 `knowledge_base/ISAACLAB.md <https://github.com/pytorch/rl/blob/main/knowledge_base/ISAACLAB.md>`_ file.
 
+IsaacLabEnv
+-----------
+
+Use :class:`~torchrl.envs.libs.isaac_lab.IsaacLabEnv` to build IsaacLab
+environments directly from their gymnasium ID:
+
+.. code-block:: python
+
+    from torchrl.envs.libs.isaac_lab import IsaacLabEnv
+
+    env = IsaacLabEnv("Isaac-Ant-v0", cfg=env_cfg)
+
+``IsaacLabEnv`` supports ``num_workers`` following the same lazy behavior as
+other TorchRL env libraries:
+
+.. code-block:: python
+
+    env = IsaacLabEnv("Isaac-Ant-v0", cfg=env_cfg, num_workers=2)
+    # env is a lazy ParallelEnv until first reset/step/spec query
+
 IsaacLabWrapper
 ---------------
 
@@ -52,7 +72,7 @@ Collector
 ---------
 
 Because IsaacLab environments are **pre-vectorized** (a single ``gym.make``
-creates ~4096 parallel environments on the GPU), use a single
+creates ~4096 parallel environments on the GPU), most workloads can use a single
 :class:`~torchrl.collectors.Collector` — there is no need for
 ``ParallelEnv`` or ``MultiCollector``:
 

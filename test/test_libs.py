@@ -109,6 +109,7 @@ from torchrl.envs.libs.gym import (
     set_gym_backend,
 )
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
+from torchrl.envs.libs.isaac_lab import IsaacLabEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.meltingpot import MeltingpotEnv, MeltingpotWrapper
 from torchrl.envs.libs.openml import OpenMLEnv
@@ -5597,6 +5598,17 @@ class TestMeltingpot:
 
 @pytest.mark.skipif(not _has_isaaclab, reason="Isaaclab not found")
 class TestIsaacLab:
+    def test_num_workers_returns_lazy_parallel_env(self):
+        env = IsaacLabEnv("Isaac-Ant-v0", num_workers=2)
+        try:
+            assert isinstance(env, ParallelEnv)
+            assert env.num_workers == 2
+            assert env.is_closed
+            env.configure_parallel(use_buffers=False)
+            assert env._use_buffers is False
+        finally:
+            env.close()
+
     @pytest.fixture(scope="class")
     def env(self):
         env = torchrl.testing.env_helper.make_isaac_env()

@@ -6828,7 +6828,6 @@ def _stack_specs(list_of_spec, dim=0, out=None):
     else:
         raise NotImplementedError
 
-
 @TensorSpec.implements_for_spec(torch.index_select)
 @Composite.implements_for_spec(torch.index_select)
 def _index_select_spec(input: TensorSpec, dim: int, index: torch.Tensor) -> TensorSpec:

@@ -16,7 +16,7 @@ from .gym import (
     set_gym_backend,
 )
 from .habitat import HabitatEnv
-from .isaac_lab import IsaacLabWrapper
+from .isaac_lab import IsaacLabEnv, IsaacLabWrapper
 from .isaacgym import IsaacGymEnv, IsaacGymWrapper
 from .jumanji import JumanjiEnv, JumanjiWrapper
 from .meltingpot import MeltingpotEnv, MeltingpotWrapper
@@ -39,6 +39,7 @@ __all__ = [
     "HabitatEnv",
     "IsaacGymEnv",
     "IsaacGymWrapper",
+    "IsaacLabEnv",
     "IsaacLabWrapper",
     "JumanjiEnv",
     "JumanjiWrapper",
