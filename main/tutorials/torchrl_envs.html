@@ -640,7 +640,7 @@ argument that allows the user to quickly ask for image-based environments:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.get" title="tensordict.TensorDict.get" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-method"><span class="n">data</span><span class="o">.</span><span class="n">get</span></a><span class="p">(</span><span class="s2">&quot;pixels&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">numpy</span><span class="p">())</span>
 </pre></div>
 </div>
-<img src="../_images/sphx_glr_torchrl_envs_001.png" srcset="../_images/sphx_glr_torchrl_envs_001.png" alt="torchrl envs" class = "sphx-glr-single-img"/><div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>&lt;matplotlib.image.AxesImage object at 0x7f4f504e7190&gt;
+<img src="../_images/sphx_glr_torchrl_envs_001.png" srcset="../_images/sphx_glr_torchrl_envs_001.png" alt="torchrl envs" class = "sphx-glr-single-img"/><div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>&lt;matplotlib.image.AxesImage object at 0x7f596c9adb10&gt;
 </pre></div>
 </div>
 <p>Let’s have a look at what the tensordict contains:</p>
@@ -1107,7 +1107,7 @@ to access this attribute. Here’s an example:</p>
 <span class="n">env</span><span class="o">.</span><span class="n">foo</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>&#39;bar_11bbdf9e-0ce7-11f1-8219-0242ac110002&#39;
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>&#39;bar_aa1525fe-0da8-11f1-8926-0242ac110002&#39;
 </pre></div>
 </div>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">parallel_env</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ParallelEnv</span></a><span class="p">(</span>
@@ -1131,13 +1131,13 @@ to access this attribute. Here’s an example:</p>
 <span class="n">foo_list</span>  <span class="c1"># needs to be instantiated, for instance using list</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>&lt;torchrl.envs.batched_envs._dispatch_caller_parallel object at 0x7f4f4ea40990&gt;
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>&lt;torchrl.envs.batched_envs._dispatch_caller_parallel object at 0x7f5a315dc710&gt;
 </pre></div>
 </div>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">list</span><span class="p">(</span><span class="n">foo_list</span><span class="p">)</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>[&#39;bar_130d0ad0-0ce7-11f1-9c86-0242ac110002&#39;, &#39;bar_130cae78-0ce7-11f1-9718-0242ac110002&#39;, &#39;bar_1309a17e-0ce7-11f1-9755-0242ac110002&#39;]
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>[&#39;bar_ab65a6ea-0da8-11f1-a6c1-0242ac110002&#39;, &#39;bar_ab63a264-0da8-11f1-912b-0242ac110002&#39;, &#39;bar_ab6af37a-0da8-11f1-8fc8-0242ac110002&#39;]
 </pre></div>
 </div>
 <p>Similarly, methods can also be accessed:</p>
@@ -1273,8 +1273,8 @@ it with data normalizing given a fixed version of the normalizing constants.</p>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;std: :&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.get" title="tensordict.TensorDict.get" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-method"><span class="n">data</span><span class="o">.</span><span class="n">get</span></a><span class="p">(</span><span class="s2">&quot;observation&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>  <span class="c1"># Approx 1</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>mean: : tensor([-0.0794,  0.0616, -0.1690])
-std: : tensor([1.1723, 1.1538, 1.0393])
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>mean: : tensor([-0.1984,  0.2138,  0.3207])
+std: : tensor([1.1507, 1.2243, 1.3374])
 </pre></div>
 </div>
 <p>In <strong>parallel envs</strong> things are slightly more complicated, as we need to
@@ -1339,8 +1339,8 @@ data:  TensorDict(
     batch_size=torch.Size([3, 5]),
     device=None,
     is_shared=False)
-mean: : tensor([-0.1289,  0.1666, -0.0072])
-std: : tensor([1.1542, 1.1810, 1.3312])
+mean: : tensor([-0.1163,  0.0688,  0.0708])
+std: : tensor([1.1819, 1.0791, 1.2151])
 </pre></div>
 </div>
 <p>The count is slightly higher than the number of steps (since we
@@ -1360,7 +1360,7 @@ This small difference will usually be absored throughout training.</p>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>update counts:  tensor([18.])
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 22.372 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 22.496 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-torchrl-envs-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/3cb02b3346194d0f8cfea19dd5243c89/torchrl_envs.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">torchrl_envs.ipynb</span></code></a></p>

@@ -245,6 +245,7 @@
 
 <span class="kn">import</span> <span class="nn">abc</span>
 <span class="kn">import</span> <span class="nn">atexit</span>
+<span class="kn">import</span> <span class="nn">importlib</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">multiprocessing</span> <span class="k">as</span> <span class="nn">mp</span>
 <span class="kn">import</span> <span class="nn">os</span>
@@ -295,6 +296,12 @@
     <span class="kn">from</span> <span class="nn">torch.compiler</span> <span class="kn">import</span> <span class="n">disable</span> <span class="k">as</span> <span class="n">compile_disable</span><span class="p">,</span> <span class="n">is_compiling</span>
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
     <span class="kn">from</span> <span class="nn">torch._dynamo</span> <span class="kn">import</span> <span class="n">disable</span> <span class="k">as</span> <span class="n">compile_disable</span><span class="p">,</span> <span class="n">is_compiling</span>
+
+
+<span class="n">_has_store</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;redis&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="ow">and</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;tensordict.store&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<span class="p">)</span>
 
 
 <span class="c1"># =============================================================================</span>
@@ -2654,6 +2661,281 @@
 
 
 
+<span class="k">class</span> <span class="nc">StoreStorage</span><span class="p">(</span><span class="n">Storage</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A replay buffer storage backed by a key-value store (Redis, Dragonfly, etc.).</span>
+
+<span class="sd">    Uses :class:`~tensordict.store.TensorDictStore` for out-of-core storage of</span>
+<span class="sd">    tensors, non-tensor data (strings, Python objects), TensorDicts, and</span>
+<span class="sd">    TensorClasses. This enables replay buffers whose data lives in a</span>
+<span class="sd">    Redis-compatible server rather than local RAM or disk.</span>
+
+<span class="sd">    The storage is lazily initialized: the backing</span>
+<span class="sd">    :class:`~tensordict.store.TensorDictStore` is created on the first call to</span>
+<span class="sd">    :meth:`set`, using the structure of the incoming data to determine the key</span>
+<span class="sd">    layout.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        max_size (int): Maximum number of elements the storage can hold.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        backend (str): Name of the store backend. Accepted values include</span>
+<span class="sd">            ``&quot;redis&quot;`` (default), ``&quot;dragonfly&quot;``, ``&quot;keydb&quot;``, or any</span>
+<span class="sd">            Redis-wire-compatible server name.</span>
+<span class="sd">        host (str): Server hostname. Defaults to ``&quot;localhost&quot;``.</span>
+<span class="sd">        port (int): Server port. Defaults to ``6379``.</span>
+<span class="sd">        db (int): Database number. Defaults to ``0``.</span>
+<span class="sd">        compilable (bool): Whether the storage is compilable. Defaults to ``False``.</span>
+<span class="sd">        **store_kwargs: Additional keyword arguments forwarded to</span>
+<span class="sd">            :class:`~tensordict.store.TensorDictStore`.</span>
+
+<span class="sd">    .. note:: Requires ``redis`` package: ``pip install redis``.</span>
+
+<span class="sd">    .. note:: Requires a tensordict version that includes the ``tensordict.store``</span>
+<span class="sd">        module (with per-element non-tensor indexing support).</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import ReplayBuffer</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data.replay_buffers import StoreStorage</span>
+<span class="sd">        &gt;&gt;&gt; storage = StoreStorage(max_size=1000, host=&quot;localhost&quot;, port=6379)</span>
+<span class="sd">        &gt;&gt;&gt; rb = ReplayBuffer(storage=storage, batch_size=32)</span>
+<span class="sd">        &gt;&gt;&gt; data = TensorDict({&quot;obs&quot;: torch.randn(10, 4), &quot;action&quot;: torch.randn(10, 2)}, [10])</span>
+<span class="sd">        &gt;&gt;&gt; rb.extend(data)</span>
+<span class="sd">        &gt;&gt;&gt; sample = rb.sample()</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_storage</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">max_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">backend</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;redis&quot;</span><span class="p">,</span>
+        <span class="n">host</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;localhost&quot;</span><span class="p">,</span>
+        <span class="n">port</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">6379</span><span class="p">,</span>
+        <span class="n">db</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">compilable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">store_kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_store</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ModuleNotFoundError</span><span class="p">(</span>
+                <span class="s2">&quot;StoreStorage requires both the `redis` package and a version of &quot;</span>
+                <span class="s2">&quot;tensordict that includes `tensordict.store`. &quot;</span>
+                <span class="s2">&quot;Install redis with: pip install redis&quot;</span>
+            <span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">max_size</span><span class="o">=</span><span class="n">max_size</span><span class="p">,</span> <span class="n">compilable</span><span class="o">=</span><span class="n">compilable</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span> <span class="o">=</span> <span class="n">backend</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_host</span> <span class="o">=</span> <span class="n">host</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_port</span> <span class="o">=</span> <span class="n">port</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_db</span> <span class="o">=</span> <span class="n">db</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_store_kwargs</span> <span class="o">=</span> <span class="n">store_kwargs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_len</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_cursor</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_is_tensor</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_tensorclass_type</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">_len</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">_len_value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_len_value&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compilable</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">_len_value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">_len_value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_len_value</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Value</span><span class="p">(</span><span class="s2">&quot;i&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">_len_value</span><span class="o">.</span><span class="n">value</span>
+        <span class="k">if</span> <span class="n">_len_value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">_len_value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_len_value</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">return</span> <span class="n">_len_value</span>
+
+    <span class="nd">@_len</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">_len</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">is_compiling</span><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compilable</span><span class="p">:</span>
+            <span class="n">_len_value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_len_value&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">_len_value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">_len_value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_len_value</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Value</span><span class="p">(</span><span class="s2">&quot;i&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">_len_value</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_len_value</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="k">def</span> <span class="nf">_init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the TensorDictStore from a single data element.&quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">tensordict.store</span> <span class="kn">import</span> <span class="n">TensorDictStore</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_is_tensor</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="c1"># Wrap raw tensors under a &quot;_tensor&quot; key so TensorDictStore can manage them.</span>
+            <span class="n">template</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+                <span class="p">{</span><span class="s2">&quot;_tensor&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">max_size</span><span class="p">,</span> <span class="o">*</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">dtype</span><span class="p">)},</span>
+                <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">max_size</span><span class="p">],</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="o">=</span> <span class="n">TensorDictStore</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span>
+                <span class="n">template</span><span class="p">,</span>
+                <span class="n">backend</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="p">,</span>
+                <span class="n">host</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_host</span><span class="p">,</span>
+                <span class="n">port</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_port</span><span class="p">,</span>
+                <span class="n">db</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_db</span><span class="p">,</span>
+                <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_store_kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;StoreStorage does not support data of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="s2">&quot;Use TensorDict, tensorclass, or torch.Tensor.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="kn">from</span> <span class="nn">tensordict.utils</span> <span class="kn">import</span> <span class="n">_is_tensorclass</span>
+
+        <span class="n">data_type</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_tensorclass_type</span> <span class="o">=</span> <span class="n">data_type</span> <span class="k">if</span> <span class="n">_is_tensorclass</span><span class="p">(</span><span class="n">data_type</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+
+        <span class="c1"># Create an empty TensorDictStore -- keys will be registered lazily on</span>
+        <span class="c1"># the first write via __setitem__.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="o">=</span> <span class="n">TensorDictStore</span><span class="p">(</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">max_size</span><span class="p">],</span>
+            <span class="n">backend</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="p">,</span>
+            <span class="n">host</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_host</span><span class="p">,</span>
+            <span class="n">port</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_port</span><span class="p">,</span>
+            <span class="n">db</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_db</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_store_kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span> <span class="nf">set</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">cursor</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">slice</span><span class="p">,</span>
+        <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">set_cursor</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">set_cursor</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_last_cursor</span> <span class="o">=</span> <span class="n">cursor</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">_flip_list</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">set_cursor</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_get_new_len</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">cursor</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cursor</span><span class="p">,</span> <span class="n">INT_CLASSES</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;StoreStorage does not support data of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+                    <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_tensor</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="s2">&quot;_tensor&quot;</span><span class="p">][</span><span class="n">cursor</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">cursor</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
+
+    <span class="k">def</span> <span class="nf">_get_new_len</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">cursor</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">numel</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span> <span class="k">else</span> <span class="mi">1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">numel</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_len</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_len</span> <span class="o">+</span> <span class="n">numel</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_size</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">slice</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Cannot get elements out of a non-initialized storage.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_tensor</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="s2">&quot;_tensor&quot;</span><span class="p">][</span><span class="n">index</span><span class="p">]</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tensorclass_type</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tensorclass_type</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="k">def</span> <span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_len</span>
+
+    <span class="k">def</span> <span class="nf">_empty</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_len</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">def</span> <span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;initialized&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span><span class="p">,</span>
+            <span class="s2">&quot;_len&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_len</span><span class="p">,</span>
+            <span class="s2">&quot;_backend&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="p">,</span>
+            <span class="s2">&quot;_host&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_host</span><span class="p">,</span>
+            <span class="s2">&quot;_port&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_port</span><span class="p">,</span>
+            <span class="s2">&quot;_db&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_db</span><span class="p">,</span>
+            <span class="s2">&quot;_store_kwargs&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_store_kwargs</span><span class="p">,</span>
+            <span class="s2">&quot;_td_id&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">_td_id</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span> <span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_len</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;_len&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;initialized&quot;</span><span class="p">]</span>
+        <span class="n">td_id</span> <span class="o">=</span> <span class="n">state_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_td_id&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">td_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">tensordict.store</span> <span class="kn">import</span> <span class="n">TensorDictStore</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="o">=</span> <span class="n">TensorDictStore</span><span class="o">.</span><span class="n">from_store</span><span class="p">(</span>
+                <span class="n">backend</span><span class="o">=</span><span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;_backend&quot;</span><span class="p">],</span>
+                <span class="n">host</span><span class="o">=</span><span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;_host&quot;</span><span class="p">],</span>
+                <span class="n">port</span><span class="o">=</span><span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;_port&quot;</span><span class="p">],</span>
+                <span class="n">db</span><span class="o">=</span><span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;_db&quot;</span><span class="p">],</span>
+                <span class="n">td_id</span><span class="o">=</span><span class="n">td_id</span><span class="p">,</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">contains</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">item</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">item</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_len</span>
+            <span class="k">return</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">item</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_len</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">item</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">item</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_len</span>
+            <span class="k">if</span> <span class="n">item</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                    <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="n">idx</span><span class="o">.</span><span class="n">item</span><span class="p">())</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">item</span><span class="p">],</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">item</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">item</span><span class="p">()),</span> <span class="n">device</span><span class="o">=</span><span class="n">item</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">item</span><span class="p">)</span><span class="si">}</span><span class="s2"> is not supported yet.&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span>
+        <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_rng&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">get_spawning_popen</span><span class="p">()</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">length</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_len</span>
+            <span class="k">del</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_len_value&quot;</span><span class="p">]</span>
+            <span class="n">state</span><span class="p">[</span><span class="s2">&quot;len__context&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">length</span>
+        <span class="k">return</span> <span class="n">state</span>
+
+    <span class="k">def</span> <span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="n">length</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;len__context&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">length</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_compilable&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+                <span class="n">_len_value</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Value</span><span class="p">(</span><span class="s2">&quot;i&quot;</span><span class="p">,</span> <span class="n">length</span><span class="p">)</span>
+                <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_len_value&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_len_value</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_len_value&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">length</span>
+        <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span><span class="p">:</span>
+            <span class="n">storage_str</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span><span class="s2">&quot;data=&lt;empty&gt;&quot;</span><span class="p">,</span> <span class="mi">4</span> <span class="o">*</span> <span class="s2">&quot; &quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">storage_str</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;data=TensorDictStore(td_id=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">_td_id</span><span class="si">!r}</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="mi">4</span> <span class="o">*</span> <span class="s2">&quot; &quot;</span>
+            <span class="p">)</span>
+        <span class="n">len_str</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;len=</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="mi">4</span> <span class="o">*</span> <span class="s2">&quot; &quot;</span><span class="p">)</span>
+        <span class="n">maxsize_str</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;max_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">max_size</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="mi">4</span> <span class="o">*</span> <span class="s2">&quot; &quot;</span><span class="p">)</span>
+        <span class="n">backend_str</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;backend=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="si">!r}</span><span class="s2">, host=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_host</span><span class="si">!r}</span><span class="s2">, port=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_port</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="mi">4</span> <span class="o">*</span> <span class="s2">&quot; &quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(</span><span class="se">\n</span><span class="si">{</span><span class="n">storage_str</span><span class="si">}</span><span class="s2">, </span><span class="se">\n</span><span class="si">{</span><span class="n">len_str</span><span class="si">}</span><span class="s2">, </span><span class="se">\n</span><span class="si">{</span><span class="n">maxsize_str</span><span class="si">}</span><span class="s2">, </span><span class="se">\n</span><span class="si">{</span><span class="n">backend_str</span><span class="si">}</span><span class="s2">)&quot;</span>
+
+
 <span class="c1"># Utils</span>
 <span class="k">def</span> <span class="nf">_mem_map_tensor_as_tensor</span><span class="p">(</span><span class="n">mem_map_tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">mem_map_tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
@@ -2709,7 +2991,7 @@
 
 
 <span class="k">def</span> <span class="nf">_get_default_collate</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">_is_tensordict</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="p">(</span><span class="n">LazyStackStorage</span><span class="p">,</span> <span class="n">TensorStorage</span><span class="p">)):</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="p">(</span><span class="n">LazyStackStorage</span><span class="p">,</span> <span class="n">TensorStorage</span><span class="p">,</span> <span class="n">StoreStorage</span><span class="p">)):</span>
         <span class="k">return</span> <span class="n">_collate_id</span>
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">CompressedListStorage</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">lazy_stack</span>

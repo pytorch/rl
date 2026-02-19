@@ -390,8 +390,8 @@ We can also customize the storage location on disk:
  .. code-block:: none
 
     The buffer has 3 elements
-    the 'a' tensor is stored in /tmp/tmp1d7j6dz0/a.memmap
-    the ('b', 'c') tensor is stored in /tmp/tmp1d7j6dz0/b/c.memmap
+    the 'a' tensor is stored in /tmp/tmpf98a58e2/a.memmap
+    the ('b', 'c') tensor is stored in /tmp/tmpf98a58e2/b/c.memmap
     samples: a= tensor([[ 8,  9, 10, 11],
             [ 4,  5,  6,  7],
             [ 0,  1,  2,  3],
@@ -1793,7 +1793,7 @@ We mark the steps as well.
     episode are grouped tensor([1, 1, 4, 4, 3, 3, 3, 3], dtype=torch.int32)
     steps are successive tensor([0, 1, 1, 2, 0, 1, 0, 1])
 
-    1064
+    4847
 
 
 
@@ -1826,7 +1826,7 @@ Next steps
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.796 seconds)
+   **Total running time of the script:** (0 minutes 0.797 seconds)
 
 
 .. _sphx_glr_download_tutorials_rb_tutorial.py:
