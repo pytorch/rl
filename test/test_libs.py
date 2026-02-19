@@ -76,6 +76,7 @@ from torchrl.data.datasets.minari_data import MinariExperienceReplay
 from torchrl.data.datasets.openml import OpenMLExperienceReplay
 from torchrl.data.datasets.openx import OpenXExperienceReplay
 from torchrl.data.datasets.roboset import RobosetExperienceReplay
+from torchrl.data.datasets.tdmpc2 import TDMPC2ExperienceReplay
 from torchrl.data.datasets.vd4rl import VD4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.samplers import SliceSampler
@@ -4376,6 +4377,147 @@ class TestRoboset:
         assert len(dataset) == 100
         sample = dataset.sample()
         assert "obs_norm" in sample.keys()
+
+
+class TestTDMPC2:
+    @staticmethod
+    def _make_chunk(path, start, terminated_last):
+        num_episodes = 2
+        horizon = 4
+
+        obs = torch.arange(
+            start,
+            start + num_episodes * horizon * 3,
+            dtype=torch.float32,
+        ).view(num_episodes, horizon, 3)
+        action = torch.arange(
+            start,
+            start + num_episodes * horizon * 2,
+            dtype=torch.float32,
+        ).view(num_episodes, horizon, 2)
+        reward = torch.arange(
+            start,
+            start + num_episodes * horizon,
+            dtype=torch.float32,
+        ).view(num_episodes, horizon)
+        terminated = torch.zeros(num_episodes, horizon, dtype=torch.bool)
+        terminated[:, -1] = torch.tensor(terminated_last, dtype=torch.bool)
+        task = (
+            torch.arange(num_episodes, dtype=torch.int64)
+            .unsqueeze(-1)
+            .expand(num_episodes, horizon)
+        )
+
+        td = TensorDict(
+            {
+                "obs": obs,
+                "action": action,
+                "reward": reward,
+                "terminated": terminated,
+                "task": task,
+            },
+            batch_size=(num_episodes, horizon),
+        )
+        torch.save(td, path)
+        return td
+
+    def test_chunk_numeric_sort(self):
+        paths = [
+            Path("mt30/chunk_10.pt"),
+            Path("mt30/chunk_2.pt"),
+            Path("mt30/chunk_1.pt"),
+        ]
+        sorted_paths = TDMPC2ExperienceReplay._sort_chunk_paths(paths)
+        assert [path.name for path in sorted_paths] == [
+            "chunk_1.pt",
+            "chunk_2.pt",
+            "chunk_10.pt",
+        ]
+
+    def test_tdmpc2_chunk_conversion_and_ordering(self, tmpdir):
+        tmpdir = Path(tmpdir)
+        chunks_dir = tmpdir / "chunks"
+        chunks_dir.mkdir(parents=True)
+
+        chunk_2 = self._make_chunk(chunks_dir / "chunk_2.pt", start=0, terminated_last=[True, False])
+        _ = self._make_chunk(
+            chunks_dir / "chunk_10.pt", start=10_000, terminated_last=[False, False]
+        )
+
+        td_data = TDMPC2ExperienceReplay._preproc_chunks(
+            [chunks_dir / "chunk_10.pt", chunks_dir / "chunk_2.pt"],
+            data_path=tmpdir / "mt30",
+        )
+
+        assert td_data.shape == torch.Size([12])
+        for key in (
+            "observation",
+            "action",
+            "episode",
+            "done",
+            "terminated",
+            "truncated",
+            ("next", "observation"),
+            ("next", "reward"),
+            ("next", "done"),
+            ("next", "terminated"),
+            ("next", "truncated"),
+        ):
+            assert key in td_data.keys(True)
+
+        assert td_data["observation"].shape == torch.Size([12, 3])
+        assert td_data["action"].shape == torch.Size([12, 2])
+        assert td_data["next", "reward"].shape == torch.Size([12, 1])
+        assert td_data["next", "done"].shape == torch.Size([12, 1])
+        assert td_data["episode"].min() == 0
+        assert td_data["episode"].max() == 3
+        assert not td_data["done"].any()
+        assert not td_data["terminated"].any()
+        assert not td_data["truncated"].any()
+
+        # chunk_2 must be processed before chunk_10 despite lexical order.
+        assert torch.equal(td_data["observation"][0], chunk_2["obs"][0, 0])
+
+        done = td_data["next", "done"].view(4, 3, 1)
+        terminated = td_data["next", "terminated"].view(4, 3, 1)
+        truncated = td_data["next", "truncated"].view(4, 3, 1)
+        assert not done[:, :2].any()
+        assert done[:, -1].all()
+        assert terminated[0, -1].item()
+        assert not truncated[0, -1].item()
+        assert not terminated[1, -1].item()
+        assert truncated[1, -1].item()
+
+    def test_tdmpc2_load_and_split(self, tmpdir):
+        tmpdir = Path(tmpdir)
+        chunks_dir = tmpdir / "chunks"
+        chunks_dir.mkdir(parents=True)
+
+        _ = self._make_chunk(chunks_dir / "chunk_0.pt", start=0, terminated_last=[False, False])
+        TDMPC2ExperienceReplay._preproc_chunks(
+            [chunks_dir / "chunk_0.pt"],
+            data_path=tmpdir / "mt30",
+        )
+
+        data = TDMPC2ExperienceReplay(
+            "mt30",
+            batch_size=4,
+            root=tmpdir,
+            download=False,
+        )
+        sample = data.sample()
+        assert sample.shape == torch.Size([4])
+        assert ("next", "done") in sample.keys(True)
+
+        data_split = TDMPC2ExperienceReplay(
+            "mt30",
+            batch_size=1,
+            root=tmpdir,
+            download=False,
+            split_trajs=True,
+        )
+        assert data_split.data_path.name == "mt30_split"
+        assert os.path.exists(data_split.data_path)
 
 
 @pytest.mark.slow
