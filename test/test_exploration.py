@@ -185,7 +185,7 @@ class TestEGreedy:
 
         with pytest.raises(
             RuntimeError,
-            match="Failed while executing module|spec must be provided to the exploration wrapper",
+            match="Failed while executing module|spec has not been set",
         ):
             explorative_policy(td)
 
@@ -421,8 +421,12 @@ class TestOrnsteinUhlenbeckProcess:
         return
 
     def test_no_spec_error(self, device):
-        with pytest.raises(RuntimeError, match="spec cannot be None."):
-            OrnsteinUhlenbeckProcessModule(spec=None).to(device)
+        module = OrnsteinUhlenbeckProcessModule(spec=None, safe=False).to(device)
+        td = TensorDict(
+            {"action": torch.randn(3, device=device)}, batch_size=[3], device=device
+        )
+        out = module(td)
+        assert "action" in out.keys()
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -683,7 +687,7 @@ def test_set_exploration_modules_spec_from_env(device, use_batched_env):
     d_obs = env.observation_spec["observation"].shape[-1]
     d_act = expected_spec.shape[-1]
 
-    # Create a policy with exploration module that has spec=None
+    # Create a policy with exploration modules that have spec=None
     net = nn.Sequential(
         nn.Linear(d_obs, 2 * d_act, device=device), NormalParamExtractor()
     )
@@ -699,19 +703,29 @@ def test_set_exploration_modules_spec_from_env(device, use_batched_env):
         distribution_class=TanhNormal,
         default_interaction_type=InteractionType.RANDOM,
     ).to(device)
-    exploration_module = AdditiveGaussianModule(spec=None, device=device)
-    exploratory_policy = TensorDictSequential(policy, exploration_module)
+    additive = AdditiveGaussianModule(spec=None, device=device)
+    egreedy = EGreedyModule(spec=None, device=device)
+    ou = OrnsteinUhlenbeckProcessModule(spec=None, device=device)
+    exploratory_policy = TensorDictSequential(policy, additive, egreedy, ou)
 
-    assert exploration_module._spec is None
+    assert additive.spec is None
+    assert egreedy.spec is None
+    assert ou.spec is None
 
     set_exploration_modules_spec_from_env(exploratory_policy, env)
 
     # Verify spec is set after configuration and matches the environment's action_spec
-    assert exploration_module._spec is not None
-    if isinstance(exploration_module._spec, Composite):
-        assert exploration_module._spec[exploration_module.action_key] == expected_spec
-    else:
-        assert exploration_module._spec == expected_spec
+    for exploration_module in (additive, egreedy, ou):
+        assert exploration_module.spec is not None
+        if isinstance(exploration_module.spec, Composite):
+            action_key = (
+                exploration_module.action_key
+                if hasattr(exploration_module, "action_key")
+                else exploration_module.ou.key
+            )
+            assert exploration_module.spec[action_key] == expected_spec
+        else:
+            assert exploration_module.spec == expected_spec
 
     td = env.reset()
     result = exploratory_policy(td)
