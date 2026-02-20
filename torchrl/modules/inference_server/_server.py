@@ -152,33 +152,45 @@ class InferenceServer:
     def _run(self) -> None:
         self._init_weight_sync()
 
-        while not self._shutdown_event.is_set():
-            # Poll for weight updates between batches (non-blocking)
-            self._poll_weight_update()
+        try:
+            while not self._shutdown_event.is_set():
+                self._poll_weight_update()
 
-            self.transport.wait_for_work(timeout=self.timeout)
+                self.transport.wait_for_work(timeout=self.timeout)
 
+                items, callbacks = self.transport.drain(self.max_batch_size)
+                if not items:
+                    continue
+
+                batch = self.collate_fn(items)
+                if self.device is not None:
+                    batch = batch.to(self.device)
+
+                try:
+                    with self._model_lock:
+                        results = self.model(batch).unbind(0)
+                    if len(results) != len(callbacks):
+                        raise RuntimeError(
+                            f"Model returned {len(results)} results for a "
+                            f"batch of {len(callbacks)} inputs."
+                        )
+                    for cb, res in zip(callbacks, results):
+                        self.transport.resolve(cb, res)
+                except Exception as exc:
+                    for cb in callbacks:
+                        self.transport.resolve_exception(cb, exc)
+        finally:
+            self._drain_pending_on_shutdown()
+
+    def _drain_pending_on_shutdown(self) -> None:
+        """Resolve all pending requests with an error during shutdown."""
+        shutdown_exc = RuntimeError("InferenceServer is shutting down.")
+        while True:
             items, callbacks = self.transport.drain(self.max_batch_size)
             if not items:
-                continue
-
-            batch = self.collate_fn(items)
-            if self.device is not None:
-                batch = batch.to(self.device)
-
-            try:
-                with self._model_lock:
-                    results = self.model(batch).unbind(0)
-                if len(results) != len(callbacks):
-                    raise RuntimeError(
-                        f"Model returned {len(results)} results for a "
-                        f"batch of {len(callbacks)} inputs."
-                    )
-                for cb, res in zip(callbacks, results):
-                    self.transport.resolve(cb, res)
-            except Exception as exc:
-                for cb in callbacks:
-                    self.transport.resolve_exception(cb, exc)
+                break
+            for cb in callbacks:
+                self.transport.resolve_exception(cb, shutdown_exc)
 
     # -- context manager ------------------------------------------------------
 
