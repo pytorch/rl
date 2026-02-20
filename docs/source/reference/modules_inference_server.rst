@@ -28,6 +28,7 @@ Transport Backends
     :template: rl_template_noinherit.rst
 
     ThreadingTransport
+    SlotTransport
     MPTransport
     RayTransport
     MonarchTransport

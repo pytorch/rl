@@ -92,9 +92,9 @@ def _env_loop(
             if shutdown_event.is_set():
                 break
             action_td = client(next_obs)
-    except Exception:
+    except Exception as exc:
         if not shutdown_event.is_set():
-            raise
+            result_queue.put(exc)
 
 
 class AsyncBatchedCollector(BaseCollector):
@@ -367,6 +367,14 @@ class AsyncBatchedCollector(BaseCollector):
     # Rollout: drain the result queue
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _check_worker_result(item):
+        """Re-raise exceptions propagated from coordinator threads."""
+        if isinstance(item, BaseException):
+            raise RuntimeError(
+                "A collector worker thread raised an exception."
+            ) from item
+
     def _rollout_frames(self) -> TensorDictBase:
         """Drain ``frames_per_batch`` transitions from the workers."""
         rq = self._result_queue
@@ -376,6 +384,7 @@ class AsyncBatchedCollector(BaseCollector):
         while collected < self.frames_per_batch:
             # Block for at least one transition
             td = rq.get()
+            self._check_worker_result(td)
             transitions.append(td)
             collected += td.numel()
             # Batch-drain any additional items already in the queue
@@ -399,6 +408,7 @@ class AsyncBatchedCollector(BaseCollector):
 
         while not self._trajectory_queue:
             td = rq.get()
+            self._check_worker_result(td)
             env_id = 0
             eid = td.get(_ENV_IDX_KEY, default=None)
             if eid is not None:

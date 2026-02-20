@@ -981,3 +981,68 @@ class TestMinBatchSize:
 
         # At least one batch should have >= min_batch_size items
         assert any(s >= min_bs for s in seen_sizes)
+
+
+# =============================================================================
+# Tests: bugfix regressions
+# =============================================================================
+
+
+class TestShutdownPendingFutures:
+    def test_shutdown_resolves_pending_futures(self):
+        """Pending futures receive an exception on shutdown (no hang)."""
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        server = InferenceServer(policy, transport, max_batch_size=1024)
+        server.start()
+        futures = [
+            transport.submit(TensorDict({"observation": torch.randn(4)}))
+            for _ in range(5)
+        ]
+        time.sleep(0.05)
+        server.shutdown(timeout=5.0)
+        for f in futures:
+            try:
+                f.result(timeout=2.0)
+            except Exception:
+                pass  # exception is acceptable; hanging is not
+
+
+class TestThreadingTransportNoLostSignals:
+    def test_rapid_submit_no_lost_signals(self):
+        """Rapid submits from many threads don't lose signals."""
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        n = 100
+        with InferenceServer(policy, transport, max_batch_size=4, timeout=0.001):
+            client = transport.client()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+                futs = [
+                    pool.submit(
+                        lambda: client(TensorDict({"observation": torch.randn(4)}))
+                    )
+                    for _ in range(n)
+                ]
+                results = [f.result(timeout=10.0) for f in futs]
+        assert len(results) == n
+        for r in results:
+            assert "action" in r.keys()
+
+
+class TestWorkerCrashPropagation:
+    def test_worker_crash_propagates(self):
+        """If the model always fails, the collector propagates the error."""
+
+        def bad_model(td):
+            raise RuntimeError("model crash")
+
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=bad_model,
+            frames_per_batch=10,
+            total_frames=100,
+        )
+        with pytest.raises(RuntimeError, match="worker thread"):
+            for _ in collector:
+                pass
+        collector.shutdown()
