@@ -15,8 +15,9 @@ from torchrl.modules.inference_server._transport import InferenceTransport
 class ThreadingTransport(InferenceTransport):
     """In-process transport for actors that are threads.
 
-    Uses a shared list protected by a :class:`threading.Lock` as the request
-    queue and :class:`~concurrent.futures.Future` objects for response routing.
+    Uses a shared list protected by a :class:`threading.Condition` as the
+    request queue and :class:`~concurrent.futures.Future` objects for response
+    routing.
 
     This is the simplest backend and is appropriate when all actors live in the
     same process (e.g. running in a :class:`~concurrent.futures.ThreadPoolExecutor`).
@@ -25,21 +26,20 @@ class ThreadingTransport(InferenceTransport):
     def __init__(self):
         self._queue: list[TensorDictBase] = []
         self._futures: list[Future] = []
-        self._lock = threading.Lock()
-        self._event = threading.Event()
+        self._cond = threading.Condition(threading.Lock())
 
     def submit(self, td: TensorDictBase) -> Future[TensorDictBase]:
         """Enqueue a request and return a Future for the result."""
         fut: Future[TensorDictBase] = Future()
-        with self._lock:
+        with self._cond:
             self._queue.append(td)
             self._futures.append(fut)
-        self._event.set()
+            self._cond.notify()
         return fut
 
     def drain(self, max_items: int) -> tuple[list[TensorDictBase], list[Future]]:
         """Dequeue up to *max_items* pending requests."""
-        with self._lock:
+        with self._cond:
             n = min(len(self._queue), max_items)
             items = self._queue[:n]
             futs = self._futures[:n]
@@ -49,8 +49,9 @@ class ThreadingTransport(InferenceTransport):
 
     def wait_for_work(self, timeout: float) -> None:
         """Block until at least one request is enqueued or *timeout* elapses."""
-        self._event.wait(timeout=timeout)
-        self._event.clear()
+        with self._cond:
+            if not self._queue:
+                self._cond.wait(timeout=timeout)
 
     def resolve(self, callback: Future, result: TensorDictBase) -> None:
         """Set the result on the actor's Future."""
