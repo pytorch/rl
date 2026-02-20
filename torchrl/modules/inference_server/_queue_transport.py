@@ -112,8 +112,10 @@ class _QueueInferenceClient:
                     raise queue.Empty(f"Timeout waiting for result of request {req_id}")
             try:
                 rid, result = self._response_queue.get(timeout=remaining)
-            except Exception:
-                raise queue.Empty(f"Timeout waiting for result of request {req_id}")
+            except Exception as e:
+                raise queue.Empty(
+                    f"Timeout waiting for result of request {req_id}"
+                ) from e
             if rid == req_id:
                 return result
             self._buffered[rid] = result
@@ -135,15 +137,15 @@ class QueueBasedTransport(InferenceTransport):
     * :meth:`_make_response_queue` -- factory for creating a new response queue.
 
     .. note::
-        ``wait_for_work`` uses a blocking ``get`` followed by ``put`` to peek
-        at the request queue.  This is safe because a single server thread
-        calls both ``wait_for_work`` and ``drain`` sequentially -- there is no
-        concurrent consumer that could miss the re-enqueued item.
+        ``wait_for_work`` uses a blocking ``get`` to detect new work.  The
+        retrieved item is stored in ``_peeked`` and consumed by the next
+        ``drain`` call, preserving FIFO ordering.
     """
 
     def __init__(self):
         self._lock = threading.Lock()
         self._next_actor_id = 0
+        self._peeked = None
 
     # -- to be implemented by subclasses --------------------------------------
 
@@ -181,7 +183,13 @@ class QueueBasedTransport(InferenceTransport):
         """Dequeue up to *max_items* pending requests (non-blocking)."""
         items: list[TensorDictBase] = []
         callbacks: list[tuple[int, int]] = []
-        for _ in range(max_items):
+        peeked = self._peeked
+        if peeked is not None:
+            self._peeked = None
+            actor_id, req_id, td = peeked
+            items.append(td)
+            callbacks.append((actor_id, req_id))
+        for _ in range(max_items - len(items)):
             try:
                 actor_id, req_id, td = self._request_queue.get(block=False)
             except Exception:
@@ -192,10 +200,10 @@ class QueueBasedTransport(InferenceTransport):
 
     def wait_for_work(self, timeout: float) -> None:
         """Block until at least one request is available or *timeout* elapses."""
+        if self._peeked is not None:
+            return
         try:
-            item = self._request_queue.get(timeout=timeout)
-            # Put it back so drain() can consume it.
-            self._request_queue.put(item)
+            self._peeked = self._request_queue.get(timeout=timeout)
         except Exception:
             pass
 
