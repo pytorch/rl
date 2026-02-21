@@ -19,6 +19,7 @@ from torchrl.modules.inference_server import (
     InferenceClient,
     InferenceServer,
     InferenceTransport,
+    ThreadingTransport,
 )
 
 
@@ -214,3 +215,104 @@ class TestInferenceClient:
             assert isinstance(fut, concurrent.futures.Future)
             result = fut.result(timeout=5.0)
             assert "action" in result.keys()
+
+
+# =============================================================================
+# Tests: ThreadingTransport (Commit 2)
+# =============================================================================
+
+
+class TestThreadingTransport:
+    def test_single_request(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(policy, transport, max_batch_size=4):
+            client = transport.client()
+            td = TensorDict({"observation": torch.randn(4)})
+            result = client(td)
+            assert "action" in result.keys()
+            assert result["action"].shape == (2,)
+
+    def test_concurrent_actors(self):
+        """Multiple threads submit concurrently; all get correct results."""
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        n_actors = 8
+        n_requests = 50
+
+        results_per_actor: list[list[TensorDictBase]] = [[] for _ in range(n_actors)]
+
+        def actor_fn(actor_id, client):
+            for _ in range(n_requests):
+                td = TensorDict({"observation": torch.randn(4)})
+                result = client(td)
+                results_per_actor[actor_id].append(result)
+
+        with InferenceServer(policy, transport, max_batch_size=16):
+            client = transport.client()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=n_actors) as pool:
+                futs = [pool.submit(actor_fn, i, client) for i in range(n_actors)]
+                concurrent.futures.wait(futs)
+                # re-raise any exceptions
+                for f in futs:
+                    f.result()
+
+        for actor_results in results_per_actor:
+            assert len(actor_results) == n_requests
+            for r in actor_results:
+                assert "action" in r.keys()
+                assert r["action"].shape == (2,)
+
+    def test_timeout_fires_partial_batch(self):
+        """A single request should be processed even below max_batch_size."""
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        # max_batch_size is large, but timeout should still fire
+        with InferenceServer(policy, transport, max_batch_size=1024, timeout=0.05):
+            client = transport.client()
+            td = TensorDict({"observation": torch.randn(4)})
+            result = client(td)
+            assert "action" in result.keys()
+
+    def test_max_batch_size_threading(self):
+        """Verify max_batch_size is respected with real threading transport."""
+        max_bs = 4
+        seen_sizes = []
+
+        def tracking_collate(items):
+            seen_sizes.append(len(items))
+            return lazy_stack(items)
+
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        n = 20
+
+        # Submit many before starting so they queue up
+        futures = [
+            transport.submit(TensorDict({"observation": torch.randn(4)}))
+            for _ in range(n)
+        ]
+        with InferenceServer(
+            policy,
+            transport,
+            max_batch_size=max_bs,
+            collate_fn=tracking_collate,
+        ):
+            for f in futures:
+                f.result(timeout=5.0)
+
+        for s in seen_sizes:
+            assert s <= max_bs
+
+    def test_model_exception_propagates(self):
+        """If the model raises, the exception propagates to the caller."""
+
+        def bad_model(td):
+            raise ValueError("model error")
+
+        transport = ThreadingTransport()
+        with InferenceServer(bad_model, transport, max_batch_size=4):
+            client = transport.client()
+            td = TensorDict({"observation": torch.randn(4)})
+            with pytest.raises(ValueError, match="model error"):
+                client(td)
