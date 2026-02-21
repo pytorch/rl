@@ -403,7 +403,7 @@ In this way, we can train an algorithm offline on a dataset made of images:
         batch_size=torch.Size([32]),
         device=cpu,
         is_shared=False)
-    Directory '/tmp/tmpyaos7fis' deleted successfully.
+    Directory '/tmp/tmpf1kjdx2j' deleted successfully.
 
 
 
@@ -411,7 +411,7 @@ In this way, we can train an algorithm offline on a dataset made of images:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 34.370 seconds)
+   **Total running time of the script:** (0 minutes 35.474 seconds)
 
 
 .. _sphx_glr_download_tutorials_pretrained_models.py:

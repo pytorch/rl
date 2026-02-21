@@ -665,7 +665,7 @@ Rollout
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.885 seconds)
+   **Total running time of the script:** (0 minutes 3.919 seconds)
 
 
 .. _sphx_glr_download_tutorials_multi_task.py:

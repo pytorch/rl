@@ -1352,7 +1352,7 @@ The steps include:
 
  .. code-block:: none
 
-    episode_reward_mean_adversary = 0, episode_reward_mean_agent = 0:   0%|          | 0/10 [00:00<?, ?it/s]    episode_reward_mean_adversary = 3.0, episode_reward_mean_agent = -3.0:  10%|█         | 1/10 [00:02<00:24,  2.68s/it]    episode_reward_mean_adversary = 4.0, episode_reward_mean_agent = -4.0:  20%|██        | 2/10 [00:05<00:21,  2.75s/it]    episode_reward_mean_adversary = 1.0, episode_reward_mean_agent = -1.0:  30%|███       | 3/10 [00:08<00:19,  2.79s/it]    episode_reward_mean_adversary = 110.0, episode_reward_mean_agent = -110.0:  40%|████      | 4/10 [00:11<00:16,  2.82s/it]    episode_reward_mean_adversary = 209.0, episode_reward_mean_agent = -209.0:  50%|█████     | 5/10 [00:14<00:14,  2.84s/it]    episode_reward_mean_adversary = 224.0, episode_reward_mean_agent = -224.0:  60%|██████    | 6/10 [00:16<00:11,  2.85s/it]    episode_reward_mean_adversary = 1035.0, episode_reward_mean_agent = -1035.0:  70%|███████   | 7/10 [00:19<00:07,  2.60s/it]    episode_reward_mean_adversary = 1147.0, episode_reward_mean_agent = -1147.0:  80%|████████  | 8/10 [00:21<00:04,  2.45s/it]    episode_reward_mean_adversary = 722.0, episode_reward_mean_agent = -722.0:  90%|█████████ | 9/10 [00:23<00:02,  2.36s/it]      episode_reward_mean_adversary = 867.0, episode_reward_mean_agent = -867.0: 100%|██████████| 10/10 [00:25<00:00,  2.31s/it]
+    episode_reward_mean_adversary = 0, episode_reward_mean_agent = 0:   0%|          | 0/10 [00:00<?, ?it/s]    episode_reward_mean_adversary = 3.0, episode_reward_mean_agent = -3.0:  10%|█         | 1/10 [00:02<00:24,  2.68s/it]    episode_reward_mean_adversary = 4.0, episode_reward_mean_agent = -4.0:  20%|██        | 2/10 [00:05<00:22,  2.77s/it]    episode_reward_mean_adversary = 1.0, episode_reward_mean_agent = -1.0:  30%|███       | 3/10 [00:08<00:19,  2.81s/it]    episode_reward_mean_adversary = 110.0, episode_reward_mean_agent = -110.0:  40%|████      | 4/10 [00:11<00:16,  2.83s/it]    episode_reward_mean_adversary = 209.0, episode_reward_mean_agent = -209.0:  50%|█████     | 5/10 [00:14<00:14,  2.84s/it]    episode_reward_mean_adversary = 224.0, episode_reward_mean_agent = -224.0:  60%|██████    | 6/10 [00:16<00:11,  2.84s/it]    episode_reward_mean_adversary = 1035.0, episode_reward_mean_agent = -1035.0:  70%|███████   | 7/10 [00:19<00:07,  2.60s/it]    episode_reward_mean_adversary = 1147.0, episode_reward_mean_agent = -1147.0:  80%|████████  | 8/10 [00:21<00:04,  2.45s/it]    episode_reward_mean_adversary = 722.0, episode_reward_mean_agent = -722.0:  90%|█████████ | 9/10 [00:23<00:02,  2.37s/it]      episode_reward_mean_adversary = 867.0, episode_reward_mean_agent = -867.0: 100%|██████████| 10/10 [00:25<00:00,  2.32s/it]
 
 
 
@@ -1488,7 +1488,7 @@ Here are a few videos of some possible scenarios you can try in VMAS.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 25.777 seconds)
+   **Total running time of the script:** (0 minutes 25.825 seconds)
 
 
 .. _sphx_glr_download_tutorials_multiagent_competitive_ddpg.py:

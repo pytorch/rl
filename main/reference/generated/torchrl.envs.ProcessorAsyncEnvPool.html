@@ -256,6 +256,8 @@
 <p>This class manages a pool of environments, each running in its own process, and
 provides methods for asynchronous stepping and resetting of environments using
 inter-process communication.</p>
+<p>Supports per-env <code class="docutils literal notranslate"><span class="pre">recv</span></code> via <code class="docutils literal notranslate"><span class="pre">env_index</span></code> for thread-safe concurrent access
+from multiple collector threads.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>This class and its subclasses should work when nested in with <code class="xref py py-class docutils literal notranslate"><span class="pre">TransformedEnv</span></code> and

@@ -385,7 +385,7 @@ change the <code class="docutils literal notranslate"><span class="pre">collate_
 <span class="nb">print</span><span class="p">(</span><span class="n">buffer_list</span><span class="o">.</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">sample</span></a><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>[&#39;a&#39;, 0, &#39;b&#39;]
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>[&#39;a&#39;, &#39;b&#39;, &#39;a&#39;]
 </pre></div>
 </div>
 <p>Because it is the one with the lowest amount of assumption, the
@@ -440,14 +440,14 @@ separate datapoints:</p>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;samples&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">sample</span></a><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">],</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">sample</span></a><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="s2">&quot;c&quot;</span><span class="p">])</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>samples tensor([[ 0,  1,  2,  3],
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>samples tensor([[ 8,  9, 10, 11],
+        [ 4,  5,  6,  7],
         [ 0,  1,  2,  3],
-        [ 0,  1,  2,  3],
-        [ 8,  9, 10, 11],
-        [ 0,  1,  2,  3]]) tensor([[ 0,  1,  2,  3,  4],
+        [ 4,  5,  6,  7],
+        [ 0,  1,  2,  3]]) tensor([[10, 11, 12, 13, 14],
+        [ 5,  6,  7,  8,  9],
         [ 0,  1,  2,  3,  4],
-        [ 0,  1,  2,  3,  4],
-        [10, 11, 12, 13, 14],
+        [ 5,  6,  7,  8,  9],
         [ 0,  1,  2,  3,  4]])
 </pre></div>
 </div>
@@ -472,18 +472,18 @@ We can also customize the storage location on disk:</p>
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>The buffer has 3 elements
-the &#39;a&#39; tensor is stored in /tmp/tmpf98a58e2/a.memmap
-the (&#39;b&#39;, &#39;c&#39;) tensor is stored in /tmp/tmpf98a58e2/b/c.memmap
-samples: a= tensor([[ 8,  9, 10, 11],
-        [ 4,  5,  6,  7],
+the &#39;a&#39; tensor is stored in /tmp/tmpfx2bbdic/a.memmap
+the (&#39;b&#39;, &#39;c&#39;) tensor is stored in /tmp/tmpfx2bbdic/b/c.memmap
+samples: a= tensor([[ 0,  1,  2,  3],
+        [ 8,  9, 10, 11],
         [ 0,  1,  2,  3],
-        [ 4,  5,  6,  7],
-        [ 0,  1,  2,  3]])
-(&#39;b&#39;, &#39;c&#39;): tensor([[10, 11, 12, 13, 14],
-        [ 5,  6,  7,  8,  9],
+        [ 8,  9, 10, 11],
+        [ 8,  9, 10, 11]])
+(&#39;b&#39;, &#39;c&#39;): tensor([[ 0,  1,  2,  3,  4],
+        [10, 11, 12, 13, 14],
         [ 0,  1,  2,  3,  4],
-        [ 5,  6,  7,  8,  9],
-        [ 0,  1,  2,  3,  4]])
+        [10, 11, 12, 13, 14],
+        [10, 11, 12, 13, 14]])
 </pre></div>
 </div>
 </section>
@@ -535,7 +535,7 @@ Let us have a look at these indices:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">sample</span></a><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">])</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([0, 2, 0, 2, 2, 1, 1, 0, 1, 0, 1, 0])
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([1, 1, 0, 1, 0, 1, 0, 0, 1, 2, 1, 1])
 </pre></div>
 </div>
 <section id="integration-with-tensorclass">
@@ -1274,10 +1274,10 @@ We mark the steps as well.</p>
 <span class="n">gc</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>episode are grouped tensor([1, 1, 4, 4, 3, 3, 3, 3], dtype=torch.int32)
-steps are successive tensor([0, 1, 1, 2, 0, 1, 0, 1])
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>episode are grouped tensor([1, 1, 4, 4, 4, 4, 2, 2], dtype=torch.int32)
+steps are successive tensor([1, 2, 1, 2, 1, 2, 0, 1])
 
-4847
+1064
 </pre></div>
 </div>
 </section>
@@ -1305,7 +1305,7 @@ which are based on our Replay Buffer API;</p></li>
 such as <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictMaxValueWriter</span></code>.</p></li>
 <li><p>Check how to checkpoint ReplayBuffers in <a class="reference internal" href="../reference/data_storage.html#checkpoint-rb"><span class="std std-ref">the doc</span></a>.</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.797 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.819 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-rb-tutorial-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/c64b1e484ba3e0219549719cc3c37479/rb_tutorial.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">rb_tutorial.ipynb</span></code></a></p>

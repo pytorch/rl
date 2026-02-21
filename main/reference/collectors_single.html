@@ -261,13 +261,16 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.AsyncCollector.html#torchrl.collectors.AsyncCollector" title="torchrl.collectors.AsyncCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AsyncCollector</span></code></a>(*args[, sync])</p></td>
 <td><p>Runs a single DataCollector on a separate process.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector" title="torchrl.collectors.MultiCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiCollector</span></code></a>(*args[, sync])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector" title="torchrl.collectors.AsyncBatchedCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AsyncBatchedCollector</span></code></a>(create_env_fn, *[, ...])</p></td>
+<td><p>Asynchronous collector that pairs per-env threads with an <a class="reference internal" href="generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool" title="torchrl.envs.AsyncEnvPool"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncEnvPool</span></code></a> and an <code class="xref py py-class docutils literal notranslate"><span class="pre">InferenceServer</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector" title="torchrl.collectors.MultiCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiCollector</span></code></a>(*args[, sync])</p></td>
 <td><p>Runs a given number of DataCollectors on separate processes.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector" title="torchrl.collectors.MultiSyncCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiSyncCollector</span></code></a>(*args[, sync])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector" title="torchrl.collectors.MultiSyncCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiSyncCollector</span></code></a>(*args[, sync])</p></td>
 <td><p>Runs a given number of DataCollectors on separate processes synchronously.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector" title="torchrl.collectors.MultiAsyncCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiAsyncCollector</span></code></a>(*args[, sync])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector" title="torchrl.collectors.MultiAsyncCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiAsyncCollector</span></code></a>(*args[, sync])</p></td>
 <td><p>Runs a given number of DataCollectors on separate processes asynchronously.</p></td>
 </tr>
 </tbody>
@@ -284,6 +287,47 @@
 <li><p><code class="docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code> → <code class="docutils literal notranslate"><span class="pre">MultiAsyncCollector</span></code></p></li>
 </ul>
 </div>
+</section>
+<section id="using-asyncbatchedcollector">
+<h2>Using AsyncBatchedCollector<a class="headerlink" href="#using-asyncbatchedcollector" title="Link to this heading">¶</a></h2>
+<p>The <a class="reference internal" href="generated/torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector" title="torchrl.collectors.AsyncBatchedCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncBatchedCollector</span></code></a> pairs an <a class="reference internal" href="generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool" title="torchrl.envs.AsyncEnvPool"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncEnvPool</span></code></a>
+with an <code class="xref py py-class docutils literal notranslate"><span class="pre">InferenceServer</span></code> to pipeline environment
+stepping and batched GPU inference.  You only need to supply <strong>env factories</strong>
+and a <strong>policy</strong> – all internal wiring is handled automatically:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">AsyncBatchedCollector</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">GymEnv</span>
+<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModule</span>
+<span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
+
+<span class="n">policy</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span>
+    <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span> <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">(),</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">2</span><span class="p">)),</span>
+    <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">],</span>
+    <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">],</span>
+<span class="p">)</span>
+
+<span class="n">collector</span> <span class="o">=</span> <span class="n">AsyncBatchedCollector</span><span class="p">(</span>
+    <span class="n">create_env_fn</span><span class="o">=</span><span class="p">[</span><span class="k">lambda</span><span class="p">:</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;CartPole-v1&quot;</span><span class="p">)]</span> <span class="o">*</span> <span class="mi">8</span><span class="p">,</span>
+    <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
+    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+    <span class="n">total_frames</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span>
+    <span class="n">max_batch_size</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">collector</span><span class="p">:</span>
+    <span class="c1"># data is a lazy-stacked TensorDict of collected transitions</span>
+    <span class="k">pass</span>
+
+<span class="n">collector</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+</pre></div>
+</div>
+<p><strong>Key advantages over</strong> <a class="reference internal" href="generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector"><code class="xref py py-class docutils literal notranslate"><span class="pre">Collector</span></code></a>:</p>
+<ul class="simple">
+<li><p>The inference server automatically <strong>batches policy forward passes</strong> from
+all environments, maximising GPU utilisation.</p></li>
+<li><p>Environment stepping and inference run in <strong>overlapping fashion</strong>, reducing
+idle time.</p></li>
+<li><p>Supports <code class="docutils literal notranslate"><span class="pre">yield_completed_trajectories=True</span></code> for episode-level yields.</p></li>
+</ul>
 </section>
 <section id="using-multicollector">
 <h2>Using MultiCollector<a class="headerlink" href="#using-multicollector" title="Link to this heading">¶</a></h2>
@@ -420,6 +464,7 @@ unless properly benchmarked).</p>
               <ul>
 <li><a class="reference internal" href="#">Single Node Collectors</a><ul>
 <li><a class="reference internal" href="#single-node-data-collectors">Single node data collectors</a></li>
+<li><a class="reference internal" href="#using-asyncbatchedcollector">Using AsyncBatchedCollector</a></li>
 <li><a class="reference internal" href="#using-multicollector">Using MultiCollector</a></li>
 <li><a class="reference internal" href="#running-the-collector-asynchronously">Running the Collector Asynchronously</a></li>
 </ul>

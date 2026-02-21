@@ -15,6 +15,7 @@ Single node data collectors
     BaseCollector
     Collector
     AsyncCollector
+    AsyncBatchedCollector
     MultiCollector
     MultiSyncCollector
     MultiAsyncCollector
@@ -28,6 +29,49 @@ Single node data collectors
     - ``_MultiDataCollector`` → ``MultiCollector``
     - ``MultiSyncDataCollector`` → ``MultiSyncCollector``
     - ``MultiaSyncDataCollector`` → ``MultiAsyncCollector``
+
+Using AsyncBatchedCollector
+---------------------------
+
+The :class:`AsyncBatchedCollector` pairs an :class:`~torchrl.envs.AsyncEnvPool`
+with an :class:`~torchrl.modules.InferenceServer` to pipeline environment
+stepping and batched GPU inference.  You only need to supply **env factories**
+and a **policy** -- all internal wiring is handled automatically:
+
+.. code-block:: python
+
+    from torchrl.collectors import AsyncBatchedCollector
+    from torchrl.envs import GymEnv
+    from tensordict.nn import TensorDictModule
+    import torch.nn as nn
+
+    policy = TensorDictModule(
+        nn.Sequential(nn.Linear(4, 64), nn.ReLU(), nn.Linear(64, 2)),
+        in_keys=["observation"],
+        out_keys=["action"],
+    )
+
+    collector = AsyncBatchedCollector(
+        create_env_fn=[lambda: GymEnv("CartPole-v1")] * 8,
+        policy=policy,
+        frames_per_batch=200,
+        total_frames=10000,
+        max_batch_size=8,
+    )
+
+    for data in collector:
+        # data is a lazy-stacked TensorDict of collected transitions
+        pass
+
+    collector.shutdown()
+
+**Key advantages over** :class:`Collector`:
+
+- The inference server automatically **batches policy forward passes** from
+  all environments, maximising GPU utilisation.
+- Environment stepping and inference run in **overlapping fashion**, reducing
+  idle time.
+- Supports ``yield_completed_trajectories=True`` for episode-level yields.
 
 Using MultiCollector
 --------------------

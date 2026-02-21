@@ -251,6 +251,7 @@ making it easy to collect high-quality training data efficiently.</p>
 <p>TorchRL provides several collector implementations optimized for different scenarios:</p>
 <ul class="simple">
 <li><p><a class="reference internal" href="generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector"><code class="xref py py-class docutils literal notranslate"><span class="pre">Collector</span></code></a>: Single-process collection on the training worker</p></li>
+<li><p><a class="reference internal" href="generated/torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector" title="torchrl.collectors.AsyncBatchedCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncBatchedCollector</span></code></a>: Async environments + auto-batching inference server (see <a class="reference internal" href="generated/torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector" title="torchrl.collectors.AsyncBatchedCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncBatchedCollector</span></code></a>)</p></li>
 <li><p><a class="reference internal" href="generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector" title="torchrl.collectors.MultiCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiCollector</span></code></a>: Parallel collection across multiple workers (see below)</p></li>
 <li><p><strong>Distributed collectors</strong>: For multi-node setups using Ray, RPC, or distributed backends (see <code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedCollector</span></code> / <code class="xref py py-class docutils literal notranslate"><span class="pre">RPCCollector</span></code>)</p></li>
 </ul>
@@ -348,6 +349,7 @@ Use the <code class="docutils literal notranslate"><span class="pre">sync</span>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="collectors_single.html">Single Node Collectors</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="collectors_single.html#single-node-data-collectors">Single node data collectors</a></li>
+<li class="toctree-l2"><a class="reference internal" href="collectors_single.html#using-asyncbatchedcollector">Using AsyncBatchedCollector</a></li>
 <li class="toctree-l2"><a class="reference internal" href="collectors_single.html#using-multicollector">Using MultiCollector</a></li>
 <li class="toctree-l2"><a class="reference internal" href="collectors_single.html#running-the-collector-asynchronously">Running the Collector Asynchronously</a></li>
 </ul>
