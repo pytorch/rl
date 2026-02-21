@@ -23,12 +23,19 @@ from torchrl.modules.inference_server import (
     RayTransport,
     ThreadingTransport,
 )
+from torchrl.modules.inference_server._monarch import MonarchTransport
 
 _has_ray = True
 try:
     import ray
 except ImportError:
     _has_ray = False
+
+_has_monarch = True
+try:
+    import monarch  # noqa: F401
+except ImportError:
+    _has_monarch = False
 
 
 # =============================================================================
@@ -490,3 +497,63 @@ class TestRayTransport:
             td = TensorDict({"observation": torch.randn(4)})
             with pytest.raises(ValueError, match="ray model error"):
                 client(td)
+
+
+# =============================================================================
+# Tests: MonarchTransport (Commit 5)
+# =============================================================================
+
+
+@pytest.mark.skipif(not _has_monarch, reason="monarch not installed")
+class TestMonarchTransport:
+    def test_single_request(self):
+        transport = MonarchTransport()
+        client = transport.client()
+        policy = _make_policy()
+        with InferenceServer(policy, transport, max_batch_size=4):
+            td = TensorDict({"observation": torch.randn(4)})
+            result = client(td)
+            assert "action" in result.keys()
+            assert result["action"].shape == (2,)
+
+    def test_concurrent_clients(self):
+        """Multiple Monarch clients submit concurrently."""
+        transport = MonarchTransport()
+        policy = _make_policy()
+        n_clients = 4
+        n_requests = 20
+
+        clients = [transport.client() for _ in range(n_clients)]
+        results_per_client: list[list[TensorDictBase]] = [[] for _ in range(n_clients)]
+
+        def client_fn(client_idx):
+            for _ in range(n_requests):
+                td = TensorDict({"observation": torch.randn(4)})
+                result = clients[client_idx](td)
+                results_per_client[client_idx].append(result)
+
+        with InferenceServer(policy, transport, max_batch_size=8):
+            with concurrent.futures.ThreadPoolExecutor(max_workers=n_clients) as pool:
+                futs = [pool.submit(client_fn, i) for i in range(n_clients)]
+                concurrent.futures.wait(futs)
+                for f in futs:
+                    f.result()
+
+        for client_results in results_per_client:
+            assert len(client_results) == n_requests
+            for r in client_results:
+                assert "action" in r.keys()
+                assert r["action"].shape == (2,)
+
+
+class TestMonarchTransportImport:
+    def test_import_without_monarch(self):
+        """MonarchTransport class can be imported even without monarch."""
+        # This test verifies the lazy import pattern works.
+        # The class itself is importable; only instantiation requires monarch.
+        assert MonarchTransport is not None
+
+    @pytest.mark.skipif(_has_monarch, reason="test requires monarch NOT installed")
+    def test_instantiation_without_monarch_raises(self):
+        with pytest.raises(ImportError, match="Monarch is required"):
+            MonarchTransport()
