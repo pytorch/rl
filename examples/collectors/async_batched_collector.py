@@ -5,15 +5,14 @@ run many environments in parallel while automatically batching policy inference
 through an :class:`~torchrl.modules.InferenceServer`.
 
 Architecture:
-  - An :class:`~torchrl.envs.AsyncEnvPool` runs environments in parallel using
-    the chosen backend (``"multiprocessing"`` by default for true parallelism,
-    or ``"threading"``/``"asyncio"``).
+  - An :class:`~torchrl.envs.AsyncEnvPool` runs environments in parallel
+    using the chosen backend (``"threading"`` or ``"multiprocessing"``).
+  - One lightweight coordinator thread per environment owns a slot in the pool
+    and an inference client.
   - An :class:`~torchrl.modules.InferenceServer` batches incoming observations
     and runs a single forward pass.
-  - A lightweight coordinator thread bridges the two: when an env finishes
-    stepping its observation is submitted to the server, and when an action is
-    ready the env is sent back for stepping -- all without synchronisation
-    barriers.
+  - There is no global synchronisation barrier -- fast envs keep stepping
+    while slow ones wait for inference.
 
 The user only supplies:
   - A list of environment factories

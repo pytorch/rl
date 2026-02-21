@@ -4,9 +4,11 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import queue
 import threading
 from collections import deque, OrderedDict
 from collections.abc import Callable, Iterator, Sequence
+from typing import Literal
 
 import torch
 from tensordict import lazy_stack, TensorDictBase
@@ -17,25 +19,69 @@ from torchrl.envs import AsyncEnvPool, EnvBase
 from torchrl.modules.inference_server import InferenceServer, ThreadingTransport
 from torchrl.modules.inference_server._transport import InferenceTransport
 
+_ENV_IDX_KEY = "env_index"
+
+
+def _env_loop(
+    pool: AsyncEnvPool,
+    env_id: int,
+    transport: InferenceTransport,
+    result_queue: queue.Queue,
+    shutdown_event: threading.Event,
+):
+    """Per-env worker thread using pool slot for env execution and InferenceServer for policy.
+
+    Each thread owns one slot in the :class:`~torchrl.envs.AsyncEnvPool` and
+    one inference client.  The pool handles the actual environment execution in
+    whatever backend it was configured with (threading, multiprocessing, etc.),
+    while this thread coordinates the send/recv cycle and inference submission.
+
+        reset -> infer (blocking) -> step_send -> step_recv -> put transition -> infer -> ...
+    """
+    client = transport.client()
+
+    try:
+        pool.async_reset_send(env_index=env_id)
+        obs = pool.async_reset_recv(env_index=env_id)
+        action_td = client(obs)
+
+        while not shutdown_event.is_set():
+            pool.async_step_and_maybe_reset_send(action_td, env_index=env_id)
+            cur_td, next_obs = pool.async_step_and_maybe_reset_recv(env_index=env_id)
+            cur_td.set(_ENV_IDX_KEY, env_id)
+            result_queue.put(cur_td)
+            if shutdown_event.is_set():
+                break
+            action_td = client(next_obs)
+    except Exception as exc:
+        if not shutdown_event.is_set():
+            result_queue.put(exc)
+
 
 class AsyncBatchedCollector(BaseCollector):
-    """Asynchronous collector that pairs :class:`~torchrl.envs.AsyncEnvPool` with an :class:`~torchrl.modules.InferenceServer`.
+    """Asynchronous collector that pairs per-env threads with an :class:`~torchrl.envs.AsyncEnvPool` and an :class:`~torchrl.modules.InferenceServer`.
 
-    Unlike :class:`~torchrl.collectors.Collector`, this collector decouples
-    environment stepping from policy inference.  An internal
-    :class:`~torchrl.modules.InferenceServer` batches policy forward passes
-    while environments step in parallel, enabling full GPU utilisation and
-    overlapping CPU-bound work (env stepping) with GPU-bound work (inference).
+    Unlike :class:`~torchrl.collectors.Collector`, this collector fully
+    decouples environment stepping from policy inference:
 
-    The user simply provides a list of environment factories and a policy
-    (or policy factory) -- the collector handles all internal wiring:
+    * An :class:`~torchrl.envs.AsyncEnvPool` runs *N* environments using
+      whatever backend the user chooses (``"threading"``,
+      ``"multiprocessing"``).
+    * *N* lightweight coordinator threads -- one per environment -- each own
+      a slot in the pool and an inference client.  A thread sends its env's
+      observation to the :class:`~torchrl.modules.InferenceServer`, blocks
+      until the batched action is returned, then sends the action back to
+      the pool for stepping.
+    * The :class:`~torchrl.modules.InferenceServer` running in a background
+      thread continuously drains observation submissions, batches them, runs
+      a single forward pass, and fans actions back out.
 
-    1. Wraps the env factories in an :class:`~torchrl.envs.AsyncEnvPool`.
-    2. Creates an :class:`~torchrl.modules.InferenceServer` with the given
-       policy and a :class:`~torchrl.modules.ThreadingTransport` (or a
-       user-supplied transport).
-    3. Runs an asynchronous rollout loop that pipelines env stepping and
-       batched inference.
+    There is **no global synchronisation barrier**: fast environments keep
+    stepping while slow ones wait for inference, and the server always
+    processes whatever observations have accumulated.
+
+    The user simply provides env factories and a policy; the collector
+    handles all wiring internally.
 
     Args:
         create_env_fn (list[Callable[[], EnvBase]]): a list of callables, each
@@ -61,11 +107,16 @@ class AsyncBatchedCollector(BaseCollector):
         transport (InferenceTransport, optional): a pre-built transport
             backend.  When ``None`` (default) a
             :class:`~torchrl.modules.ThreadingTransport` is created
-            automatically.
+            automatically (since worker threads always live in the main
+            process).  Pass a :class:`~torchrl.modules.RayTransport` or
+            :class:`~torchrl.modules.MonarchTransport` for distributed
+            setups where the inference server is remote.
         device (torch.device or str, optional): device for policy inference.
             Passed to the inference server.  Defaults to ``None``.
-        env_backend (str, optional): backend for :class:`AsyncEnvPool`.
-            One of ``"threading"`` or ``"multiprocessing"``.
+        backend (str, optional): backend for the
+            :class:`~torchrl.envs.AsyncEnvPool` that runs environments.  One
+            of ``"threading"`` or ``"multiprocessing"``.  The coordinator
+            threads are always Python threads regardless of this setting.
             Defaults to ``"threading"``.
         reset_at_each_iter (bool, optional): whether to reset all envs at the
             start of every collection batch.  Defaults to ``False``.
@@ -119,7 +170,7 @@ class AsyncBatchedCollector(BaseCollector):
         server_timeout: float = 0.01,
         transport: InferenceTransport | None = None,
         device: torch.device | str | None = None,
-        env_backend: str = "threading",
+        backend: Literal["threading", "multiprocessing"] = "threading",
         reset_at_each_iter: bool = False,
         postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
         yield_completed_trajectories: bool = False,
@@ -138,6 +189,14 @@ class AsyncBatchedCollector(BaseCollector):
             policy = policy_factory()
         self._policy = policy
 
+        # ---- env config -------------------------------------------------------
+        if not isinstance(create_env_fn, Sequence):
+            raise TypeError("create_env_fn must be a list of env factories.")
+        self._create_env_fn = list(create_env_fn)
+        self._num_envs = len(create_env_fn)
+        self._backend = backend
+        self._create_env_kwargs = create_env_kwargs
+
         # ---- build transport --------------------------------------------------
         if transport is None:
             transport = ThreadingTransport()
@@ -154,15 +213,6 @@ class AsyncBatchedCollector(BaseCollector):
             weight_sync_model_id=weight_sync_model_id,
         )
 
-        # ---- build env pool ---------------------------------------------------
-        if not isinstance(create_env_fn, Sequence):
-            raise TypeError("create_env_fn must be a list of env factories.")
-        self._create_env_fn = list(create_env_fn)
-        self._num_envs = len(create_env_fn)
-        self._env_backend = env_backend
-        self._create_env_kwargs = create_env_kwargs
-        self._env_pool: AsyncEnvPool | None = None  # built lazily at start
-
         # ---- collector settings -----------------------------------------------
         self.requested_frames_per_batch = frames_per_batch
         self.frames_per_batch = frames_per_batch
@@ -174,9 +224,14 @@ class AsyncBatchedCollector(BaseCollector):
 
         self._frames = 0
         self._iter = -1
-        self._shutdown_event = threading.Event()
 
-        # Per-env trajectory accumulators (for yield_completed_trajectories mode)
+        # ---- runtime state (created lazily) -----------------------------------
+        self._shutdown_event: threading.Event | None = None
+        self._result_queue: queue.Queue | None = None
+        self._env_pool: AsyncEnvPool | None = None
+        self._workers: list[threading.Thread] = []
+
+        # Per-env trajectory accumulators (for yield_completed_trajectories)
         self._yield_queues: list[deque] = [deque() for _ in range(self._num_envs)]
         self._trajectory_queue: deque = deque()
 
@@ -185,18 +240,44 @@ class AsyncBatchedCollector(BaseCollector):
     # ------------------------------------------------------------------
 
     def _ensure_started(self) -> None:
-        """Lazily instantiate the env pool and start the inference server."""
-        if self._env_pool is None:
-            kwargs = {}
-            if self._create_env_kwargs is not None:
-                kwargs["create_env_kwargs"] = self._create_env_kwargs
-            self._env_pool = AsyncEnvPool(
-                self._create_env_fn,
-                backend=self._env_backend,
-                **kwargs,
-            )
+        """Create the env pool, start the server and per-env threads."""
+        if self._workers and all(w.is_alive() for w in self._workers):
+            return
+
+        # Build env pool
+        kwargs = {}
+        if self._create_env_kwargs is not None:
+            kwargs["create_env_kwargs"] = self._create_env_kwargs
+        self._env_pool = AsyncEnvPool(
+            self._create_env_fn,
+            backend=self._backend,
+            **kwargs,
+        )
+
+        # Start inference server
         if not self._server.is_alive:
             self._server.start()
+
+        # Start per-env coordinator threads
+        self._result_queue = queue.Queue()
+        self._shutdown_event = threading.Event()
+
+        self._workers = []
+        for i in range(self._num_envs):
+            t = threading.Thread(
+                target=_env_loop,
+                kwargs={
+                    "pool": self._env_pool,
+                    "env_id": i,
+                    "transport": self._transport,
+                    "result_queue": self._result_queue,
+                    "shutdown_event": self._shutdown_event,
+                },
+                daemon=True,
+                name=f"AsyncBatchedCollector-env-{i}",
+            )
+            self._workers.append(t)
+            t.start()
 
     @property
     def env(self) -> AsyncEnvPool:
@@ -210,138 +291,67 @@ class AsyncBatchedCollector(BaseCollector):
         return self._policy
 
     # ------------------------------------------------------------------
-    # Rollout helpers
+    # Rollout: drain the result queue
     # ------------------------------------------------------------------
 
-    def _client_policy(self, td: TensorDictBase) -> TensorDictBase:
-        """Use the inference client to run the policy in a batched fashion."""
-        # For each env in the batch, submit to the server individually and
-        # collect results.  The server batches these across all concurrent
-        # submissions.
-        tds = td.unbind(0)
-        futures = [self._client.submit(t) for t in tds]
-        results = [f.result() for f in futures]
-        return lazy_stack(results)
+    @staticmethod
+    def _check_worker_result(item):
+        """Re-raise exceptions propagated from coordinator threads."""
+        if isinstance(item, BaseException):
+            raise RuntimeError(
+                "A collector worker thread raised an exception."
+            ) from item
 
     def _rollout_frames(self) -> TensorDictBase:
-        """Collect `frames_per_batch` frames using the pipelined async loop."""
-        env = self.env
-
-        if (
-            self.reset_at_each_iter
-            or not hasattr(self, "_shuttle")
-            or self._shuttle is None
-        ):
-            self._shuttle = env.reset()
-
-        trajectory = []
+        """Drain ``frames_per_batch`` transitions from the workers."""
+        rq = self._result_queue
         collected = 0
-        policy_input = self._shuttle
+        transitions: list[TensorDictBase] = []
 
         while collected < self.frames_per_batch:
+            td = rq.get()
+            self._check_worker_result(td)
+            transitions.append(td)
+            collected += td.numel()
             if self.verbose:
                 torchrl_logger.debug(
                     f"AsyncBatchedCollector: {collected}/{self.frames_per_batch} frames"
                 )
-            # Policy inference via server (batched automatically)
-            env_input = self._client_policy(policy_input)
-            # Synchronous step-and-maybe-reset
-            cur_output, next_output = env.step_and_maybe_reset(env_input)
 
-            trajectory.append(cur_output.clone())
-            collected += cur_output.numel()
-            policy_input = self._shuttle = next_output
-
-        return lazy_stack(trajectory, -1)
-
-    def _rollout_async(self) -> TensorDictBase:
-        """Pipelined async rollout: overlap env step with inference."""
-        env = self.env
-
-        if (
-            self.reset_at_each_iter
-            or not hasattr(self, "_shuttle")
-            or self._shuttle is None
-        ):
-            self._shuttle = env.reset()
-
-        trajectory = []
-        collected = 0
-
-        # Prime the pipeline: send the first step
-        policy_input = self._shuttle
-        env_input = self._client_policy(policy_input)
-        env.async_step_and_maybe_reset_send(env_input)
-
-        while collected < self.frames_per_batch:
-            if self.verbose:
-                torchrl_logger.debug(
-                    f"AsyncBatchedCollector: {collected}/{self.frames_per_batch} frames"
-                )
-            cur_output, next_output = env.async_step_and_maybe_reset_recv()
-
-            trajectory.append(cur_output.clone())
-            collected += cur_output.numel()
-
-            self._shuttle = next_output
-
-            # Pipeline: send next step while we process the current one
-            if collected < self.frames_per_batch:
-                env_input = self._client_policy(next_output)
-                env.async_step_and_maybe_reset_send(env_input)
-
-        return lazy_stack(trajectory, -1)
+        return lazy_stack(transitions)
 
     def _rollout_yield_trajs(self) -> TensorDictBase:
-        """Collect until at least one full trajectory is done, yield it."""
-        env = self.env
-
-        if not hasattr(self, "_started") or not self._started:
-            self._shuttle = env.reset()
-            policy_input = self._shuttle
-            env_input = self._client_policy(policy_input)
-            env.async_step_and_maybe_reset_send(env_input)
-            self._started = True
-
-        dones = torch.zeros(self._num_envs, dtype=torch.bool)
+        """Drain transitions until a complete trajectory is available."""
+        rq = self._result_queue
 
         while not self._trajectory_queue:
-            cur_output, next_output = env.async_step_and_maybe_reset_recv()
-
-            # Route results to per-env queues
-            env_ids_raw = cur_output.get(env._env_idx_key).tolist()
-            env_ids = []
-            for eid in env_ids_raw:
-                while isinstance(eid, list) and len(eid) == 1:
+            td = rq.get()
+            self._check_worker_result(td)
+            env_id = 0
+            eid = td.get(_ENV_IDX_KEY, default=None)
+            if eid is not None:
+                # Unwrap NonTensorData / NonTensorStack / list wrappers
+                if hasattr(eid, "data"):
+                    eid = eid.data
+                while isinstance(eid, (list,)) and len(eid) == 1:
                     eid = eid[0]
-                env_ids.append(eid)
+                env_id = int(eid)
 
-            dones.fill_(False)
-            for i, _data in zip(env_ids, cur_output.unbind(0)):
-                self._yield_queues[i].append(_data)
-                dones[i] = _data["next", "done"].any()
-
-            if dones.any():
-                for idx in dones.nonzero(as_tuple=True)[0].tolist():
-                    self._trajectory_queue.append(
-                        lazy_stack(list(self._yield_queues[idx]), -1)
-                    )
-                    self._yield_queues[idx].clear()
-
-            # Pipeline: send next step
-            self._shuttle = next_output
-            env_input = self._client_policy(next_output)
-            env.async_step_and_maybe_reset_send(env_input)
+            self._yield_queues[env_id].append(td)
+            if td["next", "done"].any():
+                self._trajectory_queue.append(
+                    lazy_stack(list(self._yield_queues[env_id]), -1)
+                )
+                self._yield_queues[env_id].clear()
 
         result = self._trajectory_queue.popleft()
-        # Flatten extra dimensions from AsyncEnvPool child batch sizes
         return result.reshape(-1)
 
     @property
     def rollout(self) -> Callable[[], TensorDictBase]:
         if self.yield_completed_trajectories:
             return self._rollout_yield_trajs
-        return self._rollout_async
+        return self._rollout_frames
 
     # ------------------------------------------------------------------
     # BaseCollector interface
@@ -350,15 +360,11 @@ class AsyncBatchedCollector(BaseCollector):
     def iterator(self) -> Iterator[TensorDictBase]:
         """Iterate over collected batches."""
         self._ensure_started()
-        self._client = self._transport.client()
 
         total = self.total_frames
         while total < 0 or self._frames < total:
             self._iter += 1
             td = self.rollout()
-            if td is None:
-                yield
-                continue
             self._frames += td.numel()
             if self._postproc is not None:
                 td = self._postproc(td)
@@ -370,17 +376,20 @@ class AsyncBatchedCollector(BaseCollector):
         close_env: bool = True,
         raise_on_error: bool = True,
     ) -> None:
-        """Shut down the collector, inference server and env pool."""
-        self._shutdown_event.set()
-        self._server.shutdown(timeout=timeout or 5.0)
+        """Shut down the collector, inference server, threads and env pool."""
+        if self._shutdown_event is not None:
+            self._shutdown_event.set()
+        _timeout = timeout or 5.0
+        for w in self._workers:
+            w.join(timeout=_timeout)
+        self._workers = []
+        self._server.shutdown(timeout=_timeout)
         if close_env and self._env_pool is not None:
             self._env_pool.close(raise_if_closed=raise_on_error)
             self._env_pool = None
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
-        """Set the seed for the env pool."""
-        # AsyncEnvPool does not natively support set_seed uniformly.
-        # We store it and pass through if available.
+        """Set the seed (no-op; envs are created inside the pool)."""
         return seed
 
     def state_dict(self) -> OrderedDict:
@@ -390,7 +399,7 @@ class AsyncBatchedCollector(BaseCollector):
         pass
 
     def __del__(self) -> None:
-        if getattr(self, "_env_pool", None) is not None:
+        if getattr(self, "_workers", None):
             try:
                 self.shutdown(timeout=2.0, raise_on_error=False)
             except Exception:
