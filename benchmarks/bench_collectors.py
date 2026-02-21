@@ -12,7 +12,8 @@ Collectors tested:
   2. Collector (ParallelEnv x N)        -- single-process, N envs in sub-procs
   3. MultiCollector (sync, x N)         -- N sub-processes, sync delivery
   4. MultiCollector (async, x N)        -- N sub-processes, async delivery
-  5. AsyncBatchedCollector (threading)   -- AsyncEnvPool + InferenceServer
+  5. AsyncBatched (env=thread, pol=thread)  -- threading pool + threading transport
+  6. AsyncBatched (env=mp, pol=thread)      -- multiprocessing pool + threading transport
 """
 from __future__ import annotations
 
@@ -368,33 +369,33 @@ def main():
         )
     )
 
-    # 5. AsyncBatchedCollector (threading backend)
+    # 5. AsyncBatchedCollector (env=threading, policy=threading)
     results.append(
         bench(
-            f"AsyncBatchedCollector threading (x{num_envs})",
+            f"AsyncBatched env=thread pol=thread (x{num_envs})",
             lambda: AsyncBatchedCollector(
                 create_env_fn=[make_env_fn] * num_envs,
                 policy=policy_factory(),
                 frames_per_batch=frames_per_batch,
                 total_frames=-1,
                 max_batch_size=num_envs,
-                backend="threading",
+                env_backend="threading",
             ),
             target_frames=total_frames,
         )
     )
 
-    # 6. AsyncBatchedCollector (multiprocessing backend)
+    # 6. AsyncBatchedCollector (env=multiprocessing, policy=threading)
     results.append(
         bench(
-            f"AsyncBatchedCollector mp (x{num_envs})",
+            f"AsyncBatched env=mp pol=thread (x{num_envs})",
             lambda: AsyncBatchedCollector(
                 create_env_fn=[make_env_fn] * num_envs,
                 policy=policy_factory(),
                 frames_per_batch=frames_per_batch,
                 total_frames=-1,
                 max_batch_size=num_envs,
-                backend="multiprocessing",
+                env_backend="multiprocessing",
             ),
             target_frames=total_frames,
         )

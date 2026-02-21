@@ -22,6 +22,7 @@ from torchrl.modules.inference_server import (
     InferenceTransport,
     MPTransport,
     RayTransport,
+    SlotTransport,
     ThreadingTransport,
 )
 from torchrl.modules.inference_server._monarch import MonarchTransport
@@ -728,7 +729,7 @@ class TestAsyncBatchedCollector:
             frames_per_batch=frames_per_batch,
             total_frames=total_frames,
             max_batch_size=num_envs,
-            backend="threading",
+            env_backend="threading",
         )
         total_collected = 0
         for batch in collector:
@@ -746,7 +747,7 @@ class TestAsyncBatchedCollector:
             frames_per_batch=10,
             total_frames=20,
             max_batch_size=num_envs,
-            backend="threading",
+            env_backend="threading",
         )
         total_collected = 0
         for batch in collector:
@@ -786,7 +787,7 @@ class TestAsyncBatchedCollector:
             total_frames=30,
             yield_completed_trajectories=True,
             max_batch_size=num_envs,
-            backend="threading",
+            env_backend="threading",
         )
         count = 0
         for batch in collector:
@@ -804,7 +805,7 @@ class TestAsyncBatchedCollector:
             policy=policy,
             frames_per_batch=10,
             total_frames=10,
-            backend="threading",
+            env_backend="threading",
         )
         # Consume one batch to start
         for _batch in collector:
@@ -820,7 +821,7 @@ class TestAsyncBatchedCollector:
             policy=policy,
             frames_per_batch=10,
             total_frames=-1,
-            backend="threading",
+            env_backend="threading",
         )
         collected = 0
         for batch in collector:
@@ -857,9 +858,191 @@ class TestAsyncBatchedCollector:
             frames_per_batch=10,
             total_frames=20,
             postproc=postproc,
-            backend="threading",
+            env_backend="threading",
         )
         for _ in collector:
             pass
         collector.shutdown()
         assert called["count"] >= 1
+
+
+# =============================================================================
+# Tests: SlotTransport
+# =============================================================================
+
+
+class TestSlotTransport:
+    def test_single_request(self):
+        transport = SlotTransport(num_slots=4)
+        policy = _make_policy()
+        with InferenceServer(policy, transport, max_batch_size=4):
+            client = transport.client()
+            td = TensorDict({"observation": torch.randn(4)})
+            result = client(td)
+            assert "action" in result.keys()
+            assert result["action"].shape == (2,)
+
+    def test_concurrent_actors(self):
+        """Multiple threads submit concurrently via slot clients."""
+        n_actors = 4
+        n_requests = 30
+        transport = SlotTransport(num_slots=n_actors)
+        policy = _make_policy()
+
+        results_per_actor: list[list[TensorDictBase]] = [[] for _ in range(n_actors)]
+        clients = [transport.client() for _ in range(n_actors)]
+
+        def actor_fn(actor_id):
+            for _ in range(n_requests):
+                td = TensorDict({"observation": torch.randn(4)})
+                result = clients[actor_id](td)
+                results_per_actor[actor_id].append(result)
+
+        with InferenceServer(policy, transport, max_batch_size=n_actors):
+            with concurrent.futures.ThreadPoolExecutor(max_workers=n_actors) as pool:
+                futs = [pool.submit(actor_fn, i) for i in range(n_actors)]
+                concurrent.futures.wait(futs)
+                for f in futs:
+                    f.result()
+
+        for actor_results in results_per_actor:
+            assert len(actor_results) == n_requests
+            for r in actor_results:
+                assert "action" in r.keys()
+                assert r["action"].shape == (2,)
+
+    def test_too_many_clients_raises(self):
+        """Creating more clients than slots raises RuntimeError."""
+        transport = SlotTransport(num_slots=2)
+        transport.client()
+        transport.client()
+        with pytest.raises(RuntimeError, match="slots"):
+            transport.client()
+
+    def test_submit_raises(self):
+        """Direct submit() on SlotTransport is not supported."""
+        transport = SlotTransport(num_slots=1)
+        td = TensorDict({"observation": torch.randn(4)})
+        with pytest.raises(NotImplementedError):
+            transport.submit(td)
+
+    def test_exception_propagates(self):
+        """Model exceptions propagate through SlotTransport."""
+
+        def bad_model(td):
+            raise ValueError("slot model error")
+
+        transport = SlotTransport(num_slots=1)
+        with InferenceServer(bad_model, transport, max_batch_size=4):
+            client = transport.client()
+            td = TensorDict({"observation": torch.randn(4)})
+            with pytest.raises(ValueError, match="slot model error"):
+                client(td)
+
+
+# =============================================================================
+# Tests: min_batch_size
+# =============================================================================
+
+
+class TestMinBatchSize:
+    def test_min_batch_size_accumulates(self):
+        """With min_batch_size > 1, the server waits for enough items."""
+        min_bs = 4
+        seen_sizes = []
+
+        def tracking_collate(items):
+            seen_sizes.append(len(items))
+            return lazy_stack(items)
+
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        n = 8
+
+        with InferenceServer(
+            policy,
+            transport,
+            max_batch_size=16,
+            min_batch_size=min_bs,
+            collate_fn=tracking_collate,
+            timeout=1.0,
+        ):
+            client = transport.client()
+            # Submit items from threads to give the server time to accumulate
+            with concurrent.futures.ThreadPoolExecutor(max_workers=n) as pool:
+                futs = [
+                    pool.submit(
+                        lambda: client(TensorDict({"observation": torch.randn(4)}))
+                    )
+                    for _ in range(n)
+                ]
+                for f in futs:
+                    f.result(timeout=10.0)
+
+        # At least one batch should have >= min_batch_size items
+        assert any(s >= min_bs for s in seen_sizes)
+
+
+# =============================================================================
+# Tests: bugfix regressions
+# =============================================================================
+
+
+class TestShutdownPendingFutures:
+    def test_shutdown_resolves_pending_futures(self):
+        """Pending futures receive an exception on shutdown (no hang)."""
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        server = InferenceServer(policy, transport, max_batch_size=1024)
+        server.start()
+        futures = [
+            transport.submit(TensorDict({"observation": torch.randn(4)}))
+            for _ in range(5)
+        ]
+        time.sleep(0.05)
+        server.shutdown(timeout=5.0)
+        for f in futures:
+            try:
+                f.result(timeout=2.0)
+            except Exception:
+                pass  # exception is acceptable; hanging is not
+
+
+class TestThreadingTransportNoLostSignals:
+    def test_rapid_submit_no_lost_signals(self):
+        """Rapid submits from many threads don't lose signals."""
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        n = 100
+        with InferenceServer(policy, transport, max_batch_size=4, timeout=0.001):
+            client = transport.client()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+                futs = [
+                    pool.submit(
+                        lambda: client(TensorDict({"observation": torch.randn(4)}))
+                    )
+                    for _ in range(n)
+                ]
+                results = [f.result(timeout=10.0) for f in futs]
+        assert len(results) == n
+        for r in results:
+            assert "action" in r.keys()
+
+
+class TestWorkerCrashPropagation:
+    def test_worker_crash_propagates(self):
+        """If the model always fails, the collector propagates the error."""
+
+        def bad_model(td):
+            raise RuntimeError("model crash")
+
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=bad_model,
+            frames_per_batch=10,
+            total_frames=100,
+        )
+        with pytest.raises(RuntimeError, match="worker thread"):
+            for _ in collector:
+                pass
+        collector.shutdown()

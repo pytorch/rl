@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from collections.abc import Callable
 from concurrent.futures import Future
 
@@ -32,6 +33,11 @@ class InferenceServer:
     Keyword Args:
         max_batch_size (int, optional): upper bound on the number of requests
             processed in a single forward pass. Default: ``64``.
+        min_batch_size (int, optional): minimum number of requests to
+            accumulate before dispatching a batch.  After the first request
+            arrives the server keeps draining for up to ``timeout`` seconds
+            until at least this many items are collected.  ``1`` (default)
+            dispatches immediately.
         timeout (float, optional): seconds to wait for new work before
             dispatching a partial batch. Default: ``0.01``.
         collate_fn (Callable, optional): function used to stack a list of
@@ -70,6 +76,7 @@ class InferenceServer:
         transport: InferenceTransport,
         *,
         max_batch_size: int = 64,
+        min_batch_size: int = 1,
         timeout: float = 0.01,
         collate_fn: Callable | None = None,
         device: torch.device | str | None = None,
@@ -79,6 +86,7 @@ class InferenceServer:
         self.model = model
         self.transport = transport
         self.max_batch_size = max_batch_size
+        self.min_batch_size = min_batch_size
         self.timeout = timeout
         self.collate_fn = collate_fn if collate_fn is not None else lazy_stack
         self.device = torch.device(device) if device is not None else None
@@ -161,6 +169,20 @@ class InferenceServer:
                 items, callbacks = self.transport.drain(self.max_batch_size)
                 if not items:
                     continue
+
+                # Accumulate up to min_batch_size (or until timeout expires)
+                if len(items) < self.min_batch_size:
+                    deadline = time.monotonic() + self.timeout
+                    while len(items) < self.min_batch_size:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            break
+                        self.transport.wait_for_work(timeout=remaining)
+                        more_items, more_cbs = self.transport.drain(
+                            self.max_batch_size - len(items)
+                        )
+                        items.extend(more_items)
+                        callbacks.extend(more_cbs)
 
                 batch = self.collate_fn(items)
                 if self.device is not None:

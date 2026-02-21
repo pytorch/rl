@@ -6,13 +6,20 @@ through an :class:`~torchrl.modules.InferenceServer`.
 
 Architecture:
   - An :class:`~torchrl.envs.AsyncEnvPool` runs environments in parallel
-    using the chosen backend (``"threading"`` or ``"multiprocessing"``).
+    using the chosen ``env_backend`` (``"threading"`` or ``"multiprocessing"``).
   - One lightweight coordinator thread per environment owns a slot in the pool
     and an inference client.
   - An :class:`~torchrl.modules.InferenceServer` batches incoming observations
-    and runs a single forward pass.
+    and runs a single forward pass.  The communication layer (transport) is
+    controlled by ``policy_backend`` (``"threading"``, ``"multiprocessing"``,
+    ``"ray"``, or ``"monarch"``).
   - There is no global synchronisation barrier -- fast envs keep stepping
     while slow ones wait for inference.
+
+Backend parameters:
+  - ``backend``        -- global default for both env pool and policy transport.
+  - ``env_backend``    -- override for the env pool (falls back to ``backend``).
+  - ``policy_backend`` -- override for the transport (falls back to ``backend``).
 
 The user only supplies:
   - A list of environment factories

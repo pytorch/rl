@@ -21,6 +21,45 @@ from torchrl.modules.inference_server._transport import InferenceTransport
 
 _ENV_IDX_KEY = "env_index"
 
+_POLICY_BACKENDS = ("threading", "multiprocessing", "ray", "monarch")
+_ENV_BACKENDS = ("threading", "multiprocessing")
+
+
+def _make_transport(
+    policy_backend: str, num_slots: int | None = None
+) -> InferenceTransport:
+    """Create an :class:`InferenceTransport` from a backend name.
+
+    Args:
+        policy_backend: one of ``"threading"``, ``"multiprocessing"``,
+            ``"ray"``, or ``"monarch"``.
+        num_slots: when set and ``policy_backend="threading"``, a
+            :class:`~torchrl.modules.SlotTransport` is created instead of
+            the generic :class:`~torchrl.modules.ThreadingTransport`.
+    """
+    if policy_backend == "threading":
+        if num_slots is not None:
+            from torchrl.modules.inference_server._slot import SlotTransport
+
+            return SlotTransport(num_slots)
+        return ThreadingTransport()
+    if policy_backend == "multiprocessing":
+        from torchrl.modules.inference_server._mp import MPTransport
+
+        return MPTransport()
+    if policy_backend == "ray":
+        from torchrl.modules.inference_server._ray import RayTransport
+
+        return RayTransport()
+    if policy_backend == "monarch":
+        from torchrl.modules.inference_server._monarch import MonarchTransport
+
+        return MonarchTransport()
+    raise ValueError(
+        f"Unknown policy_backend {policy_backend!r}. "
+        f"Expected one of {_POLICY_BACKENDS}."
+    )
+
 
 def _env_loop(
     pool: AsyncEnvPool,
@@ -102,22 +141,35 @@ class AsyncBatchedCollector(BaseCollector):
         max_batch_size (int, optional): upper bound on the number of
             requests the inference server processes in a single forward pass.
             Defaults to ``64``.
+        min_batch_size (int, optional): minimum number of requests the
+            inference server accumulates before dispatching a batch.  After
+            the first request arrives the server keeps draining for up to
+            ``server_timeout`` seconds until this many items are collected.
+            ``1`` (default) dispatches immediately.
         server_timeout (float, optional): seconds the server waits for work
             before dispatching a partial batch.  Defaults to ``0.01``.
         transport (InferenceTransport, optional): a pre-built transport
-            backend.  When ``None`` (default) a
-            :class:`~torchrl.modules.ThreadingTransport` is created
-            automatically (since worker threads always live in the main
-            process).  Pass a :class:`~torchrl.modules.RayTransport` or
-            :class:`~torchrl.modules.MonarchTransport` for distributed
-            setups where the inference server is remote.
+            object.  When provided, it takes precedence over
+            ``policy_backend``.  When ``None`` (default) a transport is
+            created automatically from the resolved ``policy_backend``.
         device (torch.device or str, optional): device for policy inference.
             Passed to the inference server.  Defaults to ``None``.
-        backend (str, optional): backend for the
+        backend (str, optional): global default backend for both
+            environments and policy inference.  Specific overrides
+            ``env_backend`` and ``policy_backend`` take precedence when set.
+            One of ``"threading"``, ``"multiprocessing"``, ``"ray"``, or
+            ``"monarch"``.  Defaults to ``"threading"``.
+        env_backend (str, optional): backend for the
             :class:`~torchrl.envs.AsyncEnvPool` that runs environments.  One
-            of ``"threading"`` or ``"multiprocessing"``.  The coordinator
-            threads are always Python threads regardless of this setting.
-            Defaults to ``"threading"``.
+            of ``"threading"`` or ``"multiprocessing"``.  Falls back to
+            ``backend`` when ``None``.  The coordinator threads are always
+            Python threads regardless of this setting.  Defaults to ``None``.
+        policy_backend (str, optional): backend for the inference transport
+            used to communicate with the
+            :class:`~torchrl.modules.InferenceServer`.  One of
+            ``"threading"``, ``"multiprocessing"``, ``"ray"``, or
+            ``"monarch"``.  Falls back to ``backend`` when ``None``.
+            Defaults to ``None``.
         reset_at_each_iter (bool, optional): whether to reset all envs at the
             start of every collection batch.  Defaults to ``False``.
         postproc (Callable, optional): post-processing transform applied to
@@ -167,10 +219,16 @@ class AsyncBatchedCollector(BaseCollector):
         frames_per_batch: int,
         total_frames: int = -1,
         max_batch_size: int = 64,
+        min_batch_size: int = 1,
         server_timeout: float = 0.01,
         transport: InferenceTransport | None = None,
         device: torch.device | str | None = None,
-        backend: Literal["threading", "multiprocessing"] = "threading",
+        backend: Literal[
+            "threading", "multiprocessing", "ray", "monarch"
+        ] = "threading",
+        env_backend: Literal["threading", "multiprocessing"] | None = None,
+        policy_backend: Literal["threading", "multiprocessing", "ray", "monarch"]
+        | None = None,
         reset_at_each_iter: bool = False,
         postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
         yield_completed_trajectories: bool = False,
@@ -194,12 +252,26 @@ class AsyncBatchedCollector(BaseCollector):
             raise TypeError("create_env_fn must be a list of env factories.")
         self._create_env_fn = list(create_env_fn)
         self._num_envs = len(create_env_fn)
-        self._backend = backend
         self._create_env_kwargs = create_env_kwargs
+
+        # ---- resolve backends -------------------------------------------------
+        effective_env_backend = env_backend if env_backend is not None else backend
+        effective_policy_backend = (
+            policy_backend if policy_backend is not None else backend
+        )
+        if effective_env_backend not in _ENV_BACKENDS:
+            raise ValueError(
+                f"env_backend={effective_env_backend!r} is not supported. "
+                f"Expected one of {_ENV_BACKENDS}."
+            )
+        self._env_backend = effective_env_backend
+        self._policy_backend = effective_policy_backend
 
         # ---- build transport --------------------------------------------------
         if transport is None:
-            transport = ThreadingTransport()
+            transport = _make_transport(
+                effective_policy_backend, num_slots=self._num_envs
+            )
         self._transport = transport
 
         # ---- build inference server -------------------------------------------
@@ -207,6 +279,7 @@ class AsyncBatchedCollector(BaseCollector):
             model=policy,
             transport=transport,
             max_batch_size=max_batch_size,
+            min_batch_size=min_batch_size,
             timeout=server_timeout,
             device=device,
             weight_sync=weight_sync,
@@ -250,7 +323,7 @@ class AsyncBatchedCollector(BaseCollector):
             kwargs["create_env_kwargs"] = self._create_env_kwargs
         self._env_pool = AsyncEnvPool(
             self._create_env_fn,
-            backend=self._backend,
+            backend=self._env_backend,
             **kwargs,
         )
 
@@ -309,10 +382,19 @@ class AsyncBatchedCollector(BaseCollector):
         transitions: list[TensorDictBase] = []
 
         while collected < self.frames_per_batch:
+            # Block for at least one transition
             td = rq.get()
             self._check_worker_result(td)
             transitions.append(td)
             collected += td.numel()
+            # Batch-drain any additional items already in the queue
+            while collected < self.frames_per_batch:
+                try:
+                    td = rq.get_nowait()
+                except queue.Empty:
+                    break
+                transitions.append(td)
+                collected += td.numel()
             if self.verbose:
                 torchrl_logger.debug(
                     f"AsyncBatchedCollector: {collected}/{self.frames_per_batch} frames"
