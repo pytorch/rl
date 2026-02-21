@@ -677,3 +677,189 @@ class TestWeightSyncIntegration:
             td = TensorDict({"observation": torch.randn(4)})
             result = client(td)
             assert "action" in result.keys()
+
+
+# ---------------------------------------------------------------------------
+# AsyncBatchedCollector tests
+# ---------------------------------------------------------------------------
+
+from torchrl.collectors import AsyncBatchedCollector
+from torchrl.testing.mocking_classes import CountingEnv
+
+
+def _counting_env_factory(max_steps=5):
+    """Factory that returns a CountingEnv."""
+    return CountingEnv(max_steps=max_steps)
+
+
+class _BatchCountingPolicy(TensorDictModule):
+    """A batch-aware policy that always outputs action=1 for CountingEnv."""
+
+    def __init__(self):
+        super().__init__(
+            module=nn.Module(),  # placeholder
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+
+    def forward(self, td: TensorDictBase) -> TensorDictBase:
+        obs = td.get("observation")
+        action = torch.ones_like(obs)
+        return td.set("action", action)
+
+
+def _make_counting_policy():
+    return _BatchCountingPolicy()
+
+
+class TestAsyncBatchedCollector:
+    """Tests for :class:`AsyncBatchedCollector`."""
+
+    def test_basic_collection(self):
+        """Collector yields at least frames_per_batch frames."""
+        num_envs = 3
+        frames_per_batch = 20
+        total_frames = 60
+        policy = _make_counting_policy()
+
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * num_envs,
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=total_frames,
+            max_batch_size=num_envs,
+            env_backend="threading",
+        )
+        total_collected = 0
+        for batch in collector:
+            assert batch is not None
+            total_collected += batch.numel()
+        collector.shutdown()
+        assert total_collected >= total_frames
+
+    def test_policy_factory(self):
+        """policy_factory is called to create the policy."""
+        num_envs = 2
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * num_envs,
+            policy_factory=_make_counting_policy,
+            frames_per_batch=10,
+            total_frames=20,
+            max_batch_size=num_envs,
+            env_backend="threading",
+        )
+        total_collected = 0
+        for batch in collector:
+            total_collected += batch.numel()
+        collector.shutdown()
+        assert total_collected >= 20
+
+    def test_policy_xor_factory(self):
+        """Providing both policy and policy_factory raises."""
+        policy = _make_counting_policy()
+        with pytest.raises(TypeError, match="mutually exclusive"):
+            AsyncBatchedCollector(
+                create_env_fn=[_counting_env_factory],
+                policy=policy,
+                policy_factory=_make_counting_policy,
+                frames_per_batch=10,
+            )
+
+    def test_neither_policy_nor_factory(self):
+        """Providing neither raises."""
+        with pytest.raises(TypeError, match="must be provided"):
+            AsyncBatchedCollector(
+                create_env_fn=[_counting_env_factory],
+                frames_per_batch=10,
+            )
+
+    def test_yield_completed_trajectories(self):
+        """With yield_completed_trajectories, collector yields done trajectories."""
+        num_envs = 3
+        max_steps = 5
+        policy = _make_counting_policy()
+
+        collector = AsyncBatchedCollector(
+            create_env_fn=[lambda: CountingEnv(max_steps=max_steps)] * num_envs,
+            policy=policy,
+            frames_per_batch=1,
+            total_frames=30,
+            yield_completed_trajectories=True,
+            max_batch_size=num_envs,
+            env_backend="threading",
+        )
+        count = 0
+        for batch in collector:
+            assert batch is not None
+            # Each trajectory should end with done=True
+            count += batch.numel()
+        collector.shutdown()
+        assert count >= 30
+
+    def test_shutdown_idempotent(self):
+        """Calling shutdown twice should not raise."""
+        policy = _make_counting_policy()
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=policy,
+            frames_per_batch=10,
+            total_frames=10,
+            env_backend="threading",
+        )
+        # Consume one batch to start
+        for _batch in collector:
+            break
+        collector.shutdown()
+        collector.shutdown()  # should not raise
+
+    def test_endless_collector(self):
+        """total_frames=-1 creates an endless collector; verify manual break works."""
+        policy = _make_counting_policy()
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=policy,
+            frames_per_batch=10,
+            total_frames=-1,
+            env_backend="threading",
+        )
+        collected = 0
+        for batch in collector:
+            collected += batch.numel()
+            if collected >= 50:
+                break
+        collector.shutdown()
+        assert collected >= 50
+
+    def test_num_envs(self):
+        """The collector knows the number of environments."""
+        policy = _make_counting_policy()
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=policy,
+            frames_per_batch=10,
+            total_frames=10,
+        )
+        assert collector._num_envs == 2
+        collector.shutdown()
+
+    def test_postproc(self):
+        """Post-processing callable is applied to every batch."""
+        policy = _make_counting_policy()
+        called = {"count": 0}
+
+        def postproc(td):
+            called["count"] += 1
+            return td
+
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=policy,
+            frames_per_batch=10,
+            total_frames=20,
+            postproc=postproc,
+            env_backend="threading",
+        )
+        for _ in collector:
+            pass
+        collector.shutdown()
+        assert called["count"] >= 1

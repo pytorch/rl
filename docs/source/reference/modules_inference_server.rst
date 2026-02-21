@@ -92,3 +92,29 @@ to receive updated model weights from a trainer between inference batches:
         loss.backward()
         optimizer.step()
         weight_sync.send(model=training_model)  # pushed to server
+
+Integration with Collectors
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The easiest way to use the inference server with RL data collection is
+through :class:`~torchrl.collectors.AsyncBatchedCollector`, which
+creates the server, transport, and env pool automatically:
+
+.. code-block:: python
+
+    from torchrl.collectors import AsyncBatchedCollector
+    from torchrl.envs import GymEnv
+
+    collector = AsyncBatchedCollector(
+        create_env_fn=[lambda: GymEnv("CartPole-v1")] * 8,
+        policy=my_policy,
+        frames_per_batch=200,
+        total_frames=10_000,
+        max_batch_size=8,
+    )
+
+    for data in collector:
+        # train on data ...
+        pass
+
+    collector.shutdown()
