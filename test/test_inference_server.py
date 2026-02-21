@@ -20,8 +20,15 @@ from torchrl.modules.inference_server import (
     InferenceServer,
     InferenceTransport,
     MPTransport,
+    RayTransport,
     ThreadingTransport,
 )
+
+_has_ray = True
+try:
+    import ray
+except ImportError:
+    _has_ray = False
 
 
 # =============================================================================
@@ -397,4 +404,89 @@ class TestMPTransport:
         with InferenceServer(bad_model, transport, max_batch_size=4):
             td = TensorDict({"observation": torch.randn(4)})
             with pytest.raises(ValueError, match="mp model error"):
+                client(td)
+
+
+# =============================================================================
+# Tests: RayTransport (Commit 4)
+# =============================================================================
+
+
+@pytest.mark.skipif(not _has_ray, reason="ray not installed")
+class TestRayTransport:
+    @classmethod
+    def setup_class(cls):
+        if not ray.is_initialized():
+            ray.init(num_cpus=4, ignore_reinit_error=True)
+
+    def test_single_request(self):
+        transport = RayTransport()
+        client = transport.client()
+        policy = _make_policy()
+        with InferenceServer(policy, transport, max_batch_size=4):
+            td = TensorDict({"observation": torch.randn(4)})
+            result = client(td)
+            assert "action" in result.keys()
+            assert result["action"].shape == (2,)
+
+    def test_concurrent_clients(self):
+        """Multiple clients submit concurrently from threads (simulating Ray actors)."""
+        transport = RayTransport()
+        policy = _make_policy()
+        n_clients = 4
+        n_requests = 20
+
+        clients = [transport.client() for _ in range(n_clients)]
+        results_per_client: list[list[TensorDictBase]] = [[] for _ in range(n_clients)]
+
+        def client_fn(client_idx):
+            for _ in range(n_requests):
+                td = TensorDict({"observation": torch.randn(4)})
+                result = clients[client_idx](td)
+                results_per_client[client_idx].append(result)
+
+        with InferenceServer(policy, transport, max_batch_size=8):
+            with concurrent.futures.ThreadPoolExecutor(max_workers=n_clients) as pool:
+                futs = [pool.submit(client_fn, i) for i in range(n_clients)]
+                concurrent.futures.wait(futs)
+                for f in futs:
+                    f.result()
+
+        for client_results in results_per_client:
+            assert len(client_results) == n_requests
+            for r in client_results:
+                assert "action" in r.keys()
+                assert r["action"].shape == (2,)
+
+    def test_ray_remote_actor(self):
+        """A Ray remote actor can use the client to get inference results."""
+        transport = RayTransport()
+        client = transport.client()
+        policy = _make_policy()
+
+        @ray.remote
+        def remote_actor_fn(client, n_requests):
+            results = []
+            for _ in range(n_requests):
+                td = TensorDict({"observation": torch.randn(4)})
+                result = client(td)
+                results.append(result["action"].shape)
+            return results
+
+        with InferenceServer(policy, transport, max_batch_size=8):
+            ref = remote_actor_fn.remote(client, 5)
+            shapes = ray.get(ref, timeout=30.0)
+            assert len(shapes) == 5
+            for s in shapes:
+                assert s == (2,)
+
+    def test_ray_exception_propagates(self):
+        def bad_model(td):
+            raise ValueError("ray model error")
+
+        transport = RayTransport()
+        client = transport.client()
+        with InferenceServer(bad_model, transport, max_batch_size=4):
+            td = TensorDict({"observation": torch.randn(4)})
+            with pytest.raises(ValueError, match="ray model error"):
                 client(td)

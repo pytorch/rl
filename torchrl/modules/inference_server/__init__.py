@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from torchrl.modules.inference_server._mp import MPTransport
+from torchrl.modules.inference_server._ray import RayTransport
 from torchrl.modules.inference_server._server import InferenceClient, InferenceServer
 from torchrl.modules.inference_server._threading import ThreadingTransport
 from torchrl.modules.inference_server._transport import InferenceTransport
@@ -13,5 +14,6 @@ __all__ = [
     "InferenceServer",
     "InferenceTransport",
     "MPTransport",
+    "RayTransport",
     "ThreadingTransport",
 ]
