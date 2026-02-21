@@ -42,6 +42,9 @@ class InferenceServer:
             :class:`~torchrl.weight_update.WeightSyncScheme` used to receive
             updated model weights from a trainer. When set, the server polls
             for new weights between inference batches.
+        weight_sync_model_id (str, optional): the model identifier used when
+            initialising the weight sync scheme on the receiver side.
+            Default: ``"policy"``.
 
     Example:
         >>> from tensordict.nn import TensorDictModule
@@ -71,6 +74,7 @@ class InferenceServer:
         collate_fn: Callable | None = None,
         device: torch.device | str | None = None,
         weight_sync=None,
+        weight_sync_model_id: str = "policy",
     ):
         self.model = model
         self.transport = transport
@@ -79,9 +83,12 @@ class InferenceServer:
         self.collate_fn = collate_fn if collate_fn is not None else lazy_stack
         self.device = torch.device(device) if device is not None else None
         self.weight_sync = weight_sync
+        self._weight_sync_model_id = weight_sync_model_id
 
         self._shutdown_event = threading.Event()
         self._worker: threading.Thread | None = None
+        # Protects model access during weight updates
+        self._model_lock = threading.Lock()
 
     # -- lifecycle ------------------------------------------------------------
 
@@ -119,10 +126,36 @@ class InferenceServer:
 
     # -- background loop ------------------------------------------------------
 
+    def _init_weight_sync(self) -> None:
+        """Initialise the weight sync scheme on the receiver (server) side."""
+        ws = self.weight_sync
+        if ws is None:
+            return
+        if not ws.initialized_on_receiver:
+            ws.init_on_receiver(
+                model_id=self._weight_sync_model_id,
+                model=self.model,
+                worker_idx=0,
+            )
+        if not ws.synchronized_on_receiver:
+            ws.connect(worker_idx=0)
+
+    def _poll_weight_update(self) -> None:
+        """Non-blocking check for fresh weights from the trainer."""
+        ws = self.weight_sync
+        if ws is None:
+            return
+        with self._model_lock:
+            ws.receive(timeout=0.0)
+
     @torch.no_grad()
     def _run(self) -> None:
+        self._init_weight_sync()
+
         try:
             while not self._shutdown_event.is_set():
+                self._poll_weight_update()
+
                 self.transport.wait_for_work(timeout=self.timeout)
 
                 items, callbacks = self.transport.drain(self.max_batch_size)
@@ -134,7 +167,8 @@ class InferenceServer:
                     batch = batch.to(self.device)
 
                 try:
-                    results = self.model(batch).unbind(0)
+                    with self._model_lock:
+                        results = self.model(batch).unbind(0)
                     if len(results) != len(callbacks):
                         raise RuntimeError(
                             f"Model returned {len(results)} results for a "

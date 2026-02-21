@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import threading
+import time
 
 import pytest
 import torch
@@ -557,3 +558,122 @@ class TestMonarchTransportImport:
     def test_instantiation_without_monarch_raises(self):
         with pytest.raises(ImportError, match="Monarch is required"):
             MonarchTransport()
+
+
+# =============================================================================
+# Tests: WeightSyncScheme integration (Commit 6)
+# =============================================================================
+
+
+class _SimpleWeightSync:
+    """Minimal mock that mimics the WeightSyncScheme receiver interface.
+
+    Stores a queue of weight TensorDicts. ``receive(timeout=...)`` pops
+    the next one and applies it to the model via
+    ``TensorDict.from_module / to_module``.
+    """
+
+    def __init__(self):
+        self._queue: list[TensorDictBase] = []
+        self._model = None
+        self.initialized_on_receiver = False
+        self.synchronized_on_receiver = False
+
+    def init_on_receiver(self, *, model_id, model=None, worker_idx=0, **kwargs):
+        self._model = model
+        self.initialized_on_receiver = True
+
+    def connect(self, *, worker_idx=0):
+        self.synchronized_on_receiver = True
+
+    def receive(self, timeout=None):
+        if self._queue:
+            weights = self._queue.pop(0)
+            weights.to_module(self._model)
+            return weights
+        return None
+
+    def push(self, weights: TensorDictBase):
+        """Test helper: enqueue weights for the server to pick up."""
+        self._queue.append(weights)
+
+
+class TestWeightSyncIntegration:
+    def test_weight_sync_init_called(self):
+        """Server calls init_on_receiver and connect at startup."""
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        ws = _SimpleWeightSync()
+
+        with InferenceServer(policy, transport, weight_sync=ws):
+            # Give the worker thread a moment to start
+            time.sleep(0.1)
+            assert ws.initialized_on_receiver
+            assert ws.synchronized_on_receiver
+
+    def test_weight_update_applied(self):
+        """Weights pushed via weight_sync are applied to the model."""
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        ws = _SimpleWeightSync()
+
+        with InferenceServer(
+            policy, transport, max_batch_size=4, weight_sync=ws
+        ) as server:
+            client = transport.client()
+
+            # Get initial prediction
+            td = TensorDict({"observation": torch.ones(4)})
+            client(td)
+
+            # Mutate the model weights externally and push via weight_sync
+            new_weights = TensorDict.from_module(policy)
+            for key in new_weights.keys(True, True):
+                new_weights[key] = torch.zeros_like(new_weights[key])
+            ws.push(new_weights)
+
+            # Give the server loop a chance to apply the update
+            time.sleep(0.2)
+
+            # Now inference should reflect zero weights
+            result_after = client(td)
+            # With zero weights the linear output should be zero (bias=0 too)
+            assert torch.allclose(result_after["action"], torch.zeros(2), atol=1e-6)
+
+    def test_inference_continues_after_weight_update(self):
+        """The server keeps serving after a weight update."""
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        ws = _SimpleWeightSync()
+
+        with InferenceServer(policy, transport, max_batch_size=4, weight_sync=ws):
+            client = transport.client()
+
+            # Initial requests
+            for _ in range(5):
+                td = TensorDict({"observation": torch.randn(4)})
+                result = client(td)
+                assert "action" in result.keys()
+
+            # Push weight update
+            new_weights = TensorDict.from_module(policy)
+            ws.push(new_weights)
+
+            time.sleep(0.1)
+
+            # Continue making requests
+            for _ in range(5):
+                td = TensorDict({"observation": torch.randn(4)})
+                result = client(td)
+                assert "action" in result.keys()
+                assert result["action"].shape == (2,)
+
+    def test_no_weight_sync(self):
+        """Server works fine when weight_sync is None."""
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(policy, transport, max_batch_size=4):
+            client = transport.client()
+            td = TensorDict({"observation": torch.randn(4)})
+            result = client(td)
+            assert "action" in result.keys()
