@@ -64,7 +64,7 @@ class _ConvNetBlock(nn.Module):
     def forward(self, x):
         x = self.feats_conv(x)
         x = self.resnet1(x)
-        x = self.resnet1(x)
+        x = self.resnet2(x)
         return x
 
 
