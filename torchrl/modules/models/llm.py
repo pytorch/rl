@@ -122,7 +122,7 @@ class GPT2RewardModel(nn.Module):
         rejected_rewards = rejected_batch.rewards
 
         bs = chosen_rewards.shape[0]
-        loss = 0
+        loss = torch.tensor(0.0, device=chosen_rewards.device)
 
         # TODO: this loop can likely be made more efficient
         for i in range(bs):
@@ -134,7 +134,13 @@ class GPT2RewardModel(nn.Module):
             end_ind = max(c_ind, r_ind)
 
             # Retrieve first index where trajectories diverge
-            divergence_ind = (chosen_ids[i] != rejected_ids[i]).nonzero()[0]
+            divergence = (chosen_ids[i] != rejected_ids[i]).nonzero(
+                as_tuple=False
+            )
+            if divergence.numel() == 0:
+                # Identical sequences: no preference signal, skip sample
+                continue
+            divergence_ind = divergence[0].item()
 
             # Index into the correct rewards
             c_truncated_reward = chosen_rewards[i][divergence_ind:end_ind]
