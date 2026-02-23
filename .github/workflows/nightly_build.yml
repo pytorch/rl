@@ -139,7 +139,7 @@ jobs:
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python scripts/verify_nightly_version.py
+          python packaging/verify_nightly_version.py
       - name: Run tests
         run: |
           set -e
@@ -292,7 +292,7 @@ jobs:
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
-          python scripts/verify_nightly_version.py
+          python packaging/verify_nightly_version.py
       - name: Run tests
         shell: bash
         run: |
