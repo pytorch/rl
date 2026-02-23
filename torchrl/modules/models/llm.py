@@ -134,9 +134,7 @@ class GPT2RewardModel(nn.Module):
             end_ind = max(c_ind, r_ind)
 
             # Retrieve first index where trajectories diverge
-            divergence = (chosen_ids[i] != rejected_ids[i]).nonzero(
-                as_tuple=False
-            )
+            divergence = (chosen_ids[i] != rejected_ids[i]).nonzero(as_tuple=False)
             if divergence.numel() == 0:
                 # Identical sequences: no preference signal, skip sample
                 continue
