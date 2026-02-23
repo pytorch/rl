@@ -901,6 +901,10 @@ class TestRayCollector(DistributedCollectorBase):
         torch.manual_seed(42)
         kwargs = self.distributed_kwargs()
         kwargs["remote_config"] = kwargs.pop("remote_configs")
+        kwargs["remote_config"]["num_gpus"] = 0
+        kwargs["remote_config"]["runtime_env"] = {
+            "env_vars": {"CUDA_VISIBLE_DEVICES": ""},
+        }
         rb = RayReplayBuffer(
             storage=storage,
             sampler=sampler,
@@ -908,15 +912,17 @@ class TestRayCollector(DistributedCollectorBase):
             batch_size=32,
             **kwargs,
         )
-        td = TensorDict(a=torch.arange(100, 200), batch_size=[100])
-        index = rb.extend(td)
-        assert (index == torch.arange(100)).all()
-        # Ensure buffer is fully populated before sampling
-        assert len(rb) == 100
-        for _ in range(10):
-            sample = rb.sample()
-            if sampler is SamplerWithoutReplacement:
-                assert sample["a"].unique().numel() == sample.numel()
+        try:
+            td = TensorDict(a=torch.arange(100, 200), batch_size=[100])
+            index = rb.extend(td)
+            assert (index == torch.arange(100)).all()
+            assert len(rb) == 100
+            for _ in range(10):
+                sample = rb.sample()
+                if sampler is SamplerWithoutReplacement:
+                    assert sample["a"].unique().numel() == sample.numel()
+        finally:
+            rb.close()
 
     # class CustomCollectorCls(Collector):
     #     def __init__(self, create_env_fn, **kwargs):
