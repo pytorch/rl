@@ -282,14 +282,14 @@
 <span class="sd">                        dtype=torch.float32,</span>
 <span class="sd">                        domain=continuous),</span>
 <span class="sd">                    params: Composite(</span>
-<span class="sd">                        max_speed: UnboundedDiscrete(</span>
+<span class="sd">                        max_speed: UnboundedContinuous(</span>
 <span class="sd">                            shape=torch.Size([]),</span>
 <span class="sd">                            space=ContinuousBox(</span>
-<span class="sd">                                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, contiguous=True),</span>
-<span class="sd">                                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, contiguous=True)),</span>
+<span class="sd">                                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),</span>
+<span class="sd">                                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),</span>
 <span class="sd">                            device=cpu,</span>
-<span class="sd">                            dtype=torch.int64,</span>
-<span class="sd">                            domain=discrete),</span>
+<span class="sd">                            dtype=torch.float32,</span>
+<span class="sd">                            domain=continuous),</span>
 <span class="sd">                        max_torque: UnboundedContinuous(</span>
 <span class="sd">                            shape=torch.Size([]),</span>
 <span class="sd">                            space=ContinuousBox(</span>
@@ -381,14 +381,14 @@
 <span class="sd">                        dtype=torch.float32,</span>
 <span class="sd">                        domain=continuous),</span>
 <span class="sd">                    params: Composite(</span>
-<span class="sd">                        max_speed: UnboundedDiscrete(</span>
+<span class="sd">                        max_speed: UnboundedContinuous(</span>
 <span class="sd">                            shape=torch.Size([]),</span>
 <span class="sd">                            space=ContinuousBox(</span>
-<span class="sd">                                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, contiguous=True),</span>
-<span class="sd">                                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, contiguous=True)),</span>
+<span class="sd">                                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),</span>
+<span class="sd">                                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),</span>
 <span class="sd">                            device=cpu,</span>
-<span class="sd">                            dtype=torch.int64,</span>
-<span class="sd">                            domain=discrete),</span>
+<span class="sd">                            dtype=torch.float32,</span>
+<span class="sd">                            domain=continuous),</span>
 <span class="sd">                        max_torque: UnboundedContinuous(</span>
 <span class="sd">                            shape=torch.Size([]),</span>
 <span class="sd">                            space=ContinuousBox(</span>
@@ -622,7 +622,7 @@
             <span class="p">{</span>
                 <span class="s2">&quot;params&quot;</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">(</span>
                     <span class="p">{</span>
-                        <span class="s2">&quot;max_speed&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>
+                        <span class="s2">&quot;max_speed&quot;</span><span class="p">:</span> <span class="mf">8.0</span><span class="p">,</span>
                         <span class="s2">&quot;max_torque&quot;</span><span class="p">:</span> <span class="mf">2.0</span><span class="p">,</span>
                         <span class="s2">&quot;dt&quot;</span><span class="p">:</span> <span class="mf">0.05</span><span class="p">,</span>
                         <span class="s2">&quot;g&quot;</span><span class="p">:</span> <span class="n">g</span><span class="p">,</span>
