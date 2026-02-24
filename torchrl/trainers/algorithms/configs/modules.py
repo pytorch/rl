@@ -568,3 +568,40 @@ def _make_additive_gaussian_module(*args, **kwargs):
             kwargs["action_key"] = tuple(action_key_list)
 
     return AdditiveGaussianModule(**kwargs)
+
+
+@dataclass
+class QValueModelConfig(ModelConfig):
+    """A class to configure a QValueActor model.
+
+    .. seealso:: :class:`torchrl.modules.QValueActor`
+    """
+
+    _target_: str = "torchrl.trainers.algorithms.configs.modules._make_qvalue_model"
+    network: NetworkConfig = MISSING
+    action_space: Any = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+
+
+def _make_qvalue_model(*args, **kwargs):
+    """Helper function to create a QValueActor with the given network."""
+    from hydra.utils import instantiate
+
+    from torchrl.modules import QValueActor
+
+    network = kwargs.pop("network")
+    shared = kwargs.pop("shared", False)
+
+    if hasattr(network, "_target_"):
+        network = instantiate(network)
+    elif callable(network) and hasattr(network, "func"):
+        network = network()
+
+    qvalue_actor = QValueActor(network, **kwargs)
+
+    if shared:
+        qvalue_actor = qvalue_actor.share_memory()
+
+    return qvalue_actor
