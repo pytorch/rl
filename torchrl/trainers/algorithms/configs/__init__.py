@@ -105,6 +105,7 @@ from torchrl.trainers.algorithms.configs.objectives import (
     SoftUpdateConfig,
 )
 from torchrl.trainers.algorithms.configs.trainers import (
+    DDPGTrainerConfig,
     DQNTrainerConfig,
     PPOTrainerConfig,
     SACTrainerConfig,
@@ -374,6 +375,7 @@ __all__ = [
     # Value functions
     "GAEConfig",
     # Trainers
+    "DDPGTrainerConfig",
     "DQNTrainerConfig",
     "PPOTrainerConfig",
     "SACTrainerConfig",
@@ -628,6 +630,7 @@ def _register_configs():
     # =============================================================================
 
     cs.store(group="trainer", name="base", node=TrainerConfig)
+    cs.store(group="trainer", name="ddpg", node=DDPGTrainerConfig)
     cs.store(group="trainer", name="dqn", node=DQNTrainerConfig)
     cs.store(group="trainer", name="ppo", node=PPOTrainerConfig)
     cs.store(group="trainer", name="sac", node=SACTrainerConfig)
