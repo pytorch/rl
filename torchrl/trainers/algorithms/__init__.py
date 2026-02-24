@@ -5,10 +5,18 @@
 
 from __future__ import annotations
 
+from .cql import CQLTrainer
 from .ddpg import DDPGTrainer
 from .dqn import DQNTrainer
 from .iql import IQLTrainer
 from .ppo import PPOTrainer
 from .sac import SACTrainer
 
-__all__ = ["DDPGTrainer", "DQNTrainer", "IQLTrainer", "PPOTrainer", "SACTrainer"]
+__all__ = [
+    "CQLTrainer",
+    "DDPGTrainer",
+    "DQNTrainer",
+    "IQLTrainer",
+    "PPOTrainer",
+    "SACTrainer",
+]
