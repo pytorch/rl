@@ -18,6 +18,7 @@ from torch import optim
 from torchrl.collectors import BaseCollector
 
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
+from torchrl.modules import EGreedyModule
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.record.loggers import Logger
@@ -63,6 +64,8 @@ class DQNTrainer(Trainer):
         log_rewards (bool, optional): Whether to log reward statistics. Defaults to True.
         log_observations (bool, optional): Whether to log observation statistics. Defaults to False.
         target_net_updater (TargetNetUpdater, optional): Target network updater (typically HardUpdate). Defaults to None.
+        greedy_module (EGreedyModule, optional): Epsilon-greedy exploration module. When provided,
+            the module's epsilon is annealed during training. Defaults to None.
         async_collection (bool, optional): Whether to use async data collection. Defaults to False.
         log_timings (bool, optional): Whether to log timing information for hooks. Defaults to False.
 
@@ -120,6 +123,7 @@ class DQNTrainer(Trainer):
         log_rewards: bool = True,
         log_observations: bool = False,
         target_net_updater: TargetNetUpdater | None = None,
+        greedy_module: EGreedyModule | None = None,
         async_collection: bool = False,
         log_timings: bool = False,
     ) -> None:
@@ -166,9 +170,16 @@ class DQNTrainer(Trainer):
 
         self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
 
-        policy_weights_getter = partial(
-            TensorDict.from_module, self.loss_module.value_network
-        )
+        self.greedy_module = greedy_module
+        weights_source = self.loss_module.value_network
+        if greedy_module is not None:
+            from tensordict.nn import TensorDictSequential
+
+            weights_source = TensorDictSequential(weights_source, greedy_module)
+            self._greedy_last_frames = 0
+            self.register_op("post_steps", self._step_greedy)
+
+        policy_weights_getter = partial(TensorDict.from_module, weights_source)
         update_weights = UpdateWeights(
             self.collector, 1, policy_weights_getter=policy_weights_getter
         )
@@ -180,6 +191,13 @@ class DQNTrainer(Trainer):
 
         if self.enable_logging:
             self._setup_dqn_logging()
+
+    def _step_greedy(self):
+        """Advance epsilon-greedy annealing by the number of frames collected since last call."""
+        delta = self.collected_frames - self._greedy_last_frames
+        if delta > 0:
+            self.greedy_module.step(delta)
+            self._greedy_last_frames = self.collected_frames
 
     def _setup_dqn_logging(self):
         """Set up logging hooks for DQN-specific metrics."""
