@@ -11,10 +11,9 @@ defaults:
   - env@training_env.create_env_fn.base_env: gym
   - transform@training_env.create_env_fn.transform: compose
 
-  - model@models.policy_model: tanh_normal
   - model@models.value_model: value
 
-  - network@networks.policy_network: mlp
+  - network@networks.actor_network: mlp
   - network@networks.value_network: mlp
 
   - collector@collector: sync
@@ -32,7 +31,7 @@ defaults:
 
 # Network configurations
 networks:
-  policy_network:
+  actor_network:
     out_features: 1  # Pendulum action space is 1-dimensional
     in_features: 3   # Pendulum observation space is 3-dimensional
     num_cells: [256, 256]
@@ -44,12 +43,24 @@ networks:
 
 # Model configurations
 models:
-  policy_model:
-    return_log_prob: false
+  actor_module:
+    _target_: torchrl.trainers.algorithms.configs.modules._make_tensordict_module
+    module: ${networks.actor_network}
     in_keys: ["observation"]
-    param_keys: ["loc", "scale"]
+    out_keys: ["param"]
+
+  actor_tanh:
+    _target_: torchrl.trainers.algorithms.configs.modules._make_tanh_module
+    in_keys: ["param"]
     out_keys: ["action"]
-    network: ${networks.policy_network}
+    low: -2.0
+    high: 2.0
+
+  actor_model:
+    _target_: torchrl.trainers.algorithms.configs.modules._make_tensordict_sequential
+    modules:
+      - ${models.actor_module}
+      - ${models.actor_tanh}
 
   value_model:
     in_keys: ["observation", "action"]
@@ -82,7 +93,7 @@ training_env:
 
 # Loss configuration
 loss:
-  actor_network: ${models.policy_model}
+  actor_network: ${models.actor_model}
   value_network: ${models.value_model}
   loss_function: l2
   delay_value: true
@@ -97,7 +108,7 @@ optimizer:
 # Collector configuration
 collector:
   create_env_fn: ${training_env}
-  policy: ${models.policy_model}
+  policy: ${models.actor_model}
   total_frames: 1_000_000
   frames_per_batch: 1000
   init_random_frames: 5000

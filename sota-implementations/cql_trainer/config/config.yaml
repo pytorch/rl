@@ -86,7 +86,7 @@ loss:
   qvalue_network: ${models.qvalue_model}
   loss_function: smooth_l1
   alpha_init: 1.0
-  target_entropy: "auto"
+  target_entropy: -6.0  # -action_dim for HalfCheetah (6-d actions)
   delay_qvalue: true
   temperature: 1.0
   min_q_weight: 1.0
