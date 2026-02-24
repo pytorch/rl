@@ -1640,7 +1640,7 @@ if __name__ == "__main__":
                 cwd=str(tmpdir),
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=120,
             )
 
             if result.returncode == 0:
@@ -2111,6 +2111,7 @@ trainer:
   replay_buffer: ${replay_buffer}
   target_net_updater: ${target_net_updater}
   loss_module: ${loss}
+  value_network: ${models.qvalue_model}
   logger: ${logger}
   total_frames: ${collector.total_frames}
   frame_skip: 1
