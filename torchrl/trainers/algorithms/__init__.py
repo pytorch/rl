@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from .ddpg import DDPGTrainer
 from .dqn import DQNTrainer
+from .iql import IQLTrainer
 from .ppo import PPOTrainer
 from .sac import SACTrainer
 
-__all__ = ["DDPGTrainer", "DQNTrainer", "PPOTrainer", "SACTrainer"]
+__all__ = ["DDPGTrainer", "DQNTrainer", "IQLTrainer", "PPOTrainer", "SACTrainer"]

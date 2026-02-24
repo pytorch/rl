@@ -107,6 +107,7 @@ from torchrl.trainers.algorithms.configs.objectives import (
 from torchrl.trainers.algorithms.configs.trainers import (
     DDPGTrainerConfig,
     DQNTrainerConfig,
+    IQLTrainerConfig,
     PPOTrainerConfig,
     SACTrainerConfig,
     TrainerConfig,
@@ -377,6 +378,7 @@ __all__ = [
     # Trainers
     "DDPGTrainerConfig",
     "DQNTrainerConfig",
+    "IQLTrainerConfig",
     "PPOTrainerConfig",
     "SACTrainerConfig",
     "TrainerConfig",
@@ -632,6 +634,7 @@ def _register_configs():
     cs.store(group="trainer", name="base", node=TrainerConfig)
     cs.store(group="trainer", name="ddpg", node=DDPGTrainerConfig)
     cs.store(group="trainer", name="dqn", node=DQNTrainerConfig)
+    cs.store(group="trainer", name="iql", node=IQLTrainerConfig)
     cs.store(group="trainer", name="ppo", node=PPOTrainerConfig)
     cs.store(group="trainer", name="sac", node=SACTrainerConfig)
 
