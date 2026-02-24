@@ -66,6 +66,7 @@ loss:
   value_network: ${models.qvalue_model}
   loss_function: l2
   delay_value: true
+  action_space: "one-hot"
 
 target_net_updater:
   value_network_update_interval: 50
