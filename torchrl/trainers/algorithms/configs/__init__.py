@@ -85,6 +85,7 @@ from torchrl.trainers.algorithms.configs.modules import (
     ConvNetConfig,
     MLPConfig,
     ModelConfig,
+    QValueModelConfig,
     TanhModuleConfig,
     TanhNormalModelConfig,
     TensorDictModuleConfig,
@@ -92,14 +93,19 @@ from torchrl.trainers.algorithms.configs.modules import (
     ValueModelConfig,
 )
 from torchrl.trainers.algorithms.configs.objectives import (
+    CQLLossConfig,
+    DDPGLossConfig,
+    DQNLossConfig,
     GAEConfig,
     HardUpdateConfig,
+    IQLLossConfig,
     LossConfig,
     PPOLossConfig,
     SACLossConfig,
     SoftUpdateConfig,
 )
 from torchrl.trainers.algorithms.configs.trainers import (
+    DQNTrainerConfig,
     PPOTrainerConfig,
     SACTrainerConfig,
     TrainerConfig,
@@ -271,6 +277,7 @@ __all__ = [
     "TensorDictModuleConfig",
     "TensorDictSequentialConfig",
     "ValueModelConfig",
+    "QValueModelConfig",
     "AdditiveGaussianModuleConfig",
     # Transforms - Core
     "ActionDiscretizerConfig",
@@ -357,12 +364,17 @@ __all__ = [
     "SliceSamplerConfig",
     "SliceSamplerWithoutReplacementConfig",
     # Losses
+    "CQLLossConfig",
+    "DDPGLossConfig",
+    "DQNLossConfig",
+    "IQLLossConfig",
     "LossConfig",
     "PPOLossConfig",
     "SACLossConfig",
     # Value functions
     "GAEConfig",
     # Trainers
+    "DQNTrainerConfig",
     "PPOTrainerConfig",
     "SACTrainerConfig",
     "TrainerConfig",
@@ -448,6 +460,7 @@ def _register_configs():
     cs.store(group="model", name="tanh_module", node=TanhModuleConfig)
     cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
     cs.store(group="model", name="value", node=ValueModelConfig)
+    cs.store(group="model", name="qvalue", node=QValueModelConfig)
 
     # Exploration configs
     cs.store(
@@ -553,6 +566,10 @@ def _register_configs():
     # =============================================================================
 
     cs.store(group="loss", name="base", node=LossConfig)
+    cs.store(group="loss", name="cql", node=CQLLossConfig)
+    cs.store(group="loss", name="ddpg", node=DDPGLossConfig)
+    cs.store(group="loss", name="dqn", node=DQNLossConfig)
+    cs.store(group="loss", name="iql", node=IQLLossConfig)
     cs.store(group="loss", name="ppo", node=PPOLossConfig)
     cs.store(group="loss", name="sac", node=SACLossConfig)
 
@@ -611,6 +628,7 @@ def _register_configs():
     # =============================================================================
 
     cs.store(group="trainer", name="base", node=TrainerConfig)
+    cs.store(group="trainer", name="dqn", node=DQNTrainerConfig)
     cs.store(group="trainer", name="ppo", node=PPOTrainerConfig)
     cs.store(group="trainer", name="sac", node=SACTrainerConfig)
 
