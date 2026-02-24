@@ -32,7 +32,7 @@ networks:
   qvalue_network:
     out_features: 2  # CartPole has 2 actions
     in_features: 4   # CartPole observation space is 4-dimensional
-    num_cells: [128, 128]
+    num_cells: [120, 84]
 
 # Model configurations
 models:
@@ -80,20 +80,21 @@ collector:
   create_env_fn: ${training_env}
   policy: ${models.qvalue_model}
   total_frames: 500_000
-  frames_per_batch: 128
-  init_random_frames: 2000
+  frames_per_batch: 1000
+  init_random_frames: 10_000
   _partial_: true
 
 # Replay buffer configuration
 replay_buffer:
   storage:
-    max_size: 100_000
+    max_size: 10_000
     device: cpu
     ndim: 1
   sampler:
   writer:
     compilable: false
   batch_size: 128
+
 
 logger:
   exp_name: dqn_cartpole_v1
@@ -105,6 +106,7 @@ trainer:
   replay_buffer: ${replay_buffer}
   target_net_updater: ${target_net_updater}
   loss_module: ${loss}
+  value_network: ${models.qvalue_model}
   logger: ${logger}
   total_frames: ${collector.total_frames}
   frame_skip: 1
@@ -115,5 +117,8 @@ trainer:
   save_trainer_interval: 10000
   log_interval: 10000
   save_trainer_file: null
-  optim_steps_per_batch: 10
+  optim_steps_per_batch: 100
+  eps_init: 1.0
+  eps_end: 0.05
+  annealing_num_steps: 250_000
   async_collection: false
