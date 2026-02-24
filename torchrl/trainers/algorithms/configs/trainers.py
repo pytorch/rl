@@ -363,6 +363,9 @@ class DQNTrainerConfig(TrainerConfig):
     create_env_fn: Any = None
     value_network: Any = None
     target_net_updater: Any = None
+    eps_init: float = 1.0
+    eps_end: float = 0.05
+    annealing_num_steps: int = 250_000
     async_collection: bool = False
     log_timings: bool = False
 
@@ -373,6 +376,9 @@ class DQNTrainerConfig(TrainerConfig):
 
 
 def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
+    from tensordict.nn import TensorDictSequential
+
+    from torchrl.modules import EGreedyModule
     from torchrl.trainers.trainers import Logger
 
     collector = kwargs.pop("collector")
@@ -395,17 +401,37 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
     value_network = kwargs.pop("value_network")
     kwargs.pop("create_env_fn", None)
     target_net_updater = kwargs.pop("target_net_updater")
+    eps_init = kwargs.pop("eps_init", 1.0)
+    eps_end = kwargs.pop("eps_end", 0.05)
+    annealing_num_steps = kwargs.pop("annealing_num_steps", 250_000)
     async_collection = kwargs.pop("async_collection", False)
     log_timings = kwargs.pop("log_timings", False)
 
-    if value_network is not None:
+    if value_network is not None and not isinstance(value_network, torch.nn.Module):
         value_network = value_network()
 
+    from torchrl.data import Composite, OneHot
+
+    action_spec = value_network.spec.get("action", default=None)
+    if action_spec is None:
+        n_actions = value_network.module[0].out_features
+        action_spec = OneHot(n=n_actions)
+    spec = Composite(action=action_spec)
+
+    greedy_module = EGreedyModule(
+        annealing_num_steps=annealing_num_steps,
+        eps_init=eps_init,
+        eps_end=eps_end,
+        spec=spec,
+    )
+    exploration_policy = TensorDictSequential(value_network, greedy_module)
+
     if not isinstance(collector, BaseCollector):
+        collector_kwargs = {"policy": exploration_policy}
         if not async_collection:
-            collector = collector()
+            collector = collector(**collector_kwargs)
         elif replay_buffer is not None:
-            collector = collector(replay_buffer=replay_buffer)
+            collector = collector(replay_buffer=replay_buffer, **collector_kwargs)
 
     if not isinstance(loss_module, LossModule):
         loss_module = loss_module(value_network=value_network)
@@ -442,6 +468,7 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
         save_trainer_file=save_trainer_file,
         replay_buffer=replay_buffer,
         target_net_updater=target_net_updater,
+        greedy_module=greedy_module,
         async_collection=async_collection,
         log_timings=log_timings,
     )
