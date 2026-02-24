@@ -593,6 +593,12 @@ def _make_qvalue_model(*args, **kwargs):
 
     network = kwargs.pop("network")
     shared = kwargs.pop("shared", False)
+    out_keys = kwargs.pop("out_keys", None)
+    kwargs.pop("param_keys", None)
+
+    if out_keys is not None and "action_value_key" not in kwargs:
+        if isinstance(out_keys, (list, tuple)) and len(out_keys) == 1:
+            kwargs["action_value_key"] = out_keys[0]
 
     if hasattr(network, "_target_"):
         network = instantiate(network)

@@ -156,7 +156,7 @@ class SoftUpdateConfig(TargetNetUpdaterConfig):
 class HardUpdateConfig(TargetNetUpdaterConfig):
     """A class for hard update instantiation."""
 
-    _target_: str = "torchrl.objectives.utils.HardUpdate."
+    _target_: str = "torchrl.objectives.utils.HardUpdate"
     value_network_update_interval: int = 1000
 
 
