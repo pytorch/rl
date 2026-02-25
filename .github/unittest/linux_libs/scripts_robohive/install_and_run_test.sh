@@ -54,7 +54,7 @@ else
 fi
 
 # tensordict requires cmake >= 3.22; the base image ships 3.16
-pip3 install cmake
+conda install -y cmake
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
