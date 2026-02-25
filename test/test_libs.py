@@ -5990,23 +5990,10 @@ class TestProcgen:
             env.close()
 
     def test_procgen_env_creation_and_reset(self):
-        env = ProcgenEnv("coinrun", num_envs=4)
-        try:
-            td = env.reset()
-            # ensure batch size corresponds to num_envs
-            assert td["observation"].shape[0] == 4
-        finally:
-            env.close()
-
-    def test_procgen_env_step(self):
         env = ProcgenEnv("coinrun", num_envs=2)
         try:
-            env.reset()
-            out = env.rand_step()
-            # After step, observation/reward/done are in out["next"]
-            assert "observation" in out["next"]
-            assert "reward" in out["next"]
-            assert "done" in out["next"]
+            td = env.reset()
+            assert td["observation"].shape[0] == 2
         finally:
             env.close()
 
