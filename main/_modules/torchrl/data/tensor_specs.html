@@ -1566,9 +1566,7 @@
         <span class="k">if</span> <span class="n">func</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="n">SPEC_HANDLED_FUNCTIONS</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span>
             <span class="nb">issubclass</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="p">(</span><span class="n">TensorSpec</span><span class="p">,))</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">types</span>
         <span class="p">):</span>
-            <span class="k">return</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;func </span><span class="si">{</span><span class="n">func</span><span class="si">}</span><span class="s2"> for spec </span><span class="si">{</span><span class="bp">cls</span><span class="si">}</span><span class="s2"> with handles </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="n">SPEC_HANDLED_FUNCTIONS</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="p">)</span>
+            <span class="k">return</span> <span class="bp">NotImplemented</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">SPEC_HANDLED_FUNCTIONS</span><span class="p">[</span><span class="n">func</span><span class="p">](</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">unbind</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>

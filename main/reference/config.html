@@ -608,6 +608,18 @@ python<span class="w"> </span>sota-implementations/ppo_trainer/train.py<span cla
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.ValueModelConfig.html#torchrl.trainers.algorithms.configs.modules.ValueModelConfig" title="torchrl.trainers.algorithms.configs.modules.ValueModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ValueModelConfig</span></code></a>([_partial_, in_keys, ...])</p></td>
 <td><p>A class to configure a Value model.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.QValueModelConfig.html#torchrl.trainers.algorithms.configs.modules.QValueModelConfig" title="torchrl.trainers.algorithms.configs.modules.QValueModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">QValueModelConfig</span></code></a>([_partial_, in_keys, ...])</p></td>
+<td><p>A class to configure a QValueActor model.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.TanhModuleConfig.html#torchrl.trainers.algorithms.configs.modules.TanhModuleConfig" title="torchrl.trainers.algorithms.configs.modules.TanhModuleConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TanhModuleConfig</span></code></a>([_partial_, in_keys, ...])</p></td>
+<td><p>A class to configure a TanhModule.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.TensorDictSequentialConfig.html#torchrl.trainers.algorithms.configs.modules.TensorDictSequentialConfig" title="torchrl.trainers.algorithms.configs.modules.TensorDictSequentialConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictSequentialConfig</span></code></a>([_partial_, ...])</p></td>
+<td><p>A class to configure a TensorDictSequential.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.AdditiveGaussianModuleConfig.html#torchrl.trainers.algorithms.configs.modules.AdditiveGaussianModuleConfig" title="torchrl.trainers.algorithms.configs.modules.AdditiveGaussianModuleConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AdditiveGaussianModuleConfig</span></code></a>([_partial_, ...])</p></td>
+<td><p>A class to configure an AdditiveGaussianModule.</p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -891,6 +903,21 @@ python<span class="w"> </span>sota-implementations/ppo_trainer/train.py<span cla
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig" title="torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PPOTrainerConfig</span></code></a>(collector, total_frames, ...)</p></td>
 <td><p>Configuration class for PPO (Proximal Policy Optimization) trainer.</p></td>
 </tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.SACTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.SACTrainerConfig" title="torchrl.trainers.algorithms.configs.trainers.SACTrainerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SACTrainerConfig</span></code></a>(collector, total_frames, ...)</p></td>
+<td><p>Configuration class for SAC (Soft Actor Critic) trainer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.DQNTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.DQNTrainerConfig" title="torchrl.trainers.algorithms.configs.trainers.DQNTrainerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DQNTrainerConfig</span></code></a>(collector, total_frames, ...)</p></td>
+<td><p>Configuration class for DQN (Deep Q-Network) trainer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.DDPGTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.DDPGTrainerConfig" title="torchrl.trainers.algorithms.configs.trainers.DDPGTrainerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DDPGTrainerConfig</span></code></a>(collector, total_frames, ...)</p></td>
+<td><p>Configuration class for DDPG (Deep Deterministic Policy Gradient) trainer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig" title="torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IQLTrainerConfig</span></code></a>(collector, total_frames, ...)</p></td>
+<td><p>Configuration class for IQL (Implicit Q-Learning) trainer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig" title="torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CQLTrainerConfig</span></code></a>(collector, total_frames, ...)</p></td>
+<td><p>Configuration class for CQL (Conservative Q-Learning) trainer.</p></td>
+</tr>
 </tbody>
 </table>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
@@ -900,6 +927,33 @@ python<span class="w"> </span>sota-implementations/ppo_trainer/train.py<span cla
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.PPOLossConfig.html#torchrl.trainers.algorithms.configs.objectives.PPOLossConfig" title="torchrl.trainers.algorithms.configs.objectives.PPOLossConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PPOLossConfig</span></code></a>([_partial_, actor_network, ...])</p></td>
 <td><p>A class to configure a PPO loss.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.SACLossConfig.html#torchrl.trainers.algorithms.configs.objectives.SACLossConfig" title="torchrl.trainers.algorithms.configs.objectives.SACLossConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SACLossConfig</span></code></a>([_partial_, actor_network, ...])</p></td>
+<td><p>A class to configure a SAC loss.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.DQNLossConfig.html#torchrl.trainers.algorithms.configs.objectives.DQNLossConfig" title="torchrl.trainers.algorithms.configs.objectives.DQNLossConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DQNLossConfig</span></code></a>([_partial_, value_network, ...])</p></td>
+<td><p>A class to configure a DQN loss.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.DDPGLossConfig.html#torchrl.trainers.algorithms.configs.objectives.DDPGLossConfig" title="torchrl.trainers.algorithms.configs.objectives.DDPGLossConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DDPGLossConfig</span></code></a>([_partial_, actor_network, ...])</p></td>
+<td><p>A class to configure a DDPG loss.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.IQLLossConfig.html#torchrl.trainers.algorithms.configs.objectives.IQLLossConfig" title="torchrl.trainers.algorithms.configs.objectives.IQLLossConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IQLLossConfig</span></code></a>([_partial_, actor_network, ...])</p></td>
+<td><p>A class to configure an IQL loss.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.CQLLossConfig.html#torchrl.trainers.algorithms.configs.objectives.CQLLossConfig" title="torchrl.trainers.algorithms.configs.objectives.CQLLossConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CQLLossConfig</span></code></a>([_partial_, actor_network, ...])</p></td>
+<td><p>A class to configure a CQL loss.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.GAEConfig.html#torchrl.trainers.algorithms.configs.objectives.GAEConfig" title="torchrl.trainers.algorithms.configs.objectives.GAEConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GAEConfig</span></code></a>([_partial_, gamma, lmbda, ...])</p></td>
+<td><p>A class to configure a GAELoss.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.TargetNetUpdaterConfig.html#torchrl.trainers.algorithms.configs.objectives.TargetNetUpdaterConfig" title="torchrl.trainers.algorithms.configs.objectives.TargetNetUpdaterConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TargetNetUpdaterConfig</span></code></a>(loss_module[, _partial_])</p></td>
+<td><p>An abstract class to configure target net updaters.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.SoftUpdateConfig.html#torchrl.trainers.algorithms.configs.objectives.SoftUpdateConfig" title="torchrl.trainers.algorithms.configs.objectives.SoftUpdateConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SoftUpdateConfig</span></code></a>(loss_module[, _partial_, ...])</p></td>
+<td><p>A class for soft update instantiation.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.HardUpdateConfig.html#torchrl.trainers.algorithms.configs.objectives.HardUpdateConfig" title="torchrl.trainers.algorithms.configs.objectives.HardUpdateConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HardUpdateConfig</span></code></a>(loss_module[, _partial_, ...])</p></td>
+<td><p>A class for hard update instantiation.</p></td>
 </tr>
 </tbody>
 </table>
@@ -1003,16 +1057,18 @@ python<span class="w"> </span>sota-implementations/ppo_trainer/train.py<span cla
 <li><p><strong>Use Variable Interpolation</strong>: Use <code class="docutils literal notranslate"><span class="pre">${variable}</span></code> syntax to avoid duplication</p></li>
 </ol>
 </section>
-<section id="future-extensions">
-<h2>Future Extensions<a class="headerlink" href="#future-extensions" title="Link to this heading">¶</a></h2>
-<p>As TorchRL adds more algorithms beyond PPO (such as SAC, TD3, DQN), the configuration system will expand with:</p>
+<section id="supported-algorithms">
+<h2>Supported Algorithms<a class="headerlink" href="#supported-algorithms" title="Link to this heading">¶</a></h2>
+<p>TorchRL currently provides configuration-driven trainers for the following algorithms:</p>
 <ul class="simple">
-<li><p>New trainer configurations (e.g., <code class="docutils literal notranslate"><span class="pre">SACTrainerConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">TD3TrainerConfig</span></code>)</p></li>
-<li><p>Algorithm-specific loss configurations</p></li>
-<li><p>Specialized collector configurations for different algorithms</p></li>
-<li><p>Additional environment and model configurations</p></li>
+<li><p><strong>PPO</strong> (on-policy): <code class="docutils literal notranslate"><span class="pre">PPOTrainerConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">PPOLossConfig</span></code></p></li>
+<li><p><strong>SAC</strong> (off-policy, continuous): <code class="docutils literal notranslate"><span class="pre">SACTrainerConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">SACLossConfig</span></code></p></li>
+<li><p><strong>DQN</strong> (off-policy, discrete): <code class="docutils literal notranslate"><span class="pre">DQNTrainerConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">DQNLossConfig</span></code></p></li>
+<li><p><strong>DDPG</strong> (off-policy, continuous): <code class="docutils literal notranslate"><span class="pre">DDPGTrainerConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">DDPGLossConfig</span></code></p></li>
+<li><p><strong>IQL</strong> (offline): <code class="docutils literal notranslate"><span class="pre">IQLTrainerConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">IQLLossConfig</span></code></p></li>
+<li><p><strong>CQL</strong> (offline): <code class="docutils literal notranslate"><span class="pre">CQLTrainerConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">CQLLossConfig</span></code></p></li>
 </ul>
-<p>The modular design ensures easy integration while maintaining backward compatibility.</p>
+<p>The modular design ensures easy integration of additional algorithms while maintaining backward compatibility.</p>
 </section>
 </section>
 
@@ -1082,7 +1138,7 @@ python<span class="w"> </span>sota-implementations/ppo_trainer/train.py<span cla
 </li>
 <li><a class="reference internal" href="#creating-custom-configurations">Creating Custom Configurations</a></li>
 <li><a class="reference internal" href="#best-practices">Best Practices</a></li>
-<li><a class="reference internal" href="#future-extensions">Future Extensions</a></li>
+<li><a class="reference internal" href="#supported-algorithms">Supported Algorithms</a></li>
 </ul>
 </li>
 </ul>

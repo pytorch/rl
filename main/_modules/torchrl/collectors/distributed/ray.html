@@ -1266,7 +1266,7 @@
 
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_after_each_batch</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span> <span class="o">&gt;</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
                 <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Updating weights on worker </span><span class="si">{</span><span class="n">collector_index</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">worker_ids</span><span class="o">=</span><span class="n">collector_index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">worker_ids</span><span class="o">=</span><span class="n">collector_index</span><span class="p">)</span>
 
             <span class="c1"># Schedule a new collection task</span>
             <span class="n">future</span> <span class="o">=</span> <span class="n">collector</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span>

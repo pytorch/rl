@@ -1251,6 +1251,12 @@
 
             <span class="c1"># Log to external logger (e.g., tensorboard, wandb) if conditions are met</span>
             <span class="k">if</span> <span class="n">_log</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;log_scalar&quot;</span>
+                    <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span>
+                    <span class="ow">and</span> <span class="n">item</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">0</span>
+                <span class="p">):</span>
+                    <span class="k">continue</span>
                 <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="p">,</span> <span class="n">method</span><span class="p">)(</span><span class="n">key</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">step</span><span class="o">=</span><span class="n">collected_frames</span><span class="p">)</span>
 
             <span class="c1"># Update progress bar if requested and method is scalar</span>

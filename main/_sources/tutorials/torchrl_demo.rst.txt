@@ -94,7 +94,7 @@ collect a trajectory:
 
  .. code-block:: none
 
-    Collected 10 steps, total reward: 10
+    Collected 9 steps, total reward: 9
 
 
 
@@ -669,11 +669,11 @@ synchronously - it waits for a batch to be ready before returning:
 
  .. code-block:: none
 
-    Collected batch: torch.Size([200]), reward: -8.14
-    Collected batch: torch.Size([200]), reward: -8.28
-    Collected batch: torch.Size([200]), reward: -8.26
-    Collected batch: torch.Size([200]), reward: -7.84
-    Collected batch: torch.Size([200]), reward: -8.19
+    Collected batch: torch.Size([200]), reward: -8.68
+    Collected batch: torch.Size([200]), reward: -9.06
+    Collected batch: torch.Size([200]), reward: -8.98
+    Collected batch: torch.Size([200]), reward: -7.90
+    Collected batch: torch.Size([200]), reward: -8.46
 
 
 
@@ -753,7 +753,7 @@ variants), use :class:`~torchrl.data.PrioritizedReplayBuffer`:
 
  .. code-block:: none
 
-    Prioritized sample indices: tensor([81, 31, 96, 60, 94]) ...
+    Prioritized sample indices: tensor([31, 34, 61, 28, 60]) ...
 
 
 
@@ -835,7 +835,7 @@ dummy batch to see it in action:
 
  .. code-block:: none
 
-    Loss: tensor(0.8496, grad_fn=<MeanBackward0>)
+    Loss: tensor(0.8681, grad_fn=<MeanBackward0>)
 
 
 
@@ -916,10 +916,10 @@ training loop. We'll train a simple DQN agent on CartPole:
 
  .. code-block:: none
 
-    Step 0: loss=0.993
-    Step 5: loss=0.679
-    Step 10: loss=0.432
-    Step 15: loss=0.277
+    Step 0: loss=0.992
+    Step 5: loss=0.652
+    Step 10: loss=0.453
+    Step 15: loss=0.269
 
 
 

@@ -486,6 +486,8 @@
 
 
 
+<div class="viewcode-block" id="TensorDictSequentialConfig">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.trainers.algorithms.configs.modules.TensorDictSequentialConfig.html#torchrl.trainers.algorithms.configs.modules.TensorDictSequentialConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">TensorDictSequentialConfig</span><span class="p">(</span><span class="n">ModelConfig</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A class to configure a TensorDictSequential.</span>
@@ -513,7 +515,8 @@
     <span class="n">_partial_</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="k">def</span> <span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__post_init__</span><span class="p">()</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__post_init__</span><span class="p">()</span></div>
+
 
 
 <div class="viewcode-block" id="TanhNormalModelConfig">
@@ -584,6 +587,8 @@
 
 
 
+<div class="viewcode-block" id="TanhModuleConfig">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.trainers.algorithms.configs.modules.TanhModuleConfig.html#torchrl.trainers.algorithms.configs.modules.TanhModuleConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">TanhModuleConfig</span><span class="p">(</span><span class="n">ModelConfig</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A class to configure a TanhModule.</span>
@@ -604,9 +609,12 @@
 
     <span class="k">def</span> <span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Post-initialization hook for TanhModule configurations.&quot;&quot;&quot;</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__post_init__</span><span class="p">()</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__post_init__</span><span class="p">()</span></div>
 
 
+
+<div class="viewcode-block" id="AdditiveGaussianModuleConfig">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.trainers.algorithms.configs.modules.AdditiveGaussianModuleConfig.html#torchrl.trainers.algorithms.configs.modules.AdditiveGaussianModuleConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">AdditiveGaussianModuleConfig</span><span class="p">(</span><span class="n">ModelConfig</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A class to configure an AdditiveGaussianModule.</span>
@@ -641,7 +649,8 @@
     <span class="n">_partial_</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="k">def</span> <span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__post_init__</span><span class="p">()</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__post_init__</span><span class="p">()</span></div>
+
 
 
 <span class="k">def</span> <span class="nf">_make_tensordict_module</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
@@ -828,6 +837,52 @@
             <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;action_key&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">action_key_list</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">AdditiveGaussianModule</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="QValueModelConfig">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.trainers.algorithms.configs.modules.QValueModelConfig.html#torchrl.trainers.algorithms.configs.modules.QValueModelConfig">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">QValueModelConfig</span><span class="p">(</span><span class="n">ModelConfig</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A class to configure a QValueActor model.</span>
+
+<span class="sd">    .. seealso:: :class:`torchrl.modules.QValueActor`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torchrl.trainers.algorithms.configs.modules._make_qvalue_model&quot;</span>
+    <span class="n">network</span><span class="p">:</span> <span class="n">NetworkConfig</span> <span class="o">=</span> <span class="n">MISSING</span>
+    <span class="n">action_space</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__post_init__</span><span class="p">()</span></div>
+
+
+
+<span class="k">def</span> <span class="nf">_make_qvalue_model</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Helper function to create a QValueActor with the given network.&quot;&quot;&quot;</span>
+    <span class="kn">from</span> <span class="nn">hydra.utils</span> <span class="kn">import</span> <span class="n">instantiate</span>
+
+    <span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <span class="n">QValueActor</span>
+
+    <span class="n">network</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;network&quot;</span><span class="p">)</span>
+    <span class="n">shared</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;shared&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="n">out_keys</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;out_keys&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;param_keys&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">out_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s2">&quot;action_value_key&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">out_keys</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">out_keys</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;action_value_key&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">out_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">network</span><span class="p">,</span> <span class="s2">&quot;_target_&quot;</span><span class="p">):</span>
+        <span class="n">network</span> <span class="o">=</span> <span class="n">instantiate</span><span class="p">(</span><span class="n">network</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">callable</span><span class="p">(</span><span class="n">network</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">network</span><span class="p">,</span> <span class="s2">&quot;func&quot;</span><span class="p">):</span>
+        <span class="n">network</span> <span class="o">=</span> <span class="n">network</span><span class="p">()</span>
+
+    <span class="n">qvalue_actor</span> <span class="o">=</span> <span class="n">QValueActor</span><span class="p">(</span><span class="n">network</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">shared</span><span class="p">:</span>
+        <span class="n">qvalue_actor</span> <span class="o">=</span> <span class="n">qvalue_actor</span><span class="o">.</span><span class="n">share_memory</span><span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">qvalue_actor</span>
 </pre></div>
 
              </article>

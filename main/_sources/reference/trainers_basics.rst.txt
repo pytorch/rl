@@ -26,6 +26,10 @@ Algorithm-specific trainers
 
     PPOTrainer
     SACTrainer
+    DQNTrainer
+    DDPGTrainer
+    IQLTrainer
+    CQLTrainer
 
 Builders
 --------

@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.objectives.SoftUpdateConfig
+===============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.objectives
+
+.. autoclass:: SoftUpdateConfig

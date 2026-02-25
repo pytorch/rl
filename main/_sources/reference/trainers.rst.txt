@@ -14,7 +14,7 @@ Key Features
 
 - **Modular hook system**: Customize training at 10 different points in the loop
 - **Checkpointing support**: Save and restore training state with torch or torchsnapshot
-- **Algorithm trainers**: High-level trainers for PPO, SAC with Hydra configuration
+- **Algorithm trainers**: High-level trainers for PPO, SAC, DQN, DDPG, IQL, CQL with Hydra configuration
 - **Builder helpers**: Utilities for constructing collectors, losses, and replay buffers
 
 Quick Example
