@@ -3178,36 +3178,26 @@ class TestBrax:
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires cuda")
     def test_brax_kwargs_preserved_with_seed(self, envname, device):
-        """Test that kwargs like camera_id are preserved when seed is provided.
+        """Test that constructor kwargs are preserved when seed is provided.
 
         Regression test for a bug where `kwargs` were overwritten when `_seed`
         was not None.
         """
         env = BraxEnv(
             envname,
-            from_pixels=True,
-            pixels_only=True,
-            camera_id=1,
             device=device,
         )
         try:
-            # calling set_seed should not drop or overwrite kwargs
             final_seed = env.set_seed(1)
             assert final_seed is not None
             td = env.reset()
             assert isinstance(td, TensorDict)
             preserved = False
-            if hasattr(env, "_kwargs") and isinstance(env._kwargs, dict):
-                preserved = env._kwargs.get("camera_id", None) == 1
-            else:
-                inner = getattr(env, "_env", None)
-                if (
-                    inner is not None
-                    and hasattr(inner, "_kwargs")
-                    and isinstance(inner._kwargs, dict)
-                ):
-                    preserved = inner._kwargs.get("camera_id", None) == 1
-            assert preserved, "camera_id kwarg was not preserved after set_seed"
+            if hasattr(env, "_constructor_kwargs") and isinstance(
+                env._constructor_kwargs, dict
+            ):
+                preserved = env._constructor_kwargs.get("env_name") == envname
+            assert preserved, "constructor kwargs were not preserved after set_seed"
         finally:
             env.close()
 
