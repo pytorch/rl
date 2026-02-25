@@ -1229,9 +1229,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
         if func not in cls.SPEC_HANDLED_FUNCTIONS or not all(
             issubclass(t, (TensorSpec,)) for t in types
         ):
-            return NotImplementedError(
-                f"func {func} for spec {cls} with handles {cls.SPEC_HANDLED_FUNCTIONS}"
-            )
+            return NotImplemented
         return cls.SPEC_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
     def unbind(self, dim: int = 0):
