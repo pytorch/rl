@@ -84,10 +84,11 @@ training_env:
 loss:
   actor_network: ${models.policy_model}
   qvalue_network: ${models.qvalue_model}
-  loss_function: smooth_l1
+  loss_function: l2
   alpha_init: 1.0
   target_entropy: -6.0  # -action_dim for HalfCheetah (6-d actions)
   delay_qvalue: true
+  deterministic_backup: false
   temperature: 1.0
   min_q_weight: 1.0
   with_lagrange: true

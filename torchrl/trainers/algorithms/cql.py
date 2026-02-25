@@ -22,6 +22,7 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.record.loggers import Logger
 from torchrl.trainers.trainers import (
+    DefaultOptimizationStepper,
     LogScalar,
     ReplayBufferTrainer,
     TargetNetUpdaterHook,
@@ -109,6 +110,18 @@ class CQLTrainer(Trainer):
         )
         self._pass_action_spec_from_collector_to_loss(collector, loss_module)
 
+        loss_components = [
+            "loss_actor",
+            "loss_qvalue",
+            "loss_cql",
+            "loss_alpha",
+        ]
+        if getattr(loss_module, "with_lagrange", False):
+            loss_components.append("loss_alpha_prime")
+        optimization_stepper = DefaultOptimizationStepper(
+            loss_components=loss_components,
+        )
+
         super().__init__(
             collector=collector,
             total_frames=total_frames,
@@ -116,6 +129,7 @@ class CQLTrainer(Trainer):
             optim_steps_per_batch=optim_steps_per_batch,
             loss_module=loss_module,
             optimizer=optimizer,
+            optimization_stepper=optimization_stepper,
             logger=logger,
             clip_grad_norm=clip_grad_norm,
             clip_norm=clip_norm,
