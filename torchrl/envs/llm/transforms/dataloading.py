@@ -816,6 +816,15 @@ class DataLoadingPrimer(TensorDictPrimer, metaclass=_RayServiceMetaClass):
                 batch_dims=int(bool(self.auto_batch_size or self.batch_size)),
                 device=device,
             )
+            if not out.ndim and self.auto_batch_size:
+                # auto_batch_size may fail to detect batch dimensions from
+                # NonTensorStack entries. Infer from list values in the data.
+                for v in data.values():
+                    if isinstance(v, (list, tuple)) and v:
+                        out = TensorDict.from_dict(
+                            data, batch_size=[len(v)], device=device
+                        )
+                        break
         else:
             raise TypeError(
                 "Data loader must return a mapping that can be automatically cast to a tensordict. Check that you have "
