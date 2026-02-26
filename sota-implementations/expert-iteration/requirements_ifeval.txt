@@ -11,6 +11,6 @@ tensordict==0.9.0
 vllm==0.9.0.1
 accelerate==1.7.0
 xformers==0.0.30 
-nltk==3.9.1
+nltk==3.9.3
 langdetect==1.0.9
 immutabledict==4.2.1
