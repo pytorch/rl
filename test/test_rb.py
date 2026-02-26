@@ -4269,6 +4269,7 @@ class TestRayRB:
     def cleanup(self):
         import ray
 
+        ray.shutdown()
         torchrl_logger.info("Initializing Ray.")
         ray.init(num_cpus=1)
         yield

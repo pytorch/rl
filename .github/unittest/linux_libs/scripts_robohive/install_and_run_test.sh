@@ -4,6 +4,7 @@ unset PYTORCH_VERSION
 # For unittest, nightly PyTorch is used as the following section,
 # so no need to set PYTORCH_VERSION.
 # In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
+export DEBIAN_FRONTEND=noninteractive
 apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-dev g++ gcc libosmesa6-dev cmake
 
 set -e
@@ -51,6 +52,9 @@ else
   printf "Failed to install pytorch"
   exit 1
 fi
+
+# tensordict requires cmake >= 3.22; the base image ships 3.16
+conda install -y cmake
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then

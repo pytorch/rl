@@ -349,6 +349,10 @@ Model and Network Configurations
     TensorDictModuleConfig
     TanhNormalModelConfig
     ValueModelConfig
+    QValueModelConfig
+    TanhModuleConfig
+    TensorDictSequentialConfig
+    AdditiveGaussianModuleConfig
 
 Transform Configurations
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -474,6 +478,11 @@ Training and Optimization Configurations
 
     TrainerConfig
     PPOTrainerConfig
+    SACTrainerConfig
+    DQNTrainerConfig
+    DDPGTrainerConfig
+    IQLTrainerConfig
+    CQLTrainerConfig
 
 .. currentmodule:: torchrl.trainers.algorithms.configs.objectives
 
@@ -483,6 +492,15 @@ Training and Optimization Configurations
 
     LossConfig
     PPOLossConfig
+    SACLossConfig
+    DQNLossConfig
+    DDPGLossConfig
+    IQLLossConfig
+    CQLLossConfig
+    GAEConfig
+    TargetNetUpdaterConfig
+    SoftUpdateConfig
+    HardUpdateConfig
 
 .. currentmodule:: torchrl.trainers.algorithms.configs.utils
 
@@ -553,14 +571,16 @@ Best Practices
 5. **Version Control**: Keep your configuration files under version control
 6. **Use Variable Interpolation**: Use ``${variable}`` syntax to avoid duplication
 
-Future Extensions
------------------
+Supported Algorithms
+--------------------
 
-As TorchRL adds more algorithms beyond PPO (such as SAC, TD3, DQN), the configuration system will expand with:
+TorchRL currently provides configuration-driven trainers for the following algorithms:
 
-- New trainer configurations (e.g., ``SACTrainerConfig``, ``TD3TrainerConfig``)
-- Algorithm-specific loss configurations
-- Specialized collector configurations for different algorithms
-- Additional environment and model configurations
+- **PPO** (on-policy): ``PPOTrainerConfig``, ``PPOLossConfig``
+- **SAC** (off-policy, continuous): ``SACTrainerConfig``, ``SACLossConfig``
+- **DQN** (off-policy, discrete): ``DQNTrainerConfig``, ``DQNLossConfig``
+- **DDPG** (off-policy, continuous): ``DDPGTrainerConfig``, ``DDPGLossConfig``
+- **IQL** (offline): ``IQLTrainerConfig``, ``IQLLossConfig``
+- **CQL** (offline): ``CQLTrainerConfig``, ``CQLLossConfig``
 
-The modular design ensures easy integration while maintaining backward compatibility.
+The modular design ensures easy integration of additional algorithms while maintaining backward compatibility.

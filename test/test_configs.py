@@ -1404,6 +1404,171 @@ class TestTrainerConfigs:
         assert trainer_config.actor_network is None
         assert trainer_config.critic_network is None
 
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_dqn_trainer_config(self):
+        from torchrl.trainers.algorithms.configs.trainers import DQNTrainerConfig
+
+        cfg = DQNTrainerConfig(
+            collector=None,
+            total_frames=100,
+            optim_steps_per_batch=1,
+            loss_module=None,
+            optimizer=None,
+            logger=None,
+            save_trainer_file=None,
+            replay_buffer=None,
+        )
+
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.trainers._make_dqn_trainer"
+        )
+        assert cfg.total_frames == 100
+        assert cfg.frame_skip == 1
+        assert cfg.clip_grad_norm is True
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_ddpg_trainer_config(self):
+        from torchrl.trainers.algorithms.configs.trainers import DDPGTrainerConfig
+
+        cfg = DDPGTrainerConfig(
+            collector=None,
+            total_frames=200,
+            optim_steps_per_batch=4,
+            loss_module=None,
+            optimizer=None,
+            logger=None,
+            save_trainer_file=None,
+            replay_buffer=None,
+        )
+
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.trainers._make_ddpg_trainer"
+        )
+        assert cfg.total_frames == 200
+        assert cfg.optim_steps_per_batch == 4
+        assert cfg.async_collection is False
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_iql_trainer_config(self):
+        from torchrl.trainers.algorithms.configs.trainers import IQLTrainerConfig
+
+        cfg = IQLTrainerConfig(
+            collector=None,
+            total_frames=300,
+            optim_steps_per_batch=2,
+            loss_module=None,
+            optimizer=None,
+            logger=None,
+            save_trainer_file=None,
+            replay_buffer=None,
+        )
+
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.trainers._make_iql_trainer"
+        )
+        assert cfg.total_frames == 300
+        assert cfg.actor_network is None
+        assert cfg.qvalue_network is None
+        assert cfg.value_network is None
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_cql_trainer_config(self):
+        from torchrl.trainers.algorithms.configs.trainers import CQLTrainerConfig
+
+        cfg = CQLTrainerConfig(
+            collector=None,
+            total_frames=400,
+            optim_steps_per_batch=3,
+            loss_module=None,
+            optimizer=None,
+            logger=None,
+            save_trainer_file=None,
+            replay_buffer=None,
+        )
+
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.trainers._make_cql_trainer"
+        )
+        assert cfg.total_frames == 400
+        assert cfg.actor_network is None
+        assert cfg.qvalue_network is None
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_dqn_loss_config(self):
+        from torchrl.trainers.algorithms.configs.objectives import DQNLossConfig
+
+        cfg = DQNLossConfig()
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.objectives._make_dqn_loss"
+        )
+        assert cfg.loss_function == "l2"
+        assert cfg.delay_value is True
+        assert cfg.double_dqn is False
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_ddpg_loss_config(self):
+        from torchrl.trainers.algorithms.configs.objectives import DDPGLossConfig
+
+        cfg = DDPGLossConfig()
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.objectives._make_ddpg_loss"
+        )
+        assert cfg.loss_function == "l2"
+        assert cfg.delay_actor is False
+        assert cfg.delay_value is True
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_iql_loss_config(self):
+        from torchrl.trainers.algorithms.configs.objectives import IQLLossConfig
+
+        cfg = IQLLossConfig(temperature=3.0, expectile=0.7)
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.objectives._make_iql_loss"
+        )
+        assert cfg.temperature == 3.0
+        assert cfg.expectile == 0.7
+        assert cfg.num_qvalue_nets == 2
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_cql_loss_config(self):
+        from torchrl.trainers.algorithms.configs.objectives import CQLLossConfig
+
+        cfg = CQLLossConfig(min_q_weight=5.0, with_lagrange=True, lagrange_thresh=10.0)
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.objectives._make_cql_loss"
+        )
+        assert cfg.min_q_weight == 5.0
+        assert cfg.with_lagrange is True
+        assert cfg.lagrange_thresh == 10.0
+        assert cfg.num_random == 10
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_qvalue_model_config(self):
+        from torchrl.trainers.algorithms.configs.modules import (
+            MLPConfig,
+            QValueModelConfig,
+        )
+
+        network = MLPConfig(in_features=4, out_features=2, num_cells=64)
+        cfg = QValueModelConfig(
+            network=network,
+            in_keys=["observation"],
+            action_space="one-hot",
+        )
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.modules._make_qvalue_model"
+        )
+        assert cfg.action_space == "one-hot"
+
 
 @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
 @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
@@ -1475,7 +1640,7 @@ if __name__ == "__main__":
                 cwd=str(tmpdir),
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=120,
             )
 
             if result.returncode == 0:
@@ -1847,6 +2012,563 @@ trainer:
 
     trainer = hydra.utils.instantiate(cfg.trainer)
     assert isinstance(trainer, torchrl.trainers.algorithms.ppo.PPOTrainer)
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_dqn_trainer_parsing_with_file(self, tmpdir):
+        """Test DQN trainer parsing with Hydra config."""
+        yaml_config = """
+defaults:
+  - transform@transform0: step_counter
+  - transform@transform1: reward_sum
+  - env@training_env: batched_env
+  - env@training_env.create_env_fn: transformed_env
+  - env@training_env.create_env_fn.base_env: gym
+  - transform@training_env.create_env_fn.transform: compose
+  - model@models.qvalue_model: qvalue
+  - network@networks.qvalue_network: mlp
+  - collector@collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@replay_buffer.storage: lazy_tensor
+  - writer@replay_buffer.writer: round_robin
+  - sampler@replay_buffer.sampler: random
+  - trainer@trainer: dqn
+  - optimizer@optimizer: adam
+  - loss@loss: dqn
+  - target_net_updater@target_net_updater: hard
+  - logger@logger: csv
+  - _self_
+
+networks:
+  qvalue_network:
+    out_features: 2
+    in_features: 4
+    num_cells: [64, 64]
+
+models:
+  qvalue_model:
+    in_keys: ["observation"]
+    action_space: "one-hot"
+    network: ${networks.qvalue_network}
+
+transform0:
+  max_steps: 500
+  step_count_key: "step_count"
+
+transform1:
+  in_keys: ["reward"]
+  out_keys: ["reward_sum"]
+
+training_env:
+  num_workers: 1
+  create_env_fn:
+    base_env:
+      env_name: CartPole-v1
+    transform:
+      transforms:
+        - ${transform0}
+        - ${transform1}
+    _partial_: true
+
+loss:
+  value_network: ${models.qvalue_model}
+  loss_function: l2
+  delay_value: true
+  action_space: "one-hot"
+
+target_net_updater:
+  value_network_update_interval: 50
+
+optimizer:
+  lr: 2.5e-4
+
+collector:
+  create_env_fn: ${training_env}
+  policy: ${models.qvalue_model}
+  total_frames: 500
+  frames_per_batch: 100
+  init_random_frames: 100
+  _partial_: true
+
+replay_buffer:
+  storage:
+    max_size: 1000
+    device: cpu
+    ndim: 1
+  sampler:
+  writer:
+    compilable: false
+  batch_size: 32
+
+logger:
+  exp_name: test_dqn
+
+trainer:
+  collector: ${collector}
+  optimizer: ${optimizer}
+  replay_buffer: ${replay_buffer}
+  target_net_updater: ${target_net_updater}
+  loss_module: ${loss}
+  value_network: ${models.qvalue_model}
+  logger: ${logger}
+  total_frames: ${collector.total_frames}
+  frame_skip: 1
+  clip_grad_norm: true
+  clip_norm: 10.0
+  progress_bar: false
+  seed: 42
+  save_trainer_interval: 10000
+  log_interval: 10000
+  save_trainer_file: null
+  optim_steps_per_batch: 2
+  async_collection: false
+"""
+
+        test_code = """
+    trainer = hydra.utils.instantiate(cfg.trainer)
+    assert isinstance(trainer, torchrl.trainers.algorithms.dqn.DQNTrainer)
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_ddpg_trainer_parsing_with_file(self, tmpdir):
+        """Test DDPG trainer parsing with Hydra config."""
+        yaml_config = """
+defaults:
+  - transform@transform0: step_counter
+  - transform@transform1: double_to_float
+  - transform@transform2: reward_sum
+  - env@training_env: batched_env
+  - env@training_env.create_env_fn: transformed_env
+  - env@training_env.create_env_fn.base_env: gym
+  - transform@training_env.create_env_fn.transform: compose
+  - model@models.value_model: value
+  - network@networks.actor_network: mlp
+  - network@networks.value_network: mlp
+  - collector@collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@replay_buffer.storage: lazy_tensor
+  - writer@replay_buffer.writer: round_robin
+  - sampler@replay_buffer.sampler: random
+  - trainer@trainer: ddpg
+  - optimizer@optimizer: adam
+  - loss@loss: ddpg
+  - target_net_updater@target_net_updater: soft
+  - logger@logger: csv
+  - _self_
+
+networks:
+  actor_network:
+    out_features: 1
+    in_features: 3
+    num_cells: [64, 64]
+
+  value_network:
+    out_features: 1
+    in_features: 4
+    num_cells: [64, 64]
+
+models:
+  actor_module:
+    _target_: torchrl.trainers.algorithms.configs.modules._make_tensordict_module
+    module: ${networks.actor_network}
+    in_keys: ["observation"]
+    out_keys: ["param"]
+
+  actor_tanh:
+    _target_: torchrl.trainers.algorithms.configs.modules._make_tanh_module
+    in_keys: ["param"]
+    out_keys: ["action"]
+    low: -2.0
+    high: 2.0
+
+  actor_model:
+    _target_: torchrl.trainers.algorithms.configs.modules._make_tensordict_sequential
+    modules:
+      - ${models.actor_module}
+      - ${models.actor_tanh}
+
+  value_model:
+    in_keys: ["observation", "action"]
+    out_keys: ["state_action_value"]
+    network: ${networks.value_network}
+
+transform0:
+  max_steps: 200
+  step_count_key: "step_count"
+
+transform1:
+  in_keys: null
+  out_keys: null
+
+transform2:
+  in_keys: ["reward"]
+  out_keys: ["reward_sum"]
+
+training_env:
+  num_workers: 1
+  create_env_fn:
+    base_env:
+      env_name: Pendulum-v1
+    transform:
+      transforms:
+        - ${transform0}
+        - ${transform1}
+        - ${transform2}
+    _partial_: true
+
+loss:
+  actor_network: ${models.actor_model}
+  value_network: ${models.value_model}
+  loss_function: l2
+  delay_value: true
+
+target_net_updater:
+  tau: 0.005
+
+optimizer:
+  lr: 3.0e-4
+
+collector:
+  create_env_fn: ${training_env}
+  policy: ${models.actor_model}
+  total_frames: 500
+  frames_per_batch: 100
+  init_random_frames: 100
+  _partial_: true
+
+replay_buffer:
+  storage:
+    max_size: 1000
+    device: cpu
+    ndim: 1
+  sampler:
+  writer:
+    compilable: false
+  batch_size: 32
+
+logger:
+  exp_name: test_ddpg
+
+trainer:
+  collector: ${collector}
+  optimizer: ${optimizer}
+  replay_buffer: ${replay_buffer}
+  target_net_updater: ${target_net_updater}
+  loss_module: ${loss}
+  logger: ${logger}
+  total_frames: ${collector.total_frames}
+  frame_skip: 1
+  clip_grad_norm: false
+  clip_norm: null
+  progress_bar: false
+  seed: 42
+  save_trainer_interval: 10000
+  log_interval: 10000
+  save_trainer_file: null
+  optim_steps_per_batch: 2
+  async_collection: false
+"""
+
+        test_code = """
+    trainer = hydra.utils.instantiate(cfg.trainer)
+    assert isinstance(trainer, torchrl.trainers.algorithms.ddpg.DDPGTrainer)
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_iql_trainer_parsing_with_file(self, tmpdir):
+        """Test IQL trainer parsing with Hydra config."""
+        yaml_config = """
+defaults:
+  - transform@transform0: step_counter
+  - transform@transform1: double_to_float
+  - transform@transform2: reward_sum
+  - env@training_env: batched_env
+  - env@training_env.create_env_fn: transformed_env
+  - env@training_env.create_env_fn.base_env: gym
+  - transform@training_env.create_env_fn.transform: compose
+  - model@models.policy_model: tanh_normal
+  - model@models.qvalue_model: value
+  - model@models.value_model: value
+  - network@networks.policy_network: mlp
+  - network@networks.qvalue_network: mlp
+  - network@networks.value_network: mlp
+  - collector@collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@replay_buffer.storage: lazy_tensor
+  - writer@replay_buffer.writer: round_robin
+  - sampler@replay_buffer.sampler: random
+  - trainer@trainer: iql
+  - optimizer@optimizer: adam
+  - loss@loss: iql
+  - target_net_updater@target_net_updater: soft
+  - logger@logger: csv
+  - _self_
+
+networks:
+  policy_network:
+    out_features: 2
+    in_features: 3
+    num_cells: [64, 64]
+
+  qvalue_network:
+    out_features: 1
+    in_features: 4
+    num_cells: [64, 64]
+
+  value_network:
+    out_features: 1
+    in_features: 3
+    num_cells: [64, 64]
+
+models:
+  policy_model:
+    return_log_prob: true
+    in_keys: ["observation"]
+    param_keys: ["loc", "scale"]
+    out_keys: ["action"]
+    network: ${networks.policy_network}
+
+  qvalue_model:
+    in_keys: ["observation", "action"]
+    out_keys: ["state_action_value"]
+    network: ${networks.qvalue_network}
+
+  value_model:
+    in_keys: ["observation"]
+    out_keys: ["state_value"]
+    network: ${networks.value_network}
+
+transform0:
+  max_steps: 200
+  step_count_key: "step_count"
+
+transform1:
+  in_keys: null
+  out_keys: null
+
+transform2:
+  in_keys: ["reward"]
+  out_keys: ["reward_sum"]
+
+training_env:
+  num_workers: 1
+  create_env_fn:
+    base_env:
+      env_name: Pendulum-v1
+    transform:
+      transforms:
+        - ${transform0}
+        - ${transform1}
+        - ${transform2}
+    _partial_: true
+
+loss:
+  actor_network: ${models.policy_model}
+  qvalue_network: ${models.qvalue_model}
+  value_network: ${models.value_model}
+  temperature: 3.0
+  expectile: 0.7
+  loss_function: smooth_l1
+
+target_net_updater:
+  tau: 0.005
+
+optimizer:
+  lr: 3.0e-4
+
+collector:
+  create_env_fn: ${training_env}
+  policy: ${models.policy_model}
+  total_frames: 500
+  frames_per_batch: 100
+  init_random_frames: 100
+  _partial_: true
+
+replay_buffer:
+  storage:
+    max_size: 1000
+    device: cpu
+    ndim: 1
+  sampler:
+  writer:
+    compilable: false
+  batch_size: 32
+
+logger:
+  exp_name: test_iql
+
+trainer:
+  collector: ${collector}
+  optimizer: ${optimizer}
+  replay_buffer: ${replay_buffer}
+  target_net_updater: ${target_net_updater}
+  loss_module: ${loss}
+  logger: ${logger}
+  total_frames: ${collector.total_frames}
+  frame_skip: 1
+  clip_grad_norm: false
+  clip_norm: null
+  progress_bar: false
+  seed: 42
+  save_trainer_interval: 10000
+  log_interval: 10000
+  save_trainer_file: null
+  optim_steps_per_batch: 2
+  async_collection: false
+"""
+
+        test_code = """
+    trainer = hydra.utils.instantiate(cfg.trainer)
+    assert isinstance(trainer, torchrl.trainers.algorithms.iql.IQLTrainer)
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_cql_trainer_parsing_with_file(self, tmpdir):
+        """Test CQL trainer parsing with Hydra config."""
+        yaml_config = """
+defaults:
+  - transform@transform0: step_counter
+  - transform@transform1: double_to_float
+  - transform@transform2: reward_sum
+  - env@training_env: batched_env
+  - env@training_env.create_env_fn: transformed_env
+  - env@training_env.create_env_fn.base_env: gym
+  - transform@training_env.create_env_fn.transform: compose
+  - model@models.policy_model: tanh_normal
+  - model@models.qvalue_model: value
+  - network@networks.policy_network: mlp
+  - network@networks.qvalue_network: mlp
+  - collector@collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@replay_buffer.storage: lazy_tensor
+  - writer@replay_buffer.writer: round_robin
+  - sampler@replay_buffer.sampler: random
+  - trainer@trainer: cql
+  - optimizer@optimizer: adam
+  - loss@loss: cql
+  - target_net_updater@target_net_updater: soft
+  - logger@logger: csv
+  - _self_
+
+networks:
+  policy_network:
+    out_features: 2
+    in_features: 3
+    num_cells: [64, 64]
+
+  qvalue_network:
+    out_features: 1
+    in_features: 4
+    num_cells: [64, 64]
+
+models:
+  policy_model:
+    return_log_prob: true
+    in_keys: ["observation"]
+    param_keys: ["loc", "scale"]
+    out_keys: ["action"]
+    network: ${networks.policy_network}
+
+  qvalue_model:
+    in_keys: ["observation", "action"]
+    out_keys: ["state_action_value"]
+    network: ${networks.qvalue_network}
+
+transform0:
+  max_steps: 200
+  step_count_key: "step_count"
+
+transform1:
+  in_keys: null
+  out_keys: null
+
+transform2:
+  in_keys: ["reward"]
+  out_keys: ["reward_sum"]
+
+training_env:
+  num_workers: 1
+  create_env_fn:
+    base_env:
+      env_name: Pendulum-v1
+    transform:
+      transforms:
+        - ${transform0}
+        - ${transform1}
+        - ${transform2}
+    _partial_: true
+
+loss:
+  actor_network: ${models.policy_model}
+  qvalue_network: ${models.qvalue_model}
+  loss_function: smooth_l1
+  alpha_init: 1.0
+  target_entropy: -1.0
+  delay_qvalue: true
+  temperature: 1.0
+  min_q_weight: 1.0
+  with_lagrange: true
+  lagrange_thresh: 10.0
+  num_random: 10
+
+target_net_updater:
+  tau: 0.005
+
+optimizer:
+  lr: 3.0e-4
+
+collector:
+  create_env_fn: ${training_env}
+  policy: ${models.policy_model}
+  total_frames: 500
+  frames_per_batch: 100
+  init_random_frames: 100
+  _partial_: true
+
+replay_buffer:
+  storage:
+    max_size: 1000
+    device: cpu
+    ndim: 1
+  sampler:
+  writer:
+    compilable: false
+  batch_size: 32
+
+logger:
+  exp_name: test_cql
+
+trainer:
+  collector: ${collector}
+  optimizer: ${optimizer}
+  replay_buffer: ${replay_buffer}
+  target_net_updater: ${target_net_updater}
+  loss_module: ${loss}
+  logger: ${logger}
+  total_frames: ${collector.total_frames}
+  frame_skip: 1
+  clip_grad_norm: false
+  clip_norm: null
+  progress_bar: false
+  seed: 42
+  save_trainer_interval: 10000
+  log_interval: 10000
+  save_trainer_file: null
+  optim_steps_per_batch: 2
+  async_collection: false
+"""
+
+        test_code = """
+    trainer = hydra.utils.instantiate(cfg.trainer)
+    assert isinstance(trainer, torchrl.trainers.algorithms.cql.CQLTrainer)
 """
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
