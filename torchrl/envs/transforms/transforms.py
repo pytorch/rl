@@ -7920,8 +7920,12 @@ class StepCounter(Transform):
             for parent_key in self.truncated_keys:
                 parent_truncated = next_tensordict.get(parent_key, None)
                 if parent_truncated is not None:
-                    # Expand parent truncated to match nested shape and apply OR
-                    expanded = parent_truncated.expand_as(nested_truncated)
+                    # Insert extra dims (e.g. agent dims) so the parent is
+                    # broadcastable to the nested agent-level shape.
+                    parent_val = parent_truncated
+                    while parent_val.ndim < nested_truncated.ndim:
+                        parent_val = parent_val.unsqueeze(-2)
+                    expanded = parent_val.expand_as(nested_truncated)
                     next_tensordict.set(nested_key, nested_truncated | expanded)
                     break
 
@@ -7937,8 +7941,10 @@ class StepCounter(Transform):
                 for parent_key in self.done_keys:
                     parent_done = next_tensordict.get(parent_key, None)
                     if parent_done is not None:
-                        # Expand parent done to match nested shape and apply OR
-                        expanded = parent_done.expand_as(nested_done)
+                        parent_val = parent_done
+                        while parent_val.ndim < nested_done.ndim:
+                            parent_val = parent_val.unsqueeze(-2)
+                        expanded = parent_val.expand_as(nested_done)
                         next_tensordict.set(nested_key, nested_done | expanded)
                         break
 

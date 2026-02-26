@@ -12,6 +12,7 @@ making it easy to collect high-quality training data efficiently.
 TorchRL provides several collector implementations optimized for different scenarios:
 
 - :class:`Collector`: Single-process collection on the training worker
+- :class:`AsyncBatchedCollector`: Async environments + auto-batching inference server (see :class:`AsyncBatchedCollector`)
 - :class:`MultiCollector`: Parallel collection across multiple workers (see below)
 - **Distributed collectors**: For multi-node setups using Ray, RPC, or distributed backends (see :class:`DistributedCollector` / :class:`RPCCollector`)
 

@@ -487,7 +487,7 @@ def _main_async_collector(
                             if x.device.type in ("cpu",):
                                 x.share_memory_()
                             if x.device.type in ("mps",):
-                                RuntimeError(MPS_ERROR)
+                                raise RuntimeError(MPS_ERROR)
 
                         collected_tensordict.apply(cast_tensor, filter_empty=True)
                 data = (collected_tensordict, idx)
