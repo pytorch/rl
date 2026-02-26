@@ -1681,6 +1681,21 @@ class TestBatchRenorm:
         torch.testing.assert_close(bn(data_test), brn(data_test))
 
 
+def test_convnetblock_uses_both_resnets():
+    """Regression test for https://github.com/pytorch/rl/issues/3519."""
+    from torchrl.modules.models.recipes.impala import _ConvNetBlock
+
+    block = _ConvNetBlock(num_ch=16)
+    x = torch.randn(2, 3, 8, 8)
+    out = block(x).mean()
+    out.backward()
+
+    resnet1_grad = sum(p.grad.abs().sum() for p in block.resnet1.parameters())
+    resnet2_grad = sum(p.grad.abs().sum() for p in block.resnet2.parameters())
+    assert resnet1_grad > 0, "resnet1 parameters received no gradients"
+    assert resnet2_grad > 0, "resnet2 parameters received no gradients"
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
