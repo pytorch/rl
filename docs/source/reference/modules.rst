@@ -56,4 +56,5 @@ Documentation Sections
    modules_mcts
    modules_models
    modules_distributions
+   modules_inference_server
    modules_utils

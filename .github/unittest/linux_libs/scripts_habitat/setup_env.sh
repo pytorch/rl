@@ -109,8 +109,11 @@ echo "Total data size:"
 du -sh data/
 
 # Install habitat-lab
+# Pin to commit before agent-sensor-decoupling migration (PR #2220, commit a9c8df586d64)
+# which introduced an incomplete rename of sensors -> _sensors in RearrangeSim.
 git clone https://github.com/facebookresearch/habitat-lab.git
 cd habitat-lab
+git checkout 8c403d6645bd
 pip3 install -e habitat-lab
 pip3 install -e habitat-baselines  # install habitat_baselines
 conda run python -m pip install "gym[atari,accept-rom-license]" pygame

@@ -1657,7 +1657,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         if _is_int(index):
             index = torch.as_tensor(index, device=tensordict.device)
         elif index.ndim == 2 and index.shape[:1] != tensordict.shape[:1]:
-            for dim in range(2, tensordict.ndim + 1):
+            for dim in range(tensordict.ndim, 1, -1):
                 if index.shape[:1].numel() == tensordict.shape[:dim].numel():
                     # if index has 2 dims and is in a non-zero format
                     index = index.unflatten(0, tensordict.shape[:dim])

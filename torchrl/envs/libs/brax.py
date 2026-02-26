@@ -689,16 +689,20 @@ class BraxEnv(BraxWrapper, metaclass=_BraxMeta):
         pixels_only = kwargs.pop("pixels_only", True)
         requires_grad = kwargs.pop("requires_grad", False)
         cache_clear_frequency = kwargs.pop("cache_clear_frequency", False)
+        camera_id = kwargs.pop("camera_id", 0)
+        render_kwargs = kwargs.pop("render_kwargs", None)
         if kwargs:
             raise ValueError("kwargs not supported.")
         self.wrapper_frame_skip = 1
-        env = self.lib.envs.get_environment(env_name, **kwargs)
+        env = self.lib.envs.get_environment(env_name)
         return super()._build_env(
             env,
             pixels_only=pixels_only,
             from_pixels=from_pixels,
             requires_grad=requires_grad,
             cache_clear_frequency=cache_clear_frequency,
+            camera_id=camera_id,
+            render_kwargs=render_kwargs,
         )
 
     @property

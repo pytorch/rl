@@ -24,7 +24,7 @@ jobs:
   # Job 1: vLLM tests (uses conda + pip)
   # Runs all LLM tests EXCEPT SGLang tests
   unittests-vllm:
-    if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && contains(join(github.event.pull_request.labels.*.name, ', '), 'llm/')) }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(join(github.event.pull_request.labels.*.name, ', '), 'llm/')) }}
     strategy:
       matrix:
         python_version: ["3.12"]
@@ -60,7 +60,7 @@ jobs:
   # Job 2: SGLang tests (uses uv, separate from vLLM due to Triton version conflicts)
   # SGLang requires a different Triton version than vLLM, so we run it in a separate job
   unittests-sglang:
-    if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && contains(join(github.event.pull_request.labels.*.name, ', '), 'llm/')) }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(join(github.event.pull_request.labels.*.name, ', '), 'llm/')) }}
     strategy:
       matrix:
         python_version: ["3.12"]

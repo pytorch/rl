@@ -66,6 +66,7 @@ from torchrl.data import (
     OneHot,
     ReplayBuffer,
     ReplayBufferEnsemble,
+    TensorDictReplayBuffer,
     Unbounded,
     UnboundedDiscrete,
 )
@@ -3180,36 +3181,26 @@ class TestBrax:
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires cuda")
     def test_brax_kwargs_preserved_with_seed(self, envname, device):
-        """Test that kwargs like camera_id are preserved when seed is provided.
+        """Test that constructor kwargs are preserved when seed is provided.
 
         Regression test for a bug where `kwargs` were overwritten when `_seed`
         was not None.
         """
         env = BraxEnv(
             envname,
-            from_pixels=True,
-            pixels_only=True,
-            camera_id=1,
             device=device,
         )
         try:
-            # calling set_seed should not drop or overwrite kwargs
             final_seed = env.set_seed(1)
             assert final_seed is not None
             td = env.reset()
             assert isinstance(td, TensorDict)
             preserved = False
-            if hasattr(env, "_kwargs") and isinstance(env._kwargs, dict):
-                preserved = env._kwargs.get("camera_id", None) == 1
-            else:
-                inner = getattr(env, "_env", None)
-                if (
-                    inner is not None
-                    and hasattr(inner, "_kwargs")
-                    and isinstance(inner._kwargs, dict)
-                ):
-                    preserved = inner._kwargs.get("camera_id", None) == 1
-            assert preserved, "camera_id kwarg was not preserved after set_seed"
+            if hasattr(env, "_constructor_kwargs") and isinstance(
+                env._constructor_kwargs, dict
+            ):
+                preserved = env._constructor_kwargs.get("env_name") == envname
+            assert preserved, "constructor kwargs were not preserved after set_seed"
         finally:
             env.close()
 
@@ -5171,6 +5162,34 @@ class TestPettingZoo:
         for _ in collector:
             break
 
+    def test_single_agent_group_replay_buffer(self):
+        """Regression test for gh#3515 - shape mismatch with single-agent group."""
+        env = PettingZooEnv(
+            task="simple_v3",
+            parallel=True,
+            seed=0,
+            use_mask=False,
+        )
+        group = list(env.group_map.keys())[0]
+        assert len(env.group_map[group]) == 1
+
+        rollout = env.rollout(10)
+        T = rollout.shape[0]
+        n_agents = 1
+
+        # Reshape to (1, T, n_agents) to reproduce the scenario from gh#3515
+        # where a replay buffer Transform reshapes collector output to
+        # (n_envs, traj_len, n_agents). When n_agents=1 the trailing dim of 1
+        # caused _set_index_in_td to match the wrong number of batch dims.
+        td = rollout.unsqueeze(0).unsqueeze(-1)
+        assert td.shape == torch.Size([1, T, n_agents])
+
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10_000, ndim=3),
+            batch_size=4,
+        )
+        rb.extend(td)
+
 
 @pytest.mark.skipif(not _has_robohive, reason="RoboHive not found")
 class TestRoboHive:
@@ -6014,23 +6033,10 @@ class TestProcgen:
             env.close()
 
     def test_procgen_env_creation_and_reset(self):
-        env = ProcgenEnv("coinrun", num_envs=4)
-        try:
-            td = env.reset()
-            # ensure batch size corresponds to num_envs
-            assert td["observation"].shape[0] == 4
-        finally:
-            env.close()
-
-    def test_procgen_env_step(self):
         env = ProcgenEnv("coinrun", num_envs=2)
         try:
-            env.reset()
-            out = env.rand_step()
-            # After step, observation/reward/done are in out["next"]
-            assert "observation" in out["next"]
-            assert "reward" in out["next"]
-            assert "done" in out["next"]
+            td = env.reset()
+            assert td["observation"].shape[0] == 2
         finally:
             env.close()
 

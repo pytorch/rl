@@ -1001,6 +1001,12 @@ class Trainer:
 
             # Log to external logger (e.g., tensorboard, wandb) if conditions are met
             if _log and self.logger is not None:
+                if (
+                    method == "log_scalar"
+                    and isinstance(item, torch.Tensor)
+                    and item.ndim > 0
+                ):
+                    continue
                 getattr(self.logger, method)(key, item, step=collected_frames)
 
             # Update progress bar if requested and method is scalar
