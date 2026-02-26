@@ -933,16 +933,20 @@
         <span class="n">pixels_only</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;pixels_only&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
         <span class="n">requires_grad</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;requires_grad&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
         <span class="n">cache_clear_frequency</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;cache_clear_frequency&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="n">camera_id</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;camera_id&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">render_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;render_kwargs&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;kwargs not supported.&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">wrapper_frame_skip</span> <span class="o">=</span> <span class="mi">1</span>
-        <span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">envs</span><span class="o">.</span><span class="n">get_environment</span><span class="p">(</span><span class="n">env_name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">envs</span><span class="o">.</span><span class="n">get_environment</span><span class="p">(</span><span class="n">env_name</span><span class="p">)</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_build_env</span><span class="p">(</span>
             <span class="n">env</span><span class="p">,</span>
             <span class="n">pixels_only</span><span class="o">=</span><span class="n">pixels_only</span><span class="p">,</span>
             <span class="n">from_pixels</span><span class="o">=</span><span class="n">from_pixels</span><span class="p">,</span>
             <span class="n">requires_grad</span><span class="o">=</span><span class="n">requires_grad</span><span class="p">,</span>
             <span class="n">cache_clear_frequency</span><span class="o">=</span><span class="n">cache_clear_frequency</span><span class="p">,</span>
+            <span class="n">camera_id</span><span class="o">=</span><span class="n">camera_id</span><span class="p">,</span>
+            <span class="n">render_kwargs</span><span class="o">=</span><span class="n">render_kwargs</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="nd">@property</span>
