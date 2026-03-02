@@ -220,9 +220,9 @@ def make_policy(num_actions=NUM_ACTIONS):
 
 
 def bench(name: str, factory, warmup=WARMUP_BATCHES, target_frames=TOTAL_FRAMES):
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  {name}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     collector = factory()
     total = 0
@@ -410,7 +410,7 @@ def main():
     print(f"  {total_frames} total frames, {frames_per_batch} frames/batch")
     print("=" * 70)
     print(f"  {'Collector':<45s} {'FPS':>8s}  {'Time':>7s}")
-    print(f"  {'-'*45} {'-'*8}  {'-'*7}")
+    print(f"  {'-' * 45} {'-' * 8}  {'-' * 7}")
     for name, fps, elapsed, _total in sorted(results, key=lambda x: -x[1]):
         print(f"  {name:<45s} {fps:>8.0f}  {elapsed:>6.2f}s")
     print()
