@@ -8,15 +8,10 @@ from tensordict.nn import TensorDictModule
 from torchrl._utils import get_available_device
 from torchrl.envs import EnvBase
 from torchrl.envs.utils import RandomPolicy
+from torchrl.objectives import ExponentialQuadraticCost
 from torchrl.record.loggers import generate_exp_name, get_logger, Logger
 
-from utils import (
-    BoTorchGPWorldModel,
-    ImaginedEnv,
-    make_env,
-    pendulum_cost,
-    RBFController,
-)
+from utils import BoTorchGPWorldModel, ImaginedEnv, make_env, RBFController
 
 
 def pilco_loop(
@@ -65,6 +60,7 @@ def pilco_loop(
         }
     )
 
+    cost_module = ExponentialQuadraticCost(reduction="none").to(env.device)
     for epoch in range(cfg.pilco.epochs):
         base_world_model = BoTorchGPWorldModel(
             obs_dim=obs_dim, action_dim=action_dim
@@ -94,9 +90,8 @@ def pilco_loop(
                 tensordict=reset_td,
             )
 
-            obs = imagined_data["observation"]
-            cost = pendulum_cost(obs)
-            loss = cost.mean()
+            loss_td = cost_module(imagined_data)
+            loss = loss_td.get("loss_cost").sum(dim=-1).mean()
 
             loss.backward()
             optimizer.step()
@@ -143,7 +138,9 @@ def pilco_loop(
             return td
 
         test_rollout = env.rollout(
-            max_steps=1000, policy=policy_for_env, break_when_any_done=True
+            max_steps=100,
+            policy=policy_for_env,
+            break_when_any_done=True,  # TODO change the max_steps back maybe?
         )
 
         reward = test_rollout["episode_reward"][-1].item()
