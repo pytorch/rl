@@ -404,9 +404,18 @@ class TestMLFlowLogger:
             videos_dir = client.download_artifacts(run_id, "videos", artifacts_dir)
             for i, video_name in enumerate(os.listdir(videos_dir)):
                 video_path = os.path.join(videos_dir, video_name)
-                loaded_video, _, _ = torchvision.io.read_video(
-                    video_path, pts_unit="sec", output_format="TCHW"
-                )
+                if _has_torchcodec:
+                    from torchcodec.decoders import VideoDecoder
+
+                    loaded_video = (
+                        VideoDecoder(video_path)
+                        .get_frames_in_range(start=0, stop=128)
+                        .data
+                    )
+                else:
+                    loaded_video, _, _ = torchvision.io.read_video(
+                        video_path, pts_unit="sec", output_format="TCHW"
+                    )
                 if steps:
                     assert torch.allclose(loaded_video.int(), videos[i].int(), rtol=0.1)
                 else:
