@@ -242,8 +242,10 @@ fi
 # install torchcodec (from source for nightly to match PyTorch ABI)
 if [[ "$RELEASE" == 0 ]]; then
   export BUILD_AGAINST_ALL_FFMPEG_FROM_S3=1
+  export Python3_ROOT_DIR="$(python -c 'import sys; print(sys.base_prefix)')"
   uv_pip_install --no-build-isolation git+https://github.com/meta-pytorch/torchcodec.git
   unset BUILD_AGAINST_ALL_FFMPEG_FROM_S3
+  unset Python3_ROOT_DIR
 else
   uv_pip_install torchcodec
 fi
