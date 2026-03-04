@@ -18,8 +18,9 @@ from packaging import version
 from tensordict import MemoryMappedTensor
 
 from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
+from torchrl.record.loggers.common import _has_torchcodec, _has_tv
 from torchrl.record.loggers.csv import CSVLogger
-from torchrl.record.loggers.mlflow import _has_mlflow, _has_tv, MLFlowLogger
+from torchrl.record.loggers.mlflow import _has_mlflow, MLFlowLogger
 from torchrl.record.loggers.tensorboard import _has_tb, TensorboardLogger
 from torchrl.record.loggers.trackio import _has_trackio, TrackioLogger
 from torchrl.record.loggers.wandb import _has_wandb, WandbLogger
@@ -33,6 +34,8 @@ if _has_tv:
     )
 else:
     TORCHVISION_VERSION = version.parse("0.0.1")
+
+_has_mp4 = (_has_tv and TORCHVISION_VERSION < version.parse("0.22")) or _has_torchcodec
 
 if _has_tb:
     from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
@@ -170,10 +173,7 @@ class TestCSVLogger:
 
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
     @pytest.mark.parametrize(
-        "video_format", ["pt", "memmap"] + ["mp4"] if _has_tv else []
-    )
-    @pytest.mark.skipif(
-        TORCHVISION_VERSION < version.parse("0.20.0"), reason="av compatibility bug"
+        "video_format", ["pt", "memmap"] + (["mp4"] if _has_mp4 else [])
     )
     def test_log_video(self, steps, video_format, tmpdir):
         torch.manual_seed(0)
@@ -217,11 +217,18 @@ class TestCSVLogger:
             )
             assert torch.equal(video, logged_video), logged_video
         elif video_format == "mp4":
-            import torchvision
+            if _has_torchcodec:
+                from torchcodec.decoders import VideoDecoder
 
-            logged_video = torchvision.io.read_video(path, output_format="TCHW")[0][
-                :, :1
-            ]
+                logged_video = (
+                    VideoDecoder(path)
+                    .get_frames_in_range(start=0, stop=128)
+                    .data[:, :1]
+                )
+            else:
+                logged_video = torchvision.io.read_video(path, output_format="TCHW")[0][
+                    :, :1
+                ]
             logged_video = logged_video.unsqueeze(0)
             torch.testing.assert_close(video, logged_video)
 
@@ -376,7 +383,7 @@ class TestMLFlowLogger:
             assert metric.value == values[i].item()
 
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
-    @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
+    @pytest.mark.skipif(not _has_mp4, reason="no mp4 video backend available")
     def test_log_video(self, steps, mlflow_fixture):
 
         logger, client = mlflow_fixture
