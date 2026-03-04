@@ -129,6 +129,7 @@ uv_pip_install \
   wandb \
   mlflow \
   av \
+  torchcodec \
   coverage \
   transformers \
   ninja \
