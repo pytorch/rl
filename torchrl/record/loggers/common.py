@@ -16,7 +16,13 @@ from torch import Tensor
 from torchrl._utils import implement_for
 
 _has_tv = importlib.util.find_spec("torchvision") is not None
-_has_torchcodec = importlib.util.find_spec("torchcodec") is not None
+try:
+    from torchcodec.encoders import VideoEncoder  # noqa: F401
+
+    _has_torchcodec = True
+    del VideoEncoder
+except Exception:
+    _has_torchcodec = False
 
 
 __all__ = ["Logger"]
