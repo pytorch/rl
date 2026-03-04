@@ -130,7 +130,6 @@ uv_pip_install \
   wandb \
   mlflow \
   av \
-  torchcodec \
   coverage \
   transformers \
   ninja \
@@ -242,7 +241,9 @@ fi
 
 # install torchcodec (from source for nightly to match PyTorch ABI)
 if [[ "$RELEASE" == 0 ]]; then
-  BUILD_AGAINST_ALL_FFMPEG_FROM_S3=1 uv_pip_install --no-build-isolation git+https://github.com/meta-pytorch/torchcodec.git
+  export BUILD_AGAINST_ALL_FFMPEG_FROM_S3=1
+  uv_pip_install --no-build-isolation git+https://github.com/meta-pytorch/torchcodec.git
+  unset BUILD_AGAINST_ALL_FFMPEG_FROM_S3
 else
   uv_pip_install torchcodec
 fi
