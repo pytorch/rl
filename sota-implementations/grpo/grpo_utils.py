@@ -649,8 +649,8 @@ def make_env(cfg: DictConfig, single_env: bool = False):
     # Setup environment
     max_steps = cfg.env.max_steps if cfg.env.reasoning else 1
     if cfg.env.dataset == "gsm8k":
-        # Reward scale is 0.0 to 100
-        reward_threshold = 20
+        # Reward scale is 0.0 to 1.0
+        reward_threshold = 0.1
         env = GSM8KEnv(
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,
@@ -659,9 +659,9 @@ def make_env(cfg: DictConfig, single_env: bool = False):
             device=torch.device("cpu"),
             ray_backend=True,
         )
-    elif cfg.env.dataset == "ifeval":  # ifeval
-        # Reward scale is 0.0 to 2.2
-        reward_threshold = 1.0
+    elif cfg.env.dataset == "ifeval":
+        # Reward scale is 0.0 to ~1.15
+        reward_threshold = 0.5
         env = IFEvalEnv(
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,
