@@ -420,6 +420,65 @@ By embracing such metaphors, we're encouraged to look beyond the obvious and app
         # env.check_env_specs()
 
 
+@pytest.mark.skipif(not _has_ifeval, reason="requires IFEval libs")
+class TestIFEvalRewardAggregator:
+    """Unit tests for the simplified IFEval reward aggregator."""
+
+    def test_perfect_score_with_format(self):
+        from torchrl.envs.llm.reward.ifeval._scorer import IFEvalScoreData, IfEvalScorer
+
+        scorer = IfEvalScorer()
+        score = IFEvalScoreData(
+            prompt_level_strict_acc=torch.tensor([True]),
+            inst_level_strict_acc=torch.tensor([True]),
+            prompt_level_loose_acc=torch.tensor([True]),
+            inst_level_loose_acc=torch.tensor([True]),
+            batch_size=(),
+        )
+        reward = scorer.default_reward_aggregator(
+            score,
+            think_blocks=["reasoning"],
+            answer_blocks=["answer"],
+        )
+        # format_score = 1.0 + format_bonus = 0.1 + 0.05 = 1.15
+        assert reward.item() == pytest.approx(1.15, abs=0.01)
+
+    def test_zero_score_no_answer(self):
+        from torchrl.envs.llm.reward.ifeval._scorer import IFEvalScoreData, IfEvalScorer
+
+        scorer = IfEvalScorer()
+        score = IFEvalScoreData(
+            prompt_level_strict_acc=torch.tensor([False]),
+            inst_level_strict_acc=torch.tensor([False]),
+            prompt_level_loose_acc=torch.tensor([False]),
+            inst_level_loose_acc=torch.tensor([False]),
+            batch_size=(),
+        )
+        reward = scorer.default_reward_aggregator(
+            score, think_blocks=[], answer_blocks=[]
+        )
+        # No format bonus, all metrics zero
+        assert reward.item() == pytest.approx(0.0, abs=0.01)
+
+    def test_reward_range_bounded(self):
+        from torchrl.envs.llm.reward.ifeval._scorer import IFEvalScoreData, IfEvalScorer
+
+        scorer = IfEvalScorer()
+        score = IFEvalScoreData(
+            prompt_level_strict_acc=torch.tensor([True]),
+            inst_level_strict_acc=torch.tensor([True]),
+            prompt_level_loose_acc=torch.tensor([True]),
+            inst_level_loose_acc=torch.tensor([True]),
+            batch_size=(),
+        )
+        reward = scorer.default_reward_aggregator(
+            score,
+            think_blocks=["t"],
+            answer_blocks=["a"],
+        )
+        assert 0.0 <= reward.item() <= 1.2
+
+
 class TestTools:
     @pytest.mark.skipif(not _has_transformers, reason="requires transformers")
     def test_python_interpreter_single_batch(self):
