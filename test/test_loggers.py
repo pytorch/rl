@@ -35,7 +35,9 @@ if _has_tv:
 else:
     TORCHVISION_VERSION = version.parse("0.0.1")
 
-_has_mp4 = (_has_tv and TORCHVISION_VERSION < version.parse("0.22")) or _has_torchcodec
+_has_mp4 = (
+    _has_tv and version.parse("0.20") <= TORCHVISION_VERSION < version.parse("0.22")
+) or _has_torchcodec
 
 if _has_tb:
     from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
