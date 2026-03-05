@@ -420,6 +420,60 @@ By embracing such metaphors, we're encouraged to look beyond the obvious and app
         # env.check_env_specs()
 
 
+class TestMATHRewardParser:
+    """Unit tests for the MATH reward parser (no model/dataset required)."""
+
+    def test_extract_boxed_simple(self):
+        from torchrl.envs.llm.reward.math import MATHRewardParser
+
+        assert MATHRewardParser.extract_boxed(r"The answer is $\boxed{42}$.") == "42"
+
+    def test_extract_boxed_nested(self):
+        from torchrl.envs.llm.reward.math import MATHRewardParser
+
+        assert (
+            MATHRewardParser.extract_boxed(r"$\boxed{\frac{1}{2}}$") == r"\frac{1}{2}"
+        )
+
+    def test_extract_boxed_no_boxed(self):
+        from torchrl.envs.llm.reward.math import MATHRewardParser
+
+        assert MATHRewardParser.extract_boxed("no boxed here") == "no boxed here"
+
+    def test_extract_tags(self):
+        from torchrl.envs.llm.reward.math import MATHRewardParser
+
+        think, answer = MATHRewardParser.extract_tags(
+            r"<think>reasoning</think> <answer>\frac{1}{2}</answer>"
+        )
+        assert think == "reasoning"
+        assert answer == r"\frac{1}{2}"
+
+    def test_correct_answer(self):
+        from torchrl.envs.llm.reward.math import MATHRewardParser
+
+        parser = MATHRewardParser()
+        td = parser._single_correctness_reward("42", "42", "reasoning")
+        assert td["success"]
+        assert td["reward"] == 1.0
+
+    def test_wrong_answer_with_format(self):
+        from torchrl.envs.llm.reward.math import MATHRewardParser
+
+        parser = MATHRewardParser()
+        td = parser._single_correctness_reward("42", "99", "reasoning")
+        assert not td["success"]
+        assert td["reward"] == 0.1
+
+    def test_no_answer(self):
+        from torchrl.envs.llm.reward.math import MATHRewardParser
+
+        parser = MATHRewardParser()
+        td = parser._single_correctness_reward("42", "", "")
+        assert not td["success"]
+        assert td["reward"] == 0.0
+
+
 @pytest.mark.skipif(not _has_ifeval, reason="requires IFEval libs")
 class TestIFEvalRewardAggregator:
     """Unit tests for the simplified IFEval reward aggregator."""

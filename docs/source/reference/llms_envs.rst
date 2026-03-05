@@ -20,6 +20,8 @@ The environment layer orchestrates data loading, tool execution, reward computat
     IFEvalEnv
     IfEvalScorer
     IFEvalScoreData
+    MATHEnv
+    MATHRewardParser
     LLMEnv
     LLMHashingEnv
     make_mlgym
