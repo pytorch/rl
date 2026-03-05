@@ -1007,6 +1007,7 @@ class TensorStorage(Storage):
         for datum, store in zip(data_flat, storage_flat):
             store[cursor] = datum
 
+    @compile_disable()
     def _get_new_len(self, data, cursor):
         int_cursor = _is_int(cursor)
         ndim = self.ndim - int_cursor
