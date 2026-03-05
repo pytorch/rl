@@ -6,5 +6,6 @@ from __future__ import annotations
 
 from .gsm8k import GSM8KRewardParser
 from .ifeval import IFEvalScoreData, IfEvalScorer
+from .math import MATHRewardParser
 
-__all__ = ["IfEvalScorer", "GSM8KRewardParser", "IFEvalScoreData"]
+__all__ = ["IfEvalScorer", "GSM8KRewardParser", "IFEvalScoreData", "MATHRewardParser"]
