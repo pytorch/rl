@@ -12,6 +12,8 @@ The environment layer orchestrates data loading, tool execution, reward computat
     :template: rl_template.rst
 
     ChatEnv
+    CountdownEnv
+    CountdownRewardParser
     DatasetChatEnv
     GSM8KEnv
     make_gsm8k_env

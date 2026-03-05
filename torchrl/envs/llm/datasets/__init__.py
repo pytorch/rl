@@ -4,11 +4,13 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from .countdown import CountdownEnv
 from .gsm8k import GSM8KEnv, GSM8KPrepareQuestion, make_gsm8k_env
 from .ifeval import IFEvalData, IFEvalEnv, IfEvalScorer
 from .math import MATHEnv
 
 __all__ = [
+    "CountdownEnv",
     "make_gsm8k_env",
     "GSM8KPrepareQuestion",
     "GSM8KEnv",
