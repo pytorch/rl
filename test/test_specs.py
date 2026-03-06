@@ -4639,6 +4639,30 @@ class TestIndexSelect:
             torch.index_select(stacked_spec, dim=0, index=torch.tensor([0]))
 
 
+def _has_mps():
+    if hasattr(torch, "mps") and hasattr(torch.mps, "is_available"):
+        return torch.mps.is_available()
+    return (
+        getattr(torch.backends, "mps", None) is not None
+        and torch.backends.mps.is_available()
+    )
+
+
+@pytest.mark.skipif(not _has_mps(), reason="MPS device not available")
+class TestMPSDtype:
+    """Tests that MPS-incompatible dtypes (float64) are downcast to float32 in tensor specs."""
+
+    def test_unbounded_to_mps_downcasts_float64(self):
+        """Unbounded.to('mps') downcasts float64 -> float32."""
+        spec_cpu = Unbounded(shape=(6,), device="cpu", dtype=torch.float64)
+        assert spec_cpu.dtype == torch.float64
+
+        with pytest.warns(UserWarning, match="MPS device does not support float64"):
+            spec_mps = spec_cpu.to("mps")
+        assert spec_mps.dtype == torch.float32
+        assert spec_mps.device.type == "mps"
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
