@@ -57,8 +57,8 @@ def _write_video(filename, video_array, **kwargs):  # noqa: F811
     preset = options.pop("preset", None)
     pixel_format = options.pop("pixel_format", None)
 
-    # VideoEncoder expects (N, C, H, W); callers pass (T, H, W, C)
-    video_array = video_array.permute(0, 3, 1, 2).contiguous()
+    # VideoEncoder expects (N, C, H, W) uint8; callers pass (T, H, W, C)
+    video_array = video_array.permute(0, 3, 1, 2).contiguous().to(torch.uint8)
 
     to_file_kwargs = {}
     if video_codec is not None:
