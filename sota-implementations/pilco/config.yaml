@@ -1,0 +1,18 @@
+env:
+  env_name: InvertedPendulum-v5
+  library: gym
+device: null
+logger:
+  backend: wandb
+  project_name: torchrl_pilco
+  group_name: null
+  video: True
+optim:
+  policy_lr: 5e-3
+pilco:
+  horizon: 40
+  initial_rollout_length: 200
+  max_rollout_length: 350
+  epochs: 3
+  policy_training_steps: 100
+  policy_n_basis: 10
