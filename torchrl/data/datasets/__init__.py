@@ -36,6 +36,11 @@ except ImportError:
     pass
 
 try:
+    from .tdmpc2 import TDMPC2ExperienceReplay
+except ImportError:
+    pass
+
+try:
     from .roboset import RobosetExperienceReplay
 except ImportError:
     pass
@@ -53,6 +58,7 @@ __all__ = [
     "GenDGRLExperienceReplay",
     "OpenMLExperienceReplay",
     "OpenXExperienceReplay",
+    "TDMPC2ExperienceReplay",
     "RobosetExperienceReplay",
     "VD4RLExperienceReplay",
 ]
