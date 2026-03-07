@@ -113,6 +113,15 @@ def _default_dtype_and_device(
         device = _make_ordinal_device(torch.device(device))
     elif not allow_none_device:
         device = torch.zeros(()).device
+
+    if device is not None and device.type == "mps" and dtype == torch.float64:
+        warnings.warn(
+            "MPS device does not support float64. Downcasting dtype from float64 to float32.",
+            UserWarning,
+            stacklevel=2,
+        )
+        dtype = torch.float32
+
     return dtype, device
 
 
