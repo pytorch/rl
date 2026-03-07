@@ -4652,6 +4652,15 @@ def _has_mps():
 class TestMPSDtype:
     """Tests that MPS-incompatible dtypes (float64) are downcast to float32 in tensor specs."""
 
+    def test_mps_does_not_support_float64(self):
+        """Assert that MPS still doesn't support float64.
+
+        If this test fails, MPS has gained float64 support and the downcasts
+        can be removed (e.g., in _default_dtype_and_device)
+        """
+        with pytest.raises(TypeError, match="MPS framework doesn't support float64"):
+            torch.ones(2, dtype=torch.float64, device="mps")
+
     def test_unbounded_to_mps_downcasts_float64(self):
         """Unbounded.to('mps') downcasts float64 -> float32."""
         spec_cpu = Unbounded(shape=(6,), device="cpu", dtype=torch.float64)
