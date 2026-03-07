@@ -46,6 +46,8 @@ __all__ = [
     "MOGymWrapper",
     "MeltingpotEnv",
     "MeltingpotWrapper",
+    "OpenEnvEnv",
+    "OpenEnvWrapper",
     "MultiThreadedEnv",
     "MultiThreadedEnvWrapper",
     "OpenMLEnv",
@@ -66,3 +68,17 @@ __all__ = [
     "register_gym_spec_conversion",
     "set_gym_backend",
 ]
+
+
+def __getattr__(name):
+    # Lazy import for OpenEnv to avoid circular imports: openenv imports from
+    # torchrl.envs.llm which eventually imports from torchrl.data, which may
+    # not be fully initialised yet.
+    if name in ("OpenEnvEnv", "OpenEnvWrapper"):
+        from .openenv import OpenEnvEnv, OpenEnvWrapper
+
+        _globals = globals()
+        _globals["OpenEnvEnv"] = OpenEnvEnv
+        _globals["OpenEnvWrapper"] = OpenEnvWrapper
+        return _globals[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
