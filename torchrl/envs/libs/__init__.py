@@ -15,6 +15,7 @@ from .gym import (
     register_gym_spec_conversion,
     set_gym_backend,
 )
+from .genesis import GenesisEnv, GenesisWrapper, genesis_cleanup
 from .habitat import HabitatEnv
 from .isaac_lab import IsaacLabWrapper
 from .isaacgym import IsaacGymEnv, IsaacGymWrapper
@@ -34,6 +35,9 @@ __all__ = [
     "BraxWrapper",
     "DMControlEnv",
     "DMControlWrapper",
+    "GenesisEnv",
+    "GenesisWrapper",
+    "genesis_cleanup",
     "GymEnv",
     "GymWrapper",
     "HabitatEnv",

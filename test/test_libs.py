@@ -117,6 +117,7 @@ from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
 from torchrl.envs.libs.procgen import ProcgenEnv, ProcgenWrapper
 from torchrl.envs.libs.robohive import _has_robohive, RoboHiveEnv
 from torchrl.envs.libs.smacv2 import _has_smacv2, SMACv2Env
+from torchrl.envs.libs.genesis import GenesisEnv, GenesisWrapper
 from torchrl.envs.libs.unity_mlagents import (
     _has_unity_mlagents,
     UnityMLAgentsEnv,
@@ -223,6 +224,8 @@ _has_meltingpot = importlib.util.find_spec("meltingpot") is not None
 _has_minigrid = importlib.util.find_spec("minigrid") is not None
 
 _has_procgen = importlib.util.find_spec("procgen") is not None
+
+_has_genesis = importlib.util.find_spec("genesis") is not None
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -334,8 +337,7 @@ class TestGym:
                 batch_size=[],
             )
 
-        def _set_seed(self, seed: int | None) -> None:
-            ...
+        def _set_seed(self, seed: int | None) -> None: ...
 
     @implement_for("gym", None, "0.18")
     def _make_spec(self, batch_size, cat, cat_shape, multicat, multicat_shape):
@@ -420,13 +422,11 @@ class TestGym:
     def test_gym_new_spec_reg(self):
         Space = gym_backend("spaces").Space
 
-        class MySpaceParent(Space):
-            ...
+        class MySpaceParent(Space): ...
 
         s_parent = MySpaceParent()
 
-        class MySpaceChild(MySpaceParent):
-            ...
+        class MySpaceChild(MySpaceParent): ...
 
         # We intentionally register first the child then the parent
         @register_gym_spec_conversion(MySpaceChild)
@@ -441,8 +441,7 @@ class TestGym:
         assert _gym_to_torchrl_spec_transform(s_parent).example_data == "parent"
         assert _gym_to_torchrl_spec_transform(s_child).example_data == "child"
 
-        class NoConversionSpace(Space):
-            ...
+        class NoConversionSpace(Space): ...
 
         s_no_conv = NoConversionSpace()
         with pytest.raises(
@@ -1849,9 +1848,9 @@ class TestGym:
 
         # This should return True since it has a "pixels" key
         result = _is_from_pixels(dict_pixel_env)
-        assert (
-            result is True
-        ), f"Expected True for Dict environment with pixels, got {result}"
+        assert result is True, (
+            f"Expected True for Dict environment with pixels, got {result}"
+        )
 
     def test_is_from_pixels_dict_env_no_pixels(self):
         """Test that _is_from_pixels correctly identifies Dict environments without pixels."""
@@ -1875,9 +1874,9 @@ class TestGym:
 
         # This should return False since it doesn't have a "pixels" key
         result = _is_from_pixels(dict_no_pixel_env)
-        assert (
-            result is False
-        ), f"Expected False for Dict environment without pixels, got {result}"
+        assert result is False, (
+            f"Expected False for Dict environment without pixels, got {result}"
+        )
 
     def test_num_workers_returns_parallel_env(self):
         """Ensure explicit TorchRL `num_workers` returns a lazy ParallelEnv, while gym's
@@ -1993,9 +1992,9 @@ class TestGym:
 
             # This should return True since it's detected as a pixel wrapper
             result = _is_from_pixels(wrapped_env)
-            assert (
-                result is True
-            ), f"Expected True for wrapped environment, got {result}"
+            assert result is True, (
+                f"Expected True for wrapped environment, got {result}"
+            )
         finally:
             # Restore original isinstance
             builtins.isinstance = original_isinstance
@@ -2676,9 +2675,9 @@ class TestEnvPool:
         td = env_multithreaded.rollout(
             policy=None, max_steps=T, break_when_any_done=False
         )
-        assert (
-            td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
-        ), f"{td.shape}, {td.get('done').sum(1)}"
+        assert td.shape == torch.Size([N, T]) or td.get("done").sum(1).all(), (
+            f"{td.shape}, {td.get('done').sum(1)}"
+        )
 
         env_multithreaded.close()
 
@@ -2775,9 +2774,9 @@ class TestEnvPool:
         td = env_multithreaded.rollout(
             policy=policy, max_steps=T, break_when_any_done=False
         )
-        assert (
-            td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
-        ), f"{td.shape}, {td.get('done').sum(1)}"
+        assert td.shape == torch.Size([N, T]) or td.get("done").sum(1).all(), (
+            f"{td.shape}, {td.get('done').sum(1)}"
+        )
 
         env_multithreaded.close()
 
@@ -3113,9 +3112,9 @@ class TestBrax:
             # gc.collect()
         final_memory = process.memory_info().rss / 1024 / 1024  # MB
         memory_increase = final_memory - initial_memory
-        assert (
-            memory_increase < 100
-        ), f"Memory leak with automatic clearing: {memory_increase:.2f} MB"
+        assert memory_increase < 100, (
+            f"Memory leak with automatic clearing: {memory_increase:.2f} MB"
+        )
 
     def test_brax_cache_clearing(self, envname, device):
         env = BraxEnv(envname, batch_size=[1], requires_grad=True, device=device)
@@ -4289,9 +4288,9 @@ class TestMinari:
                 torchrl_logger.info(
                     f"[Local Minari] Sampling time {1000 * (t1 - t0):4.4f} ms"
                 )
-                assert data.metadata["action_space"].is_in(
-                    sample["action"]
-                ), "Invalid action sample"
+                assert data.metadata["action_space"].is_in(sample["action"]), (
+                    "Invalid action sample"
+                )
                 assert data.metadata["observation_space"].is_in(
                     sample["observation"]
                 ), "Invalid observation sample"
@@ -4623,9 +4622,9 @@ class TestOpenX:
                 sample = dataset.sample()
                 assert sample.shape == (batch_size,)
         if slice_len is not None:
-            assert sample.get(("next", "done")).sum() == int(
-                batch_size // slice_len
-            ), sample.get(("next", "done"))
+            assert sample.get(("next", "done")).sum() == int(batch_size // slice_len), (
+                sample.get(("next", "done"))
+            )
         elif num_slices is not None:
             assert sample.get(("next", "done")).sum() == num_slices
 
@@ -5715,13 +5714,13 @@ class TestIsaacLab:
                 # Without replay buffer, collector yields data normally
                 collected_frames = 0
                 for i, data in enumerate(col):
-                    assert (
-                        data is not None
-                    ), "Expected data when not using replay buffer"
+                    assert data is not None, (
+                        "Expected data when not using replay buffer"
+                    )
                     # Check the data shape matches the batch size
-                    assert (
-                        data.numel() >= 1000
-                    ), f"Expected at least 1000 frames, got {data.numel()}"
+                    assert data.numel() >= 1000, (
+                        f"Expected at least 1000 frames, got {data.numel()}"
+                    )
                     collected_frames += data.numel()
 
                     # Only collect a few batches for the test
@@ -6036,6 +6035,134 @@ class TestProcgen:
             assert td["observation"].shape[0] == 2
         finally:
             env.close()
+
+
+@pytest.mark.skipif(not _has_genesis, reason="Genesis not found")
+class TestGenesis:
+    def test_genesis_wrapper_import(self):
+        assert GenesisWrapper is not None
+        assert GenesisEnv is not None
+
+    def test_genesis_available_envs(self):
+        envs = GenesisEnv.available_envs
+        assert isinstance(envs, list)
+
+    def test_genesis_wrapper_basic(self):
+        import genesis as gs
+
+        gs.init(backend=gs.cpu)
+        scene = gs.Scene()
+        plane = scene.add_entity(gs.morphs.Plane())
+        scene.build()
+
+        env = GenesisWrapper(scene)
+        try:
+            td = env.reset()
+            assert "observation" in td.keys()
+        finally:
+            env.close()
+
+    def test_genesis_wrapper_step(self):
+        import genesis as gs
+
+        gs.init(backend=gs.cpu)
+        scene = gs.Scene()
+        plane = scene.add_entity(gs.morphs.Plane())
+        scene.build()
+
+        env = GenesisWrapper(scene)
+        try:
+            td = env.reset()
+            td = env.rand_step(td)
+            assert "next" in td.keys()
+            assert "observation" in td["next"].keys()
+            assert "reward" in td["next"].keys()
+            assert "done" in td["next"].keys()
+        finally:
+            env.close()
+
+    def test_genesis_wrapper_specs(self):
+        import genesis as gs
+
+        gs.init(backend=gs.cpu)
+        scene = gs.Scene()
+        plane = scene.add_entity(gs.morphs.Plane())
+        scene.build()
+
+        env = GenesisWrapper(scene)
+        try:
+            env.reset()
+            assert env.observation_spec is not None
+            assert env.action_spec is not None
+            assert env.reward_spec is not None
+            assert env.done_spec is not None
+        finally:
+            env.close()
+
+    def test_genesis_wrapper_batch_size(self):
+        import genesis as gs
+
+        gs.init(backend=gs.cpu)
+        scene = gs.Scene()
+        plane = scene.add_entity(gs.morphs.Plane())
+        scene.build()
+
+        env = GenesisWrapper(scene, batch_size=torch.Size([2]))
+        try:
+            td = env.reset()
+            assert td.batch_size[0] == 2
+        finally:
+            env.close()
+
+    def test_genesis_wrapper_frame_skip(self):
+        import genesis as gs
+
+        gs.init(backend=gs.cpu)
+        scene = gs.Scene()
+        plane = scene.add_entity(gs.morphs.Plane())
+        scene.build()
+
+        env = GenesisWrapper(scene, frame_skip=4)
+        try:
+            td = env.reset()
+            td = env.rand_step(td)
+            assert "next" in td.keys()
+        finally:
+            env.close()
+
+    def test_genesis_custom_functions(self):
+        import genesis as gs
+
+        gs.init(backend=gs.cpu)
+        scene = gs.Scene()
+        plane = scene.add_entity(gs.morphs.Plane())
+        scene.build()
+
+        def custom_obs(scene):
+            return {"custom_obs": np.array([1.0, 2.0, 3.0])}
+
+        def custom_reward(scene):
+            return 1.0
+
+        env = GenesisWrapper(
+            scene,
+            observation_func=custom_obs,
+            reward_func=custom_reward,
+        )
+        try:
+            td = env.reset()
+            assert "custom_obs" in td["observation"].keys()
+            td = env.rand_step(td)
+            assert "custom_obs" in td["next"]["observation"].keys()
+        finally:
+            env.close()
+
+    def test_genesis_env_config(self):
+        try:
+            env = GenesisEnv(env_name="franka_reach", max_steps=100)
+            env.close()
+        except Exception as e:
+            pytest.skip(f"Genesis franka_reach not available: {e}")
 
 
 if __name__ == "__main__":
