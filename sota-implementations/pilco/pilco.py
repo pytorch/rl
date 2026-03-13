@@ -8,10 +8,11 @@ from tensordict.nn import TensorDictModule
 from torchrl._utils import get_available_device
 from torchrl.envs import EnvBase
 from torchrl.envs.utils import RandomPolicy
+from torchrl.modules.models import GPWorldModel
 from torchrl.objectives import ExponentialQuadraticCost
 from torchrl.record.loggers import generate_exp_name, get_logger, Logger
 
-from utils import BoTorchGPWorldModel, ImaginedEnv, make_env, RBFController
+from utils import ImaginedEnv, make_env, RBFController
 
 
 def pilco_loop(
@@ -62,9 +63,9 @@ def pilco_loop(
 
     cost_module = ExponentialQuadraticCost(reduction="none").to(env.device)
     for epoch in range(cfg.pilco.epochs):
-        base_world_model = BoTorchGPWorldModel(
-            obs_dim=obs_dim, action_dim=action_dim
-        ).to(env.device)
+        base_world_model = GPWorldModel(obs_dim=obs_dim, action_dim=action_dim).to(
+            env.device
+        )
         base_world_model.fit(rollout)
         base_world_model.freeze_and_detach()
 
