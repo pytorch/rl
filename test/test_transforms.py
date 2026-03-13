@@ -11043,6 +11043,23 @@ class TestTransforms:
         obs_spec = obs_spec[key]
         assert obs_spec.shape[-1] == 4 * env.base_env.observation_spec[key].shape[-1]
 
+    def test_transform__call_invoked_on_reset(self):
+        class _RecordTransform(Transform):
+            def __init__(self):
+                super().__init__()
+                self.called_on_reset = False
+
+            def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+                self.called_on_reset = True
+                tensordict.set("was_transformed_on_reset", torch.tensor(1))
+                return tensordict
+
+        env = TransformedEnv(ContinuousActionVecMockEnv(), _RecordTransform())
+        td = env.reset()
+        # check reset produced the transformed key (proves _call ran)
+        assert "was_transformed_on_reset" in td.keys()
+        assert int(td.get("was_transformed_on_reset").item()) == 1
+
     def test_insert(self):
         env = ContinuousActionVecMockEnv()
         obs_spec = env.observation_spec
