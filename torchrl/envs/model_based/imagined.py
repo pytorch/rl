@@ -36,6 +36,8 @@ class ImaginedEnv(ModelBasedEnvBase):
             reward, done) are copied into this imagined environment.
         batch_size (int, Sequence[int], torch.Size, optional): Override batch size.
             If ``None``, inferred from ``base_env`` (with a minimum of ``[1]``).
+        next_observation_key (str or tuple of str, optional): The key where the world
+            model writes the predicted next observation. Defaults to ``("next", "observation")``.
 
     Examples:
         >>> import torch
@@ -43,21 +45,26 @@ class ImaginedEnv(ModelBasedEnvBase):
         >>> from tensordict.nn import TensorDictModule
         >>> from torchrl.envs.model_based import ImaginedEnv, ModelBasedEnvBase
         >>> from torchrl.data import Composite, Unbounded
+        >>> base_env = GymEnv("Pendulum-v1")
+        >>> obs_dim = base_env.observation_spec["observation"].shape[-1]
         >>> # A toy world model that returns zero-mean, identity covariance
         >>> class DummyWorldModel(torch.nn.Module):
         ...     def __init__(self, obs_dim):
         ...         super().__init__()
         ...         self.obs_dim = obs_dim
         ...     def forward(self, action, observation):
-        ...         mean = observation.get("mean")
+        ...         # Assuming observation comes in as a dict with a "mean" key
+        ...         mean = observation.get("mean", observation)
         ...         var = torch.eye(self.obs_dim).expand(*mean.shape[:-1], -1, -1)
         ...         return mean, var
-        >>> obs_dim, act_dim = 4, 1
         >>> wm = TensorDictModule(
         ...     DummyWorldModel(obs_dim),
         ...     in_keys=["action", "observation"],
-        ...     out_keys=[("next_observation", "mean"), ("next_observation", "var")],
+        ...     out_keys=[("next", "observation", "mean"), ("next", "observation", "var")],
         ... )
+        >>> imagined_env = ImaginedEnv(wm, base_env, next_observation_key=("next", "observation"))
+        >>> # Collect an imagined rollout
+        >>> rollout = imagined_env.rollout(max_steps=5, policy=RandomPolicy(imagined_env.action_spec))
     """
 
     def __init__(
@@ -65,8 +72,11 @@ class ImaginedEnv(ModelBasedEnvBase):
         world_model_module: TensorDictModule,
         base_env: EnvBase,
         batch_size: int | torch.Size | Sequence[int] | None = None,
+        next_observation_key: str | tuple[str, ...] = ("next", "observation"),
         **kwargs,
     ) -> None:
+        self.next_observation_key = next_observation_key
+
         if batch_size is not None:
             batch_size = (
                 torch.Size(batch_size)
@@ -114,7 +124,7 @@ class ImaginedEnv(ModelBasedEnvBase):
         done = torch.zeros(*tensordict.shape, 1, dtype=torch.bool, device=self.device)
         out = TensorDict(
             {
-                "observation": tensordict.get("next_observation"),
+                "observation": tensordict.get(self.next_observation_key),
                 "reward": reward,
                 "done": done,
                 "terminated": done.clone(),

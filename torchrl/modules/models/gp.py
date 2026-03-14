@@ -29,8 +29,13 @@ class GPWorldModel(nn.Module):
     Requires ``botorch`` and ``gpytorch`` as optional dependencies.
 
     Args:
-        obs_dim (int): Dimensionality of the observation space.
-        action_dim (int): Dimensionality of the action space.
+        obs_dim (int): The dimension of the observation space.
+        action_dim (int): The dimension of the action space.
+        in_keys (list[str | tuple[str, ...]] | None, optional): The keys to read from the
+            input TensorDict. Defaults to ["action", "observation"].
+        out_keys (list[str | tuple[str, ...]] | None, optional): The keys to write the
+            predicted mean and variance to in the output TensorDict.
+            Defaults to [("next", "observation"), ("next", "observation_var")].
 
     Examples:
         >>> import torch
@@ -38,7 +43,13 @@ class GPWorldModel(nn.Module):
         >>> model = GPWorldModel(obs_dim=4, action_dim=1)  # doctest: +SKIP
     """
 
-    def __init__(self, obs_dim: int, action_dim: int) -> None:
+    def __init__(
+        self,
+        obs_dim: int,
+        action_dim: int,
+        in_keys: list[str | tuple[str, ...]] | None = None,
+        out_keys: list[str | tuple[str, ...]] | None = None,
+    ) -> None:
         if not _has_botorch or not _has_gpytorch:
             raise ImportError(
                 "botorch and gpytorch are required to use GPWorldModel. "
@@ -48,6 +59,27 @@ class GPWorldModel(nn.Module):
         self.obs_dim = obs_dim
         self.action_dim = action_dim
         self.input_dim = obs_dim + action_dim
+
+        self.in_keys = (
+            in_keys
+            if in_keys is not None
+            else [
+                ("action", "mean"),
+                ("action", "var"),
+                ("action", "cross_covariance"),
+                ("observation", "mean"),
+                ("observation", "var"),
+            ]
+        )
+
+        self.out_keys = (
+            out_keys
+            if out_keys is not None
+            else [
+                ("next", "observation", "mean"),
+                ("next", "observation", "var"),
+            ]
+        )
 
         self.model_list = None
 
@@ -166,60 +198,53 @@ class GPWorldModel(nn.Module):
         """Returns the extracted hyperparameters of each per-dimension GP."""
         return self.lengthscales, self.variances, self.noises
 
-    def forward(
-        self, action: TensorDictBase, observation: TensorDictBase
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Forward pass for the GPWorldModel.
 
         Routes the request to either the deterministic or uncertain forward pass
         depending on whether the observation input contains variance.
 
         Args:
-            action (TensorDictBase): The action tensordict.
-            observation (TensorDictBase): The observation tensordict.
+            tensordict (TensorDictBase): The input tensordict containing the action and observation.
 
         Returns:
             tuple[torch.Tensor, torch.Tensor]: A tuple containing the mean and
             variance tensors of the next observation.
         """
+        u_mean_key, u_var_key, u_cc_key, x_mean_key, x_var_key = self.in_keys
+
+        x_var = tensordict.get(x_var_key, None)
         observation_uncertain = False
-        x_var = observation.get("var", None)
         if x_var is not None:
             observation_uncertain = not torch.all(
                 torch.isclose(x_var, torch.zeros_like(x_var))
             )
+
         if observation_uncertain:
-            return self.uncertain_forward(action, observation)
+            return self.uncertain_forward(tensordict)
         else:
-            return self.deterministic_forward(action, observation)
+            return self.deterministic_forward(tensordict)
 
-    def freeze_and_detach(self) -> None:
-        """Freezes the model parameters so they are not updated during policy optimisation."""
-
-    def uncertain_forward(
-        self, action: TensorDictBase, obs: TensorDictBase
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def uncertain_forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Calculates the forward pass when the observation has uncertainty (non-zero variance).
 
         Propagates uncertainty through the Gaussian Process via exact moment matching.
 
         Args:
-            action (TensorDictBase): A tensordict containing ``"mean"``, ``"var"``, and
-                ``"cross_covariance"`` of the action.
-            obs (TensorDictBase): A tensordict containing the ``"mean"`` and ``"var"``
-                of the current observation.
+            tensordict (TensorDictBase): A tensordict containing the action and observation tensors.
 
         Returns:
-            tuple[torch.Tensor, torch.Tensor]: Next observation mean and variance matrices.
+            TensorDictBase: Next observation mean and variance matrices.
         """
         inv_K, beta = self.compute_factorizations()
         lengthscales, variances, noises = self._gather_gp_params()
+        u_mean_key, u_var_key, u_cc_key, x_mean_key, x_var_key = self.in_keys
 
-        m_x, s_x = obs.get("mean"), obs.get("var")
+        m_x, s_x = tensordict.get(x_mean_key), tensordict.get(x_var_key)
         m_u, s_u, c_xu = (
-            action.get("mean"),
-            action.get("var"),
-            action.get("cross_covariance"),
+            tensordict.get(u_mean_key),
+            tensordict.get(u_var_key),
+            tensordict.get(u_cc_key),
         )
 
         device, dtype = m_x.device, m_x.dtype
@@ -342,23 +367,24 @@ class GPWorldModel(nn.Module):
         s_x = s_x + 1e-8 * torch.eye(self.obs_dim, device=s_x.device).expand(
             s_x.shape[0], -1, -1
         )
-        return m_x, s_x
 
-    def deterministic_forward(
-        self, action: TensorDictBase, observation: TensorDictBase
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        out_mean_key, out_var_key = self.out_keys
+        tensordict.set(out_mean_key, m_x)
+        tensordict.set(out_var_key, s_x)
+        return tensordict
+
+    def deterministic_forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Calculates the forward pass when the input observation is deterministic (no variance).
 
         Args:
-            action (TensorDictBase): A tensordict containing the ``"mean"`` of the action.
-            observation (TensorDictBase): A tensordict containing the ``"mean"`` of the
-                current observation.
+            tensordict (TensorDictBase): A tensordict containing the action and observation tensors.
 
         Returns:
-            tuple[torch.Tensor, torch.Tensor]: Next observation mean and variance matrices.
+            TensorDictBase: Next observation mean and variance matrices.
         """
-        observation_mean = observation.get("mean")
-        action_mean = action.get("mean")
+        u_mean_key, u_var_key, u_cc_key, x_mean_key, x_var_key = self.in_keys
+        observation_mean = tensordict.get(x_mean_key)
+        action_mean = tensordict.get(u_mean_key)
 
         x_flat = observation_mean.view(-1, self.obs_dim)
         u_flat = action_mean.view(-1, self.action_dim)
@@ -380,4 +406,10 @@ class GPWorldModel(nn.Module):
         delta_mean = delta_mean_flat.view(*batch_shape, self.obs_dim)
         delta_std = delta_std_flat.view(*batch_shape, self.obs_dim)
 
-        return observation_mean + delta_mean, torch.diag_embed(delta_std**2)
+        m_x = observation_mean + delta_mean
+        s_x = torch.diag_embed(delta_std**2)
+
+        out_mean_key, out_var_key = self.out_keys
+        tensordict.set(out_mean_key, m_x)
+        tensordict.set(out_var_key, s_x)
+        return tensordict

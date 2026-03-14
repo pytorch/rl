@@ -71,16 +71,10 @@ def pilco_loop(
             env.device
         )
         base_world_model.fit(rollout)
-        base_world_model.freeze_and_detach()
-
-        world_model_module = TensorDictModule(
-            module=base_world_model,
-            in_keys=["action", "observation"],
-            out_keys=[("next_observation", "mean"), ("next_observation", "var")],
-        )
+        base_world_model.eval()
 
         imagined_env = ImaginedEnv(
-            world_model_module=world_model_module,
+            world_model_module=base_world_model,
             base_env=env,
         )
         reset_td = initial_observation.expand(*imagined_env.batch_size)
@@ -119,6 +113,15 @@ def pilco_loop(
             logger.log_scalar("eval/reward", reward, step=logger_step)
             logger.log_scalar("eval/steps", steps, step=logger_step)
 
+        test_rollout.set("observation", test_rollout.get(("observation", "mean")))
+        test_rollout.set("action", test_rollout.get(("action", "mean")))
+        test_rollout.set(
+            ("next", "observation"), test_rollout.get(("next", "observation", "mean"))
+        )
+
+        test_rollout = test_rollout.select(
+            *rollout.keys(include_nested=True, leaves_only=True)
+        )
         rollout = tensordict.cat([rollout, test_rollout], dim=0)
 
         if len(rollout) > cfg.pilco.max_rollout_length:
