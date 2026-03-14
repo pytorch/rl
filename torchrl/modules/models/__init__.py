@@ -16,6 +16,7 @@ from .exploration import (
     NoisyLinear,
     reset_noise,
 )
+from .gp import GPWorldModel
 from .llm import GPT2RewardModel
 from .model_based import (
     DreamerActor,
@@ -46,6 +47,7 @@ from .multiagent import (
     QMixer,
     VDNMixer,
 )
+from .rbf_controller import RBFController
 from .utils import Squeeze2dLayer, SqueezeLayer
 
 __all__ = [
@@ -53,6 +55,7 @@ __all__ = [
     "BatchRenorm1d",
     "DecisionTransformer",
     "GPT2RewardModel",
+    "GPWorldModel",
     "ConsistentDropout",
     "ConsistentDropoutModule",
     "NoisyLazyLinear",
@@ -81,6 +84,7 @@ __all__ = [
     "MultiAgentNetBase",
     "QMixer",
     "VDNMixer",
+    "RBFController",
     "Squeeze2dLayer",
     "SqueezeLayer",
 ]

@@ -8,11 +8,11 @@ from tensordict.nn import TensorDictModule
 from torchrl._utils import get_available_device
 from torchrl.envs import EnvBase
 from torchrl.envs.utils import RandomPolicy
-from torchrl.modules.models import GPWorldModel
+from torchrl.modules.models import GPWorldModel, RBFController
 from torchrl.objectives import ExponentialQuadraticCost
 from torchrl.record.loggers import generate_exp_name, get_logger, Logger
 
-from utils import ImaginedEnv, make_env, RBFController
+from utils import ImaginedEnv, make_env
 
 
 def pilco_loop(
