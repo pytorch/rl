@@ -3,16 +3,18 @@ import tensordict
 import torch
 from omegaconf import DictConfig
 
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torchrl._utils import get_available_device
-from torchrl.envs import EnvBase
+from torchrl.envs import EnvBase, TransformedEnv
+from torchrl.envs.model_based import ImaginedEnv
+from torchrl.envs.transforms import MeanActionSelector
 from torchrl.envs.utils import RandomPolicy
-from torchrl.modules.models import GPWorldModel
+from torchrl.modules.models import GPWorldModel, RBFController
 from torchrl.objectives import ExponentialQuadraticCost
 from torchrl.record.loggers import generate_exp_name, get_logger, Logger
 
-from utils import ImaginedEnv, make_env, RBFController
+from utils import make_env
 
 
 def pilco_loop(
@@ -61,6 +63,8 @@ def pilco_loop(
         }
     )
 
+    eval_env = TransformedEnv(env, MeanActionSelector())
+
     cost_module = ExponentialQuadraticCost(reduction="none").to(env.device)
     for epoch in range(cfg.pilco.epochs):
         base_world_model = GPWorldModel(obs_dim=obs_dim, action_dim=action_dim).to(
@@ -102,50 +106,14 @@ def pilco_loop(
                     "train/trajectory_cost", loss.item(), step=logger_step
                 )
 
-        def policy_for_env(td: TensorDictBase) -> TensorDictBase:
-            obs = td["observation"]
-            device, dtype = obs.device, obs.dtype
-
-            is_unbatched = obs.ndim == 1
-            if is_unbatched:
-                obs = obs.unsqueeze(0)
-
-            batch_shape = obs.shape[:-1]
-            D = obs.shape[-1]
-
-            policy_in = TensorDict(
-                {
-                    "observation": TensorDict(
-                        {
-                            "mean": obs,
-                            "var": torch.zeros(
-                                (*batch_shape, D, D), device=device, dtype=dtype
-                            ),
-                        },
-                        batch_size=batch_shape,
-                    )
-                },
-                batch_size=batch_shape,
-                device=device,
-            )
-
-            policy_out = policy_module(policy_in)
-            action_mean = policy_out["action", "mean"]
-
-            if is_unbatched:
-                action_mean = action_mean.squeeze(0)
-
-            td["action"] = action_mean
-            return td
-
-        test_rollout = env.rollout(
+        test_rollout = eval_env.rollout(
             max_steps=100,
-            policy=policy_for_env,
-            break_when_any_done=True,  # TODO change the max_steps back maybe?
+            policy=policy_module,
+            break_when_any_done=True,
         )
 
-        reward = test_rollout["episode_reward"][-1].item()
-        steps = test_rollout["step_count"].max().item()
+        reward = test_rollout["episode_reward"][-1].tolist()
+        steps = test_rollout["step_count"].max().tolist()
 
         if logger:
             logger.log_scalar("eval/reward", reward, step=logger_step)

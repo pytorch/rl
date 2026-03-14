@@ -19,15 +19,29 @@ except ImportError:
 
 
 class GPWorldModel(nn.Module):
-    """Gaussian Process World Model.
+    """Gaussian Process World Model for moment-matching model-based RL.
 
-    This module implements a Gaussian Process (GP) based world model using BoTorch and GPyTorch.
-    It models the transition dynamics of an environment by predicting the change in observation
-    given the current observation and action.
+    Fits one independent single-task GP per observation dimension using
+    BoTorch/GPyTorch. Each GP models the *transition residual*
+    ``delta_i = next_obs_i - obs_i`` given the concatenated ``[obs, action]``
+    input. After fitting, the model supports two forward modes:
+
+    * **Deterministic**: point predictions via the GP posterior mean/variance.
+    * **Uncertain** (moment-matching): propagates Gaussian beliefs
+      ``N(m, S)`` through the GP analytically, yielding the next-state
+      belief ``N(m', S')``. This is the core computation in PILCO
+      (Deisenroth & Rasmussen, 2011).
+
+    Requires ``botorch`` and ``gpytorch`` as optional dependencies.
 
     Args:
-        obs_dim (int): The dimension of the observation space.
-        action_dim (int): The dimension of the action space.
+        obs_dim (int): Dimensionality of the observation space.
+        action_dim (int): Dimensionality of the action space.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> model = GPWorldModel(obs_dim=4, action_dim=1)  # doctest: +SKIP
     """
 
     def __init__(self, obs_dim: int, action_dim: int) -> None:
@@ -140,9 +154,16 @@ class GPWorldModel(nn.Module):
         self._cached_beta = torch.stack(betas)
 
     def compute_factorizations(self) -> tuple[torch.Tensor, torch.Tensor]:
+        """Returns the cached kernel inverse and weight vectors.
+
+        Returns:
+            inv_K (Tensor): Inverse kernel matrices, shape ``(obs_dim, N, N)``.
+            beta (Tensor): Weight vectors ``K^{-1} y``, shape ``(obs_dim, N)``.
+        """
         return self._cached_inv_K, self._cached_beta
 
     def _gather_gp_params(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Returns the extracted hyperparameters of each per-dimension GP."""
         return self.lengthscales, self.variances, self.noises
 
     def forward(
@@ -173,7 +194,7 @@ class GPWorldModel(nn.Module):
             return self.deterministic_forward(action, observation)
 
     def freeze_and_detach(self) -> None:
-        """Freezes the model and detaches gradients."""
+        """Freezes the model parameters so they are not updated during policy optimisation."""
 
     def uncertain_forward(
         self, action: TensorDictBase, obs: TensorDictBase
@@ -230,8 +251,8 @@ class GPWorldModel(nn.Module):
         scaled_exp = torch.exp(-torch.sum(inv_N * t, dim=-1) / 2)
         lb = scaled_exp * beta.unsqueeze(0)
 
-        det_B = torch.linalg.det(B_mat)
-        c = variances.squeeze(1).unsqueeze(0) / torch.sqrt(det_B)
+        _, log_det_B = torch.linalg.slogdet(B_mat)
+        c = variances.squeeze(1).unsqueeze(0) * torch.exp(-0.5 * log_det_B)
 
         pred_mean = torch.sum(lb, dim=-1) * c.squeeze(0)
 
@@ -284,8 +305,8 @@ class GPWorldModel(nn.Module):
                     batch_size, num_train_pts, num_train_pts
                 )
 
-                det_R_ab = torch.linalg.det(R_ab)
-                c_ab = variances[a] * variances[b] / torch.sqrt(det_R_ab)
+                _, log_det_R_ab = torch.linalg.slogdet(R_ab)
+                c_ab = variances[a] * variances[b] * torch.exp(-0.5 * log_det_R_ab)
 
                 Q_ab = c_ab.view(-1, 1, 1) * torch.exp(exp1.unsqueeze(0) + exp2)
 
@@ -300,7 +321,7 @@ class GPWorldModel(nn.Module):
                     invK_Q = torch.matmul(inv_K[a].unsqueeze(0), Q_ab)
                     trace_val = torch.diagonal(invK_Q, dim1=-2, dim2=-1).sum(-1)
 
-                    pred_cov[:, a, a] += variances[a] - trace_val + noises[a].item()
+                    pred_cov[:, a, a] += variances[a] - trace_val + noises[a]
 
         outer_mean = torch.bmm(pred_mean.unsqueeze(-1), pred_mean.unsqueeze(-2))
         pred_cov = pred_cov - outer_mean
