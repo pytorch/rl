@@ -2,20 +2,14 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import importlib.util
+
 import torch
 import torch.nn as nn
 from tensordict import TensorDictBase
 
-try:
-    from botorch.fit import fit_gpytorch_mll
-    from botorch.models import ModelListGP, SingleTaskGP
-    from gpytorch.kernels import RBFKernel, ScaleKernel
-    from gpytorch.mlls import SumMarginalLogLikelihood
-    from gpytorch.priors import GammaPrior
-
-    _has_botorch = True
-except ImportError:
-    _has_botorch = False
+_has_gpytorch = importlib.util.find_spec("gpytorch") is not None
+_has_botorch = importlib.util.find_spec("botorch") is not None
 
 
 class GPWorldModel(nn.Module):
@@ -45,7 +39,7 @@ class GPWorldModel(nn.Module):
     """
 
     def __init__(self, obs_dim: int, action_dim: int) -> None:
-        if not _has_botorch:
+        if not _has_botorch or not _has_gpytorch:
             raise ImportError(
                 "botorch and gpytorch are required to use GPWorldModel. "
                 "Please install them to proceed."
@@ -55,7 +49,7 @@ class GPWorldModel(nn.Module):
         self.action_dim = action_dim
         self.input_dim = obs_dim + action_dim
 
-        self.model_list: ModelListGP | None = None
+        self.model_list = None
 
         self.register_buffer("X_train", torch.empty(0))
         self.register_buffer("lengthscales", torch.zeros(self.obs_dim, self.input_dim))
@@ -78,6 +72,12 @@ class GPWorldModel(nn.Module):
         Args:
             dataset (TensorDictBase): A dataset of collected transitions.
         """
+        from botorch.fit import fit_gpytorch_mll
+        from botorch.models import ModelListGP, SingleTaskGP
+        from gpytorch.kernels import RBFKernel, ScaleKernel
+        from gpytorch.mlls import SumMarginalLogLikelihood
+        from gpytorch.priors import GammaPrior
+
         obs = dataset["observation"]
         action = dataset["action"]
         next_obs = dataset[("next", "observation")]
@@ -244,7 +244,7 @@ class GPWorldModel(nn.Module):
         B_mat = inv_L.unsqueeze(0) @ joint_var.unsqueeze(1) @ inv_L.unsqueeze(0)
         B_mat = B_mat + torch.eye(
             self.input_dim, dtype=m_x.dtype, device=m_x.device
-        ).view(1, 1, self.input_dim, self.input_dim)
+        ).reshape(1, 1, self.input_dim, self.input_dim)
 
         t = torch.linalg.solve(B_mat, inv_N.transpose(-2, -1)).transpose(-2, -1)
 

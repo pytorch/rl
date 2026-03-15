@@ -30,6 +30,7 @@ REPO_DIR="/root/rl"
 VENV_DIR="/root/torchrl_venv"
 MODE="isaac"      # "isaac" or "dmcontrol"
 BUILD_ONLY=false
+GPUS=""            # explicit GPU set, e.g. "3,4,5"
 EXTRA_ARGS=()      # extra Hydra overrides forwarded to the training script
 
 # ---- Parse arguments --------------------------------------------------------
@@ -38,6 +39,7 @@ for arg in "$@"; do
         --build-only)   BUILD_ONLY=true ;;
         --dmcontrol)    MODE="dmcontrol" ;;
         --isaac)        MODE="isaac" ;;
+        --gpus=*)       GPUS="${arg#--gpus=}" ;;
         *)              EXTRA_ARGS+=("$arg") ;;
     esac
 done
@@ -45,15 +47,38 @@ done
 # Avoid "'': unknown terminal type" in headless containers
 export TERM="${TERM:-xterm}"
 
+# Resolve GPU set early so we can use it for zombie cleanup
+if [[ -n "$GPUS" ]]; then
+    export CUDA_VISIBLE_DEVICES="$GPUS"
+elif [[ "$MODE" == "isaac" ]]; then
+    export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2}"
+fi
+
 echo "============================================================"
 echo " setup-and-run.sh"
 echo "   mode=$MODE  build_only=$BUILD_ONLY"
+echo "   gpus=${CUDA_VISIBLE_DEVICES:-<all>}"
 echo "   extra_args=${EXTRA_ARGS[*]:-<none>}"
 echo "============================================================"
 
-# ---- 0) Kill zombie Python processes from previous runs ---------------------
-echo "* Killing leftover Python processes..."
-pkill -9 -f python || true
+# ---- 0) Kill zombie Python processes on the SAME GPUs ----------------------
+# Only kill dreamer processes whose CUDA_VISIBLE_DEVICES matches ours,
+# so that a second experiment on different GPUs is left untouched.
+echo "* Killing leftover dreamer processes on GPUs=${CUDA_VISIBLE_DEVICES:-<all>}..."
+if [[ -n "${CUDA_VISIBLE_DEVICES:-}" ]]; then
+    # Find dreamer_isaac.py PIDs whose /proc/<pid>/environ contains our GPU set
+    for pid in $(pgrep -f "dreamer_isaac.py|dreamer.py" 2>/dev/null || true); do
+        proc_env=$(tr '\0' '\n' < /proc/$pid/environ 2>/dev/null || true)
+        proc_gpus=$(echo "$proc_env" | grep '^CUDA_VISIBLE_DEVICES=' | head -1 | cut -d= -f2)
+        if [[ "$proc_gpus" == "$CUDA_VISIBLE_DEVICES" ]] || [[ -z "$proc_gpus" ]]; then
+            echo "  Killing PID $pid (CUDA_VISIBLE_DEVICES=$proc_gpus)"
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+    done
+else
+    # No GPU constraint — kill all dreamer processes
+    pkill -9 -f "dreamer_isaac.py|dreamer.py" || true
+fi
 sleep 1
 
 # ---- 1) System dependencies ------------------------------------------------
@@ -203,8 +228,8 @@ echo "============================================================"
 cd "$REPO_DIR"
 
 if [[ "$MODE" == "isaac" ]]; then
-    # Expose 3 GPUs: GPU 0 = sim, GPU 1 = training, GPU 2 = eval (rendering)
-    export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2}"
+    # GPUs already set above: GPU0 = sim, GPU1 = training, GPU2 = eval (rendering)
+    echo "  CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
     $PYTHON "sota-implementations/dreamer/dreamer_isaac.py" "${EXTRA_ARGS[@]}"
 else
     export MUJOCO_GL=egl
