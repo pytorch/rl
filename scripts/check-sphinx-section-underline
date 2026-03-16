@@ -1,128 +1,149 @@
 #!/usr/bin/env python3
-"""Check that Sphinx/ReST section underlines match title lengths."""
-import re
-import sys
+"""Check that RST title underlines (and overlines) have the same length as the title text."""
+
+import argparse
 from pathlib import Path
 
-# Pattern to match Sphinx section titles followed by underlines
-# Supports: = - ` : . ' " ~ ^ _ * + # < >
-SECTION_PATTERN = re.compile(r"^([^\n]+)\n([~=\-^`':\"#\*_\+.<>]+)\n", re.MULTILINE)
+RST_SECTION_CHARS = frozenset("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
 
 
-def fix_file(path):
-    """Fix underline length mismatches in a file."""
-    try:
-        text = Path(path).read_text(encoding="utf-8")
-    except Exception as e:
-        print(f"Warning: Could not read {path}: {e}")
+def _strip_bom(line: str) -> str:
+    """Strip the Unicode BOM (U+FEFF) that some generators emit."""
+    return line.lstrip("\ufeff")
+
+
+def _is_section_line(line: str) -> bool:
+    """Return True if *line* is composed entirely of one repeated RST section character."""
+    if not line:
         return False
-
-    original_text = text
-    fixed_count = 0
-
-    def replace_underline(match):
-        nonlocal fixed_count
-        title, underline = match.groups()
-        title_stripped = title.strip()
-        underline_stripped = underline.strip()
-
-        # Skip if title is empty or looks like it might be a code block or other content
-        if not title_stripped or title_stripped.startswith(".."):
-            return match.group(0)
-
-        if len(title_stripped) != len(underline_stripped):
-            # Get the underline character and create correct length underline
-            underline_char = underline_stripped[0]
-            correct_underline = underline_char * len(title_stripped)
-            fixed_count += 1
-            return f"{title}\n{correct_underline}\n"
-
-        return match.group(0)
-
-    text = SECTION_PATTERN.sub(replace_underline, text)
-
-    if text != original_text:
-        Path(path).write_text(text, encoding="utf-8")
-        return fixed_count
-
-    return 0
+    if line[0] not in RST_SECTION_CHARS:
+        return False
+    return len(set(line)) == 1
 
 
-def check_file(path):
-    """Check a single file for underline length mismatches."""
-    try:
-        text = Path(path).read_text(encoding="utf-8")
-    except Exception as e:
-        print(f"Warning: Could not read {path}: {e}")
-        return []
+def _is_title_candidate(line: str) -> bool:
+    """Return True if *line* could be an RST section title."""
+    if not line or line[0] == " ":
+        return False
+    if _is_section_line(line):
+        return False
+    if line.startswith(">>>") or line.startswith("..."):
+        return False
+    return True
 
-    errors = []
 
-    for match in SECTION_PATTERN.finditer(text):
-        title, underline = match.groups()
-        title_stripped = title.strip()
-        underline_stripped = underline.strip()
+def _visible_len(line: str) -> int:
+    """Length ignoring BOM characters."""
+    return len(_strip_bom(line))
 
-        # Skip if title is empty or looks like it might be a code block or other content
-        if not title_stripped or title_stripped.startswith(".."):
+
+def _scan(lines: list[str]) -> list[tuple[int, str, int, int, int]]:
+    """Return ``(marker_idx, title, title_len, marker_len, is_overline)`` for every mismatch."""
+    n = len(lines)
+    errors: list[tuple[int, str, int, int, int]] = []
+    consumed: set[int] = set()
+
+    i = 0
+    while i < n:
+        line = lines[i]
+
+        if not _is_section_line(line) or line[0] == " ":
+            i += 1
             continue
 
-        if len(title_stripped) != len(underline_stripped):
-            # Calculate line number
-            line_num = text.count("\n", 0, match.start()) + 1
-            errors.append(
-                f"{path}:{line_num}: "
-                f"title '{title_stripped}' length {len(title_stripped)}, "
-                f"underline length {len(underline_stripped)}"
-            )
+        # --- overline + title + underline ---
+        title_candidate = _strip_bom(lines[i + 1]) if i + 1 < n else ""
+        if (
+            i + 2 < n
+            and _is_title_candidate(title_candidate)
+            and _is_section_line(lines[i + 2])
+            and lines[i + 2][0] == line[0]
+        ):
+            title = title_candidate
+            title_len = len(title)
+
+            if len(line) != title_len:
+                errors.append((i, title, title_len, len(line), True))
+            if len(lines[i + 2]) != title_len:
+                errors.append((i + 2, title, title_len, len(lines[i + 2]), False))
+            consumed.update({i, i + 1, i + 2})
+            i += 3
+            continue
+
+        # --- title (previous line) + underline ---
+        if i > 0 and i not in consumed:
+            prev = _strip_bom(lines[i - 1])
+            if _is_title_candidate(prev):
+                title_len = len(prev)
+                if len(line) != title_len:
+                    errors.append((i, prev, title_len, len(line), False))
+
+        i += 1
 
     return errors
 
 
-def main(argv):
-    """Main entry point for the hook."""
-    # Check for --fix flag
-    fix_mode = "--fix" in argv
-    if fix_mode:
-        argv = [arg for arg in argv if arg != "--fix"]
+def fix_file(filepath: str) -> list[tuple[int, str, int, int]]:
+    """Fix marker lines in-place and return the list of mismatches that were corrected."""
+    with open(filepath) as fh:
+        raw_lines = fh.readlines()
 
-    if len(argv) < 2:
-        print("✅ Sphinx section underline check: no files to check.")
-        sys.exit(0)
+    lines = [raw.rstrip("\n\r") for raw in raw_lines]
+    mismatches = _scan(lines)
 
-    if fix_mode:
-        total_fixed = 0
-        for path in argv[1:]:
-            fixed_count = fix_file(path)
-            if fixed_count:
-                print(f"✏️  Fixed {fixed_count} section(s) in {path}")
-                total_fixed += fixed_count
+    reported: list[tuple[int, str, int, int]] = []
+    fixed_indices: dict[int, str] = {}
+    for marker_idx, title, title_len, marker_len, _is_over in mismatches:
+        reported.append((marker_idx + 1, title, title_len, marker_len))
+        fixed_indices[marker_idx] = lines[marker_idx][0] * title_len
 
-        if total_fixed:
-            print(f"\n✅ Fixed {total_fixed} section underline(s) total.")
-            sys.exit(0)
-        else:
-            print("✅ Sphinx section underline check: no fixes needed.")
-            sys.exit(0)
-    else:
-        all_errors = []
-        for path in argv[1:]:
-            all_errors.extend(check_file(path))
+    if fixed_indices:
+        with open(filepath, "w") as fh:
+            for idx, raw_line in enumerate(raw_lines):
+                if idx in fixed_indices:
+                    fh.write(fixed_indices[idx] + "\n")
+                else:
+                    fh.write(raw_line)
 
-        if all_errors:
-            print("❌ Sphinx section underline length errors:\n")
-            for e in all_errors:
-                print("  ", e)
-            print("\nFix underline lengths to match title text.")
-            print("Or run with --fix flag to automatically fix them:")
+    return reported
+
+
+def check_file(filepath: str) -> list[tuple[int, str, int, int]]:
+    """Return ``(lineno, title, title_len, marker_len)`` for every mismatch in *filepath*."""
+    with open(filepath) as fh:
+        raw_lines = fh.readlines()
+
+    lines = [raw.rstrip("\n\r") for raw in raw_lines]
+    return [
+        (marker_idx + 1, title, title_len, marker_len)
+        for marker_idx, title, title_len, marker_len, _ in _scan(lines)
+    ]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "files", nargs="*", help="RST files to check (default: all docs/**/*.rst)"
+    )
+    parser.add_argument("--fix", action="store_true", help="Fix underlines in-place")
+    args = parser.parse_args()
+
+    paths = args.files or [str(p) for p in Path("docs").rglob("*.rst")]
+
+    handler = fix_file if args.fix else check_file
+    failures = 0
+    for path in sorted(paths):
+        for lineno, title, title_len, marker_len in handler(path):
+            verb = "fixed" if args.fix else "found"
             print(
-                f"  python3 scripts/check-sphinx-section-underline --fix {' '.join(argv[1:])}"
+                f"{path}:{lineno}: title/underline length mismatch ({verb}): "
+                f"title {title_len!r} != marker {marker_len!r}  "
+                f"({title!r})"
             )
-            sys.exit(1)
-        else:
-            print("✅ Sphinx section underline check passed.")
-            sys.exit(0)
+            failures += 1
+
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    raise SystemExit(main())
