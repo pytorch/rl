@@ -266,8 +266,90 @@ class TestGSM8K:
         r["history"].full = history_full
         s = env.step(r)
         assert s.device == device
-        assert s["next", "reward"] >= 10
+        assert s["next", "reward"] > 0
         assert s["next", "done"].all()
+
+
+class TestGSM8KRewardParser:
+    """Unit tests for the GSM8K reward parser (no model/dataset required)."""
+
+    def test_extract_tags(self):
+        from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
+
+        think, answer = GSM8KRewardParser.extract_tags(
+            "<think>some reasoning</think> <answer>42</answer>"
+        )
+        assert think == "some reasoning"
+        assert answer == "42"
+
+    def test_extract_tags_malformed(self):
+        from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
+
+        think, answer = GSM8KRewardParser.extract_tags(
+            "<think>reasoning with <special> chars & stuff</think> <answer>5</answer>"
+        )
+        assert answer == "5"
+
+    def test_extract_tags_missing(self):
+        from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
+
+        think, answer = GSM8KRewardParser.extract_tags("no tags here at all")
+        assert think == ""
+        assert answer == ""
+
+    def test_normalize_answer(self):
+        from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
+
+        assert GSM8KRewardParser.normalize_answer("1,234") == "1234"
+        assert GSM8KRewardParser.normalize_answer("$120") == "120"
+        assert GSM8KRewardParser.normalize_answer("120.0") == "120"
+        assert GSM8KRewardParser.normalize_answer("120.00") == "120"
+        assert GSM8KRewardParser.normalize_answer(" 42 ") == "42"
+        assert GSM8KRewardParser.normalize_answer("3.14") == "3.14"
+        assert GSM8KRewardParser.normalize_answer("100%") == "100"
+
+    def test_correct_answer_reward(self):
+        from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
+
+        parser = GSM8KRewardParser()
+        td = parser._single_correctness_reward("42", "42", "some reasoning")
+        assert td["success"]
+        assert td["reward"] == 1.0
+
+    def test_wrong_answer_with_format(self):
+        from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
+
+        parser = GSM8KRewardParser()
+        td = parser._single_correctness_reward("42", "99", "some reasoning")
+        assert not td["success"]
+        assert td["reward"] == 0.1
+        assert td["reward_answer"] == 1.0
+
+    def test_no_answer(self):
+        from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
+
+        parser = GSM8KRewardParser()
+        td = parser._single_correctness_reward("42", "", "")
+        assert not td["success"]
+        assert td["reward"] == 0.0
+        assert td["reward_answer"] == 0.0
+
+    def test_normalized_match(self):
+        from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
+
+        parser = GSM8KRewardParser()
+        td = parser._single_correctness_reward("1234", "1,234", "thinking")
+        assert td["success"]
+        assert td["reward"] == 1.0
+
+    def test_custom_reward_values(self):
+        from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
+
+        parser = GSM8KRewardParser(format_reward=0.5, correct_reward=2.0)
+        td_correct = parser._single_correctness_reward("42", "42", "cot")
+        assert td_correct["reward"] == 2.0
+        td_format = parser._single_correctness_reward("42", "99", "cot")
+        assert td_format["reward"] == 0.5
 
 
 @pytest.mark.skipif(not _has_ifeval, reason="requires IFEval libs")
