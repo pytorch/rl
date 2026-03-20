@@ -56,7 +56,12 @@ from torchrl.envs import (
     SerialEnv,
     set_gym_backend,
 )
-from torchrl.envs.batched_envs import _stackable
+from torchrl.envs.batched_envs import (
+    _has_float64_leaf,
+    _stackable,
+    _td_to_device_mps_safe,
+    _to_device_mps_safe,
+)
 from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, GymWrapper
@@ -4832,6 +4837,193 @@ class TestAsyncEnvPool:
             env.check_env_specs(break_when_any_done="both")
         finally:
             base_env._maybe_shutdown()
+
+
+def _has_mps():
+    if hasattr(torch, "mps") and hasattr(torch.mps, "is_available"):
+        return torch.mps.is_available()
+    return (
+        getattr(torch.backends, "mps", None) is not None
+        and torch.backends.mps.is_available()
+    )
+
+
+@pytest.mark.skipif(not _has_mps(), reason="MPS device not available")
+class TestMPSDeviceCasting:
+    def test_mps_does_not_support_float64(self):
+        """Assert that MPS still doesn't support float64.
+
+        If this test fails, MPS has gained float64 support and the downcasts
+        can be removed.
+        """
+        with pytest.raises(TypeError, match="MPS framework doesn't support float64"):
+            torch.ones(2, dtype=torch.float64, device="mps")
+
+    def test_to_device_mps_safe_float64_downcast(self):
+        t = torch.randn(4, dtype=torch.float64, device="cpu")
+        result = _to_device_mps_safe(t, torch.device("mps"))
+        assert result.device.type == "mps"
+        assert result.dtype == torch.float32
+
+    def test_td_to_device_mps_safe_downcasts_float64(self):
+        td = TensorDict(
+            {
+                "obs": torch.randn(3, dtype=torch.float64),
+                "flag": torch.ones(1, dtype=torch.bool),
+            },
+            batch_size=[],
+        )
+        result = _td_to_device_mps_safe(td, torch.device("mps"))
+        assert result["obs"].device.type == "mps"
+        assert result["obs"].dtype == torch.float32
+        assert result["flag"].device.type == "mps"
+        assert result["flag"].dtype == torch.bool
+
+    def test_has_float64_leaf(self):
+        from torchrl.data import Unbounded
+
+        spec_f64 = Composite(
+            obs=Unbounded(shape=(3,), dtype=torch.float64, device="cpu")
+        )
+        assert _has_float64_leaf(spec_f64) is True
+
+        spec_mixed_dtype_with_f64 = Composite(
+            obs32=Unbounded(shape=(3,), dtype=torch.float32, device="cpu"),
+            obs64=Unbounded(shape=(3,), dtype=torch.float64, device="cpu"),
+        )
+        assert _has_float64_leaf(spec_mixed_dtype_with_f64) is True
+
+        spec_f32 = Composite(
+            obs=Unbounded(shape=(3,), dtype=torch.float32, device="cpu")
+        )
+        assert _has_float64_leaf(spec_f32) is False
+
+        inner = Composite(obs=Unbounded(shape=(3,), dtype=torch.float64, device="cpu"))
+        outer = Composite(next=inner)
+        assert _has_float64_leaf(outer) is True
+
+        assert _has_float64_leaf(Composite()) is False
+
+    class _Float64ObsEnv(EnvBase):
+        """Minimal env that produces float64 observations on CPU."""
+
+        def __init__(self):
+            super().__init__(device="cpu")
+            self.observation_spec = Composite(
+                observation=Unbounded(shape=(4,), dtype=torch.float64),
+            )
+            self.action_spec = Unbounded(shape=(2,))
+            self.reward_spec = Unbounded(shape=(1,))
+
+        def _reset(self, tensordict):
+            return TensorDict(
+                {
+                    "observation": torch.randn(4, dtype=torch.float64),
+                    "done": torch.zeros(1, dtype=torch.bool),
+                    "terminated": torch.zeros(1, dtype=torch.bool),
+                },
+                batch_size=[],
+            )
+
+        def _step(self, tensordict):
+            return TensorDict(
+                {
+                    "observation": torch.randn(4, dtype=torch.float64),
+                    "reward": torch.zeros(1, dtype=torch.float64),
+                    "done": torch.zeros(1, dtype=torch.bool),
+                    "terminated": torch.zeros(1, dtype=torch.bool),
+                },
+                batch_size=[],
+            )
+
+        def _set_seed(self, seed):
+            return seed
+
+    _MPS_FLOAT64_WARNING = r"Sub-environments produce float64 data but the batched env device is 'mps.*' which does not support float64\. All float64 specs and tensors will be downcast to float32\."
+
+    def test_serial_env_mps_parent_cpu_worker_reset(self):
+        with pytest.warns(UserWarning, match=self._MPS_FLOAT64_WARNING):
+            env = SerialEnv(2, self._Float64ObsEnv, device="mps")
+        try:
+            td = env.reset()
+            assert td.device.type == "mps"
+            assert td["observation"].dtype == torch.float32
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_serial_env_mps_parent_cpu_worker_rollout(self):
+        with pytest.warns(UserWarning, match=self._MPS_FLOAT64_WARNING):
+            env = SerialEnv(2, self._Float64ObsEnv, device="mps")
+        try:
+            policy = RandomPolicy(env.action_spec)
+            td = env.rollout(max_steps=3, policy=policy)
+            assert td.device.type == "mps"
+            assert td["observation"].dtype == torch.float32
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_parallel_env_mps_parent_cpu_worker_reset(self):
+        with pytest.warns(UserWarning, match=self._MPS_FLOAT64_WARNING):
+            env = ParallelEnv(2, self._Float64ObsEnv, device="mps")
+        try:
+            td = env.reset()
+            assert td.device.type == "mps"
+            assert td["observation"].dtype == torch.float32
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_parallel_env_mps_parent_cpu_worker_rollout(self):
+        with pytest.warns(UserWarning, match=self._MPS_FLOAT64_WARNING):
+            env = ParallelEnv(2, self._Float64ObsEnv, device="mps")
+        try:
+            policy = RandomPolicy(env.action_spec)
+            td = env.rollout(max_steps=3, policy=policy)
+            assert td.device.type == "mps"
+            assert td["observation"].dtype == torch.float32
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_serial_env_no_buffers_mps_reset(self):
+        with pytest.warns(UserWarning, match=self._MPS_FLOAT64_WARNING):
+            env = SerialEnv(2, self._Float64ObsEnv, device="mps", use_buffers=False)
+        try:
+            td = env.reset()
+            assert td.device.type == "mps"
+            assert td["observation"].dtype == torch.float32
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_serial_env_no_buffers_mps_rollout(self):
+        with pytest.warns(UserWarning, match=self._MPS_FLOAT64_WARNING):
+            env = SerialEnv(2, self._Float64ObsEnv, device="mps", use_buffers=False)
+        try:
+            policy = RandomPolicy(env.action_spec)
+            td = env.rollout(max_steps=3, policy=policy)
+            assert td.device.type == "mps"
+            assert td["observation"].dtype == torch.float32
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_parallel_env_no_buffers_mps_reset(self):
+        with pytest.warns(UserWarning, match=self._MPS_FLOAT64_WARNING):
+            env = ParallelEnv(2, self._Float64ObsEnv, device="mps", use_buffers=False)
+        try:
+            td = env.reset()
+            assert td.device.type == "mps"
+            assert td["observation"].dtype == torch.float32
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_parallel_env_no_buffers_mps_rollout(self):
+        with pytest.warns(UserWarning, match=self._MPS_FLOAT64_WARNING):
+            env = ParallelEnv(2, self._Float64ObsEnv, device="mps", use_buffers=False)
+        try:
+            policy = RandomPolicy(env.action_spec)
+            td = env.rollout(max_steps=3, policy=policy)
+            assert td.device.type == "mps"
+            assert td["observation"].dtype == torch.float32
+        finally:
+            env.close(raise_if_closed=False)
 
 
 if __name__ == "__main__":
