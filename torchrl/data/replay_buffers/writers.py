@@ -236,7 +236,7 @@ class RoundRobinWriter(Writer):
 
     @property
     def _cursor(self):
-        _cursor_value = self.__dict__.get("_cursor_value", None)
+        _cursor_value = getattr(self, "_cursor_value", None)
         if not self._compilable:
             if _cursor_value is None:
                 _cursor_value = self._cursor_value = mp.Value("i", 0)
@@ -249,7 +249,7 @@ class RoundRobinWriter(Writer):
     @_cursor.setter
     def _cursor(self, value):
         if not self._compilable:
-            _cursor_value = self.__dict__.get("_cursor_value", None)
+            _cursor_value = getattr(self, "_cursor_value", None)
             if _cursor_value is None:
                 _cursor_value = self._cursor_value = mp.Value("i", 0)
             _cursor_value.value = value
@@ -258,7 +258,7 @@ class RoundRobinWriter(Writer):
 
     @property
     def _write_count(self):
-        _write_count = self.__dict__.get("_write_count_value", None)
+        _write_count = getattr(self, "_write_count_value", None)
         if not self._compilable:
             if _write_count is None:
                 _write_count = self._write_count_value = mp.Value("i", 0)
@@ -271,7 +271,7 @@ class RoundRobinWriter(Writer):
     @_write_count.setter
     def _write_count(self, value):
         if not self._compilable:
-            _write_count = self.__dict__.get("_write_count_value", None)
+            _write_count = getattr(self, "_write_count_value", None)
             if _write_count is None:
                 _write_count = self._write_count_value = mp.Value("i", 0)
             _write_count.value = value
@@ -531,14 +531,14 @@ class TensorDictMaxValueWriter(Writer):
 
     @property
     def _write_count(self):
-        _write_count = self.__dict__.get("_write_count_value", None)
+        _write_count = getattr(self, "_write_count_value", None)
         if _write_count is None:
             _write_count = self._write_count_value = mp.Value("i", 0)
         return _write_count.value
 
     @_write_count.setter
     def _write_count(self, value):
-        _write_count = self.__dict__.get("_write_count_value", None)
+        _write_count = getattr(self, "_write_count_value", None)
         if _write_count is None:
             _write_count = self._write_count_value = mp.Value("i", 0)
         _write_count.value = value

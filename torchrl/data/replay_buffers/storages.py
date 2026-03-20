@@ -770,7 +770,7 @@ class TensorStorage(Storage):
 
     @property
     def _len(self):
-        _len_value = self.__dict__.get("_len_value", None)
+        _len_value = getattr(self, "_len_value", None)
         if not self._compilable:
             if _len_value is None:
                 _len_value = self._len_value = mp.Value("i", 0)
@@ -783,7 +783,7 @@ class TensorStorage(Storage):
     @_len.setter
     def _len(self, value):
         if not is_compiling() and not self._compilable:
-            _len_value = self.__dict__.get("_len_value", None)
+            _len_value = getattr(self, "_len_value", None)
             if _len_value is None:
                 _len_value = self._len_value = mp.Value("i", 0)
             _len_value.value = value
@@ -793,7 +793,7 @@ class TensorStorage(Storage):
     @property
     def _total_shape(self):
         # Total shape, irrespective of how full the storage is
-        _total_shape = self.__dict__.get("_total_shape_value", None)
+        _total_shape = getattr(self, "_total_shape_value", None)
         if _total_shape is None and self.initialized:
             if is_tensor_collection(self._storage):
                 _total_shape = self._storage.shape[: self.ndim]
@@ -2440,7 +2440,7 @@ class StoreStorage(Storage):
 
     @property
     def _len(self):
-        _len_value = self.__dict__.get("_len_value", None)
+        _len_value = getattr(self, "_len_value", None)
         if not self._compilable:
             if _len_value is None:
                 _len_value = self._len_value = mp.Value("i", 0)
@@ -2452,7 +2452,7 @@ class StoreStorage(Storage):
     @_len.setter
     def _len(self, value):
         if not is_compiling() and not self._compilable:
-            _len_value = self.__dict__.get("_len_value", None)
+            _len_value = getattr(self, "_len_value", None)
             if _len_value is None:
                 _len_value = self._len_value = mp.Value("i", 0)
             _len_value.value = value

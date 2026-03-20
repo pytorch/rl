@@ -61,6 +61,54 @@ _CONSOLIDATE_ERR_CAPTURE = (
 )
 
 
+def _to_device_mps_safe(
+    tensor: torch.Tensor,
+    device: torch.device,
+    *,
+    non_blocking: bool = False,
+) -> torch.Tensor:
+    """Move a tensor to the target device, downcasting float64 to float32 for MPS.
+
+    MPS does not support float64. When the target device is MPS and the source
+    tensor is float64, this automatically downcasts to float32 during the transfer.
+    For all other devices the call is equivalent to ``tensor.to(device, ...)``.
+    """
+    if device.type == "mps" and tensor.dtype == torch.float64:
+        return tensor.to(device=device, dtype=torch.float32, non_blocking=non_blocking)
+    return tensor.to(device=device, non_blocking=non_blocking)
+
+
+def _td_to_device_mps_safe(
+    td: TensorDictBase,
+    device: torch.device,
+    *,
+    non_blocking: bool = False,
+) -> TensorDictBase:
+    """Move a TensorDict to the target device, handling MPS float64 via :func:`_to_device_mps_safe`.
+
+    For non-MPS devices this falls back to ``td.to(device, ...)``.
+    For MPS it applies :func:`_to_device_mps_safe` per-tensor to avoid the
+    float64-on-MPS limitation.
+    """
+    if device.type == "mps":
+        return td._fast_apply(
+            functools.partial(
+                _to_device_mps_safe, device=device, non_blocking=non_blocking
+            ),
+            device=device,
+            filter_empty=True,
+        )
+    return td.to(device, non_blocking=non_blocking)
+
+
+def _has_float64_leaf(spec) -> bool:
+    """Return True if any non-Composite leaf spec in *spec* has dtype float64."""
+    for _, s in spec.items(include_nested=True, leaves_only=True):
+        if getattr(s, "dtype", None) == torch.float64:
+            return True
+    return False
+
+
 def _check_start(fun):
     def decorated_fun(self: BatchedEnvBase, *args, **kwargs):
         if self.is_closed:
@@ -551,7 +599,9 @@ class BatchedEnvBase(EnvBase):
             selected_keys = self._selected_step_keys
         if name in selected_keys:
             if self.device is not None and tensor.device != self.device:
-                return tensor.to(self.device, non_blocking=self.non_blocking)
+                return _to_device_mps_safe(
+                    tensor, self.device, non_blocking=self.non_blocking
+                )
             return tensor.clone()
 
     @property
@@ -775,11 +825,29 @@ class BatchedEnvBase(EnvBase):
                 meta_data.specs["output_spec"].to(device)
             )
 
-            self.action_spec = input_spec["full_action_spec"]
-            self.state_spec = input_spec["full_state_spec"]
-            self.observation_spec = output_spec["full_observation_spec"]
-            self.reward_spec = output_spec["full_reward_spec"]
-            self.done_spec = output_spec["full_done_spec"]
+            if (
+                self._device is not None
+                and torch.device(self._device).type == "mps"
+                and (_has_float64_leaf(input_spec) or _has_float64_leaf(output_spec))
+            ):
+                warnings.warn(
+                    f"Sub-environments produce float64 data but the batched env device is "
+                    f"'{self._device}' which does not support float64. "
+                    f"All float64 specs and tensors will be downcast to float32.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="MPS device does not support float64",
+                    category=UserWarning,
+                )
+                self.action_spec = input_spec["full_action_spec"]
+                self.state_spec = input_spec["full_state_spec"]
+                self.observation_spec = output_spec["full_observation_spec"]
+                self.reward_spec = output_spec["full_reward_spec"]
+                self.done_spec = output_spec["full_done_spec"]
 
             self._dummy_env_str = meta_data.env_str
             self._env_tensordict = meta_data.tensordict
@@ -819,12 +887,34 @@ class BatchedEnvBase(EnvBase):
                 output_spec.append(_check_for_empty_spec(md.specs["output_spec"]))
             output_spec = torch.stack(output_spec, 0)
 
-            self.action_spec = input_spec["full_action_spec"]
-            self.state_spec = input_spec["full_state_spec"]
+            if (
+                self._device is not None
+                and torch.device(self._device).type == "mps"
+                and any(
+                    _has_float64_leaf(md.specs["input_spec"])
+                    or _has_float64_leaf(md.specs["output_spec"])
+                    for md in meta_data
+                )
+            ):
+                warnings.warn(
+                    f"Sub-environments produce float64 data but the batched env device is "
+                    f"'{self._device}' which does not support float64. "
+                    f"All float64 specs and tensors will be downcast to float32.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="MPS device does not support float64",
+                    category=UserWarning,
+                )
+                self.action_spec = input_spec["full_action_spec"]
+                self.state_spec = input_spec["full_state_spec"]
 
-            self.observation_spec = output_spec["full_observation_spec"]
-            self.reward_spec = output_spec["full_reward_spec"]
-            self.done_spec = output_spec["full_done_spec"]
+                self.observation_spec = output_spec["full_observation_spec"]
+                self.reward_spec = output_spec["full_reward_spec"]
+                self.done_spec = output_spec["full_done_spec"]
 
             self._dummy_env_str = str(meta_data[0])
             if self.share_individual_td:
@@ -1193,7 +1283,7 @@ class SerialEnv(BatchedEnvBase):
                     if self.device is None:
                         ftd.clear_device_()
                     else:
-                        ftd = ftd.to(self.device)
+                        ftd = _td_to_device_mps_safe(ftd, self.device)
                     out_tds[i] = ftd
                 continue
             if tensordict is not None:
@@ -1244,7 +1334,9 @@ class SerialEnv(BatchedEnvBase):
                 if device is None:
                     result = result.clear_device_()
                 else:
-                    result = result.to(device, non_blocking=self.non_blocking)
+                    result = _td_to_device_mps_safe(
+                        result, device, non_blocking=self.non_blocking
+                    )
                     self._sync_w2m()
             return result
 
@@ -1309,6 +1401,8 @@ class SerialEnv(BatchedEnvBase):
         if not self._use_buffers or self._non_tensor_keys:
             out_tds = []
 
+        device = self.device
+
         if self._use_buffers:
             next_td = self.shared_tensordict_parent.get("next")
             for i, _data_in in zip(workers_range, data_in):
@@ -1325,7 +1419,6 @@ class SerialEnv(BatchedEnvBase):
 
             # We must pass a clone of the tensordict, as the values of this tensordict
             # will be modified in-place at further steps
-            device = self.device
 
             selected_keys = self._selected_step_keys
 
@@ -1353,6 +1446,14 @@ class SerialEnv(BatchedEnvBase):
                 out_td = self._envs[i]._step(_data_in)
                 out_tds.append(out_td)
             out = LazyStackedTensorDict.maybe_dense_stack(out_tds)
+            if out.device != device:
+                if device is None:
+                    out = out.clear_device_()
+                else:
+                    out = _td_to_device_mps_safe(
+                        out, device, non_blocking=self.non_blocking
+                    )
+                    self._sync_w2m()
 
         if partial_steps is not None and not partial_steps.all():
             result = out.new_zeros(tensordict_save.shape)
@@ -2115,7 +2216,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         out = LazyStackedTensorDict.maybe_dense_stack(out_tds)
         if self.device is not None and out.device != self.device:
-            out = out.to(self.device, non_blocking=self.non_blocking)
+            out = _td_to_device_mps_safe(
+                out, self.device, non_blocking=self.non_blocking
+            )
         if partial_steps is not None:
             result = out.new_zeros(tensordict_save.shape)
 
@@ -2349,7 +2452,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         result = LazyStackedTensorDict.maybe_dense_stack(out_tds)
         device = self.device
         if device is not None and result.device != device:
-            return result.to(self.device, non_blocking=self.non_blocking)
+            return _td_to_device_mps_safe(
+                result, self.device, non_blocking=self.non_blocking
+            )
         return result
 
     @torch.no_grad()
