@@ -88,6 +88,7 @@ train_model:
 
 # Inference model configuration
 inference_model:
+  backend: "vllm"  # Inference backend: "vllm" or "sglang"
   num_devices: 2  # Number of devices to use
   quantization:
     enabled: false  # Enable 4-bit quantization for base model
