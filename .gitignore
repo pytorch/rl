@@ -189,6 +189,7 @@ log
 Roms
 
 scratch/*
+setup-and-run.sh
 
 # Large directories from git history that should not be committed
 dev/
