@@ -16,7 +16,9 @@ from torch import device as torch_device, dtype as torch_dtype
 
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.envs.llm import AddThinkingPrompt, GSM8KEnv, KLRewardTransform, RetrieveKL
+from torchrl.envs.llm.datasets.countdown import CountdownEnv
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
+from torchrl.envs.llm.datasets.math import MATHEnv
 from torchrl.modules.llm import SGLangWrapper, TransformersWrapper, vLLMWrapper
 from torchrl.weight_update.llm import SGLangWeightSyncScheme, VLLMWeightSyncScheme
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
@@ -774,28 +776,27 @@ def make_env(cfg: DictConfig, single_env: bool = False):
 
     # Setup environment
     max_steps = cfg.env.max_steps if cfg.env.reasoning else 1
+    num_envs = cfg.env.num_envs if not single_env else 1
+    common_kwargs = {
+        "repeats": cfg.env.repeats,
+        "tokenizer": train_tokenizer,
+        "num_envs": num_envs,
+        "max_steps": max_steps,
+        "device": torch.device("cpu"),
+    }
+
     if cfg.env.dataset == "gsm8k":
-        # Reward scale is 0.0 to 100
-        reward_threshold = 20
-        env = GSM8KEnv(
-            repeats=cfg.env.repeats,
-            tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs if not single_env else 1,
-            max_steps=max_steps,
-            device=torch.device("cpu"),
-            ray_backend=True,
-        )
-    elif cfg.env.dataset == "ifeval":  # ifeval
-        # Reward scale is 0.0 to 2.2
-        reward_threshold = 1.0
-        env = IFEvalEnv(
-            repeats=cfg.env.repeats,
-            tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs if not single_env else 1,
-            max_steps=max_steps,
-            device=torch.device("cpu"),
-            ray_backend=True,
-        )
+        reward_threshold = 0.1
+        env = GSM8KEnv(**common_kwargs, ray_backend=True)
+    elif cfg.env.dataset == "ifeval":
+        reward_threshold = 0.5
+        env = IFEvalEnv(**common_kwargs, ray_backend=True)
+    elif cfg.env.dataset == "math":
+        reward_threshold = 0.1
+        env = MATHEnv(**common_kwargs, ray_backend=True)
+    elif cfg.env.dataset == "countdown":
+        reward_threshold = 0.1
+        env = CountdownEnv(**common_kwargs)
     else:
         raise NotImplementedError(f"Dataset {cfg.env.dataset} not implemented")
 
