@@ -2253,7 +2253,9 @@ class _RequestOutput_tc(TensorClass["nocast"]):
                         prompt_logprobs=torch.tensor(
                             [
                                 v[int(tid)].logprob if v is not None else 0.0
-                                for v, tid in _zip_strict(
+                                # Use zip (not _zip_strict) because vLLM V1 may return
+                                # fewer prompt_logprobs than prompt_token_ids (cached tokens)
+                                for v, tid in zip(
                                     request.prompt_logprobs, request.prompt_token_ids
                                 )
                             ]
@@ -2282,7 +2284,9 @@ class _RequestOutput_tc(TensorClass["nocast"]):
                     prompt_logprobs=torch.tensor(
                         [
                             v[int(tid)].logprob if v is not None else 0.0
-                            for v, tid in _zip_strict(
+                            # Use zip (not _zip_strict) because vLLM V1 may return
+                            # fewer prompt_logprobs than prompt_token_ids (cached tokens)
+                            for v, tid in zip(
                                 request.prompt_logprobs, request.prompt_token_ids
                             )
                         ]
