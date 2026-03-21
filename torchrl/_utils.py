@@ -1423,6 +1423,12 @@ def merge_ray_runtime_env(ray_init_config: dict[str, Any]) -> dict[str, Any]:
     elif not isinstance(runtime_env["env_vars"], dict):
         runtime_env["env_vars"] = dict(runtime_env["env_vars"])
 
+    # Auto-propagate common env vars to Ray workers
+    for key in ("WANDB_API_KEY", "HF_TOKEN", "HF_HOME"):
+        val = os.environ.get(key)
+        if val and key not in runtime_env["env_vars"]:
+            runtime_env["env_vars"][key] = val
+
     return ray_init_config
 
 
