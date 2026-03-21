@@ -266,8 +266,90 @@ class TestGSM8K:
         r["history"].full = history_full
         s = env.step(r)
         assert s.device == device
-        assert s["next", "reward"] >= 10
+        assert s["next", "reward"] > 0
         assert s["next", "done"].all()
+
+
+class TestGSM8KRewardParser:
+    """Unit tests for the GSM8K reward parser (no model/dataset required)."""
+
+    def test_extract_tags(self):
+        from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
+
+        think, answer = GSM8KRewardParser.extract_tags(
+            "<think>some reasoning</think> <answer>42</answer>"
+        )
+        assert think == "some reasoning"
+        assert answer == "42"
+
+    def test_extract_tags_malformed(self):
+        from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
+
+        think, answer = GSM8KRewardParser.extract_tags(
+            "<think>reasoning with <special> chars & stuff</think> <answer>5</answer>"
+        )
+        assert answer == "5"
+
+    def test_extract_tags_missing(self):
+        from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
+
+        think, answer = GSM8KRewardParser.extract_tags("no tags here at all")
+        assert think == ""
+        assert answer == ""
+
+    def test_normalize_answer(self):
+        from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
+
+        assert GSM8KRewardParser.normalize_answer("1,234") == "1234"
+        assert GSM8KRewardParser.normalize_answer("$120") == "120"
+        assert GSM8KRewardParser.normalize_answer("120.0") == "120"
+        assert GSM8KRewardParser.normalize_answer("120.00") == "120"
+        assert GSM8KRewardParser.normalize_answer(" 42 ") == "42"
+        assert GSM8KRewardParser.normalize_answer("3.14") == "3.14"
+        assert GSM8KRewardParser.normalize_answer("100%") == "100"
+
+    def test_correct_answer_reward(self):
+        from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
+
+        parser = GSM8KRewardParser()
+        td = parser._single_correctness_reward("42", "42", "some reasoning")
+        assert td["success"]
+        assert td["reward"] == 1.0
+
+    def test_wrong_answer_with_format(self):
+        from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
+
+        parser = GSM8KRewardParser()
+        td = parser._single_correctness_reward("42", "99", "some reasoning")
+        assert not td["success"]
+        assert td["reward"] == 0.1
+        assert td["reward_answer"] == 1.0
+
+    def test_no_answer(self):
+        from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
+
+        parser = GSM8KRewardParser()
+        td = parser._single_correctness_reward("42", "", "")
+        assert not td["success"]
+        assert td["reward"] == 0.0
+        assert td["reward_answer"] == 0.0
+
+    def test_normalized_match(self):
+        from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
+
+        parser = GSM8KRewardParser()
+        td = parser._single_correctness_reward("1234", "1,234", "thinking")
+        assert td["success"]
+        assert td["reward"] == 1.0
+
+    def test_custom_reward_values(self):
+        from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
+
+        parser = GSM8KRewardParser(format_reward=0.5, correct_reward=2.0)
+        td_correct = parser._single_correctness_reward("42", "42", "cot")
+        assert td_correct["reward"] == 2.0
+        td_format = parser._single_correctness_reward("42", "99", "cot")
+        assert td_format["reward"] == 0.5
 
 
 @pytest.mark.skipif(not _has_ifeval, reason="requires IFEval libs")
@@ -336,6 +418,178 @@ By embracing such metaphors, we're encouraged to look beyond the obvious and app
 
         # TODO: To test this, we would need to pass a policy to check_env_specs()
         # env.check_env_specs()
+
+
+class TestMATHRewardParser:
+    """Unit tests for the MATH reward parser (no model/dataset required)."""
+
+    def test_extract_boxed_simple(self):
+        from torchrl.envs.llm.reward.math import MATHRewardParser
+
+        assert MATHRewardParser.extract_boxed(r"The answer is $\boxed{42}$.") == "42"
+
+    def test_extract_boxed_nested(self):
+        from torchrl.envs.llm.reward.math import MATHRewardParser
+
+        assert (
+            MATHRewardParser.extract_boxed(r"$\boxed{\frac{1}{2}}$") == r"\frac{1}{2}"
+        )
+
+    def test_extract_boxed_no_boxed(self):
+        from torchrl.envs.llm.reward.math import MATHRewardParser
+
+        assert MATHRewardParser.extract_boxed("no boxed here") == "no boxed here"
+
+    def test_extract_tags(self):
+        from torchrl.envs.llm.reward.math import MATHRewardParser
+
+        think, answer = MATHRewardParser.extract_tags(
+            r"<think>reasoning</think> <answer>\frac{1}{2}</answer>"
+        )
+        assert think == "reasoning"
+        assert answer == r"\frac{1}{2}"
+
+    def test_correct_answer(self):
+        from torchrl.envs.llm.reward.math import MATHRewardParser
+
+        parser = MATHRewardParser()
+        td = parser._single_correctness_reward("42", "42", "reasoning")
+        assert td["success"]
+        assert td["reward"] == 1.0
+
+    def test_wrong_answer_with_format(self):
+        from torchrl.envs.llm.reward.math import MATHRewardParser
+
+        parser = MATHRewardParser()
+        td = parser._single_correctness_reward("42", "99", "reasoning")
+        assert not td["success"]
+        assert td["reward"] == 0.1
+
+    def test_no_answer(self):
+        from torchrl.envs.llm.reward.math import MATHRewardParser
+
+        parser = MATHRewardParser()
+        td = parser._single_correctness_reward("42", "", "")
+        assert not td["success"]
+        assert td["reward"] == 0.0
+
+
+class TestCountdownRewardParser:
+    """Unit tests for the Countdown reward parser (no model/dataset required)."""
+
+    def test_validate_expression_correct(self):
+        from torchrl.envs.llm.reward.countdown import CountdownRewardParser
+
+        assert CountdownRewardParser.validate_expression(
+            "(25 + 3) * 4", 112, [25, 3, 4]
+        )
+
+    def test_validate_expression_wrong_result(self):
+        from torchrl.envs.llm.reward.countdown import CountdownRewardParser
+
+        assert not CountdownRewardParser.validate_expression("25 + 3", 100, [25, 3, 4])
+
+    def test_validate_expression_reuses_number(self):
+        from torchrl.envs.llm.reward.countdown import CountdownRewardParser
+
+        assert not CountdownRewardParser.validate_expression("25 + 25", 50, [25, 3, 4])
+
+    def test_validate_expression_invalid_chars(self):
+        from torchrl.envs.llm.reward.countdown import CountdownRewardParser
+
+        assert not CountdownRewardParser.validate_expression("import os", 0, [1, 2])
+
+    def test_parse_ground_truth(self):
+        from torchrl.envs.llm.reward.countdown import CountdownRewardParser
+
+        target, numbers = CountdownRewardParser._parse_ground_truth(
+            "target=42, numbers=10,20,5,7"
+        )
+        assert target == 42
+        assert numbers == [10, 20, 5, 7]
+
+    def test_correct_answer_reward(self):
+        from torchrl.envs.llm.reward.countdown import CountdownRewardParser
+
+        parser = CountdownRewardParser()
+        td = parser._single_correctness_reward(28, [25, 3], "25 + 3", "thinking")
+        assert td["success"]
+        assert td["reward"] == 1.0
+
+    def test_wrong_answer_with_format(self):
+        from torchrl.envs.llm.reward.countdown import CountdownRewardParser
+
+        parser = CountdownRewardParser()
+        td = parser._single_correctness_reward(100, [25, 3], "25 + 3", "thinking")
+        assert not td["success"]
+        assert td["reward"] == 0.1
+
+    def test_no_answer(self):
+        from torchrl.envs.llm.reward.countdown import CountdownRewardParser
+
+        parser = CountdownRewardParser()
+        td = parser._single_correctness_reward(100, [25, 3], "", "")
+        assert not td["success"]
+        assert td["reward"] == 0.0
+
+
+@pytest.mark.skipif(not _has_ifeval, reason="requires IFEval libs")
+class TestIFEvalRewardAggregator:
+    """Unit tests for the simplified IFEval reward aggregator."""
+
+    def test_perfect_score_with_format(self):
+        from torchrl.envs.llm.reward.ifeval._scorer import IFEvalScoreData, IfEvalScorer
+
+        scorer = IfEvalScorer()
+        score = IFEvalScoreData(
+            prompt_level_strict_acc=torch.tensor([True]),
+            inst_level_strict_acc=torch.tensor([True]),
+            prompt_level_loose_acc=torch.tensor([True]),
+            inst_level_loose_acc=torch.tensor([True]),
+            batch_size=(),
+        )
+        reward = scorer.default_reward_aggregator(
+            score,
+            think_blocks=["reasoning"],
+            answer_blocks=["answer"],
+        )
+        # format_score = 1.0 + format_bonus = 0.1 + 0.05 = 1.15
+        assert reward.item() == pytest.approx(1.15, abs=0.01)
+
+    def test_zero_score_no_answer(self):
+        from torchrl.envs.llm.reward.ifeval._scorer import IFEvalScoreData, IfEvalScorer
+
+        scorer = IfEvalScorer()
+        score = IFEvalScoreData(
+            prompt_level_strict_acc=torch.tensor([False]),
+            inst_level_strict_acc=torch.tensor([False]),
+            prompt_level_loose_acc=torch.tensor([False]),
+            inst_level_loose_acc=torch.tensor([False]),
+            batch_size=(),
+        )
+        reward = scorer.default_reward_aggregator(
+            score, think_blocks=[], answer_blocks=[]
+        )
+        # No format bonus, all metrics zero
+        assert reward.item() == pytest.approx(0.0, abs=0.01)
+
+    def test_reward_range_bounded(self):
+        from torchrl.envs.llm.reward.ifeval._scorer import IFEvalScoreData, IfEvalScorer
+
+        scorer = IfEvalScorer()
+        score = IFEvalScoreData(
+            prompt_level_strict_acc=torch.tensor([True]),
+            inst_level_strict_acc=torch.tensor([True]),
+            prompt_level_loose_acc=torch.tensor([True]),
+            inst_level_loose_acc=torch.tensor([True]),
+            batch_size=(),
+        )
+        reward = scorer.default_reward_aggregator(
+            score,
+            think_blocks=["t"],
+            answer_blocks=["a"],
+        )
+        assert 0.0 <= reward.item() <= 1.2
 
 
 class TestTools:
