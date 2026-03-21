@@ -110,7 +110,7 @@ llm = [
 # LLM with vLLM backend
 llm-vllm = [
     "torchrl[llm]",
-    "vllm",
+    "vllm>=0.17",
 ]
 # LLM with SGLang backend
 llm-sglang = [
@@ -120,7 +120,7 @@ llm-sglang = [
 # LLM with both backends
 llm-all = [
     "torchrl[llm]",
-    "vllm",
+    "vllm>=0.17",
     "sglang[all]",
 ]
 grpo = [
