@@ -266,7 +266,8 @@ class TD3Trainer(Trainer):
 
         self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
 
-        # Here, we build a weight source that mirrors the collector policy structure when an exploration module is used, to allow for simpler weight synchronization.
+        # Here, we build a weight source that mirrors the collector policy structure when
+        # an exploration module is used, to allow for simpler weight synchronization.
         weights_source = self.loss_module.actor_network
         if exploration_module is not None:
             from tensordict.nn import TensorDictSequential
