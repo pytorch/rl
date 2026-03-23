@@ -8,7 +8,9 @@ set -e
 
 expected="${1:?Usage: assert_torch_version.sh nightly|stable}"
 
-python -c "
+PYTHON="${PYTHON:-$(command -v python3 || command -v python)}"
+
+"$PYTHON" -c "
 import torch
 v = torch.__version__
 is_nightly = 'dev' in v

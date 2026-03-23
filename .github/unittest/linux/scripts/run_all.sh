@@ -248,7 +248,7 @@ fi
 
 # install torchcodec (from source for nightly, from PyPI for stable)
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
-  uv_pip_install --no-build-isolation git+https://github.com/pytorch/torchcodec.git
+  BUILD_AGAINST_ALL_FFMPEG_FROM_S3=1 uv_pip_install --no-build-isolation git+https://github.com/pytorch/torchcodec.git
 else
   uv_pip_install torchcodec
 fi

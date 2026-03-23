@@ -71,7 +71,7 @@ jobs:
           # Use nightly PyTorch for main, nightly, and PRs
           python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
           python -m pip install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
-          python -m pip install --no-build-isolation git+https://github.com/pytorch/torchcodec.git --quiet --root-user-action=ignore
+          BUILD_AGAINST_ALL_FFMPEG_FROM_S3=1 python -m pip install --no-build-isolation git+https://github.com/pytorch/torchcodec.git --quiet --root-user-action=ignore
         fi
         
         # 6. Install doc requirements BEFORE TorchRL to ensure gymnasium is available
