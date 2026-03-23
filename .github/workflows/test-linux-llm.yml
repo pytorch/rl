@@ -54,7 +54,7 @@ jobs:
 
         bash .github/unittest/llm/scripts_llm/setup_env.sh
         bash .github/unittest/llm/scripts_llm/install.sh
-        bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/llm/scripts_llm/run_test.sh
         bash .github/unittest/llm/scripts_llm/post_process.sh
 
@@ -93,6 +93,6 @@ jobs:
         # This avoids Triton version conflicts between vLLM and SGLang
         bash .github/unittest/llm/scripts_sglang/setup_env.sh
         bash .github/unittest/llm/scripts_sglang/install.sh
-        bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/llm/scripts_sglang/run_test.sh
         bash .github/unittest/llm/scripts_sglang/post_process.sh

@@ -10,7 +10,7 @@ echo "Running minari tests with uv-based setup..."
 # Source each script in sequence to maintain environment state
 source "${this_dir}/setup_env.sh"
 source "${this_dir}/install.sh"
-bash "$(git rev-parse --show-toplevel)/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
+PYTHON=./env/bin/python bash "$(git rev-parse --show-toplevel)/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
 source "${this_dir}/run_test.sh"
 source "${this_dir}/post_process.sh"
 

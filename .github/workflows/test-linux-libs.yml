@@ -160,7 +160,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_envpool/setup_env.sh
         bash .github/unittest/linux_libs/scripts_envpool/install.sh
-        bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_envpool/run_test.sh
         bash .github/unittest/linux_libs/scripts_envpool/post_process.sh
 
@@ -195,7 +195,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_gen-dgrl/setup_env.sh
         bash .github/unittest/linux_libs/scripts_gen-dgrl/install.sh
-        bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_gen-dgrl/run_test.sh
         bash .github/unittest/linux_libs/scripts_gen-dgrl/post_process.sh
 
@@ -286,7 +286,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_jumanji/setup_env.sh
         bash .github/unittest/linux_libs/scripts_jumanji/install.sh
-        bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_jumanji/run_test.sh
         bash .github/unittest/linux_libs/scripts_jumanji/post_process.sh
 
@@ -322,7 +322,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_meltingpot/setup_env.sh
         bash .github/unittest/linux_libs/scripts_meltingpot/install.sh
-        bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_meltingpot/run_test.sh
         bash .github/unittest/linux_libs/scripts_meltingpot/post_process.sh
 
@@ -361,7 +361,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_open_spiel/setup_env.sh
         bash .github/unittest/linux_libs/scripts_open_spiel/install.sh
-        bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_open_spiel/run_test.sh
         bash .github/unittest/linux_libs/scripts_open_spiel/post_process.sh
 
@@ -400,7 +400,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_chess/setup_env.sh
         bash .github/unittest/linux_libs/scripts_chess/install.sh
-        bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_chess/run_test.sh
         bash .github/unittest/linux_libs/scripts_chess/post_process.sh
 
@@ -439,7 +439,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_unity_mlagents/setup_env.sh
         bash .github/unittest/linux_libs/scripts_unity_mlagents/install.sh
-        bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_unity_mlagents/run_test.sh
         bash .github/unittest/linux_libs/scripts_unity_mlagents/post_process.sh
 
@@ -507,7 +507,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_openx/setup_env.sh
         bash .github/unittest/linux_libs/scripts_openx/install.sh
-        bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_openx/run_test.sh
         bash .github/unittest/linux_libs/scripts_openx/post_process.sh
 
@@ -543,7 +543,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_pettingzoo/setup_env.sh
         bash .github/unittest/linux_libs/scripts_pettingzoo/install.sh
-        bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_pettingzoo/run_test.sh
         bash .github/unittest/linux_libs/scripts_pettingzoo/post_process.sh
 
@@ -583,7 +583,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_procgen/setup_env.sh
         bash .github/unittest/linux_libs/scripts_procgen/install.sh
-        bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_procgen/run_test.sh
         bash .github/unittest/linux_libs/scripts_procgen/post_process.sh
 
@@ -653,7 +653,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_roboset/setup_env.sh
         bash .github/unittest/linux_libs/scripts_roboset/install.sh
-        bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_roboset/run_test.sh
         bash .github/unittest/linux_libs/scripts_roboset/post_process.sh
 
@@ -690,7 +690,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_sklearn/setup_env.sh
         bash .github/unittest/linux_libs/scripts_sklearn/install.sh
-        bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_sklearn/run_test.sh
         bash .github/unittest/linux_libs/scripts_sklearn/post_process.sh
 
@@ -730,7 +730,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_smacv2/setup_env.sh
         bash .github/unittest/linux_libs/scripts_smacv2/install.sh
-        bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_smacv2/run_test.sh
         bash .github/unittest/linux_libs/scripts_smacv2/post_process.sh
 
@@ -766,7 +766,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_vd4rl/setup_env.sh
         bash .github/unittest/linux_libs/scripts_vd4rl/install.sh
-        bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_vd4rl/run_test.sh
         bash .github/unittest/linux_libs/scripts_vd4rl/post_process.sh
 
@@ -806,6 +806,6 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_vmas/setup_env.sh
         bash .github/unittest/linux_libs/scripts_vmas/install.sh
-        bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_vmas/run_test.sh
         bash .github/unittest/linux_libs/scripts_vmas/post_process.sh
