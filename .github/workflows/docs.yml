@@ -45,7 +45,8 @@ jobs:
         apt-get update
         apt-get install -y libglfw3 libglfw3-dev libgl1-mesa-glx libgl1-mesa-dev libegl1-mesa-dev \
           freeglut3-dev libglu1-mesa libegl1 mesa-utils xvfb wget git cmake \
-          ffmpeg libavcodec-dev libavformat-dev libavutil-dev libswscale-dev
+          ffmpeg libavcodec-dev libavformat-dev libavutil-dev libswscale-dev \
+          libavdevice-dev libavfilter-dev libswresample-dev pkg-config
         
         # 2. upgrade pip, ninja and packaging
         python -m pip install --upgrade pip
