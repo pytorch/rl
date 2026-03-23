@@ -289,6 +289,7 @@ class TensorDictReplayBufferConfig(ReplayBufferBaseConfig):
     writer: Any = None
     transform: Any = None
     batch_size: int | None = None
+    prefetch: int | None = None
 
     def __post_init__(self) -> None:
         """Post-initialization hook for TensorDict replay buffer configurations."""

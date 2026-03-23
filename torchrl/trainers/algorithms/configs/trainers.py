@@ -22,6 +22,7 @@ from torchrl.trainers.algorithms.dqn import DQNTrainer
 from torchrl.trainers.algorithms.iql import IQLTrainer
 from torchrl.trainers.algorithms.ppo import PPOTrainer
 from torchrl.trainers.algorithms.sac import SACTrainer
+from torchrl.trainers.algorithms.td3 import TD3Trainer
 
 
 @dataclass
@@ -816,4 +817,189 @@ def _make_cql_trainer(*args, **kwargs) -> CQLTrainer:
         target_net_updater=target_net_updater,
         async_collection=async_collection,
         log_timings=log_timings,
+    )
+
+
+@dataclass
+class TD3TrainerConfig(TrainerConfig):
+    """Configuration class for TD3 (Twin Delayed DDPG) trainer."""
+
+    collector: Any
+    total_frames: int
+    loss_module: Any
+    logger: Any
+    replay_buffer: Any
+    save_trainer_file: Any
+    optim_steps_per_batch: int | None = 1
+    optimizer: Any | None = None
+    optimizer_actor: Any | None = None
+    optimizer_critic: Any | None = None
+    actor_network: Any = None
+    qvalue_network: Any = None
+    exploration_module: Any = None
+    seed: int | None = None
+    clip_grad_norm: bool = True
+    clip_norm: float | None = None
+    async_collection: bool = False
+    create_env_fn: Any = None
+    target_net_updater: Any = None
+    policy_update_delay: int = 2
+    value_estimator_gamma: float | None = None
+    _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_td3_trainer"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+
+
+def _make_td3_trainer(*args, **kwargs):
+    from tensordict.nn import TensorDictSequential
+
+    from torchrl.objectives.utils import TargetNetUpdater
+    from torchrl.trainers.algorithms.td3 import TD3OptimizationStepper
+    from torchrl.trainers.trainers import Logger
+
+    collector = kwargs.pop("collector")
+    total_frames = kwargs.pop("total_frames")
+    if total_frames is None:
+        total_frames = collector.total_frames
+    frame_skip = kwargs.pop("frame_skip", 1)
+    optim_steps_per_batch = kwargs.pop("optim_steps_per_batch", 1)
+    loss_module = kwargs.pop("loss_module")
+    optimizer = kwargs.pop("optimizer", None)
+    optimizer_actor = kwargs.pop("optimizer_actor", None)
+    optimizer_critic = kwargs.pop("optimizer_critic", None)
+    logger = kwargs.pop("logger")
+    clip_grad_norm = kwargs.pop("clip_grad_norm", True)
+    clip_norm = kwargs.pop("clip_norm")
+    progress_bar = kwargs.pop("progress_bar", True)
+    replay_buffer = kwargs.pop("replay_buffer")
+    save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
+    log_interval = kwargs.pop("log_interval", 10000)
+    save_trainer_file = kwargs.pop("save_trainer_file")
+    seed = kwargs.pop("seed")
+    num_epochs = kwargs.pop("num_epochs", 1)
+    async_collection = kwargs.pop("async_collection", False)
+    log_timings = kwargs.pop("log_timings", False)
+    actor_network = kwargs.pop("actor_network", None)
+    qvalue_network = kwargs.pop("qvalue_network", None)
+    exploration_module = kwargs.pop("exploration_module", None)
+    kwargs.pop("create_env_fn")
+    target_net_updater = kwargs.pop("target_net_updater", None)
+    policy_update_delay = kwargs.pop("policy_update_delay", 2)
+    value_estimator_gamma = kwargs.pop("value_estimator_gamma", None)
+
+    if actor_network is not None and not isinstance(actor_network, torch.nn.Module):
+        actor_network = actor_network()
+
+    if qvalue_network is not None and not isinstance(qvalue_network, torch.nn.Module):
+        qvalue_network = qvalue_network()
+
+    if exploration_module is not None and not isinstance(
+        exploration_module, torch.nn.Module
+    ):
+        exploration_module = exploration_module()
+
+    exploration_policy = (
+        actor_network
+        if exploration_module is None
+        else TensorDictSequential(actor_network, exploration_module)
+    )
+
+    if not isinstance(collector, BaseCollector):
+        collector_kwargs = {"policy": exploration_policy}
+        if not async_collection:
+            collector = collector(**collector_kwargs)
+        elif replay_buffer is not None:
+            collector = collector(replay_buffer=replay_buffer, **collector_kwargs)
+
+    env = collector.env
+    action_spec = getattr(env, "action_spec_unbatched", None) or env.action_spec
+    if hasattr(action_spec, "get"):
+        nested_action_spec = action_spec.get("action", default=None)
+        if nested_action_spec is not None:
+            action_spec = nested_action_spec
+
+    if not callable(loss_module):
+        # TD3Loss currently requires real action bounds from the environment. Therefore, we
+        # require it to be a partial for now.
+        raise TypeError(
+            "TD3Trainer currently expects loss_module to be a Hydra partial/callable. "
+            "Provide a partial loss config (e.g. loss._partial_=true) and let the "
+            "trainer inject actor_network, qvalue_network, and action_spec."
+        )
+    else:
+        loss_module = loss_module(
+            action_spec=action_spec,
+            actor_network=actor_network,
+            qvalue_network=qvalue_network,
+        )
+
+    if value_estimator_gamma is not None:
+        loss_module.make_value_estimator(gamma=value_estimator_gamma)
+
+    if not isinstance(target_net_updater, TargetNetUpdater):
+        target_net_updater = target_net_updater(loss_module)
+
+    if optimizer_actor is None and optimizer_critic is None:
+        optimizer_actor = optimizer
+        optimizer_critic = optimizer
+    elif optimizer_actor is None or optimizer_critic is None:
+        raise TypeError(
+            "TD3Trainer requires both optimizer_actor and optimizer_critic when overriding optimizer."
+        )
+
+    actor_params = list(loss_module.actor_network_params.flatten_keys().values())
+    critic_params = list(loss_module.qvalue_network_params.flatten_keys().values())
+
+    if not isinstance(optimizer_actor, torch.optim.Optimizer):
+        optimizer_actor = optimizer_actor(params=actor_params)
+    if not isinstance(optimizer_critic, torch.optim.Optimizer):
+        optimizer_critic = optimizer_critic(params=critic_params)
+
+    optimization_stepper = TD3OptimizationStepper(
+        optimizer_actor=optimizer_actor,
+        optimizer_critic=optimizer_critic,
+        policy_update_delay=policy_update_delay,
+        zero_grad_set_to_none=True,
+    )
+
+    if not isinstance(collector, BaseCollector):
+        raise TypeError(f"collector must be a BaseCollector, got {type(collector)}")
+    if not isinstance(loss_module, LossModule):
+        raise TypeError(f"loss_module must be a LossModule, got {type(loss_module)}")
+    if optimizer_actor is None or optimizer_critic is None:
+        raise TypeError("TD3Trainer requires optimizer configuration.")
+    if not isinstance(optimizer_actor, torch.optim.Optimizer):
+        raise TypeError(
+            f"TD3Trainer requires optimizer_actor to be a torch.optim.Optimizer, got {type(optimizer)}"
+        )
+    if not isinstance(optimizer_critic, torch.optim.Optimizer):
+        raise TypeError(
+            f"TD3Trainer requires optimizer_critic to be a torch.optim.Optimizer, got {type(optimizer)}"
+        )
+    if not isinstance(logger, Logger) and logger is not None:
+        raise TypeError(f"logger must be a Logger or None, got {type(logger)}")
+
+    return TD3Trainer(
+        collector=collector,
+        total_frames=total_frames,
+        frame_skip=frame_skip,
+        optim_steps_per_batch=optim_steps_per_batch,
+        loss_module=loss_module,
+        optimizer=None,
+        optimization_stepper=optimization_stepper,
+        logger=logger,
+        clip_grad_norm=clip_grad_norm,
+        clip_norm=clip_norm,
+        progress_bar=progress_bar,
+        seed=seed,
+        save_trainer_interval=save_trainer_interval,
+        log_interval=log_interval,
+        save_trainer_file=save_trainer_file,
+        num_epochs=num_epochs,
+        replay_buffer=replay_buffer,
+        async_collection=async_collection,
+        log_timings=log_timings,
+        target_net_updater=target_net_updater,
+        exploration_module=exploration_module,
     )
