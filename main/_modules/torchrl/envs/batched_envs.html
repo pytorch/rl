@@ -300,6 +300,54 @@
 <span class="p">)</span>
 
 
+<span class="k">def</span> <span class="nf">_to_device_mps_safe</span><span class="p">(</span>
+    <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">non_blocking</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Move a tensor to the target device, downcasting float64 to float32 for MPS.</span>
+
+<span class="sd">    MPS does not support float64. When the target device is MPS and the source</span>
+<span class="sd">    tensor is float64, this automatically downcasts to float32 during the transfer.</span>
+<span class="sd">    For all other devices the call is equivalent to ``tensor.to(device, ...)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;mps&quot;</span> <span class="ow">and</span> <span class="n">tensor</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">tensor</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">non_blocking</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">tensor</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">non_blocking</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_td_to_device_mps_safe</span><span class="p">(</span>
+    <span class="n">td</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">non_blocking</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Move a TensorDict to the target device, handling MPS float64 via :func:`_to_device_mps_safe`.</span>
+
+<span class="sd">    For non-MPS devices this falls back to ``td.to(device, ...)``.</span>
+<span class="sd">    For MPS it applies :func:`_to_device_mps_safe` per-tensor to avoid the</span>
+<span class="sd">    float64-on-MPS limitation.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;mps&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">td</span><span class="o">.</span><span class="n">_fast_apply</span><span class="p">(</span>
+            <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span>
+                <span class="n">_to_device_mps_safe</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">non_blocking</span>
+            <span class="p">),</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">td</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">non_blocking</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_has_float64_leaf</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return True if any non-Composite leaf spec in *spec* has dtype float64.&quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">spec</span><span class="o">.</span><span class="n">items</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="s2">&quot;dtype&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">return</span> <span class="kc">False</span>
+
+
 <span class="k">def</span> <span class="nf">_check_start</span><span class="p">(</span><span class="n">fun</span><span class="p">):</span>
     <span class="k">def</span> <span class="nf">decorated_fun</span><span class="p">(</span><span class="bp">self</span><span class="p">:</span> <span class="n">BatchedEnvBase</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_closed</span><span class="p">:</span>
@@ -790,7 +838,9 @@
             <span class="n">selected_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_selected_step_keys</span>
         <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">selected_keys</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">tensor</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
-                <span class="k">return</span> <span class="n">tensor</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">_to_device_mps_safe</span><span class="p">(</span>
+                    <span class="n">tensor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span>
+                <span class="p">)</span>
             <span class="k">return</span> <span class="n">tensor</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
 
     <span class="nd">@property</span>
@@ -1014,11 +1064,29 @@
                 <span class="n">meta_data</span><span class="o">.</span><span class="n">specs</span><span class="p">[</span><span class="s2">&quot;output_spec&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
             <span class="p">)</span>
 
-            <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_action_spec&quot;</span><span class="p">]</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">state_spec</span> <span class="o">=</span> <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_state_spec&quot;</span><span class="p">]</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span> <span class="o">=</span> <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_observation_spec&quot;</span><span class="p">]</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">reward_spec</span> <span class="o">=</span> <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">]</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">done_spec</span> <span class="o">=</span> <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_done_spec&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_device</span><span class="p">)</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;mps&quot;</span>
+                <span class="ow">and</span> <span class="p">(</span><span class="n">_has_float64_leaf</span><span class="p">(</span><span class="n">input_spec</span><span class="p">)</span> <span class="ow">or</span> <span class="n">_has_float64_leaf</span><span class="p">(</span><span class="n">output_spec</span><span class="p">))</span>
+            <span class="p">):</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Sub-environments produce float64 data but the batched env device is &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_device</span><span class="si">}</span><span class="s2">&#39; which does not support float64. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;All float64 specs and tensors will be downcast to float32.&quot;</span><span class="p">,</span>
+                    <span class="ne">UserWarning</span><span class="p">,</span>
+                    <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">():</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span>
+                    <span class="s2">&quot;ignore&quot;</span><span class="p">,</span>
+                    <span class="n">message</span><span class="o">=</span><span class="s2">&quot;MPS device does not support float64&quot;</span><span class="p">,</span>
+                    <span class="n">category</span><span class="o">=</span><span class="ne">UserWarning</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_action_spec&quot;</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">state_spec</span> <span class="o">=</span> <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_state_spec&quot;</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span> <span class="o">=</span> <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_observation_spec&quot;</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">reward_spec</span> <span class="o">=</span> <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">done_spec</span> <span class="o">=</span> <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_done_spec&quot;</span><span class="p">]</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">_dummy_env_str</span> <span class="o">=</span> <span class="n">meta_data</span><span class="o">.</span><span class="n">env_str</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_env_tensordict</span> <span class="o">=</span> <span class="n">meta_data</span><span class="o">.</span><span class="n">tensordict</span>
@@ -1058,12 +1126,34 @@
                 <span class="n">output_spec</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_check_for_empty_spec</span><span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">specs</span><span class="p">[</span><span class="s2">&quot;output_spec&quot;</span><span class="p">]))</span>
             <span class="n">output_spec</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">output_spec</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
 
-            <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_action_spec&quot;</span><span class="p">]</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">state_spec</span> <span class="o">=</span> <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_state_spec&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_device</span><span class="p">)</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;mps&quot;</span>
+                <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span>
+                    <span class="n">_has_float64_leaf</span><span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">specs</span><span class="p">[</span><span class="s2">&quot;input_spec&quot;</span><span class="p">])</span>
+                    <span class="ow">or</span> <span class="n">_has_float64_leaf</span><span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">specs</span><span class="p">[</span><span class="s2">&quot;output_spec&quot;</span><span class="p">])</span>
+                    <span class="k">for</span> <span class="n">md</span> <span class="ow">in</span> <span class="n">meta_data</span>
+                <span class="p">)</span>
+            <span class="p">):</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Sub-environments produce float64 data but the batched env device is &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_device</span><span class="si">}</span><span class="s2">&#39; which does not support float64. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;All float64 specs and tensors will be downcast to float32.&quot;</span><span class="p">,</span>
+                    <span class="ne">UserWarning</span><span class="p">,</span>
+                    <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">():</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span>
+                    <span class="s2">&quot;ignore&quot;</span><span class="p">,</span>
+                    <span class="n">message</span><span class="o">=</span><span class="s2">&quot;MPS device does not support float64&quot;</span><span class="p">,</span>
+                    <span class="n">category</span><span class="o">=</span><span class="ne">UserWarning</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_action_spec&quot;</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">state_spec</span> <span class="o">=</span> <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_state_spec&quot;</span><span class="p">]</span>
 
-            <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span> <span class="o">=</span> <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_observation_spec&quot;</span><span class="p">]</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">reward_spec</span> <span class="o">=</span> <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">]</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">done_spec</span> <span class="o">=</span> <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_done_spec&quot;</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span> <span class="o">=</span> <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_observation_spec&quot;</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">reward_spec</span> <span class="o">=</span> <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">done_spec</span> <span class="o">=</span> <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_done_spec&quot;</span><span class="p">]</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">_dummy_env_str</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">meta_data</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">share_individual_td</span><span class="p">:</span>
@@ -1443,7 +1533,7 @@
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                         <span class="n">ftd</span><span class="o">.</span><span class="n">clear_device_</span><span class="p">()</span>
                     <span class="k">else</span><span class="p">:</span>
-                        <span class="n">ftd</span> <span class="o">=</span> <span class="n">ftd</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                        <span class="n">ftd</span> <span class="o">=</span> <span class="n">_td_to_device_mps_safe</span><span class="p">(</span><span class="n">ftd</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
                     <span class="n">out_tds</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">ftd</span>
                 <span class="k">continue</span>
             <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1494,7 +1584,9 @@
                 <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">clear_device_</span><span class="p">()</span>
                 <span class="k">else</span><span class="p">:</span>
-                    <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span><span class="p">)</span>
+                    <span class="n">result</span> <span class="o">=</span> <span class="n">_td_to_device_mps_safe</span><span class="p">(</span>
+                        <span class="n">result</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span>
+                    <span class="p">)</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_sync_w2m</span><span class="p">()</span>
             <span class="k">return</span> <span class="n">result</span>
 
@@ -1559,6 +1651,8 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_non_tensor_keys</span><span class="p">:</span>
             <span class="n">out_tds</span> <span class="o">=</span> <span class="p">[]</span>
 
+        <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span><span class="p">:</span>
             <span class="n">next_td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_tensordict_parent</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">_data_in</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">workers_range</span><span class="p">,</span> <span class="n">data_in</span><span class="p">):</span>
@@ -1575,7 +1669,6 @@
 
             <span class="c1"># We must pass a clone of the tensordict, as the values of this tensordict</span>
             <span class="c1"># will be modified in-place at further steps</span>
-            <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
 
             <span class="n">selected_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_selected_step_keys</span>
 
@@ -1603,6 +1696,14 @@
                 <span class="n">out_td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_envs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">_step</span><span class="p">(</span><span class="n">_data_in</span><span class="p">)</span>
                 <span class="n">out_tds</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">out_td</span><span class="p">)</span>
             <span class="n">out</span> <span class="o">=</span> <span class="n">LazyStackedTensorDict</span><span class="o">.</span><span class="n">maybe_dense_stack</span><span class="p">(</span><span class="n">out_tds</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">out</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">clear_device_</span><span class="p">()</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">out</span> <span class="o">=</span> <span class="n">_td_to_device_mps_safe</span><span class="p">(</span>
+                        <span class="n">out</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span>
+                    <span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_sync_w2m</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="n">partial_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">partial_steps</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
             <span class="n">result</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">tensordict_save</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
@@ -2380,7 +2481,9 @@
 
         <span class="n">out</span> <span class="o">=</span> <span class="n">LazyStackedTensorDict</span><span class="o">.</span><span class="n">maybe_dense_stack</span><span class="p">(</span><span class="n">out_tds</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">out</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
-            <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span><span class="p">)</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">_td_to_device_mps_safe</span><span class="p">(</span>
+                <span class="n">out</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span>
+            <span class="p">)</span>
         <span class="k">if</span> <span class="n">partial_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">result</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">tensordict_save</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
 
@@ -2614,7 +2717,9 @@
         <span class="n">result</span> <span class="o">=</span> <span class="n">LazyStackedTensorDict</span><span class="o">.</span><span class="n">maybe_dense_stack</span><span class="p">(</span><span class="n">out_tds</span><span class="p">)</span>
         <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
         <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">result</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">_td_to_device_mps_safe</span><span class="p">(</span>
+                <span class="n">result</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span>
+            <span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span>
 
     <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>

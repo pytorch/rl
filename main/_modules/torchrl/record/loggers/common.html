@@ -244,6 +244,7 @@
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">abc</span>
+<span class="kn">import</span> <span class="nn">importlib.util</span>
 <span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Sequence</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
 
@@ -251,8 +252,66 @@
 <span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDictBase</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">Tensor</span>
 
+<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">implement_for</span>
+
+<span class="n">_has_tv</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;torchvision&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">torchcodec.encoders</span> <span class="kn">import</span> <span class="n">VideoEncoder</span>  <span class="c1"># noqa: F401</span>
+
+    <span class="n">_has_torchcodec</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="k">del</span> <span class="n">VideoEncoder</span>
+<span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+    <span class="n">_has_torchcodec</span> <span class="o">=</span> <span class="kc">False</span>
+
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Logger&quot;</span><span class="p">]</span>
+
+
+<span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torchvision&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;0.22&quot;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">_write_video</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">video_array</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_tv</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+            <span class="s2">&quot;Writing mp4 videos with torchvision &lt; 0.22 requires torchvision to be installed. &quot;</span>
+            <span class="s2">&quot;Install it with: pip install torchvision&quot;</span>
+        <span class="p">)</span>
+    <span class="kn">import</span> <span class="nn">torchvision</span>
+
+    <span class="n">torchvision</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">write_video</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">video_array</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
+<span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torchvision&quot;</span><span class="p">,</span> <span class="s2">&quot;0.22&quot;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">_write_video</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">video_array</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_torchcodec</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+            <span class="s2">&quot;Writing mp4 videos with torchvision &gt;= 0.22 requires torchcodec &gt;= 0.10.0, &quot;</span>
+            <span class="s2">&quot;since torchvision.io.write_video was deprecated in 0.22 and removed in 0.24. &quot;</span>
+            <span class="s2">&quot;Install it with: pip install &#39;torchcodec&gt;=0.10.0&#39;&quot;</span>
+        <span class="p">)</span>
+    <span class="kn">from</span> <span class="nn">torchcodec.encoders</span> <span class="kn">import</span> <span class="n">VideoEncoder</span>
+
+    <span class="n">fps</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;fps&quot;</span><span class="p">,</span> <span class="mi">30</span><span class="p">)</span>
+    <span class="n">video_codec</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;video_codec&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">options</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;options&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{})</span>
+    <span class="n">crf</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;crf&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">preset</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;preset&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">pixel_format</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;pixel_format&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="c1"># VideoEncoder expects (N, C, H, W); callers pass (T, H, W, C)</span>
+    <span class="n">video_array</span> <span class="o">=</span> <span class="n">video_array</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+
+    <span class="n">to_file_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="n">video_codec</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">to_file_kwargs</span><span class="p">[</span><span class="s2">&quot;codec&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">video_codec</span>
+    <span class="k">if</span> <span class="n">crf</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">to_file_kwargs</span><span class="p">[</span><span class="s2">&quot;crf&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">crf</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">preset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">to_file_kwargs</span><span class="p">[</span><span class="s2">&quot;preset&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">preset</span>
+    <span class="k">if</span> <span class="n">pixel_format</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">to_file_kwargs</span><span class="p">[</span><span class="s2">&quot;pixel_format&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pixel_format</span>
+    <span class="k">if</span> <span class="n">options</span><span class="p">:</span>
+        <span class="n">to_file_kwargs</span><span class="p">[</span><span class="s2">&quot;extra_options&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">options</span>
+
+    <span class="n">VideoEncoder</span><span class="p">(</span><span class="n">frames</span><span class="o">=</span><span class="n">video_array</span><span class="p">,</span> <span class="n">frame_rate</span><span class="o">=</span><span class="n">fps</span><span class="p">)</span><span class="o">.</span><span class="n">to_file</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="o">**</span><span class="n">to_file_kwargs</span><span class="p">)</span>
 
 
 <span class="k">def</span> <span class="nf">_make_metrics_safe</span><span class="p">(</span>

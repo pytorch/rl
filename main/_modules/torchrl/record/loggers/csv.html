@@ -253,7 +253,7 @@
 <span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">MemoryMappedTensor</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">Tensor</span>
 
-<span class="kn">from</span> <span class="nn">.common</span> <span class="kn">import</span> <span class="n">Logger</span>
+<span class="kn">from</span> <span class="nn">.common</span> <span class="kn">import</span> <span class="n">_write_video</span><span class="p">,</span> <span class="n">Logger</span>
 
 
 <span class="k">class</span> <span class="nc">CSVExperiment</span><span class="p">:</span>
@@ -296,9 +296,12 @@
 <span class="sd">        - `&quot;pt&quot;`: uses :func:`~torch.save` to save the video tensor);</span>
 <span class="sd">        - `&quot;memmap&quot;`: saved the file as memory-mapped array (reading this file will require</span>
 <span class="sd">          the dtype and shape to be known at read time);</span>
-<span class="sd">        - `&quot;mp4&quot;`: saves the file as an `.mp4` file using torchvision :func:`~torchvision.io.write_video`</span>
-<span class="sd">          API. Any ``kwargs`` passed to ``add_video`` will be transmitted to ``write_video``.</span>
-<span class="sd">          These include ``preset``, ``crf`` and others.</span>
+<span class="sd">        - `&quot;mp4&quot;`: saves the file as an `.mp4` file. For torchvision &lt; 0.22, this uses</span>
+<span class="sd">          :func:`~torchvision.io.write_video`; for torchvision &gt;= 0.22, this uses</span>
+<span class="sd">          :class:`~torchcodec.encoders.VideoEncoder` since ``write_video`` was deprecated and</span>
+<span class="sd">          later removed. Any ``kwargs`` passed to ``add_video`` will be transmitted to the</span>
+<span class="sd">          underlying writer. These include ``video_codec``, ``options``</span>
+<span class="sd">          (a dict, e.g. ``{&quot;crf&quot;: &quot;23&quot;, &quot;preset&quot;: &quot;medium&quot;}``), and others.</span>
 <span class="sd">          See ffmpeg&#39;s doc (https://trac.ffmpeg.org/wiki/Encode/H.264) for some more information of the video format options.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -326,8 +329,6 @@
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">video_format</span> <span class="o">==</span> <span class="s2">&quot;memmap&quot;</span><span class="p">:</span>
             <span class="n">MemoryMappedTensor</span><span class="o">.</span><span class="n">from_tensor</span><span class="p">(</span><span class="n">vid_tensor</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="n">filepath</span><span class="p">)</span>
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">video_format</span> <span class="o">==</span> <span class="s2">&quot;mp4&quot;</span><span class="p">:</span>
-            <span class="kn">import</span> <span class="nn">torchvision</span>
-
             <span class="k">if</span> <span class="n">vid_tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">3</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                     <span class="s2">&quot;expected the video tensor to be of format [T, C, H, W] but the third channel &quot;</span>
@@ -338,7 +339,7 @@
             <span class="n">vid_tensor</span> <span class="o">=</span> <span class="n">vid_tensor</span><span class="o">.</span><span class="n">permute</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
             <span class="n">vid_tensor</span> <span class="o">=</span> <span class="n">vid_tensor</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="o">*</span><span class="n">vid_tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="mi">3</span><span class="p">)</span>
             <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;fps&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">video_fps</span><span class="p">)</span>
-            <span class="n">torchvision</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">write_video</span><span class="p">(</span><span class="n">filepath</span><span class="p">,</span> <span class="n">vid_tensor</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">_write_video</span><span class="p">(</span><span class="n">filepath</span><span class="p">,</span> <span class="n">vid_tensor</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Unknown video format </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">video_format</span><span class="si">}</span><span class="s2">. Must be one of &#39;pt&#39;, &#39;memmap&#39; or &#39;mp4&#39;.&quot;</span>
@@ -429,8 +430,8 @@
 <span class="sd">            step (int, optional): The step at which the video is logged. Defaults to None.</span>
 <span class="sd">            **kwargs: other kwargs passed to the underlying video logger.</span>
 
-<span class="sd">        .. note:: If the video format is `mp4`, many more arguments can be passed to the :meth:`~torchvision.io.write_video`</span>
-<span class="sd">            function.</span>
+<span class="sd">        .. note:: If the video format is `mp4`, additional arguments (e.g. ``video_codec``, ``options``)</span>
+<span class="sd">            can be passed through to the underlying video writer.</span>
 <span class="sd">            For more information on video logging with :class:`~torchrl.record.loggers.csv.CSVLogger`,</span>
 <span class="sd">            see the :meth:`~torchrl.record.loggers.csv.CSVExperiment.add_video` documentation.</span>
 <span class="sd">        &quot;&quot;&quot;</span>

@@ -253,7 +253,7 @@
 <span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDictBase</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">Tensor</span>
 
-<span class="kn">from</span> <span class="nn">torchrl.record.loggers.common</span> <span class="kn">import</span> <span class="n">_make_metrics_safe</span><span class="p">,</span> <span class="n">Logger</span>
+<span class="kn">from</span> <span class="nn">torchrl.record.loggers.common</span> <span class="kn">import</span> <span class="n">_make_metrics_safe</span><span class="p">,</span> <span class="n">_write_video</span><span class="p">,</span> <span class="n">Logger</span>
 
 <span class="n">_has_tv</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;torchvision&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 
@@ -340,7 +340,6 @@
 <span class="sd">                supports &#39;step&#39; (integer indicating the step index) and &#39;fps&#39; (defaults to ``self.video_fps``).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="kn">import</span> <span class="nn">mlflow</span>
-        <span class="kn">import</span> <span class="nn">torchvision</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_tv</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
@@ -360,7 +359,7 @@
         <span class="k">with</span> <span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">temp_dir</span><span class="p">:</span>
             <span class="n">video_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">_step_</span><span class="si">{</span><span class="n">step</span><span class="si">:</span><span class="s2">04</span><span class="si">}</span><span class="s2">.mp4&quot;</span> <span class="k">if</span> <span class="n">step</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">.mp4&quot;</span>
             <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">temp_dir</span><span class="p">,</span> <span class="n">video_name</span><span class="p">),</span> <span class="s2">&quot;wb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
-                <span class="n">torchvision</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">write_video</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="n">f</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">video_array</span><span class="o">=</span><span class="n">video</span><span class="p">,</span> <span class="n">fps</span><span class="o">=</span><span class="n">fps</span><span class="p">)</span>
+                <span class="n">_write_video</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">video</span><span class="p">,</span> <span class="n">fps</span><span class="o">=</span><span class="n">fps</span><span class="p">)</span>
                 <span class="n">mlflow</span><span class="o">.</span><span class="n">log_artifact</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">&quot;videos&quot;</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">log_hparams</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cfg</span><span class="p">:</span> <span class="n">DictConfig</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>

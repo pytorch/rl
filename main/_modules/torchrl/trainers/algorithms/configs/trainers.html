@@ -261,6 +261,7 @@
 <span class="kn">from</span> <span class="nn">torchrl.trainers.algorithms.iql</span> <span class="kn">import</span> <span class="n">IQLTrainer</span>
 <span class="kn">from</span> <span class="nn">torchrl.trainers.algorithms.ppo</span> <span class="kn">import</span> <span class="n">PPOTrainer</span>
 <span class="kn">from</span> <span class="nn">torchrl.trainers.algorithms.sac</span> <span class="kn">import</span> <span class="n">SACTrainer</span>
+<span class="kn">from</span> <span class="nn">torchrl.trainers.algorithms.td3</span> <span class="kn">import</span> <span class="n">TD3Trainer</span>
 
 
 <div class="viewcode-block" id="TrainerConfig">
@@ -1076,6 +1077,191 @@
         <span class="n">target_net_updater</span><span class="o">=</span><span class="n">target_net_updater</span><span class="p">,</span>
         <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">TD3TrainerConfig</span><span class="p">(</span><span class="n">TrainerConfig</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Configuration class for TD3 (Twin Delayed DDPG) trainer.&quot;&quot;&quot;</span>
+
+    <span class="n">collector</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">loss_module</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="n">logger</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="n">replay_buffer</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="n">save_trainer_file</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="n">optim_steps_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">optimizer</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">optimizer_actor</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">optimizer_critic</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">actor_network</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">qvalue_network</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">exploration_module</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">clip_grad_norm</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">clip_norm</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">create_env_fn</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">target_net_updater</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">policy_update_delay</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span>
+    <span class="n">value_estimator_gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torchrl.trainers.algorithms.configs.trainers._make_td3_trainer&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__post_init__</span><span class="p">()</span>
+
+
+<span class="k">def</span> <span class="nf">_make_td3_trainer</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictSequential</span>
+
+    <span class="kn">from</span> <span class="nn">torchrl.objectives.utils</span> <span class="kn">import</span> <span class="n">TargetNetUpdater</span>
+    <span class="kn">from</span> <span class="nn">torchrl.trainers.algorithms.td3</span> <span class="kn">import</span> <span class="n">TD3OptimizationStepper</span>
+    <span class="kn">from</span> <span class="nn">torchrl.trainers.trainers</span> <span class="kn">import</span> <span class="n">Logger</span>
+
+    <span class="n">collector</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">)</span>
+    <span class="n">total_frames</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;total_frames&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">total_frames</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">total_frames</span> <span class="o">=</span> <span class="n">collector</span><span class="o">.</span><span class="n">total_frames</span>
+    <span class="n">frame_skip</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;frame_skip&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">optim_steps_per_batch</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;optim_steps_per_batch&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">loss_module</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;loss_module&quot;</span><span class="p">)</span>
+    <span class="n">optimizer</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;optimizer&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">optimizer_actor</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;optimizer_actor&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">optimizer_critic</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;optimizer_critic&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">logger</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;logger&quot;</span><span class="p">)</span>
+    <span class="n">clip_grad_norm</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;clip_grad_norm&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">clip_norm</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;clip_norm&quot;</span><span class="p">)</span>
+    <span class="n">progress_bar</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;progress_bar&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;replay_buffer&quot;</span><span class="p">)</span>
+    <span class="n">save_trainer_interval</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;save_trainer_interval&quot;</span><span class="p">,</span> <span class="mi">10000</span><span class="p">)</span>
+    <span class="n">log_interval</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_interval&quot;</span><span class="p">,</span> <span class="mi">10000</span><span class="p">)</span>
+    <span class="n">save_trainer_file</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;save_trainer_file&quot;</span><span class="p">)</span>
+    <span class="n">seed</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;seed&quot;</span><span class="p">)</span>
+    <span class="n">num_epochs</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;num_epochs&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">async_collection</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;async_collection&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="n">log_timings</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_timings&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="n">actor_network</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;actor_network&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">qvalue_network</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;qvalue_network&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">exploration_module</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;exploration_module&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;create_env_fn&quot;</span><span class="p">)</span>
+    <span class="n">target_net_updater</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;target_net_updater&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">policy_update_delay</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;policy_update_delay&quot;</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">value_estimator_gamma</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;value_estimator_gamma&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">actor_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">actor_network</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+        <span class="n">actor_network</span> <span class="o">=</span> <span class="n">actor_network</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">qvalue_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">qvalue_network</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+        <span class="n">qvalue_network</span> <span class="o">=</span> <span class="n">qvalue_network</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">exploration_module</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
+        <span class="n">exploration_module</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span>
+    <span class="p">):</span>
+        <span class="n">exploration_module</span> <span class="o">=</span> <span class="n">exploration_module</span><span class="p">()</span>
+
+    <span class="n">exploration_policy</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">actor_network</span>
+        <span class="k">if</span> <span class="n">exploration_module</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="k">else</span> <span class="n">TensorDictSequential</span><span class="p">(</span><span class="n">actor_network</span><span class="p">,</span> <span class="n">exploration_module</span><span class="p">)</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">collector</span><span class="p">,</span> <span class="n">BaseCollector</span><span class="p">):</span>
+        <span class="n">collector_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;policy&quot;</span><span class="p">:</span> <span class="n">exploration_policy</span><span class="p">}</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">async_collection</span><span class="p">:</span>
+            <span class="n">collector</span> <span class="o">=</span> <span class="n">collector</span><span class="p">(</span><span class="o">**</span><span class="n">collector_kwargs</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">collector</span> <span class="o">=</span> <span class="n">collector</span><span class="p">(</span><span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay_buffer</span><span class="p">,</span> <span class="o">**</span><span class="n">collector_kwargs</span><span class="p">)</span>
+
+    <span class="n">env</span> <span class="o">=</span> <span class="n">collector</span><span class="o">.</span><span class="n">env</span>
+    <span class="n">action_spec</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="s2">&quot;action_spec_unbatched&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="n">env</span><span class="o">.</span><span class="n">action_spec</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">action_spec</span><span class="p">,</span> <span class="s2">&quot;get&quot;</span><span class="p">):</span>
+        <span class="n">nested_action_spec</span> <span class="o">=</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">nested_action_spec</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">action_spec</span> <span class="o">=</span> <span class="n">nested_action_spec</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">loss_module</span><span class="p">):</span>
+        <span class="c1"># TD3Loss currently requires real action bounds from the environment. Therefore, we</span>
+        <span class="c1"># require it to be a partial for now.</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="s2">&quot;TD3Trainer currently expects loss_module to be a Hydra partial/callable. &quot;</span>
+            <span class="s2">&quot;Provide a partial loss config (e.g. loss._partial_=true) and let the &quot;</span>
+            <span class="s2">&quot;trainer inject actor_network, qvalue_network, and action_spec.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">loss_module</span> <span class="o">=</span> <span class="n">loss_module</span><span class="p">(</span>
+            <span class="n">action_spec</span><span class="o">=</span><span class="n">action_spec</span><span class="p">,</span>
+            <span class="n">actor_network</span><span class="o">=</span><span class="n">actor_network</span><span class="p">,</span>
+            <span class="n">qvalue_network</span><span class="o">=</span><span class="n">qvalue_network</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">value_estimator_gamma</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">loss_module</span><span class="o">.</span><span class="n">make_value_estimator</span><span class="p">(</span><span class="n">gamma</span><span class="o">=</span><span class="n">value_estimator_gamma</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">target_net_updater</span><span class="p">,</span> <span class="n">TargetNetUpdater</span><span class="p">):</span>
+        <span class="n">target_net_updater</span> <span class="o">=</span> <span class="n">target_net_updater</span><span class="p">(</span><span class="n">loss_module</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">optimizer_actor</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">optimizer_critic</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">optimizer_actor</span> <span class="o">=</span> <span class="n">optimizer</span>
+        <span class="n">optimizer_critic</span> <span class="o">=</span> <span class="n">optimizer</span>
+    <span class="k">elif</span> <span class="n">optimizer_actor</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">optimizer_critic</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="s2">&quot;TD3Trainer requires both optimizer_actor and optimizer_critic when overriding optimizer.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">actor_params</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">loss_module</span><span class="o">.</span><span class="n">actor_network_params</span><span class="o">.</span><span class="n">flatten_keys</span><span class="p">()</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+    <span class="n">critic_params</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">loss_module</span><span class="o">.</span><span class="n">qvalue_network_params</span><span class="o">.</span><span class="n">flatten_keys</span><span class="p">()</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">optimizer_actor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Optimizer</span><span class="p">):</span>
+        <span class="n">optimizer_actor</span> <span class="o">=</span> <span class="n">optimizer_actor</span><span class="p">(</span><span class="n">params</span><span class="o">=</span><span class="n">actor_params</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">optimizer_critic</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Optimizer</span><span class="p">):</span>
+        <span class="n">optimizer_critic</span> <span class="o">=</span> <span class="n">optimizer_critic</span><span class="p">(</span><span class="n">params</span><span class="o">=</span><span class="n">critic_params</span><span class="p">)</span>
+
+    <span class="n">optimization_stepper</span> <span class="o">=</span> <span class="n">TD3OptimizationStepper</span><span class="p">(</span>
+        <span class="n">optimizer_actor</span><span class="o">=</span><span class="n">optimizer_actor</span><span class="p">,</span>
+        <span class="n">optimizer_critic</span><span class="o">=</span><span class="n">optimizer_critic</span><span class="p">,</span>
+        <span class="n">policy_update_delay</span><span class="o">=</span><span class="n">policy_update_delay</span><span class="p">,</span>
+        <span class="n">zero_grad_set_to_none</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">collector</span><span class="p">,</span> <span class="n">BaseCollector</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;collector must be a BaseCollector, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">collector</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">loss_module</span><span class="p">,</span> <span class="n">LossModule</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;loss_module must be a LossModule, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">loss_module</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">optimizer_actor</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">optimizer_critic</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;TD3Trainer requires optimizer configuration.&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">optimizer_actor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Optimizer</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;TD3Trainer requires optimizer_actor to be a torch.optim.Optimizer, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">optimizer</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">optimizer_critic</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Optimizer</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;TD3Trainer requires optimizer_critic to be a torch.optim.Optimizer, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">optimizer</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">logger</span><span class="p">,</span> <span class="n">Logger</span><span class="p">)</span> <span class="ow">and</span> <span class="n">logger</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;logger must be a Logger or None, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">logger</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">TD3Trainer</span><span class="p">(</span>
+        <span class="n">collector</span><span class="o">=</span><span class="n">collector</span><span class="p">,</span>
+        <span class="n">total_frames</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
+        <span class="n">frame_skip</span><span class="o">=</span><span class="n">frame_skip</span><span class="p">,</span>
+        <span class="n">optim_steps_per_batch</span><span class="o">=</span><span class="n">optim_steps_per_batch</span><span class="p">,</span>
+        <span class="n">loss_module</span><span class="o">=</span><span class="n">loss_module</span><span class="p">,</span>
+        <span class="n">optimizer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">optimization_stepper</span><span class="o">=</span><span class="n">optimization_stepper</span><span class="p">,</span>
+        <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span>
+        <span class="n">clip_grad_norm</span><span class="o">=</span><span class="n">clip_grad_norm</span><span class="p">,</span>
+        <span class="n">clip_norm</span><span class="o">=</span><span class="n">clip_norm</span><span class="p">,</span>
+        <span class="n">progress_bar</span><span class="o">=</span><span class="n">progress_bar</span><span class="p">,</span>
+        <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
+        <span class="n">save_trainer_interval</span><span class="o">=</span><span class="n">save_trainer_interval</span><span class="p">,</span>
+        <span class="n">log_interval</span><span class="o">=</span><span class="n">log_interval</span><span class="p">,</span>
+        <span class="n">save_trainer_file</span><span class="o">=</span><span class="n">save_trainer_file</span><span class="p">,</span>
+        <span class="n">num_epochs</span><span class="o">=</span><span class="n">num_epochs</span><span class="p">,</span>
+        <span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay_buffer</span><span class="p">,</span>
+        <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
+        <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
+        <span class="n">target_net_updater</span><span class="o">=</span><span class="n">target_net_updater</span><span class="p">,</span>
+        <span class="n">exploration_module</span><span class="o">=</span><span class="n">exploration_module</span><span class="p">,</span>
     <span class="p">)</span>
 </pre></div>
 
