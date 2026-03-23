@@ -130,7 +130,6 @@ uv_pip_install \
   wandb \
   mlflow \
   av \
-  torchcodec \
   coverage \
   transformers \
   ninja \
@@ -247,6 +246,13 @@ else
   uv_pip_install -e . --no-build-isolation --no-deps
 fi
 
+# install torchcodec (from source for nightly, from PyPI for stable)
+if [[ "$TORCH_VERSION" == "nightly" ]]; then
+  uv_pip_install --no-build-isolation git+https://github.com/pytorch/torchcodec.git
+else
+  uv_pip_install torchcodec
+fi
+
 if [ "${CU_VERSION:-}" != cpu ] ; then
   printf "* Installing VC1\n"
   # Install vc_models directly via uv.
@@ -312,6 +318,8 @@ fi
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
+
+bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
 
 Xvfb :99 -screen 0 1024x768x24 &
 

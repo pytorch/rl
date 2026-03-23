@@ -93,6 +93,8 @@ jobs:
           python3.10 -m pip install safetensors tqdm pandas numpy matplotlib ray
           python3.10 setup.py develop
 
+          bash .github/unittest/helpers/assert_torch_version.sh nightly
+
           # test import
           python -c """import torch
           assert torch.cuda.device_count()

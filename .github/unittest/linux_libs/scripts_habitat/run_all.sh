@@ -28,6 +28,7 @@ cp $this_dir/10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
 bash ${this_dir}/setup_env.sh
 bash ${this_dir}/install.sh
 
-#apt-get install -y freeglut3 freeglut3-dev
+bash "$(git rev-parse --show-toplevel)/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
+
 bash ${this_dir}/run_test.sh
 bash ${this_dir}/post_process.sh

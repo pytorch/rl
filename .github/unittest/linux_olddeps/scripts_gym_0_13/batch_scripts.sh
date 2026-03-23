@@ -6,4 +6,5 @@
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 $DIR/install.sh
+bash "$(git rev-parse --show-toplevel)/.github/unittest/helpers/assert_torch_version.sh" stable
 $DIR/run_test.sh

@@ -147,6 +147,8 @@ export LAZY_LEGACY_OP=False
 echo "=== Collecting environment info ==="
 python -m torch.utils.collect_env
 
+bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
+
 echo "=== Starting pytest execution ==="
 echo "Current working directory: $(pwd)"
 echo "Python executable: $(which python)"
