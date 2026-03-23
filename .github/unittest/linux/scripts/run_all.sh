@@ -248,11 +248,13 @@ fi
 
 # install torchcodec (from source for nightly, from PyPI for stable)
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
-  export BUILD_AGAINST_ALL_FFMPEG_FROM_S3=1
-  export Python3_INCLUDE_DIR="$(python -c 'import sysconfig; print(sysconfig.get_path("include"))')"
-  export Python3_LIBRARY="$(python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')/libpython${PYTHON_VERSION}.so"
-  uv_pip_install --no-build-isolation git+https://github.com/pytorch/torchcodec.git
-  unset BUILD_AGAINST_ALL_FFMPEG_FROM_S3 Python3_INCLUDE_DIR Python3_LIBRARY
+  torchcodec_dir=$(mktemp -d)
+  git clone --depth 1 https://github.com/pytorch/torchcodec.git "$torchcodec_dir"
+  python_base="$(python -c 'import sys; print(sys.base_prefix)')"
+  CMAKE_PREFIX_PATH="${python_base}${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}" \
+    I_CONFIRM_THIS_IS_NOT_A_LICENSE_VIOLATION=1 \
+    uv_pip_install --no-build-isolation "$torchcodec_dir"
+  rm -rf "$torchcodec_dir"
 else
   uv_pip_install torchcodec
 fi
