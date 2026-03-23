@@ -255,7 +255,7 @@ class _StepMDP:
     @classmethod
     def _exclude(
         cls, nested_key_dict: dict, data_in: TensorDictBase, out: TensorDictBase | None
-    ) -> None:
+    ) -> TensorDictBase | None:
         """Copies the entries if they're not part of the list of keys to exclude."""
         if isinstance(data_in, LazyStackedTensorDict):
             if out is None:
@@ -279,23 +279,32 @@ class _StepMDP:
                         out = data_in.empty()
                     out._set_str(key, value, validated=True, inplace=False)
                     has_set = True
-        if has_set:
-            return out
+        return out
 
-    def __call__(self, tensordict):
+    def __call__(self, tensordict, out=None):
         if isinstance(tensordict, LazyStackedTensorDict):
-            out = LazyStackedTensorDict.lazy_stack(
-                [self.__call__(td) for td in tensordict.tensordicts],
-                tensordict.stack_dim,
-            )
-            return out
+            if out is not None and isinstance(out, LazyStackedTensorDict):
+                result = LazyStackedTensorDict.lazy_stack(
+                    [
+                        self.__call__(td, out=td_out)
+                        for td, td_out in zip(tensordict.tensordicts, out.tensordicts)
+                    ],
+                    tensordict.stack_dim,
+                )
+            else:
+                result = LazyStackedTensorDict.lazy_stack(
+                    [self.__call__(td) for td in tensordict.tensordicts],
+                    tensordict.stack_dim,
+                )
+            return result
         next_td = tensordict._get_str("next", None)
         if self.keep_other:
-            out = self._exclude(self.exclude_from_root, tensordict, out=None)
+            out = self._exclude(self.exclude_from_root, tensordict, out=out)
             if out is None:
                 out = tensordict.empty()
         else:
-            out = next_td.empty()
+            if out is None:
+                out = next_td.empty()
             self._grab_and_place(
                 self.keys_from_root,
                 tensordict,
