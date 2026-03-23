@@ -820,44 +820,6 @@ def _make_cql_trainer(*args, **kwargs) -> CQLTrainer:
     )
 
 
-# TODO(Ben): Remove this once confirmed that SOTA behaviour matches "close enough".
-# The reason why this was here is that the collector's env spec is on MPS float32,
-# Whereas TanhModule's spec as instantiated from the config is int64 on CPU.
-# Practically, this probably doesn't have an effect on results, but it MIGHT.
-# Ideally we can simplify this for now and just not care that it's on CPU/int64.
-# def _align_policy_modules_with_env_action_spec(
-#     policy: torch.nn.Module, env: Any
-# ) -> Any:
-#     """Align policy modules with environment action bounds.
-
-#     This intentionally handles a minimal case for now: ``TanhModule`` bounds.
-#     """
-
-#     action_spec = getattr(env, "action_spec_unbatched", None) or env.action_spec
-#     if hasattr(action_spec, "get"):
-#         nested_action_spec = action_spec.get("action", default=None)
-#         if nested_action_spec is not None:
-#             action_spec = nested_action_spec
-
-#     low = high = None
-#     if hasattr(action_spec, "space") and action_spec.space is not None:
-#         low, high = action_spec.space.low, action_spec.space.high
-#     elif hasattr(action_spec, "low") and hasattr(action_spec, "high"):
-#         low, high = action_spec.low, action_spec.high
-
-#     if low is None or high is None:
-#         return action_spec
-
-#     from torchrl.modules import TanhModule
-
-#     for module in policy.modules():
-#         if isinstance(module, TanhModule):
-#             module.action_low = low
-#             module.action_high = high
-
-#     return action_spec
-
-
 @dataclass
 class TD3TrainerConfig(TrainerConfig):
     """Configuration class for TD3 (Twin Delayed DDPG) trainer."""
@@ -950,14 +912,6 @@ def _make_td3_trainer(*args, **kwargs):
         elif replay_buffer is not None:
             collector = collector(replay_buffer=replay_buffer, **collector_kwargs)
 
-    # The collector (and therefore, environment) exist at this point, so we can make sure
-    # actor/exploration modules use the same action bounds/spec as the env.
-    # TODO(Ben): Delete this. See note above.
-    # env = collector.env
-    # action_spec = _align_policy_modules_with_env_action_spec(exploration_policy, env)
-
-    # TODO(Ben): If the above is NOT deleted, then delete this, as it duplicates
-    # Fetching the action_spec.
     env = collector.env
     action_spec = getattr(env, "action_spec_unbatched", None) or env.action_spec
     if hasattr(action_spec, "get"):
