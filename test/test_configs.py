@@ -1498,6 +1498,28 @@ class TestTrainerConfigs:
         assert cfg.qvalue_network is None
 
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_td3_trainer_config(self):
+        from torchrl.trainers.algorithms.configs.trainers import TD3TrainerConfig
+
+        cfg = TD3TrainerConfig(
+            collector=None,
+            total_frames=500,
+            loss_module=None,
+            logger=None,
+            replay_buffer=None,
+            save_trainer_file=None,
+        )
+
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.trainers._make_td3_trainer"
+        )
+        assert cfg.total_frames == 500
+        assert cfg.optim_steps_per_batch == 1
+        assert cfg.policy_update_delay == 2
+        assert cfg.clip_grad_norm is True
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_dqn_loss_config(self):
         from torchrl.trainers.algorithms.configs.objectives import DQNLossConfig
 
@@ -1549,6 +1571,21 @@ class TestTrainerConfigs:
         assert cfg.with_lagrange is True
         assert cfg.lagrange_thresh == 10.0
         assert cfg.num_random == 10
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_td3_loss_config(self):
+        from torchrl.trainers.algorithms.configs.objectives import TD3LossConfig
+
+        cfg = TD3LossConfig()
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.objectives._make_td3_loss"
+        )
+        assert cfg.num_qvalue_nets == 2
+        assert cfg.policy_noise == 0.2
+        assert cfg.noise_clip == 0.5
+        assert cfg.delay_actor is True
+        assert cfg.delay_qvalue is True
 
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_qvalue_model_config(self):
