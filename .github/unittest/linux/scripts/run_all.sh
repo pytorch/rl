@@ -26,7 +26,8 @@ if [[ $OSTYPE != 'darwin'* ]]; then
 
   apt-get install -y libglfw3 libosmesa6 libglew-dev
   apt-get install -y libglvnd0 libgl1 libglx0 libglx-mesa0 libegl1 libgles2 xvfb ffmpeg \
-    libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev
+    libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev \
+    libavdevice-dev libavfilter-dev
 
   if [ "${CU_VERSION:-}" == cpu ] ; then
     apt-get upgrade -y libstdc++6
@@ -130,7 +131,6 @@ uv_pip_install \
   wandb \
   mlflow \
   av \
-  torchcodec \
   coverage \
   transformers \
   ninja \
@@ -247,6 +247,19 @@ else
   uv_pip_install -e . --no-build-isolation --no-deps
 fi
 
+# install torchcodec (from source for nightly, from PyPI for stable)
+if [[ "$TORCH_VERSION" == "nightly" ]]; then
+  torchcodec_dir=$(mktemp -d)
+  git clone --depth 1 https://github.com/pytorch/torchcodec.git "$torchcodec_dir"
+  python_base="$(python -c 'import sys; print(sys.base_prefix)')"
+  CMAKE_PREFIX_PATH="${python_base}${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}" \
+    I_CONFIRM_THIS_IS_NOT_A_LICENSE_VIOLATION=1 \
+    uv_pip_install --no-build-isolation "$torchcodec_dir"
+  rm -rf "$torchcodec_dir"
+else
+  uv_pip_install torchcodec
+fi
+
 if [ "${CU_VERSION:-}" != cpu ] ; then
   printf "* Installing VC1\n"
   # Install vc_models directly via uv.
@@ -312,6 +325,8 @@ fi
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
+
+bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
 
 Xvfb :99 -screen 0 1024x768x24 &
 
