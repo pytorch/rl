@@ -2221,7 +2221,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             (+ others if needed).
 
         """
-        # sanity check
+        if self._trust_step_output:
+            next_tensordict = self._step(tensordict)
+            tensordict.set("next", next_tensordict)
+            return tensordict
+
         self._assert_tensordict_shape(tensordict)
         partial_steps = tensordict.pop("_step", None)
 
@@ -2250,8 +2254,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         if next_tensordict is None:
             next_tensordict = self._step(tensordict)
-            if not self._trust_step_output:
-                next_tensordict = self._step_proc_data(next_tensordict)
+            next_tensordict = self._step_proc_data(next_tensordict)
         if next_preset is not None:
             # tensordict could already have a "next" key
             # this could be done more efficiently by not excluding but just passing
