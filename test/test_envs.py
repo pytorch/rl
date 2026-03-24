@@ -2232,6 +2232,28 @@ class TestStepMdp:
         out_cls = step_func(tensordict)
         assert (out_func == out_cls).all()
 
+    @pytest.mark.parametrize(
+        "envcls",
+        [
+            ContinuousActionVecMockEnv,
+            CountingBatchedEnv,
+            CountingEnv,
+        ],
+    )
+    def test_step_class_out_reuse(self, envcls):
+        torch.manual_seed(0)
+        env = envcls()
+        tensordict = env.rand_step(env.reset())
+
+        step_func = _StepMDP(env, exclude_action=False)
+        result_no_out = step_func(tensordict.clone())
+        out_buf = result_no_out.clone()
+        out_buf_id = id(out_buf)
+
+        result_with_out = step_func(tensordict.clone(), out=out_buf)
+        assert id(result_with_out) == out_buf_id
+        assert (result_no_out == result_with_out).all()
+
     @pytest.mark.parametrize("nested_obs", [True, False])
     @pytest.mark.parametrize("nested_action", [True, False])
     @pytest.mark.parametrize("nested_done", [True, False])
@@ -3780,6 +3802,32 @@ class TestAutoReset:
             assert not lazy["lidar"][~done.squeeze()].isnan().any()
             assert (lazy_root["lidar"][1:][done[:-1].squeeze()] == 0).all()
 
+    def test_skip_maybe_reset_default(self):
+        env = AutoResettingCountingEnv(4, auto_reset=True)
+        assert not env._skip_maybe_reset
+
+    def test_skip_maybe_reset_step_and_maybe_reset(self):
+        env_normal = AutoResettingCountingEnv(100, auto_reset=True)
+        td_normal = env_normal.reset()
+        td_normal.set("action", torch.ones((*td_normal.shape, 1), dtype=torch.int64))
+
+        env_skip = AutoResettingCountingEnv(100, auto_reset=True)
+        env_skip._skip_maybe_reset = True
+        td_skip = env_skip.reset()
+        td_skip.set("action", torch.ones((*td_skip.shape, 1), dtype=torch.int64))
+
+        out_normal, next_normal = env_normal.step_and_maybe_reset(td_normal)
+        out_skip, next_skip = env_skip.step_and_maybe_reset(td_skip)
+
+        torch.testing.assert_close(
+            out_normal["next", "observation"],
+            out_skip["next", "observation"],
+        )
+        torch.testing.assert_close(
+            next_normal["observation"],
+            next_skip["observation"],
+        )
+
 
 class TestEnvWithDynamicSpec:
     def test_dynamic_rollout(self):
@@ -5024,6 +5072,47 @@ class TestMPSDeviceCasting:
             assert td["observation"].dtype == torch.float32
         finally:
             env.close(raise_if_closed=False)
+
+
+class TestTrustStepOutput:
+    def test_trust_step_output_default(self):
+        env = ContinuousActionVecMockEnv()
+        assert not env._trust_step_output
+
+    def test_trust_step_output_fast_path(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter())
+        td = env.reset()
+        td = env.rand_action(td)
+
+        out_normal = env.step(td.clone())
+
+        env._trust_step_output = True
+        env.base_env._trust_step_output = True
+        out_fast = env.step(td.clone())
+
+        torch.testing.assert_close(
+            out_normal["next", "observation"],
+            out_fast["next", "observation"],
+        )
+        torch.testing.assert_close(
+            out_normal["next", "reward"],
+            out_fast["next", "reward"],
+        )
+
+    def test_trust_step_fast_path_step_and_maybe_reset(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter())
+        env._trust_step_output = True
+        env.base_env._trust_step_output = True
+        env._skip_maybe_reset = True
+
+        td = env.reset()
+        td = env.rand_action(td)
+
+        out, next_out = env.step_and_maybe_reset(td)
+
+        assert "next" in out.keys()
+        assert "observation" in next_out.keys()
+        assert "step_count" in next_out.keys()
 
 
 if __name__ == "__main__":
