@@ -247,6 +247,32 @@ def test_async_pixels(benchmark):
     benchmark(execute_collector, c)
 
 
+def single_collector_fast_setup():
+    device = "cuda:0" if torch.cuda.device_count() else "cpu"
+    env = TransformedEnv(DMControlEnv("cheetah", "run", device=device), StepCounter(50))
+    env._trust_step_output = True
+    env.base_env._trust_step_output = True
+    env._skip_maybe_reset = True
+    c = SyncDataCollector(
+        env,
+        RandomPolicy(env.action_spec),
+        total_frames=-1,
+        frames_per_batch=100,
+        device=device,
+        update_traj_ids=False,
+    )
+    c = iter(c)
+    for i, _ in enumerate(c):
+        if i == 10:
+            break
+    return ((c,), {})
+
+
+def test_single_fast(benchmark):
+    (c,), _ = single_collector_fast_setup()
+    benchmark(execute_collector, c)
+
+
 class TestRBGCollector:
     @pytest.mark.parametrize(
         "n_col,n_wokrers_per_col",
