@@ -376,6 +376,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             are to be expected. Can be ``None``.
         is_spec_locked (bool): returns ``True`` if the specs are locked. See the :attr:`spec_locked`
             argument above.
+        _skip_maybe_reset (bool): if ``True``, :meth:`step_and_maybe_reset` will skip calling
+            :meth:`maybe_reset` after each step. This is useful for auto-resetting environments
+            that already handle resets inside their :meth:`_step` method. Defaults to ``False``.
+        _trust_step_output (bool): if ``True``, :meth:`step` will skip the :meth:`_step_proc_data`
+            validation (reward shape checks, done-key completion, type checks) after :meth:`_step`.
+            Set this when the environment guarantees that its :meth:`_step` output always has correct
+            shapes, all done keys present, and proper dtypes. Defaults to ``False``.
 
     Methods:
         step (TensorDictBase -> TensorDictBase): step in the environment
@@ -477,6 +484,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     _batch_size: torch.Size | None
     _device: torch.device | None
     _is_spec_locked: bool = False
+    _skip_maybe_reset: bool = False
+    _trust_step_output: bool = False
 
     def __init__(
         self,
@@ -2212,7 +2221,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             (+ others if needed).
 
         """
-        # sanity check
+        if self._trust_step_output:
+            next_tensordict = self._step(tensordict)
+            tensordict.set("next", next_tensordict)
+            return tensordict
+
         self._assert_tensordict_shape(tensordict)
         partial_steps = tensordict.pop("_step", None)
 
@@ -3821,15 +3834,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 device=cpu,
                 is_shared=False)
         """
-        if tensordict.device != self.device:
-            tensordict = tensordict.to(self.device)
+        if not self._trust_step_output:
+            if tensordict.device != self.device:
+                tensordict = tensordict.to(self.device)
         tensordict = self.step(tensordict)
-        # done and truncated are in done_keys
-        # We read if any key is done.
         tensordict_ = self._step_mdp(tensordict)
-        # if self._post_step_mdp_hooks is not None:
-        # tensordict_ = self._post_step_mdp_hooks(tensordict_)
-        tensordict_ = self.maybe_reset(tensordict_)
+        if not self._skip_maybe_reset:
+            tensordict_ = self.maybe_reset(tensordict_)
         return tensordict, tensordict_
 
     # _post_step_mdp_hooks: Callable[[TensorDictBase], TensorDictBase] | None = None

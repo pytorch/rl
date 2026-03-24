@@ -349,6 +349,10 @@ class Collector(BaseCollector):
             Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
             the policy version.
             Defaults to `False`.
+        update_traj_ids (bool, optional): if ``True``, trajectory IDs are updated at each step
+            to track episode boundaries. Set to ``False`` to skip this overhead when trajectory
+            splitting is not needed (e.g., fixed-length PPO rollouts).
+            Defaults to ``True``.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -449,6 +453,7 @@ class Collector(BaseCollector):
         weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
         weight_recv_schemes: dict[str, WeightSyncScheme] | None = None,
         track_policy_version: bool = False,
+        update_traj_ids: bool = True,
         worker_idx: int | None = None,
         **kwargs,
     ):
@@ -540,6 +545,7 @@ class Collector(BaseCollector):
         )
         self.return_same_td = return_same_td
         self.set_truncated = set_truncated
+        self.update_traj_ids = update_traj_ids
 
         # Create shuttle and rollout buffers
         self._make_shuttle()
@@ -878,6 +884,7 @@ class Collector(BaseCollector):
         self._cast_to_env_device = self._cast_to_policy_device or (
             self.env.device != self.storing_device
         )
+        self._env_returns_carrier = not self._cast_to_env_device
 
     def _setup_max_frames_per_traj(self, max_frames_per_traj: int | None) -> None:
         """Set up maximum frames per trajectory and add StepCounter if needed."""
@@ -1690,11 +1697,9 @@ class Collector(BaseCollector):
                     env_input = self._carrier
                 env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
 
-                if self._carrier is not env_output:
-                    # ad-hoc update shuttle
+                if not self._env_returns_carrier:
                     next_data = env_output.get("next")
                     if self._shuttle_has_no_device:
-                        # Make sure
                         next_data.clear_device_()
                     self._carrier.set("next", next_data)
 
@@ -1721,13 +1726,21 @@ class Collector(BaseCollector):
                     else:
                         tensordicts.append(self._carrier)
 
-                # carry over collector data without messing up devices
-                collector_data = self._carrier.get("collector").copy()
+                collector_data = self._carrier._get_str("collector", default=None)
+                if self.update_traj_ids:
+                    collector_data = collector_data.copy()
                 self._carrier = env_next_output
                 if self._shuttle_has_no_device:
                     self._carrier.clear_device_()
-                self._carrier.set("collector", collector_data)
-                self._update_traj_ids(env_output)
+                self._carrier._set_str(
+                    "collector",
+                    collector_data,
+                    validated=True,
+                    inplace=False,
+                    non_blocking=False,
+                )
+                if self.update_traj_ids:
+                    self._update_traj_ids(env_output)
 
                 if (
                     self.interruptor is not None
