@@ -4088,6 +4088,69 @@ class TestUniqueTraj:
             del c
 
 
+class TestUpdateTrajIds:
+    def test_update_traj_ids_default_is_true(self):
+        env = ContinuousActionVecMockEnv()
+        policy = TensorDictModule(
+            nn.Linear(
+                env.observation_spec["observation"].shape[-1], env.action_spec.shape[-1]
+            ),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+        collector = Collector(env, policy, frames_per_batch=10, total_frames=10)
+        try:
+            assert collector.update_traj_ids is True
+        finally:
+            collector.shutdown()
+
+    def test_update_traj_ids_false_skips_tracking(self):
+        env = ContinuousActionVecMockEnv()
+        policy = TensorDictModule(
+            nn.Linear(
+                env.observation_spec["observation"].shape[-1], env.action_spec.shape[-1]
+            ),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+        collector = Collector(
+            env,
+            policy,
+            frames_per_batch=10,
+            total_frames=20,
+            update_traj_ids=False,
+        )
+        try:
+            for data in collector:
+                traj_ids = data.get(("collector", "traj_ids"))
+                assert (traj_ids == traj_ids[..., 0:1]).all()
+        finally:
+            collector.shutdown()
+
+    def test_update_traj_ids_true_updates(self):
+        env = ContinuousActionVecMockEnv()
+        policy = TensorDictModule(
+            nn.Linear(
+                env.observation_spec["observation"].shape[-1], env.action_spec.shape[-1]
+            ),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+        collector = Collector(
+            env,
+            policy,
+            frames_per_batch=50,
+            total_frames=100,
+            update_traj_ids=True,
+        )
+        try:
+            for data in collector:
+                traj_ids = data.get(("collector", "traj_ids"))
+                assert traj_ids is not None
+        finally:
+            collector.shutdown()
+
+
 class TestDynamicEnvs:
     def test_dynamic_sync_collector(self):
         env = EnvWithDynamicSpec()
@@ -5294,6 +5357,36 @@ class TestCollectorProfiling:
         # Check that the trace file was created for worker 0
         expected_trace = tmp_path / "trace_0.json"
         assert expected_trace.exists(), f"Trace file not found at {expected_trace}"
+
+
+class TestCollectorOptimizationFlags:
+    def test_collector_all_optimizations(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter())
+        env._trust_step_output = True
+        env.base_env._trust_step_output = True
+        env._skip_maybe_reset = True
+        policy = TensorDictModule(
+            nn.Linear(
+                env.observation_spec["observation"].shape[-1], env.action_spec.shape[-1]
+            ),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+        collector = Collector(
+            env,
+            policy,
+            frames_per_batch=20,
+            total_frames=40,
+            update_traj_ids=False,
+        )
+        try:
+            for data in collector:
+                assert data.shape[-1] == 20
+                assert "observation" in data.keys()
+                assert ("next", "observation") in data.keys(True)
+                assert ("next", "reward") in data.keys(True)
+        finally:
+            collector.shutdown()
 
 
 if __name__ == "__main__":
