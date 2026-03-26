@@ -187,6 +187,7 @@ def train(
     pbar = tqdm.tqdm(total=total_steps)
     grad_norm = 0.0  # Initialize grad_norm
     data_read_count = 0
+    optim_steps = 0  # Track optimizer steps for weight update scheduling
     start_time = time.time()
 
     for step in range(total_steps):
@@ -214,7 +215,14 @@ def train(
             data_read_count += batch.numel()
 
         with timeit("forward_pass"):
-            with autocast("cuda", enabled=cfg.train.mixed_precision):
+            # Use the model's dtype for autocast to avoid bf16→fp16 downcast
+            # (fp16 range ±65504 can overflow with bf16 activations ±3.4e38)
+            autocast_dtype = getattr(torch, cfg.train_model.torch_dtype)
+            with autocast(
+                "cuda",
+                enabled=cfg.train.mixed_precision,
+                dtype=autocast_dtype,
+            ):
                 loss = loss_fn(batch)
                 loss_val = (
                     loss.mean(reduce=True) / cfg.train.gradient_accumulation_steps
@@ -250,6 +258,26 @@ def train(
                     optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
 
+            optim_steps += 1
+
+            # Weight sync is tied to optimizer steps, not gradient steps.
+            # This ensures the training model diverges from the inference model
+            # between syncs, which is essential for meaningful importance sampling
+            # in GRPO (otherwise ESS stays at 1.0 and GRPO degenerates to REINFORCE).
+            if optim_steps % cfg.train.weight_update_frequency == 0:
+                with timeit("update_policy_weights"):
+                    torchrl_logger.info(
+                        f"Updating policy weights (optim step {optim_steps})..."
+                    )
+                    sender.update_weights()
+                    gc.collect()
+
+                timeit.print(prefix="timeit")
+                wandb_logger.log_metrics(
+                    {f"timeit/{key}": val for key, val in timeit.todict().items()}
+                )
+                timeit.reset()
+
         if (step % cfg.train.logging_frequency) == 0:
             log_training_metrics(
                 wandb_logger=wandb_logger,
@@ -265,36 +293,6 @@ def train(
                 history_str=history_str,
                 use_kl_to_ref=cfg.train.use_kl_to_ref,
             )
-
-        if step % cfg.train.weight_update_frequency == 0:
-            with timeit("update_policy_weights"):
-                torchrl_logger.info("Updating policy weights...")
-                sender.update_weights()
-                # TODO: do we need this? Does it interfere with other processes?
-                # torch.cuda.empty_cache()
-                gc.collect()
-
-        # Checkpointing disabled to prevent disk space issues
-        # if (step + 1) % cfg.train.checkpoint_frequency == 0:
-        #     with timeit("save_checkpoint"):
-        #         torchrl_logger.info(
-        #             f"Saving checkpoint {(step+1) // cfg.train.checkpoint_frequency}..."
-        #         )
-        #         checkpoint = {
-        #             "step": step,
-        #             "model_state_dict": policy_training.model.state_dict(),
-        #             "optimizer_state_dict": optimizer.state_dict(),
-        #             "scaler_state_dict": scaler.state_dict(),
-        #             "config": dict(cfg),
-        #         }
-        #         torch.save(checkpoint, checkpoint_dir / f"checkpoint_{step:04d}.pt")
-
-        if step % cfg.train.weight_update_frequency == 0:
-            timeit.print(prefix="timeit")
-            wandb_logger.log_metrics(
-                {f"timeit/{key}": val for key, val in timeit.todict().items()}
-            )
-            timeit.reset()
 
         del loss_val
         # TODO: do we need this? Does it interfere with other processes?
