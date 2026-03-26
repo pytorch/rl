@@ -30,7 +30,11 @@ from torchrl.modules.llm.policies.common import (
     Tokens,
 )
 from torchrl.modules.llm.policies.transformers_wrapper import TransformersWrapper
-from torchrl.modules.llm.policies.vllm_wrapper import vLLMWrapper
+from torchrl.modules.llm.policies.vllm_wrapper import (
+    _completion_output_to_tc,
+    _RequestOutput_tc,
+    vLLMWrapper,
+)
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
@@ -3370,6 +3374,179 @@ class TestPreferTokens:
         assert initial_decoded in new_decoded or new_decoded.startswith(
             initial_decoded.strip()
         )
+
+
+@pytest.mark.skipif(not _has_vllm, reason="vllm not available")
+class TestRequestOutputConversion:
+    """Tests for _RequestOutput_tc, CompletionOutput_tc, and the conversion helpers."""
+
+    @pytest.fixture
+    def CompletionOutput_tc(self):
+        return vLLMWrapper.CompletionOutput_tc
+
+    @pytest.fixture
+    def mock_completion_output(self):
+        """Create a mock vLLM CompletionOutput with typical fields."""
+        from vllm.outputs import CompletionOutput
+
+        return CompletionOutput(
+            index=0,
+            text="Hello world",
+            token_ids=[1, 2, 3, 4],
+            cumulative_logprob=-1.5,
+            logprobs=None,
+            finish_reason="stop",
+            stop_reason=None,
+        )
+
+    def test_completion_output_to_tc_basic(
+        self, CompletionOutput_tc, mock_completion_output
+    ):
+        """Test basic conversion of CompletionOutput without logprobs."""
+        tc = _completion_output_to_tc(mock_completion_output, CompletionOutput_tc)
+        assert tc.index == 0
+        assert tc.text == "Hello world"
+        assert tc.cumulative_logprob == -1.5
+        assert tc.logprobs is None
+        assert tc.finish_reason == "stop"
+        assert tc.stop_reason is None
+
+    def test_completion_output_to_tc_with_logprobs(self, CompletionOutput_tc):
+        """Test conversion of CompletionOutput with logprobs present."""
+        from vllm.outputs import CompletionOutput
+
+        logprobs = [
+            {1: {"logprob": -0.1, "rank": 1}},
+            {2: {"logprob": -0.2, "rank": 1}},
+        ]
+        output = CompletionOutput(
+            index=0,
+            text="Hi",
+            token_ids=[1, 2],
+            cumulative_logprob=-0.3,
+            logprobs=logprobs,
+            finish_reason="stop",
+            stop_reason=None,
+        )
+        tc = _completion_output_to_tc(output, CompletionOutput_tc)
+        # logprobs should be passed through (not None) since they are non-empty
+        assert tc.logprobs is not None
+
+    def test_completion_output_to_tc_empty_logprobs_list(self, CompletionOutput_tc):
+        """Test conversion when vLLM returns logprobs=[] (vLLM 0.17 V1 behavior).
+
+        This is the case that was crashing with from_dataclass due to
+        tensordict's _convert_list_to_stack failing on empty lists.
+        """
+        from vllm.outputs import CompletionOutput
+
+        output = CompletionOutput(
+            index=0,
+            text="",
+            token_ids=[],
+            cumulative_logprob=None,
+            logprobs=[],  # vLLM 0.17 V1 returns [] instead of None
+            finish_reason=None,
+            stop_reason=None,
+        )
+        tc = _completion_output_to_tc(output, CompletionOutput_tc)
+        # Empty logprobs list should be converted to None (falsy)
+        assert tc.logprobs is None
+
+    def test_request_output_post_init(self, CompletionOutput_tc):
+        """Test that _RequestOutput_tc.__post_init__ correctly processes outputs."""
+        from vllm.outputs import CompletionOutput
+
+        outputs = [
+            CompletionOutput(
+                index=0,
+                text="Hello",
+                token_ids=[10, 20, 30],
+                cumulative_logprob=-1.0,
+                logprobs=None,
+                finish_reason="stop",
+                stop_reason=None,
+            ),
+        ]
+        tc = _RequestOutput_tc(
+            request_id="req-1",
+            prompt="Say hello",
+            prompt_token_ids=torch.tensor([1, 2, 3]),
+            prompt_logprobs=torch.tensor([]),
+            outputs=outputs,
+            finished="true",
+            metrics=None,
+            lora_request=None,
+            encoder_prompt=None,
+            encoder_prompt_token_ids=None,
+            num_cached_tokens=torch.tensor(0),
+        )
+        # After __post_init__, outputs should be a CompletionOutput_tc, not a raw list
+        assert not isinstance(tc.outputs, list)
+        assert tc.outputs.text == "Hello"
+        assert tc.outputs.token_ids.dtype == torch.long
+        torch.testing.assert_close(
+            tc.outputs.token_ids, torch.tensor([10, 20, 30], dtype=torch.long)
+        )
+
+    def test_request_output_post_init_empty_logprobs(self, CompletionOutput_tc):
+        """Test __post_init__ with empty logprobs list (vLLM 0.17 V1 edge case)."""
+        from vllm.outputs import CompletionOutput
+
+        outputs = [
+            CompletionOutput(
+                index=0,
+                text="",
+                token_ids=[],
+                cumulative_logprob=None,
+                logprobs=[],  # vLLM 0.17 V1 behavior
+                finish_reason=None,
+                stop_reason=None,
+            ),
+        ]
+        # This should not crash (previously crashed with from_dataclass)
+        tc = _RequestOutput_tc(
+            request_id="req-2",
+            prompt="Test",
+            prompt_token_ids=torch.tensor([1]),
+            prompt_logprobs=torch.tensor([]),
+            outputs=outputs,
+            finished="false",
+            metrics=None,
+            lora_request=None,
+            encoder_prompt=None,
+            encoder_prompt_token_ids=None,
+            num_cached_tokens=torch.tensor(0),
+        )
+        assert not isinstance(tc.outputs, list)
+
+    def test_from_request_output(self):
+        """Test from_request_output class method with a mock RequestOutput."""
+        from vllm.outputs import CompletionOutput, RequestOutput
+
+        completion = CompletionOutput(
+            index=0,
+            text="world",
+            token_ids=[10, 20],
+            cumulative_logprob=-0.5,
+            logprobs=None,
+            finish_reason="stop",
+            stop_reason=None,
+        )
+        request = RequestOutput(
+            request_id="req-3",
+            prompt="Hello",
+            prompt_token_ids=[1, 2, 3],
+            prompt_logprobs=None,
+            outputs=[completion],
+            finished=True,
+        )
+        result = _RequestOutput_tc.from_request_output([request])
+        assert result.request_id == "req-3"
+        assert result.prompt == "Hello"
+        torch.testing.assert_close(result.prompt_token_ids, torch.tensor([1, 2, 3]))
+        # prompt_logprobs=None should become empty tensor
+        assert result.prompt_logprobs.numel() == 0
 
 
 if __name__ == "__main__":

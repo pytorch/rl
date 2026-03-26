@@ -910,7 +910,19 @@ def log_training_metrics(
         batch_policy_version = batch["next", "policy_version"].view(-1).min()
         batch_policy_age = collector.policy_version - batch_policy_version
 
+        # Buffer-level staleness stats
+        buffer_policy_versions = (
+            rb_content.get(("next", "policy_version")).view(-1).float()
+        )
+        current_version = collector.policy_version
+        buffer_staleness = current_version - buffer_policy_versions
+        buffer_staleness_mean = float(buffer_staleness.mean())
+        buffer_staleness_max = float(buffer_staleness.max())
+
         metrics = {
+            "steps_collected": int(replay_buffer.write_count),
+            "staleness_mean (buffer)": buffer_staleness_mean,
+            "staleness_max (buffer)": buffer_staleness_max,
             "step_count from buffer": float(step_count),
             "reward from buffer": float(
                 torch.cat(rb_content.get(("next", "reward"), as_list=True)).mean()
