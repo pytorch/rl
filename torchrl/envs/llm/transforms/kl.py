@@ -914,7 +914,9 @@ class RayRetrieveKL(RayTransform):
         )(RetrieveKL)
 
         if self._actor_name is not None:
-            RemoteRetrieveKL = RemoteRetrieveKL.options(name=self._actor_name)
+            RemoteRetrieveKL = RemoteRetrieveKL.options(
+                name=self._actor_name, lifetime="detached"
+            )
 
         # Determine how to create models on the remote actor
         gen_model_arg = self._gen_model
