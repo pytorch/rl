@@ -566,6 +566,27 @@ class VLLMWeightSender:
         self._transport = None
         self._model_metadata = None
         self._trainer_nccl_group = None
+        self._collectors: list = []
+        self._post_hooks: list = []
+
+    def register_collector(self, collector) -> None:
+        """Register a collector for automatic policy version increment.
+
+        After each :meth:`update_weights` call, ``collector.increment_version()``
+        is called automatically.
+        """
+        self._collectors.append(collector)
+        if len(self._post_hooks) == 0:
+            self._post_hooks.append(self._increment_all_collector_versions)
+
+    def _increment_all_collector_versions(self):
+        for collector in self._collectors:
+            try:
+                collector.increment_version()
+            except Exception as e:
+                torchrl_logger.warning(
+                    f"Failed to increment version for collector: {e}"
+                )
 
     def register_model(self, model: Any) -> None:
         """Register the model to extract weights from."""
@@ -629,6 +650,10 @@ class VLLMWeightSender:
 
         # Send via transport
         self._transport.send_weights("vllm_model", weights)
+
+        # Run post-hooks (e.g. increment policy version on collectors)
+        for hook in self._post_hooks:
+            hook()
 
 
 class VLLMWeightReceiver:

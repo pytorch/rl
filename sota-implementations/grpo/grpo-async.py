@@ -142,6 +142,11 @@ def train(
         torchrl_logger.info(f"Starting collector {i}...")
         collector.start()
 
+    # Register collectors with the sender so increment_version() is
+    # called automatically after each update_weights().
+    for collector in collectors:
+        sender.register_collector(collector)
+
     while not replay_buffer.write_count:
         torchrl_logger.info("Waiting for replay buffer...")
         time.sleep(1)
