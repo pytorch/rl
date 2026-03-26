@@ -1,0 +1,111 @@
+# @package _global_
+defaults:
+  - mode: ${mode:async}
+  - _self_
+  - override hydra/hydra_logging: disabled
+  - override hydra/job_logging: disabled
+
+env:
+  dataset: countdown
+  num_envs: 32
+  repeats: 16
+  reasoning: false
+  max_steps: 2
+
+model:
+  name: Qwen/Qwen2.5-3B
+  compile: false
+
+train:
+  exp_name: "grpo-countdown"
+  mixed_precision: true
+  total_dialog_turns: 100_000
+  packing: false
+  dialog_turns_per_batch: 32
+  gradient_accumulation_steps: 8
+  checkpoint_frequency: 100
+  optim_batch_size: 32
+  kl_coef_in_loss: true
+  use_kl_to_ref: false
+  kl_to_ref_coeff: 0.0
+  kl_to_inference_coeff: 1e-2
+  entropy_coeff: 1e-4
+  logging_frequency: 10
+  empty_replay_buffer: true
+
+train_model:
+  gradient_checkpointing: true
+  num_devices: 1
+  lora:
+    enabled: true
+    r: 8
+    alpha: 16
+    dropout: 0.1
+  quantization:
+    enabled: false
+  attn_implementation: sdpa
+  torch_dtype: bfloat16
+
+inference_model:
+  num_devices: 1
+  quantization:
+    enabled: false
+  attn_implementation: sdpa
+  torch_dtype: bfloat16
+  gpu_memory_utilization: 0.9
+  temperature: 1.0
+  top_p: 0.95
+  max_tokens: 512
+  include_stop_str_in_output: true
+  enforce_eager: false
+
+ref_model:
+  gradient_checkpointing: false
+  num_devices: 1
+  lora:
+    enabled: true
+    r: 8
+    alpha: 16
+    dropout: 0.1
+  quantization:
+    enabled: false
+  attn_implementation: sdpa
+  torch_dtype: bfloat16
+
+optimizer:
+  name: AdamW
+  lr: 1e-5
+  clip_grad_norm: 1.0
+  weight_decay: 0.0
+
+ray:
+  init_config:
+    num_cpus: 96
+    num_gpus: 8
+    runtime_env:
+      working_dir: "."
+    _temp_dir: "/tmp/ray_grpo"
+    _system_config:
+      object_spilling_threshold: 0.8
+      max_direct_memory_size: 10 * 1024 * 1024 * 1024
+      object_store_full_delay_ms: 100
+      object_store_full_max_retries: 3
+  collector_config:
+    num_cpus: 4
+  train_handler_config:
+    num_cpus: 4
+  replay_buffer_config:
+    num_cpus: 4
+    num_gpus: 0.0
+
+logging:
+  experiment_name: null
+  checkpoint_dir: "checkpoints"
+  checkpoint_frequency: 10
+
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}
