@@ -1,6 +1,6 @@
 # @package _global_
 defaults:
-  - mode: async
+  - mode: sync
   - _self_
   - override hydra/hydra_logging: disabled
   - override hydra/job_logging: disabled
@@ -17,7 +17,7 @@ model:
   compile: false
 
 train:
-  exp_name: "grpo-math-7b-full-v3"
+  exp_name: "grpo-math-7b-sync-ess-test"
   mixed_precision: true
   total_dialog_turns: 200_000
   packing: false
@@ -31,8 +31,7 @@ train:
   kl_to_ref_coeff: 0.0
   kl_to_inference_coeff: 1e-2
   entropy_coeff: 1e-4
-  logging_frequency: 10
-  weight_update_frequency: 1
+  logging_frequency: 1
   empty_replay_buffer: false
 
 train_model:
