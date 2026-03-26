@@ -474,6 +474,65 @@ class TestMATHRewardParser:
         assert td["reward"] == 0.0
 
 
+class TestCountdownRewardParser:
+    """Unit tests for the Countdown reward parser (no model/dataset required)."""
+
+    def test_validate_expression_correct(self):
+        from torchrl.envs.llm.reward.countdown import CountdownRewardParser
+
+        assert CountdownRewardParser.validate_expression(
+            "(25 + 3) * 4", 112, [25, 3, 4]
+        )
+
+    def test_validate_expression_wrong_result(self):
+        from torchrl.envs.llm.reward.countdown import CountdownRewardParser
+
+        assert not CountdownRewardParser.validate_expression("25 + 3", 100, [25, 3, 4])
+
+    def test_validate_expression_reuses_number(self):
+        from torchrl.envs.llm.reward.countdown import CountdownRewardParser
+
+        assert not CountdownRewardParser.validate_expression("25 + 25", 50, [25, 3, 4])
+
+    def test_validate_expression_invalid_chars(self):
+        from torchrl.envs.llm.reward.countdown import CountdownRewardParser
+
+        assert not CountdownRewardParser.validate_expression("import os", 0, [1, 2])
+
+    def test_parse_ground_truth(self):
+        from torchrl.envs.llm.reward.countdown import CountdownRewardParser
+
+        target, numbers = CountdownRewardParser._parse_ground_truth(
+            "target=42, numbers=10,20,5,7"
+        )
+        assert target == 42
+        assert numbers == [10, 20, 5, 7]
+
+    def test_correct_answer_reward(self):
+        from torchrl.envs.llm.reward.countdown import CountdownRewardParser
+
+        parser = CountdownRewardParser()
+        td = parser._single_correctness_reward(28, [25, 3], "25 + 3", "thinking")
+        assert td["success"]
+        assert td["reward"] == 1.0
+
+    def test_wrong_answer_with_format(self):
+        from torchrl.envs.llm.reward.countdown import CountdownRewardParser
+
+        parser = CountdownRewardParser()
+        td = parser._single_correctness_reward(100, [25, 3], "25 + 3", "thinking")
+        assert not td["success"]
+        assert td["reward"] == 0.1
+
+    def test_no_answer(self):
+        from torchrl.envs.llm.reward.countdown import CountdownRewardParser
+
+        parser = CountdownRewardParser()
+        td = parser._single_correctness_reward(100, [25, 3], "", "")
+        assert not td["success"]
+        assert td["reward"] == 0.0
+
+
 @pytest.mark.skipif(not _has_ifeval, reason="requires IFEval libs")
 class TestIFEvalRewardAggregator:
     """Unit tests for the simplified IFEval reward aggregator."""
