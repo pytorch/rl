@@ -137,10 +137,10 @@ def get_train_model(
     max_memory = {}
     for i in range(torch.cuda.device_count()):
         if i in train_devices:
-            max_memory[i] = "24GiB"  # Allow max memory for devices we want to use
+            max_memory[i] = "130GiB"  # Allow max memory for devices we want to use
         else:
             max_memory[i] = "0GiB"  # No memory for other devices
-    max_memory["cpu"] = "24GiB"  # Allow CPU memory as fallback
+    max_memory["cpu"] = "48GiB"  # Allow CPU memory as fallback
 
     # Let HF handle distribution with max_memory
     device_map = "balanced" if len(train_devices) > 1 else f"cuda:{train_devices[0]}"
@@ -456,10 +456,10 @@ def get_ref_model(
     max_memory = {}
     for i in range(torch.cuda.device_count()):
         if i in ref_devices:
-            max_memory[i] = "24GiB"  # Allow max memory for devices we want to use
+            max_memory[i] = "130GiB"  # Allow max memory for devices we want to use
         else:
             max_memory[i] = "0GiB"  # No memory for other devices
-    max_memory["cpu"] = "24GiB"  # Allow CPU memory as fallback
+    max_memory["cpu"] = "48GiB"  # Allow CPU memory as fallback
 
     # Let HF handle distribution with max_memory
     device_map = "balanced" if len(ref_devices) > 1 else f"cuda:{ref_devices[0]}"
