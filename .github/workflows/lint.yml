@@ -1,0 +1,81 @@
+name: Lint
+
+on:
+  pull_request:
+  push:
+    branches:
+      - nightly
+      - main
+      - release/*
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
+  # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
+  group: lint-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  python-source-and-configs:
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    with:
+      repository: pytorch/rl
+      script: |
+        set -euo pipefail
+
+        echo '::group::Setup environment'
+        CONDA_PATH=$(which conda)
+        eval "$(${CONDA_PATH} shell.bash hook)"
+        conda create --name ci --quiet --yes python=3.11 pip
+        conda activate ci
+        echo '::endgroup::'
+        
+        echo '::group::Install lint tools'
+        pip install --progress-bar=off pre-commit autoflake
+        echo '::endgroup::'
+        
+        echo '::group::Lint Python source and configs'
+        set +e
+        pre-commit run --all-files
+        
+        if [ $? -ne 0 ]; then
+          git --no-pager diff
+          exit 1
+        fi
+        echo '::endgroup::'
+
+  c-source:
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    with:
+      repository: pytorch/rl
+      script: |
+        set -euo pipefail
+        
+        echo '::group::Install lint tools'
+        # Install clang-format via package manager (more reliable than binary download)
+        if command -v apt-get &> /dev/null; then
+          apt-get update && apt-get install -y clang-format
+        elif command -v yum &> /dev/null; then
+          yum install -y clang-tools-extra
+        elif command -v dnf &> /dev/null; then
+          dnf install -y clang-tools-extra
+        else
+          echo "No supported package manager found"
+          exit 1
+        fi
+        echo '::endgroup::'
+
+        echo '::group::Lint C source'
+        set +e
+        python ./.github/unittest/linux/scripts/run-clang-format.py -r torchrl/csrc --clang-format-executable clang-format
+        
+        if [ $? -ne 0 ]; then
+          git --no-pager diff
+          exit 1
+        fi
+        echo '::endgroup::'
