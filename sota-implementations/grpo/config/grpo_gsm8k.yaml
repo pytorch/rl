@@ -134,7 +134,7 @@ ray:
     _temp_dir: "/tmp/ray_grpo"  # Custom temp directory
     _system_config:
       object_spilling_threshold: 0.8  # Spill when 80% full
-      max_direct_memory_size: 10 * 1024 * 1024 * 1024  # 10GB limit
+      max_direct_memory_size: 10737418240  # 10GB limit
       object_store_full_delay_ms: 100  # Delay when store is full
       object_store_full_max_retries: 3  # Max retries when store is full
   collector_config:

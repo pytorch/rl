@@ -808,12 +808,11 @@ class LLMMaskedCategorical(D.Distribution):
             logits = self._sampling_logits
             # Replace inf/NaN to prevent softmax → multinomial crashes
             if not logits.isfinite().all():
-                finfo = torch.finfo(logits.dtype)
                 logits = torch.nan_to_num(
                     logits,
                     nan=0.0,
-                    posinf=finfo.max / 2,
-                    neginf=finfo.min / 2,
+                    posinf=1e4,
+                    neginf=-1e4,
                 )
             self._masked_dist = D.Categorical(logits=logits)
         return self._masked_dist

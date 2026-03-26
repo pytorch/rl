@@ -60,7 +60,6 @@ class MATHRewardParser(Transform):
         format_reward: float = 0.1,
         correct_reward: float = 1.0,
     ):
-        super().__init__()
         self.tokenizer = tokenizer
         self.eos_token = (
             eos_token
@@ -112,8 +111,6 @@ class MATHRewardParser(Transform):
         result = super().set_container(container)
         self._maybe_get_in_keys()
         return result
-
-    _input_mode = None
 
     @property
     def input_mode(self):

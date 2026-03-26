@@ -17,7 +17,7 @@ model:
   compile: false
 
 train:
-  exp_name: "grpo-math-7b-sync-ess-test"
+  exp_name: "grpo-math-7b-sync"
   mixed_precision: true
   total_dialog_turns: 200_000
   packing: false
@@ -85,7 +85,7 @@ ray:
     _temp_dir: "/tmp/ray_grpo"
     _system_config:
       object_spilling_threshold: 0.8
-      max_direct_memory_size: 10 * 1024 * 1024 * 1024
+      max_direct_memory_size: 10737418240
       object_store_full_delay_ms: 100
       object_store_full_max_retries: 3
   collector_config:
