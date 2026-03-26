@@ -1,0 +1,7 @@
+pytest-benchmark
+tenacity
+safetensors
+tqdm
+pandas
+numpy
+matplotlib

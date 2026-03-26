@@ -1,0 +1,164 @@
+name: Nightly Status Collector
+
+on:
+  # Run after the orchestrator completes (triggered by repository dispatch)
+  repository_dispatch:
+    types: [nightly-orchestrator-completed]
+  # Also run on schedule to catch any missed updates
+  schedule:
+    - cron: '0 18 * * *'  # 6PM UTC (nightly starts at 6AM UTC, usually done by then)
+  # Manual trigger for backfills
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Number of days to collect (for backfill)'
+        type: number
+        default: 7
+      force:
+        description: 'Force recollection even if data already exists'
+        type: boolean
+        default: false
+      skip-deploy:
+        description: 'Collect status but skip deploying to gh-pages (dry-run)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  collect-status:
+    runs-on: ubuntu-latest
+    outputs:
+      should-deploy: ${{ steps.resolve-deploy.outputs.deploy }}
+    steps:
+      - name: Resolve deploy flag
+        id: resolve-deploy
+        run: |
+          # repository_dispatch: read from client payload
+          # workflow_dispatch: read from inputs
+          # schedule: always deploy
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            DEPLOY="${{ github.event.client_payload.deploy }}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ inputs.skip-deploy }}" = "true" ]; then
+              DEPLOY="false"
+            else
+              DEPLOY="true"
+            fi
+          else
+            DEPLOY="true"
+          fi
+          echo "deploy=${DEPLOY:-true}" >> "$GITHUB_OUTPUT"
+          echo "Deploy dashboard: ${DEPLOY:-true}"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout gh-pages branch for existing data
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages-data
+        continue-on-error: true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: false
+
+      - name: Collect nightly status
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DAYS="${{ inputs.days || 7 }}"
+
+          # Copy existing history if available
+          mkdir -p nightly-status
+          if [ -f "gh-pages-data/nightly-status/history.json" ]; then
+            cp gh-pages-data/nightly-status/history.json nightly-status/history.json
+            echo "Loaded existing history"
+          fi
+
+          # Extract repo name from github.repository (format: owner/repo)
+          REPO_NAME="${{ github.repository }}"
+          REPO_NAME="${REPO_NAME#*/}"
+
+          # Build force flag if requested
+          FORCE_FLAG=""
+          if [ "${{ inputs.force }}" = "true" ]; then
+            FORCE_FLAG="--force"
+          fi
+
+          # Run the collector script with inline dependencies
+          uv run --no-project --with requests --script .github/scripts/collect_nightly_status.py \
+            --owner "${{ github.repository_owner }}" \
+            --repo "$REPO_NAME" \
+            --days "$DAYS" \
+            --output-dir nightly-status \
+            --history-file nightly-status/history.json \
+            $FORCE_FLAG
+
+      - name: Prepare dashboard files
+        run: |
+          # Copy dashboard HTML
+          cp .github/nightly-dashboard/index.html nightly-status/
+
+      - name: Deploy nightly-status to GitHub Pages
+        if: steps.resolve-deploy.outputs.deploy == 'true'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./nightly-status
+          destination_dir: nightly-status
+          keep_files: true
+          commit_message: 'Update nightly status dashboard'
+
+      - name: Dry-run summary
+        if: steps.resolve-deploy.outputs.deploy != 'true'
+        run: |
+          echo "### Dry-run: skipped dashboard deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "Collected status data is available in the workflow artifacts below." >> "$GITHUB_STEP_SUMMARY"
+          head -50 nightly-status/history.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload collected data (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-status-data
+          path: nightly-status/
+          retention-days: 7
+
+  notify-if-degraded:
+    runs-on: ubuntu-latest
+    needs: collect-status
+    steps:
+      - name: Checkout for data
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages-data
+        continue-on-error: true
+
+      - name: Check for degraded status
+        id: check
+        run: |
+          if [ ! -f "gh-pages-data/nightly-status/history.json" ]; then
+            echo "No history file found, skipping notification check"
+            exit 0
+          fi
+
+          # Check if success rate dropped below 70% in last 7 days
+          SUCCESS_RATE=$(jq -r '.stats.last_7_days.success_rate // 100' gh-pages-data/nightly-status/history.json)
+
+          if [ "$SUCCESS_RATE" != "null" ] && [ "$(echo "$SUCCESS_RATE < 70" | bc -l)" -eq 1 ]; then
+            echo "degraded=true" >> "$GITHUB_OUTPUT"
+            echo "success_rate=$SUCCESS_RATE" >> "$GITHUB_OUTPUT"
+          else
+            echo "degraded=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post warning (if degraded)
+        if: steps.check.outputs.degraded == 'true'
+        run: |
+          echo "::warning::Nightly workflow success rate has dropped to ${{ steps.check.outputs.success_rate }}% (below 70% threshold)"
