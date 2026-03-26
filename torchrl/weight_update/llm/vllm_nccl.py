@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+#
 
 """vLLM weight synchronization for the v2 API.
 
@@ -99,8 +100,6 @@ In this setup:
 
 from __future__ import annotations
 
-import time
-
 from typing import Any, Literal
 
 import torch
@@ -108,7 +107,6 @@ import torch.distributed
 from tensordict import TensorDictBase
 
 from torchrl._utils import logger as torchrl_logger
-from torchrl.modules.llm.backends import stateless_init_process_group
 from torchrl.weight_update.weight_sync_schemes import WeightStrategy, WeightSyncScheme
 
 # ============================================================================
@@ -117,17 +115,10 @@ from torchrl.weight_update.weight_sync_schemes import WeightStrategy, WeightSync
 
 
 class VLLMCollectiveTransport:
-    """Transport for vLLM using collective communication (NCCL).
+    """Transport for vLLM using vLLM's native WeightTransferConfig API (vLLM 0.17+).
 
-    **COLLECTIVE LAYER ONLY** - This class handles the data transfer layer.
-    RPC coordination is handled separately by the caller (sender/receiver).
-
-    This transport uses PyTorch distributed collectives to broadcast weights
-    from a trainer (rank 0) to vLLM workers (ranks 1+).
-
-    **Separation of Concerns:**
-    - This class: NCCL collective operations (GPU-GPU data transfer)
-    - Caller (sender/receiver): RPC coordination (when to start collective)
+    This transport uses vLLM's built-in NCCL weight transfer engine to broadcast
+    weights from a trainer (rank 0) to vLLM workers (ranks 1+).
 
     Args:
         master_address: Address of the master node for distributed init.
@@ -136,10 +127,6 @@ class VLLMCollectiveTransport:
         world_size: Total number of processes (1 + num_replicas * gpus_per_replica).
         device: Device to use for communication (typically cuda:0).
         vllm_engine: Optional vLLM engine reference (for receiver side).
-
-    Note:
-        The RPC layer (e.g., Ray remote calls) must ensure all ranks call
-        init_all_workers_group() simultaneously before any collective operations.
     """
 
     def __init__(
@@ -156,106 +143,153 @@ class VLLMCollectiveTransport:
         self.rank = rank
         self.world_size = world_size
         self.vllm_engine = vllm_engine
-        self._comm_group = None
+        self._trainer_nccl_group = None
         self._model_metadata = None
+        self._initialized = False
 
         # Ray sets CUDA_VISIBLE_DEVICES, so each actor sees only device 0
-        # PyNcclCommunicator expects an integer device index
         if device is None:
-            self.device = 0  # Default to device 0 (Ray convention)
+            self.device = 0
         elif isinstance(device, str):
-            # Extract device index from "cuda:X"
             self.device = int(device.split(":")[-1]) if ":" in device else 0
         elif isinstance(device, torch.device):
-            # Extract index from torch.device
             self.device = device.index if device.index is not None else 0
         else:
             self.device = device
 
     def init_all_workers_group(
-        self, model_metadata: dict[str, tuple[torch.dtype, torch.Size]]
+        self,
+        model_metadata: dict[str, tuple[torch.dtype, torch.Size]],
+        gpus_per_replica: int | None = None,
     ):
-        """Initialize the collective communication group.
+        """Initialize the collective communication group using vLLM's native API.
 
         Args:
             model_metadata: Dict mapping param names to (dtype, shape) tuples.
+            gpus_per_replica: GPUs per replica (for rank_offset calculation). Inferred if not provided.
         """
+        from dataclasses import asdict
+
+        from vllm.distributed.weight_transfer.base import WeightTransferInitRequest
+        from vllm.distributed.weight_transfer.nccl_engine import (
+            NCCLWeightTransferEngine,
+            NCCLWeightTransferInitInfo,
+        )
+
         self._model_metadata = model_metadata
 
-        if self.rank == 0:
-            # Trainer side - initialize process group
-            torchrl_logger.debug(
-                f"Initializing trainer collective group: rank={self.rank}, world_size={self.world_size}, device={self.device}"
-            )
-            # Ray sets CUDA_VISIBLE_DEVICES, so we always use device 0
-            # Set CUDA device before initializing NCCL to avoid segfaults
-            torch.cuda.set_device(self.device)
-            torchrl_logger.debug(f"Set CUDA device to {self.device}")
+        if gpus_per_replica is None and self.vllm_engine is not None:
+            num_replicas = getattr(self.vllm_engine, "num_replicas", 1)
+            gpus_per_replica = max(1, (self.world_size - 1) // num_replicas)
 
-            self._comm_group = stateless_init_process_group(
-                self.master_address,
-                self.master_port,
-                self.rank,
-                self.world_size,
-                device=self.device,
+        if self.rank == 0:
+            # Trainer side: start trainer NCCL group in background thread (it blocks
+            # waiting for workers to connect), then dispatch init to vLLM actors.
+            import threading
+
+            import ray
+
+            torchrl_logger.debug(
+                f"Initializing trainer NCCL group: rank=0, world_size={self.world_size}, device={self.device}"
             )
-            torchrl_logger.debug("Trainer collective group initialized successfully")
+            torch.cuda.set_device(self.device)
+
+            # Start trainer_init in a thread so it can wait for workers to connect
+            # while we dispatch the worker init calls concurrently.
+            trainer_result = [None]
+            trainer_error = [None]
+
+            def _init_trainer():
+                try:
+                    trainer_result[0] = NCCLWeightTransferEngine.trainer_init(
+                        {
+                            "master_address": self.master_address,
+                            "master_port": int(self.master_port),
+                            "world_size": self.world_size,
+                        }
+                    )
+                except Exception as e:
+                    trainer_error[0] = e
+
+            trainer_thread = threading.Thread(target=_init_trainer)
+            trainer_thread.start()
+
+            # Now dispatch init to each vLLM actor — workers will connect to
+            # the TCPStore that trainer_init is already listening on.
+            refs = []
+            if self.vllm_engine is not None:
+                torchrl_logger.debug("Dispatching vLLM worker weight transfer init...")
+                for i, actor in enumerate(self.vllm_engine.actors):
+                    rank_offset = 1 + i * gpus_per_replica
+                    init_info = NCCLWeightTransferInitInfo(
+                        master_address=self.master_address,
+                        master_port=int(self.master_port),
+                        rank_offset=rank_offset,
+                        world_size=self.world_size,
+                    )
+                    init_request = WeightTransferInitRequest(
+                        init_info=asdict(init_info)
+                    )
+                    refs.append(actor.init_weight_transfer_engine.remote(init_request))
+
+            # Wait for both sides to complete
+            if refs:
+                ray.get(refs)
+            trainer_thread.join()
+
+            if trainer_error[0] is not None:
+                raise trainer_error[0]
+            self._trainer_nccl_group = trainer_result[0]
+
+            self._initialized = True
+            torchrl_logger.debug("Trainer NCCL group initialized successfully")
         else:
-            # vLLM worker side - initialize through engine
+            # vLLM worker side - dispatch init_weight_transfer_engine to engine actors
             if self.vllm_engine is None:
                 raise ValueError("vllm_engine must be provided for worker ranks")
 
-            torchrl_logger.debug(
-                "Initializing vLLM worker collective group through engine"
-            )
-            # Call vLLM engine's init method - it returns futures for all workers
-            # Workers will start NCCL init in background threads and return immediately
-            refs = self.vllm_engine.init_weight_update_group(
-                master_address=self.master_address,
-                master_port=self.master_port,
-            )
-
-            # Wait for RPCs to complete - ensures workers have dispatched their NCCL init threads
             import ray
 
+            torchrl_logger.debug(
+                "Initializing vLLM worker weight transfer through engine"
+            )
+            refs = []
+            for i, actor in enumerate(self.vllm_engine.actors):
+                rank_offset = 1 + i * gpus_per_replica
+                init_info = NCCLWeightTransferInitInfo(
+                    master_address=self.master_address,
+                    master_port=int(self.master_port),
+                    rank_offset=rank_offset,
+                    world_size=self.world_size,
+                )
+                init_request = WeightTransferInitRequest(init_info=asdict(init_info))
+                refs.append(actor.init_weight_transfer_engine.remote(init_request))
             ray.get(refs)
-            torchrl_logger.debug(
-                f"All {len(refs)} vLLM workers have dispatched NCCL init RPCs"
-            )
-
-            # Small delay to ensure worker background threads have entered the NCCL collective
-            # This prevents a race where the trainer starts NCCL before workers are ready
-
-            time.sleep(0.2)
-
-            self._comm_group = True  # Mark as initialized
-            torchrl_logger.debug(
-                "vLLM workers should now be blocked in NCCL collective, ready for trainer"
-            )
+            self._initialized = True
+            torchrl_logger.debug("vLLM worker weight transfer initialized")
 
     def send_weights(self, model_id: str, weights: Any) -> None:
-        """Broadcast weights to all workers using NCCL.
-
-        This method follows AsyncVLLM's periodic-mono pattern:
-        For each weight: RPC → NCCL broadcast → Wait for RPC completion
-
-        This should only be called from rank 0 (trainer).
+        """Send weights to all workers using vLLM's native weight transfer API.
 
         Args:
             model_id: ID of the model (used for logging).
             weights: TensorDict or dict of weights to broadcast.
         """
-        # This code is a duplicate from AsyncVLLM
-        # We are waiting for vLLM server to accept tokens endpoints, at which point we will be
-        # able to remove all dependencies on Ray for vllm distributed features.
-        # This will allow a more natural integration with the sender/receiver API.
+        from dataclasses import asdict
 
         import ray
+
+        from vllm.distributed.weight_transfer.base import WeightTransferUpdateRequest
+        from vllm.distributed.weight_transfer.nccl_engine import (
+            NCCLTrainerSendWeightsArgs,
+            NCCLWeightTransferEngine,
+            NCCLWeightTransferUpdateInfo,
+        )
 
         if self.rank != 0:
             raise RuntimeError("send_weights should only be called from rank 0")
 
-        if self._comm_group is None:
+        if not self._initialized:
             raise RuntimeError(
                 "Communication group not initialized. Call init_all_workers_group first."
             )
@@ -268,7 +302,6 @@ class VLLMCollectiveTransport:
                 "vllm_engine must be provided to sender for RPC coordination"
             )
 
-        # Set CUDA device for this operation
         torch.cuda.set_device(self.device)
 
         # Convert to dict if needed
@@ -278,37 +311,58 @@ class VLLMCollectiveTransport:
             weights_dict = weights
 
         torchrl_logger.debug(
-            f"Broadcasting {len(weights_dict)} weights for model '{model_id}'"
+            f"Sending {len(weights_dict)} weights for model '{model_id}'"
         )
 
-        # Broadcast each weight using periodic-mono pattern (like AsyncVLLM)
-        for name, (dtype, shape) in self._model_metadata.items():
-            if name not in weights_dict:
-                raise ValueError(
-                    f"Weight '{name}' not found in weights. Weights keys: {list(weights_dict.keys())[:10]}..."
-                )
+        # Build weight metadata
+        weight_names = list(self._model_metadata.keys())
+        dtype_names = [
+            str(dtype).split(".")[-1] for dtype, _shape in self._model_metadata.values()
+        ]
+        shapes = [list(shape) for _dtype, shape in self._model_metadata.values()]
 
-            tensor = weights_dict[name].to(f"cuda:{self.device}")
-            dtype_name = str(dtype).split(".")[-1]  # "torch.float16" -> "float16"
+        update_info = NCCLWeightTransferUpdateInfo(
+            names=weight_names,
+            dtype_names=dtype_names,
+            shapes=shapes,
+            packed=True,
+        )
+        update_request = WeightTransferUpdateRequest(update_info=asdict(update_info))
 
-            # Step 1: Send RPC to workers for this weight
-            futures = self.vllm_engine.collective_rpc(
-                "update_weight", args=(name, dtype_name, tuple(shape))
-            )
+        # Put vLLM engine to sleep before weight transfer
+        sleep_refs = []
+        for actor in self.vllm_engine.actors:
+            sleep_refs.append(actor.sleep.remote(level=0))
+        ray.get(sleep_refs)
 
-            # Step 2: Immediately broadcast this weight
-            self._comm_group.broadcast(
-                tensor,
-                src=0,
-                stream=torch.cuda.current_stream(),
-            )
+        # Tell vLLM workers to start receiving
+        refs = []
+        for actor in self.vllm_engine.actors:
+            refs.append(actor.update_weights_native.remote(update_request))
 
-            # Step 3: Wait for workers to complete this weight
-            ray.get(futures)
-            del tensor
+        # Send weights from trainer side
+        def _weight_iter():
+            for name in weight_names:
+                tensor = weights_dict[name].to(f"cuda:{self.device}")
+                yield name, tensor
 
+        NCCLWeightTransferEngine.trainer_send_weights(
+            iterator=_weight_iter(),
+            trainer_args=NCCLTrainerSendWeightsArgs(
+                group=self._trainer_nccl_group, packed=True
+            ),
+        )
+
+        ray.get(refs)
         torch.cuda.synchronize()
-        torchrl_logger.debug(f"Broadcast complete for model '{model_id}'")
+
+        # Wake up vLLM engine after weight transfer
+        wake_refs = []
+        for actor in self.vllm_engine.actors:
+            wake_refs.append(actor.wake_up.remote(tags=["scheduling"]))
+        ray.get(wake_refs)
+
+        torchrl_logger.debug(f"Weight transfer complete for model '{model_id}'")
 
     def receive_weights(
         self,
@@ -320,25 +374,14 @@ class VLLMCollectiveTransport:
     ) -> Any | None:
         """Receive weights from broadcaster.
 
-        This should only be called from worker ranks (rank > 0).
-        This method is called by vLLM engine internally through collective operations.
-
-        Args:
-            timeout: Ignored (vLLM handles synchronization internally).
-            weights: Ignored.
-            model: Ignored.
-            strategy: Ignored.
-
         Returns:
-            None - vLLM handles weight application internally via collectives.
+            None - vLLM handles weight application internally via native API.
         """
-        # vLLM handles this through its own collective operations
-        # The weights are received and applied by the engine during broadcast
         return None
 
     def check_connection(self) -> bool:
         """Check if the communication group is initialized."""
-        return self._comm_group is not None
+        return self._initialized
 
 
 # ============================================================================
@@ -522,6 +565,7 @@ class VLLMWeightSender:
         self._model_ref = None
         self._transport = None
         self._model_metadata = None
+        self._trainer_nccl_group = None
 
     def register_model(self, model: Any) -> None:
         """Register the model to extract weights from."""
@@ -534,7 +578,7 @@ class VLLMWeightSender:
         model_metadata: dict[str, tuple[torch.dtype, torch.Size]],
         vllm_engine: Any | None = None,
     ):
-        """Initialize the collective communication group.
+        """Initialize the collective communication group using vLLM's native API.
 
         Args:
             model_metadata: Dict mapping param names to (dtype, shape) tuples.
@@ -556,10 +600,12 @@ class VLLMWeightSender:
         torchrl_logger.debug(
             f"Initializing transport from sender with world_size={world_size}"
         )
-        self._transport.init_all_workers_group(model_metadata)
+        self._transport.init_all_workers_group(
+            model_metadata, gpus_per_replica=self._scheme.gpus_per_replica
+        )
 
     def update_weights(self, weights: Any | None = None) -> None:
-        """Extract and broadcast weights to vLLM workers.
+        """Extract and send weights to vLLM workers using native weight transfer API.
 
         Args:
             weights: Optional weights to send. If None, extracts from registered model.
@@ -633,13 +679,12 @@ class VLLMWeightReceiver:
     def init_all_workers_group(
         self, model_metadata: dict[str, tuple[torch.dtype, torch.Size]]
     ):
-        """Initialize the collective communication group.
+        """Initialize the collective communication group using vLLM's native API.
 
         Args:
             model_metadata: Dict mapping param names to (dtype, shape) tuples.
         """
-        # For vLLM receiver, we use rank=1 as a placeholder
-        # The engine handles actual rank assignment internally for all workers
+        # For vLLM receiver, the engine handles init via init_weight_update_group()
         world_size = 1 + self._scheme.num_replicas * self._scheme.gpus_per_replica
         self._transport = VLLMCollectiveTransport(
             master_address=self._scheme.master_address,
@@ -652,7 +697,9 @@ class VLLMWeightReceiver:
         torchrl_logger.debug(
             f"Initializing transport from receiver with world_size={world_size}."
         )
-        self._transport.init_all_workers_group(model_metadata)
+        self._transport.init_all_workers_group(
+            model_metadata, gpus_per_replica=self._scheme.gpus_per_replica
+        )
 
     def apply_weights(self, weights: Any, inplace: bool = True) -> None:
         """Apply weights to vLLM engine.

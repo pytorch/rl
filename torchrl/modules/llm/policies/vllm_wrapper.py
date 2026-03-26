@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import collections
-
+import dataclasses
 import importlib.util
 import threading
 import warnings
@@ -2218,6 +2218,13 @@ class _RequestOutput_tc(TensorClass["nocast"]):
 
         if isinstance(self.outputs, list):
             outputs = self.outputs
+            # Pre-process: replace empty list fields with None to avoid
+            # tensordict conversion errors (empty lists can't be stacked)
+            for output in outputs:
+                for field in dataclasses.fields(output):
+                    val = getattr(output, field.name)
+                    if isinstance(val, list) and len(val) == 0:
+                        object.__setattr__(output, field.name, None)
             outputs = [
                 postproc(from_dataclass(output, dest_cls=CompletionOutput_tc))
                 for output in outputs
@@ -2253,7 +2260,9 @@ class _RequestOutput_tc(TensorClass["nocast"]):
                         prompt_logprobs=torch.tensor(
                             [
                                 v[int(tid)].logprob if v is not None else 0.0
-                                for v, tid in _zip_strict(
+                                # Use zip (not _zip_strict) because vLLM V1 may return
+                                # fewer prompt_logprobs than prompt_token_ids (cached tokens)
+                                for v, tid in zip(
                                     request.prompt_logprobs, request.prompt_token_ids
                                 )
                             ]
@@ -2282,7 +2291,9 @@ class _RequestOutput_tc(TensorClass["nocast"]):
                     prompt_logprobs=torch.tensor(
                         [
                             v[int(tid)].logprob if v is not None else 0.0
-                            for v, tid in _zip_strict(
+                            # Use zip (not _zip_strict) because vLLM V1 may return
+                            # fewer prompt_logprobs than prompt_token_ids (cached tokens)
+                            for v, tid in zip(
                                 request.prompt_logprobs, request.prompt_token_ids
                             )
                         ]
