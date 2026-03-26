@@ -1,0 +1,220 @@
+# File-based auto-labeling configuration
+# Works with actions/labeler@v5
+# This complements auto-tag.yml (title-based labeling) by detecting which files changed
+
+# =============================================================================
+# Environment Sub-Labels (trigger specific tests in test-linux-libs.yml)
+# =============================================================================
+"Environments/brax":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/envs/libs/brax.py']
+
+"Environments/dm_control":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/envs/libs/dm_control.py']
+
+"Environments/envpool":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/envs/libs/envpool.py']
+
+"Environments/gym":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/envs/libs/gym.py', 'torchrl/envs/libs/_gym_utils.py']
+
+"Environments/habitat":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/envs/libs/habitat.py']
+
+"Environments/isaaclab":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/envs/libs/isaac_lab.py', 'torchrl/envs/libs/isaacgym.py']
+
+"Environments/jumanji":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/envs/libs/jumanji.py']
+
+"Environments/meltingpot":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/envs/libs/meltingpot.py']
+
+"Environments/open_spiel":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/envs/libs/openspiel.py']
+
+"Environments/pettingzoo":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/envs/libs/pettingzoo.py']
+
+"Environments/procgen":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/envs/libs/procgen.py']
+
+"Environments/robohive":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/envs/libs/robohive.py']
+
+"Environments/smacv2":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/envs/libs/smacv2.py']
+
+"Environments/unity_mlagents":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/envs/libs/unity_mlagents.py']
+
+"Environments/vmas":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/envs/libs/vmas.py']
+
+"Environments/chess":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/envs/custom/chess.py']
+
+# Parent Environments label (any env lib change)
+"Environments":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'torchrl/envs/libs/**'
+      - 'test/test_libs.py'
+
+# =============================================================================
+# Data Sub-Labels (trigger specific tests in test-linux-libs.yml)
+# =============================================================================
+"Data/gendgrl":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/data/datasets/gen_dgrl.py']
+
+"Data/minari":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/data/datasets/minari_data.py']
+
+"Data/openx":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/data/datasets/openx.py']
+
+"Data/roboset":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/data/datasets/roboset.py']
+
+"Data/vd4rl":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/data/datasets/vd4rl.py']
+
+# Parent Data label
+"Data":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'torchrl/data/datasets/**'
+
+# =============================================================================
+# LLM (triggers test-linux-llm.yml)
+# =============================================================================
+"llm/":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'torchrl/envs/llm/**'
+      - 'torchrl/objectives/llm/**'
+      - 'torchrl/data/llm/**'
+      - 'torchrl/weight_update/llm/**'
+      - 'torchrl/modules/llm/**'
+      - 'torchrl/collectors/llm/**'
+      - 'test/llm/**'
+
+# =============================================================================
+# Core Module Labels (informational, core tests always run)
+# =============================================================================
+"Collectors":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'torchrl/collectors/**'
+      - 'test/test_collectors.py'
+
+"Objectives":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'torchrl/objectives/**'
+      - 'test/test_objectives.py'
+
+"Modules":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'torchrl/modules/**'
+      - 'test/test_modules.py'
+      - 'test/test_tensordictmodules.py'
+      - 'test/test_actors.py'
+
+"Transforms":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'torchrl/envs/transforms/**'
+      - 'test/test_transforms.py'
+
+"Trainers":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'torchrl/trainers/**'
+      - 'test/test_trainer.py'
+
+"Record":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'torchrl/record/**'
+      - 'test/test_loggers.py'
+
+"WeightUpdate":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'torchrl/weight_update/**'
+
+"ReplayBuffers":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'torchrl/data/replay_buffers/**'
+      - 'test/test_rb.py'
+      - 'test/test_storage_map.py'
+
+"Services":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'torchrl/services/**'
+      - 'test/services/**'
+
+"distributions":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'torchrl/modules/distributions/**'
+      - 'test/test_distributions.py'
+
+# =============================================================================
+# Documentation & CI
+# =============================================================================
+"Documentation":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'docs/**'
+      - '*.md'
+      - '*.rst'
+
+"CI":
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.github/**'
+
+"sota-implementations/":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'sota-implementations/**'
+
+"tutorials/":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'tutorials/**'
+
+"Examples":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'examples/**'
+
+"Benchmarks":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'benchmarks/**'
