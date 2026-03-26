@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from .gsm8k import GSM8KEnv, GSM8KPrepareQuestion, make_gsm8k_env
 from .ifeval import IFEvalData, IFEvalEnv, IfEvalScorer
+from .math import MATHEnv
 
 __all__ = [
     "make_gsm8k_env",
@@ -14,4 +15,5 @@ __all__ = [
     "IFEvalEnv",
     "IFEvalData",
     "IfEvalScorer",
+    "MATHEnv",
 ]
