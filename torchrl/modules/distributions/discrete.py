@@ -805,7 +805,17 @@ class LLMMaskedCategorical(D.Distribution):
     def _sampling_dist(self):
         """Get masked distribution for sampling operations."""
         if self._masked_dist is None:
-            self._masked_dist = D.Categorical(logits=self._sampling_logits)
+            logits = self._sampling_logits
+            # Replace inf/NaN to prevent softmax → multinomial crashes
+            if not logits.isfinite().all():
+                finfo = torch.finfo(logits.dtype)
+                logits = torch.nan_to_num(
+                    logits,
+                    nan=0.0,
+                    posinf=finfo.max / 2,
+                    neginf=finfo.min / 2,
+                )
+            self._masked_dist = D.Categorical(logits=logits)
         return self._masked_dist
 
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
