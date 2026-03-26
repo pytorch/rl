@@ -1,0 +1,104 @@
+name: Build Windows Wheels
+
+on:
+  pull_request:
+  push:
+    branches:
+      - nightly
+      - main
+      - release/*
+    tags:
+        # NOTE: Binary build pipelines should only get triggered on release candidate builds
+        # Release candidate tags look like: v1.11.0-rc1
+        - v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+
+  workflow_dispatch:
+    inputs:
+      build-cpu:
+        description: 'Build CPU wheels'
+        required: false
+        type: boolean
+        default: true
+      build-cuda:
+        description: 'Build CUDA wheels'
+        required: false
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      test-infra-ref:
+        description: 'PyTorch test-infra ref (main for nightly, release/X.Y for stable)'
+        required: false
+        type: string
+        default: 'main'
+      tensordict-source:
+        description: 'TensorDict source: stable (PyPI), git, or auto (branch-based detection)'
+        required: false
+        type: string
+        default: 'auto'
+      channel:
+        description: 'Build channel: nightly, test, release, or empty for auto-detection'
+        required: false
+        type: string
+        default: ''
+      with-cuda:
+        description: 'Build with CUDA (enable/disable)'
+        required: false
+        type: string
+        default: 'enable'
+      with-cpu:
+        description: 'Build with CPU (enable/disable)'
+        required: false
+        type: string
+        default: 'enable'
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  # TensorDict source passed to build scripts
+  # Note: This may not propagate to pytorch/test-infra called workflows;
+  # scripts also use GITHUB_REF_NAME for branch-based detection as fallback.
+  TENSORDICT_SOURCE: ${{ inputs.tensordict-source || 'auto' }}
+
+jobs:
+  generate-matrix:
+    uses: pytorch/test-infra/.github/workflows/generate_binary_build_matrix.yml@main
+    with:
+      package-type: wheel
+      os: windows
+      test-infra-repository: pytorch/test-infra
+      test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
+      channel: ${{ inputs.channel || '' }}
+      use-only-dl-pytorch-org: ${{ inputs.channel == 'release' && 'true' || 'false' }}
+      # For workflow_dispatch: convert boolean to enable/disable string
+      # For workflow_call: use the string input directly
+      # Default: enable all variants (Windows has no ROCm)
+      with-cuda: ${{ github.event_name == 'workflow_dispatch' && (inputs.build-cuda && 'enable' || 'disable') || inputs.with-cuda || 'enable' }}
+      with-cpu: ${{ github.event_name == 'workflow_dispatch' && (inputs.build-cpu && 'enable' || 'disable') || inputs.with-cpu || 'enable' }}
+  build:
+    needs: generate-matrix
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - repository: pytorch/rl
+            pre-script: .github/scripts/pre-build-script-win.sh
+            env-script: .github/scripts/version_script.bat
+            post-script: "python packaging/wheel/relocate.py"
+            smoke-test-script: test/smoke_test.py
+            package-name: torchrl
+    name: ${{ matrix.repository }}
+    uses: pytorch/test-infra/.github/workflows/build_wheels_windows.yml@main
+    with:
+      repository: ${{ matrix.repository }}
+      ref: ""
+      test-infra-repository: pytorch/test-infra
+      test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
+      build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
+      pre-script: ${{ matrix.pre-script }}
+      env-script: ${{ matrix.env-script }}
+      post-script: ${{ matrix.post-script }}
+      package-name: ${{ matrix.package-name }}
+      smoke-test-script: ${{ matrix.smoke-test-script }}
+      trigger-event: ${{ github.event_name }}

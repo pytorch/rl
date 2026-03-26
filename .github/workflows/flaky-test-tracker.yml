@@ -1,0 +1,226 @@
+name: Flaky Test Tracker
+
+on:
+  schedule:
+    # Run daily at 6:00 UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      num_runs:
+        description: 'Number of recent CI runs to analyze per workflow'
+        required: false
+        default: '30'
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+  issues: write
+
+env:
+  FLAKY_RUNS_TO_ANALYZE: ${{ inputs.num_runs || '30' }}
+  # Workflows to analyze for flaky tests
+  FLAKY_WORKFLOWS: 'test-linux.yml,test-linux-libs.yml,test-linux-habitat.yml,test-linux-llm.yml,test-linux-sota.yml,test-linux-tutorials.yml'
+
+jobs:
+  analyze-flaky-tests:
+    runs-on: ubuntu-latest
+    outputs:
+      flaky_count: ${{ steps.analyze.outputs.flaky_count }}
+      new_flaky_count: ${{ steps.analyze.outputs.new_flaky_count }}
+      resolved_count: ${{ steps.analyze.outputs.resolved_count }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Analyze flaky tests
+        id: analyze
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python .github/scripts/analyze_flaky_tests.py \
+            --runs "$FLAKY_RUNS_TO_ANALYZE" \
+            --workflows "$FLAKY_WORKFLOWS" \
+            --output-dir flaky-reports
+
+      - name: Generate dashboard
+        run: |
+          python .github/scripts/generate_dashboard.py \
+            --input-dir flaky-reports \
+            --output-dir flaky-reports
+
+      - name: Upload reports as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flaky-test-reports
+          path: flaky-reports/
+          retention-days: 90
+
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages
+          fetch-depth: 1
+
+      - name: Deploy to GitHub Pages
+        run: |
+          # Create flaky directory if it doesn't exist
+          mkdir -p gh-pages/flaky
+          
+          # Copy reports
+          cp flaky-reports/flaky-tests.json gh-pages/flaky/
+          cp flaky-reports/flaky-tests.md gh-pages/flaky/
+          cp flaky-reports/badge.json gh-pages/flaky/
+          cp flaky-reports/index.html gh-pages/flaky/
+          
+          # Update historical data
+          if [ -f gh-pages/flaky/data.json ]; then
+            # Merge new data point with existing history
+            python -c "
+          import json
+          from datetime import datetime
+
+          # Load existing data
+          with open('gh-pages/flaky/data.json') as f:
+              history = json.load(f)
+
+          # Load new report
+          with open('flaky-reports/flaky-tests.json') as f:
+              new_report = json.load(f)
+
+          # Add new data point
+          new_point = {
+              'date': datetime.utcnow().strftime('%Y-%m-%d'),
+              'flaky_count': new_report['summary']['flaky_count'],
+              'new_flaky_count': new_report['summary'].get('new_flaky_count', 0),
+              'resolved_count': new_report['summary'].get('resolved_count', 0),
+              'total_tests': new_report['summary']['total_tests'],
+          }
+          history['history'].append(new_point)
+
+          # Keep last 90 days
+          history['history'] = history['history'][-90:]
+
+          with open('gh-pages/flaky/data.json', 'w') as f:
+              json.dump(history, f, indent=2)
+          "
+          else
+            # Create initial data file
+            python -c "
+          import json
+          from datetime import datetime
+
+          with open('flaky-reports/flaky-tests.json') as f:
+              report = json.load(f)
+
+          history = {
+              'history': [{
+                  'date': datetime.utcnow().strftime('%Y-%m-%d'),
+                  'flaky_count': report['summary']['flaky_count'],
+                  'new_flaky_count': report['summary'].get('new_flaky_count', 0),
+                  'resolved_count': report['summary'].get('resolved_count', 0),
+                  'total_tests': report['summary']['total_tests'],
+              }]
+          }
+
+          with open('gh-pages/flaky/data.json', 'w') as f:
+              json.dump(history, f, indent=2)
+          "
+          fi
+          
+          # Commit and push
+          cd gh-pages
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add flaky/
+          git diff --staged --quiet || git commit -m "Update flaky test report - $(date -u +%Y-%m-%d)"
+          git push
+
+  notify:
+    needs: analyze-flaky-tests
+    runs-on: ubuntu-latest
+    if: needs.analyze-flaky-tests.outputs.flaky_count != '0' || needs.analyze-flaky-tests.outputs.new_flaky_count != '0'
+
+    steps:
+      - name: Download reports
+        uses: actions/download-artifact@v4
+        with:
+          name: flaky-test-reports
+          path: flaky-reports/
+
+      - name: Create or update flaky test tracking issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Read the markdown report
+            const report = fs.readFileSync('flaky-reports/flaky-tests.md', 'utf8');
+            const jsonReport = JSON.parse(fs.readFileSync('flaky-reports/flaky-tests.json', 'utf8'));
+            
+            const flakyCount = jsonReport.summary.flaky_count;
+            const newFlakyCount = jsonReport.summary.new_flaky_count || 0;
+            const resolvedCount = jsonReport.summary.resolved_count || 0;
+            
+            // Look for existing flaky test tracking issue
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'flaky-test-tracker',
+              state: 'open',
+              per_page: 1
+            });
+            
+            const title = `[Flaky Tests] ${flakyCount} flaky test(s) detected`;
+            const body = `## Flaky Test Report - ${new Date().toISOString().split('T')[0]}
+            
+            **Summary:**
+            - Flaky tests: **${flakyCount}**
+            - Newly flaky (last 7 days): **${newFlakyCount}**
+            - Resolved: **${resolvedCount}**
+            
+            ---
+            
+            ${report}
+            
+            ---
+            
+            *This issue is automatically updated daily. See the [full dashboard](https://pytorch.github.io/rl/flaky/) for more details.*
+            `;
+            
+            if (issues.data.length > 0) {
+              // Update existing issue
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issues.data[0].number,
+                title: title,
+                body: body
+              });
+              console.log(`Updated issue #${issues.data[0].number}`);
+            } else if (flakyCount > 0) {
+              // Create new issue only if there are flaky tests
+              const newIssue = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['flaky-test-tracker', 'ci']
+              });
+              console.log(`Created issue #${newIssue.data.number}`);
+            }

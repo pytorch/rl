@@ -1,0 +1,11 @@
+vllm==0.14.1
+peft
+bitsandbytes
+datasets
+wandb
+hydra-core
+ray
+tqdm
+tensordict
+accelerate
+xformers
