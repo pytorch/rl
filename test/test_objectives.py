@@ -18696,6 +18696,33 @@ class TestImaginedEnv:
         )
         assert not env.any_done(td)
 
+    def test_check_env_specs(self):
+        obs_dim, action_dim = 4, 1
+        wm = self._make_dummy_world_model(obs_dim, action_dim)
+        base_env = self._make_base_env(obs_dim, action_dim)
+
+        env = ImaginedEnv(
+            world_model_module=wm,
+            base_env=base_env,
+            next_observation_key="next_observation",
+        )
+
+        env.check_env_specs()
+
+        td = TensorDict(
+            {
+                ("observation", "mean"): torch.zeros(1, obs_dim),
+                ("observation", "var"): torch.eye(obs_dim).unsqueeze(0) * 1e-3,
+                ("action", "mean"): torch.zeros(1, action_dim),
+                ("action", "var"): torch.zeros(1, action_dim, action_dim),
+                ("action", "cross_covariance"): torch.zeros(1, obs_dim, action_dim),
+            },
+            batch_size=[1],
+        )
+        out = env.step(td)
+        assert ("next_observation", "mean") not in out.keys(True)
+        assert ("next_observation", "var") not in out.keys(True)
+
 
 class TestMeanActionSelector:
     @staticmethod

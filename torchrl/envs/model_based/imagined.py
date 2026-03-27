@@ -139,7 +139,7 @@ class ImaginedEnv(ModelBasedEnvBase):
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        tensordict = self.world_model(tensordict)
+        tensordict = self.world_model(tensordict.clone(recurse=False))
 
         reward = torch.zeros(*tensordict.shape, 1, device=self.device)
         done = torch.zeros(*tensordict.shape, 1, dtype=torch.bool, device=self.device)
