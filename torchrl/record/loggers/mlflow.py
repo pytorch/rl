@@ -14,7 +14,7 @@ from typing import Any
 from tensordict import TensorDictBase
 from torch import Tensor
 
-from torchrl.record.loggers.common import _make_metrics_safe, Logger
+from torchrl.record.loggers.common import _make_metrics_safe, _write_video, Logger
 
 _has_tv = importlib.util.find_spec("torchvision") is not None
 
@@ -99,7 +99,6 @@ class MLFlowLogger(Logger):
                 supports 'step' (integer indicating the step index) and 'fps' (defaults to ``self.video_fps``).
         """
         import mlflow
-        import torchvision
 
         if not _has_tv:
             raise ImportError(
@@ -119,7 +118,7 @@ class MLFlowLogger(Logger):
         with TemporaryDirectory() as temp_dir:
             video_name = f"{name}_step_{step:04}.mp4" if step else f"{name}.mp4"
             with open(os.path.join(temp_dir, video_name), "wb") as f:
-                torchvision.io.write_video(filename=f.name, video_array=video, fps=fps)
+                _write_video(f.name, video, fps=fps)
                 mlflow.log_artifact(f.name, "videos")
 
     def log_hparams(self, cfg: DictConfig | dict) -> None:  # noqa: F821

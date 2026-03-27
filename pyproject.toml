@@ -51,7 +51,7 @@ atari = ["gymnasium[atari]"]
 dm_control = ["dm_control"]
 replay_buffer = ["torch>=2.7.0"]
 gym_continuous = ["gymnasium<1.0", "mujoco"]
-rendering = ["moviepy<2.0.0"]
+rendering = ["moviepy<2.0.0", "torchcodec>=0.10.0"]
 tests = [
     "pytest",
     "pyyaml",

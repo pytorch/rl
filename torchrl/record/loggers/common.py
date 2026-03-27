@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import abc
+import importlib.util
 from collections.abc import Sequence
 from typing import Any
 
@@ -12,8 +13,66 @@ import torch
 from tensordict import TensorDictBase
 from torch import Tensor
 
+from torchrl._utils import implement_for
+
+_has_tv = importlib.util.find_spec("torchvision") is not None
+try:
+    from torchcodec.encoders import VideoEncoder  # noqa: F401
+
+    _has_torchcodec = True
+    del VideoEncoder
+except Exception:
+    _has_torchcodec = False
+
 
 __all__ = ["Logger"]
+
+
+@implement_for("torchvision", None, "0.22")
+def _write_video(filename, video_array, **kwargs):
+    if not _has_tv:
+        raise ImportError(
+            "Writing mp4 videos with torchvision < 0.22 requires torchvision to be installed. "
+            "Install it with: pip install torchvision"
+        )
+    import torchvision
+
+    torchvision.io.write_video(filename, video_array, **kwargs)
+
+
+@implement_for("torchvision", "0.22")
+def _write_video(filename, video_array, **kwargs):  # noqa: F811
+    if not _has_torchcodec:
+        raise ImportError(
+            "Writing mp4 videos with torchvision >= 0.22 requires torchcodec >= 0.10.0, "
+            "since torchvision.io.write_video was deprecated in 0.22 and removed in 0.24. "
+            "Install it with: pip install 'torchcodec>=0.10.0'"
+        )
+    from torchcodec.encoders import VideoEncoder
+
+    fps = kwargs.pop("fps", 30)
+    video_codec = kwargs.pop("video_codec", None)
+    options = dict(kwargs.pop("options", None) or {})
+    crf = options.pop("crf", None)
+    preset = options.pop("preset", None)
+    pixel_format = options.pop("pixel_format", None)
+
+    # VideoEncoder expects (N, C, H, W); callers pass (T, H, W, C)
+    video_array = video_array.permute(0, 3, 1, 2).contiguous()
+
+    to_file_kwargs = {}
+    if video_codec is not None:
+        to_file_kwargs["codec"] = video_codec
+    if crf is not None:
+        to_file_kwargs["crf"] = float(crf)
+    if preset is not None:
+        to_file_kwargs["preset"] = preset
+    if pixel_format is not None:
+        to_file_kwargs["pixel_format"] = pixel_format
+    if options:
+        to_file_kwargs["extra_options"] = options
+
+    VideoEncoder(frames=video_array, frame_rate=fps).to_file(filename, **to_file_kwargs)
 
 
 def _make_metrics_safe(

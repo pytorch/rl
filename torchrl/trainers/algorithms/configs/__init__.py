@@ -103,6 +103,7 @@ from torchrl.trainers.algorithms.configs.objectives import (
     PPOLossConfig,
     SACLossConfig,
     SoftUpdateConfig,
+    TD3LossConfig,
 )
 from torchrl.trainers.algorithms.configs.trainers import (
     CQLTrainerConfig,
@@ -111,6 +112,7 @@ from torchrl.trainers.algorithms.configs.trainers import (
     IQLTrainerConfig,
     PPOTrainerConfig,
     SACTrainerConfig,
+    TD3TrainerConfig,
     TrainerConfig,
 )
 from torchrl.trainers.algorithms.configs.transforms import (
@@ -374,6 +376,7 @@ __all__ = [
     "LossConfig",
     "PPOLossConfig",
     "SACLossConfig",
+    "TD3LossConfig",
     # Value functions
     "GAEConfig",
     # Trainers
@@ -383,6 +386,7 @@ __all__ = [
     "IQLTrainerConfig",
     "PPOTrainerConfig",
     "SACTrainerConfig",
+    "TD3TrainerConfig",
     "TrainerConfig",
     # Loggers
     "CSVLoggerConfig",
@@ -578,6 +582,7 @@ def _register_configs():
     cs.store(group="loss", name="iql", node=IQLLossConfig)
     cs.store(group="loss", name="ppo", node=PPOLossConfig)
     cs.store(group="loss", name="sac", node=SACLossConfig)
+    cs.store(group="loss", name="td3", node=TD3LossConfig)
 
     # =============================================================================
     # Value Function Configurations
@@ -640,6 +645,7 @@ def _register_configs():
     cs.store(group="trainer", name="iql", node=IQLTrainerConfig)
     cs.store(group="trainer", name="ppo", node=PPOTrainerConfig)
     cs.store(group="trainer", name="sac", node=SACTrainerConfig)
+    cs.store(group="trainer", name="td3", node=TD3TrainerConfig)
 
     # =============================================================================
     # Optimizer Configurations
