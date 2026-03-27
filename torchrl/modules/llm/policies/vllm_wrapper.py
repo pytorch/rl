@@ -2266,6 +2266,14 @@ def _build_prompt_logprobs(request):
     return torch.tensor(values)
 
 
+def _build_num_cached_tokens(request) -> torch.Tensor:
+    """Build a tensor for ``num_cached_tokens`` with a stable default."""
+    num_cached_tokens = getattr(request, "num_cached_tokens", None)
+    if num_cached_tokens is None:
+        return torch.tensor(0)
+    return torch.as_tensor(num_cached_tokens)
+
+
 def _completion_output_to_tc(output, CompletionOutput_tc):
     """Convert a vLLM CompletionOutput dataclass to CompletionOutput_tc.
 
@@ -2284,6 +2292,12 @@ def _completion_output_to_tc(output, CompletionOutput_tc):
         # Special handling: falsy logprobs → None so tensordict can stack
         if f.name == "logprobs":
             val = val if val else None
+        elif f.name == "token_ids":
+            val = (
+                torch.as_tensor(val).long()
+                if val is not None
+                else torch.tensor([], dtype=torch.long)
+            )
         kwargs[f.name] = val
     return CompletionOutput_tc(**kwargs)
 
@@ -2359,6 +2373,24 @@ class _RequestOutput_tc(TensorClass["nocast"]):
             requests, (RequestOutput, list)
         ), f"requests must be RequestOutput or list, got {type(requests)}"
 
+        if isinstance(requests, RequestOutput):
+            return cls(
+                request_id=requests.request_id,
+                prompt=requests.prompt,
+                prompt_token_ids=torch.as_tensor(requests.prompt_token_ids),
+                prompt_logprobs=_build_prompt_logprobs(requests),
+                outputs=requests.outputs,
+                finished=requests.finished,
+                metrics=requests.metrics,
+                lora_request=requests.lora_request,
+                encoder_prompt=requests.encoder_prompt,
+                encoder_prompt_token_ids=requests.encoder_prompt_token_ids,
+                num_cached_tokens=_build_num_cached_tokens(requests),
+            )
+
+        if len(requests) == 1:
+            return cls.from_request_output(requests[0])
+
         # Check if we can stack the outputs
         try:
             out = lazy_stack(
@@ -2374,7 +2406,7 @@ class _RequestOutput_tc(TensorClass["nocast"]):
                         lora_request=request.lora_request,
                         encoder_prompt=request.encoder_prompt,
                         encoder_prompt_token_ids=request.encoder_prompt_token_ids,
-                        num_cached_tokens=torch.as_tensor(request.num_cached_tokens),
+                        num_cached_tokens=_build_num_cached_tokens(request),
                     )
                     for request in requests
                 ]
@@ -2394,7 +2426,7 @@ class _RequestOutput_tc(TensorClass["nocast"]):
                     lora_request=request.lora_request,
                     encoder_prompt=request.encoder_prompt,
                     encoder_prompt_token_ids=request.encoder_prompt_token_ids,
-                    num_cached_tokens=torch.as_tensor(request.num_cached_tokens),
+                    num_cached_tokens=_build_num_cached_tokens(request),
                 )
                 for request in requests
             ]
