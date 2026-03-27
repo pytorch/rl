@@ -302,8 +302,9 @@ class TestEnvBase:
 
         check_env_specs() should succeed when state_spec contains keys that are
         not present in observation_spec (e.g. RNG seeds, auxiliary state).
-        The fake 'next' tensordict must include those state keys so it matches
-        a real rollout.
+        Such keys may be returned by _step and appear in the real rollout's
+        "next", but are intentionally excluded from the key comparison in
+        check_env_specs() since their presence is optional.
         """
 
         class EnvWithExtraState(EnvBase):
@@ -341,14 +342,9 @@ class TestEnvBase:
             def _set_seed(self, seed):
                 pass
 
-        env = EnvWithExtraState()
-        # fake_tensordict()'s "next" must contain the state_spec key
-        ftd = env.fake_tensordict()
-        assert (
-            "hidden_state" in ftd["next"].keys()
-        ), "state_spec key 'hidden_state' missing from fake_tensordict()['next']"
-        # check_env_specs() must not raise
-        check_env_specs(env)
+        # check_env_specs() must not raise even though _step returns
+        # "hidden_state" (a state_spec key) in "next"
+        check_env_specs(EnvWithExtraState())
 
     class MyEnv(EnvBase):
         def __init__(self):
