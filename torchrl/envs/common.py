@@ -3859,7 +3859,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         # Hence we generate the input, and override using the output
         fake_in_out = fake_input.update(fake_obs)
 
-        next_output = fake_state.clone()
+        next_output = state_spec.zero()
         next_output.update(fake_obs)
         next_output.update(fake_reward)
         next_output.update(fake_done)

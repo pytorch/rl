@@ -273,6 +273,59 @@ class TestEnvBase:
         with pytest.raises(TypeError):
             check_env_specs(env)
 
+    def test_check_env_specs_state_spec_keys(self):
+        """Regression test for https://github.com/pytorch/rl/issues/3260.
+
+        check_env_specs() should succeed when state_spec contains keys that are
+        not present in observation_spec (e.g. RNG seeds, auxiliary state).
+        The fake 'next' tensordict must include those state keys so it matches
+        a real rollout.
+        """
+
+        class EnvWithExtraState(EnvBase):
+            def __init__(self):
+                super().__init__()
+                self.observation_spec = Composite(
+                    observation=Unbounded(shape=(3,), dtype=torch.float32)
+                )
+                self.action_spec = Unbounded(shape=(1,), dtype=torch.float32)
+                self.reward_spec = Unbounded(shape=(1,), dtype=torch.float32)
+                # state_spec has a key ("hidden_state") absent from observation_spec
+                self.state_spec = Composite(
+                    hidden_state=Unbounded(shape=(4,), dtype=torch.float32)
+                )
+
+            def _reset(self, tensordict):
+                return TensorDict(
+                    {
+                        "observation": torch.zeros(3),
+                        "hidden_state": torch.zeros(4),
+                    }
+                )
+
+            def _step(self, tensordict):
+                return TensorDict(
+                    {
+                        "observation": torch.zeros(3),
+                        "hidden_state": torch.zeros(4),
+                        "reward": torch.zeros(1),
+                        "done": torch.zeros(1, dtype=torch.bool),
+                        "terminated": torch.zeros(1, dtype=torch.bool),
+                    }
+                )
+
+            def _set_seed(self, seed):
+                pass
+
+        env = EnvWithExtraState()
+        # fake_tensordict()'s "next" must contain the state_spec key
+        ftd = env.fake_tensordict()
+        assert "hidden_state" in ftd["next"].keys(), (
+            "state_spec key 'hidden_state' missing from fake_tensordict()['next']"
+        )
+        # check_env_specs() must not raise
+        check_env_specs(env)
+
     class MyEnv(EnvBase):
         def __init__(self):
             super().__init__()
