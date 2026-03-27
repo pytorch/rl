@@ -344,9 +344,9 @@ class TestEnvBase:
         env = EnvWithExtraState()
         # fake_tensordict()'s "next" must contain the state_spec key
         ftd = env.fake_tensordict()
-        assert "hidden_state" in ftd["next"].keys(), (
-            "state_spec key 'hidden_state' missing from fake_tensordict()['next']"
-        )
+        assert (
+            "hidden_state" in ftd["next"].keys()
+        ), "state_spec key 'hidden_state' missing from fake_tensordict()['next']"
         # check_env_specs() must not raise
         check_env_specs(env)
 
