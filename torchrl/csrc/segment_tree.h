@@ -25,7 +25,7 @@ namespace torchrl {
 
 // SegmentTree is a tree data structure to maintain statistics of intervals.
 // https://en.wikipedia.org/wiki/Segment_tree
-// Here is the implementaion of non-recursive SegmentTree for single point
+// Here is the implementation of non-recursive SegmentTree for single point
 // update and interval query. The time complexities of both Update and Query are
 // O(logN).
 // One example of a SegmentTree is shown below.
@@ -43,8 +43,7 @@ class SegmentTree {
  public:
   SegmentTree(int64_t size, const T& identity_element)
       : size_(size), identity_element_(identity_element) {
-    for (capacity_ = 1; capacity_ <= size; capacity_ <<= 1)
-      ;
+    for (capacity_ = 1; capacity_ <= size; capacity_ <<= 1);
     values_.assign(2 * capacity_, identity_element_);
   }
 

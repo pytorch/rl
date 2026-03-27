@@ -109,20 +109,12 @@ We will cover six crucial components of TorchRL:
 import warnings
 
 warnings.filterwarnings("ignore")
+# Set multiprocessing start method to fork if not already set
+# This allows the tutorial to run as a script without if __name__ == "__main__"
 from torch import multiprocessing
 
-# TorchRL prefers spawn method, that restricts creation of  ``~torchrl.envs.ParallelEnv`` inside
-# `__main__` method call, but for the easy of reading the code switch to fork
-# which is also a default spawn method in Google's Colaboratory
-try:
-    is_sphinx = __sphinx_build__
-except NameError:
-    is_sphinx = False
-
-try:
-    multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
-except RuntimeError:
-    pass
+if multiprocessing.get_start_method(allow_none=True) is None:
+    multiprocessing.set_start_method("fork")
 
 # sphinx_gallery_end_ignore
 
@@ -490,12 +482,12 @@ print("Running value:", value_module(env.reset()))
 # on which ``device`` the policy should be executed, etc. They are also
 # designed to work efficiently with batched and multiprocessed environments.
 #
-# The simplest data collector is the :class:`~torchrl.collectors.collectors.SyncDataCollector`:
+# The simplest data collector is the :class:`~torchrl.collectors.SyncDataCollector`:
 # it is an iterator that you can use to get batches of data of a given length, and
 # that will stop once a total number of frames (``total_frames``) have been
 # collected.
-# Other data collectors (:class:`~torchrl.collectors.collectors.MultiSyncDataCollector` and
-# :class:`~torchrl.collectors.collectors.MultiaSyncDataCollector`) will execute
+# Other data collectors (:class:`~torchrl.collectors.MultiSyncDataCollector` and
+# :class:`~torchrl.collectors.MultiaSyncDataCollector`) will execute
 # the same operations in synchronous and asynchronous manner over a
 # set of multiprocessed workers.
 #
@@ -571,9 +563,9 @@ loss_module = ClipPPOLoss(
     critic_network=value_module,
     clip_epsilon=clip_epsilon,
     entropy_bonus=bool(entropy_eps),
-    entropy_coef=entropy_eps,
+    entropy_coeff=entropy_eps,
     # these keys match by default but we set this for completeness
-    critic_coef=1.0,
+    critic_coeff=1.0,
     loss_critic_type="smooth_l1",
 )
 

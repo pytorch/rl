@@ -16,12 +16,12 @@ from typing import Any
 
 import numpy as np
 import torch
+from pyvers import implement_for
 from tensordict import MemoryMappedTensor, TensorDict
 from tensordict.utils import NestedKey
-
 from torch.utils._pytree import tree_map
 from torchrl._extension import EXTENSION_WARNING
-from torchrl._utils import _replace_last, logger
+from torchrl._utils import _replace_last, logger, rl_warnings
 from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
 from torchrl.data.replay_buffers.utils import _auto_device, _is_int, unravel_index
 
@@ -33,7 +33,11 @@ try:
         SumSegmentTreeFp64,
     )
 except ImportError:
-    warnings.warn(EXTENSION_WARNING)
+    # Make default values
+    MinSegmentTreeFp32 = None
+    MinSegmentTreeFp64 = None
+    SumSegmentTreeFp32 = None
+    SumSegmentTreeFp64 = None
 
 _EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
 
@@ -331,21 +335,22 @@ class PrioritizedSampler(Sampler):
             the maximum value since the instantiation of the sampler.
 
     **Parameter Guidelines**:
-    - **:math:`\alpha` (alpha)**: Controls how much to prioritize high-error experiences
-        - 0.4-0.7: Good balance between learning speed and stability
-        - 1.0: Maximum prioritization (may be unstable)
-        - 0.0: Uniform sampling (no prioritization benefit)
 
-    - **:math:`\beta` (beta)**: Controls importance sampling correction
-        - Start at 0.4-0.6 for training stability
-        - Anneal to 1.0 over training to reduce bias
-        - Lower values = more stable but biased
-        - Higher values = less biased but potentially unstable
+    - **:math:`\alpha` (alpha)**: Controls how much to prioritize high-error experiences.
+      0.4-0.7: Good balance between learning speed and stability.
+      1.0: Maximum prioritization (may be unstable).
+      0.0: Uniform sampling (no prioritization benefit).
 
-    - **:math:`\epsilon`**: Small constant to prevent zero priorities
-        - 1e-8: Good default value
-        - Too small: may cause numerical issues
-        - Too large: reduces prioritization effect
+    - **:math:`\beta` (beta)**: Controls importance sampling correction.
+      Start at 0.4-0.6 for training stability.
+      Anneal to 1.0 over training to reduce bias.
+      Lower values = more stable but biased.
+      Higher values = less biased but potentially unstable.
+
+    - **:math:`\epsilon`**: Small constant to prevent zero priorities.
+      1e-8: Good default value.
+      Too small: may cause numerical issues.
+      Too large: reduces prioritization effect.
 
     Examples:
         >>> from torchrl.data.replay_buffers import ReplayBuffer, LazyTensorStorage, PrioritizedSampler
@@ -369,7 +374,7 @@ class PrioritizedSampler(Sampler):
                 device=cpu,
                 is_shared=False)
         >>> print(info)
-        {'_weight': array([1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11,
+        {'priority_weight': array([1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11,
                1.e-11, 1.e-11], dtype=float32), 'index': array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1])}
 
     .. note:: Using a :class:`~torchrl.data.replay_buffers.TensorDictReplayBuffer` can smoothen the
@@ -419,6 +424,8 @@ class PrioritizedSampler(Sampler):
         self.dtype = dtype
         self._max_priority_within_buffer = max_priority_within_buffer
         self._init()
+        if rl_warnings() and SumSegmentTreeFp32 is None:
+            logger.warning(EXTENSION_WARNING)
 
     def __repr__(self):
         return f"{self.__class__.__name__}(alpha={self._alpha}, beta={self._beta}, eps={self._eps}, reduction={self.reduction})"
@@ -451,6 +458,22 @@ class PrioritizedSampler(Sampler):
         return super().__getstate__()
 
     def _init(self) -> None:
+        if SumSegmentTreeFp32 is None:
+            raise RuntimeError(
+                "SumSegmentTreeFp32 is not available. See warning above."
+            )
+        if MinSegmentTreeFp32 is None:
+            raise RuntimeError(
+                "MinSegmentTreeFp32 is not available. See warning above."
+            )
+        if SumSegmentTreeFp64 is None:
+            raise RuntimeError(
+                "SumSegmentTreeFp64 is not available. See warning above."
+            )
+        if MinSegmentTreeFp64 is None:
+            raise RuntimeError(
+                "MinSegmentTreeFp64 is not available. See warning above."
+            )
         if self.dtype in (torch.float, torch.FloatType, torch.float32):
             self._sum_tree = SumSegmentTreeFp32(self._max_capacity)
             self._min_tree = MinSegmentTreeFp32(self._max_capacity)
@@ -566,7 +589,7 @@ class PrioritizedSampler(Sampler):
         weight = torch.pow(weight / p_min, -self._beta)
         if storage.ndim > 1:
             index = unravel_index(index, storage.shape)
-        return index, {"_weight": weight}
+        return index, {"priority_weight": weight}
 
     def add(self, index: torch.Tensor | int) -> None:
         super().add(index)
@@ -685,7 +708,12 @@ class PrioritizedSampler(Sampler):
         self._sum_tree = state_dict.pop("_sum_tree")
         self._min_tree = state_dict.pop("_min_tree")
 
+    @implement_for("torch", None, "2.5.0")
     def dumps(self, path):
+        raise NotImplementedError("This method is not implemented for Torch < 2.5.0")
+
+    @implement_for("torch", "2.5.0", None)
+    def dumps(self, path):  # noqa: F811
         path = Path(path).absolute()
         path.mkdir(exist_ok=True)
         try:
@@ -731,7 +759,12 @@ class PrioritizedSampler(Sampler):
                 file,
             )
 
+    @implement_for("torch", None, "2.5.0")
     def loads(self, path):
+        raise NotImplementedError("This method is not implemented for Torch < 2.5.0")
+
+    @implement_for("torch", "2.5.0", None)
+    def loads(self, path):  # noqa: F811
         path = Path(path).absolute()
         with open(path / "sampler_metadata.json") as file:
             metadata = json.load(file)
@@ -1122,10 +1155,10 @@ class SliceSampler(Sampler):
     def __getstate__(self):
         if get_spawning_popen() is not None and self.cache_values:
             logger.warning(
-                f"It seems you are sharing a {type(self).__name__} across processes with"
+                f"It seems you are sharing a {type(self).__name__} across processes with "
                 f"cache_values=True. "
                 f"While this isn't forbidden and could perfectly work if your dataset "
-                f"is unaltered on both processes, remember that calling extend/add on"
+                f"is unaltered on both processes, remember that calling extend/add on "
                 f"one process will NOT erase the cache on another process's sampler, "
                 f"which will cause synchronization issues."
             )
@@ -1927,21 +1960,22 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             "median" or "mean".
 
     **Parameter Guidelines**:
-    - **:math:`\alpha` (alpha)**: Controls how much to prioritize high-error trajectory regions
-        - 0.4-0.7: Good balance between learning speed and stability
-        - 1.0: Maximum prioritization (may be unstable)
-        - 0.0: Uniform sampling (no prioritization benefit)
 
-    - **:math:`\beta` (beta)**: Controls importance sampling correction
-        - Start at 0.4-0.6 for training stability
-        - Anneal to 1.0 over training to reduce bias
-        - Lower values = more stable but biased
-        - Higher values = less biased but potentially unstable
+    - **:math:`\alpha` (alpha)**: Controls how much to prioritize high-error trajectory regions.
+      0.4-0.7: Good balance between learning speed and stability.
+      1.0: Maximum prioritization (may be unstable).
+      0.0: Uniform sampling (no prioritization benefit).
 
-    - **:math:`\\epsilon`**: Small constant to prevent zero priorities
-        - 1e-8: Good default value
-        - Too small: may cause numerical issues
-        - Too large: reduces prioritization effect
+    - **:math:`\beta` (beta)**: Controls importance sampling correction.
+      Start at 0.4-0.6 for training stability.
+      Anneal to 1.0 over training to reduce bias.
+      Lower values = more stable but biased.
+      Higher values = less biased but potentially unstable.
+
+    - **:math:`\\epsilon`**: Small constant to prevent zero priorities.
+      1e-8: Good default value.
+      Too small: may cause numerical issues.
+      Too large: reduces prioritization effect.
 
     Keyword Args:
         num_slices (int): the number of slices to be sampled. The batch-size
@@ -2036,7 +2070,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         episode [2, 2, 2, 2, 1, 1]
         >>> print("steps", sample["steps"].tolist())
         steps [1, 2, 0, 1, 1, 2]
-        >>> print("weight", info["_weight"].tolist())
+        >>> print("weight", info["priority_weight"].tolist())
         weight [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
         >>> priority = torch.tensor([0,3,3,0,0,0,1,1,1])
         >>> rb.update_priority(torch.arange(0,9,1), priority=priority)
@@ -2045,7 +2079,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         episode [2, 2, 2, 2, 2, 2]
         >>> print("steps", sample["steps"].tolist())
         steps [1, 2, 0, 1, 0, 1]
-        >>> print("weight", info["_weight"].tolist())
+        >>> print("weight", info["priority_weight"].tolist())
         weight [9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06]
     """
 
@@ -2262,7 +2296,9 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         if isinstance(starts, tuple):
             starts = torch.stack(starts, -1)
         # starts = torch.as_tensor(starts, device=lengths.device)
-        info["_weight"] = torch.as_tensor(info["_weight"], device=lengths.device)
+        info["priority_weight"] = torch.as_tensor(
+            info["priority_weight"], device=lengths.device
+        )
 
         # extends starting indices of each slice with sequence_length to get indices of all steps
         index = self._tensor_slices_from_startend(
@@ -2270,7 +2306,9 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         )
 
         # repeat the weight of each slice to match the number of steps
-        info["_weight"] = torch.repeat_interleave(info["_weight"], seq_length)
+        info["priority_weight"] = torch.repeat_interleave(
+            info["priority_weight"], seq_length
+        )
 
         if self.truncated_key is not None:
             # following logics borrowed from SliceSampler

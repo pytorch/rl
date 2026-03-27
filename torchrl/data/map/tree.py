@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import weakref
 from collections import deque
-from typing import Any, Callable, Literal
+from collections.abc import Callable
+from typing import Any, Literal
 
 import torch
 from tensordict import (
@@ -45,7 +46,7 @@ class Tree(TensorClass["nocast"]):
         hash (torch.Tensor): A hash value for this node.
             It may be the case that ``hash`` is ``None`` in the specific case where the root of the tree
             has more than one action associated. In that case, each subtree branch will have a different action
-            associated and a hash correspoding to the ``(observation, action)`` pair.
+            associated and a hash corresponding to the ``(observation, action)`` pair.
         node_id (int): A unique identifier for this node.
         rollout (TensorDict): Rollout data following the observation encoded in this node, in a TED format.
             If there are multiple actions taken at this node, subtrees are stored in the corresponding
@@ -609,7 +610,7 @@ class Tree(TensorClass["nocast"]):
         This function can pull out information from each of the nodes in a tree,
         so it can be useful for debugging. The nodes are listed line-by-line.
         Each line contains the path to the node, followed by the string
-        representation of that node generated with :arg:`node_format_fn`. Each
+        representation of that node generated with ``node_format_fn``. Each
         line is indented according to number of steps in the path required to
         get to the corresponding node.
 
@@ -1369,7 +1370,7 @@ class MCTSForest:
         This function can pull out information from each of the nodes in a tree,
         so it can be useful for debugging. The nodes are listed line-by-line.
         Each line contains the path to the node, followed by the string
-        representation of that node generated with :arg:`node_format_fn`. Each
+        representation of that node generated with ``node_format_fn``. Each
         line is indented according to number of steps in the path required to
         get to the corresponding node.
 

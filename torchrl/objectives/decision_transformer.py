@@ -5,15 +5,15 @@
 from __future__ import annotations
 
 import math
+import warnings
 from dataclasses import dataclass
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import dispatch, TensorDictModule
+from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
-from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import _reduce, distance_loss
 
@@ -24,7 +24,7 @@ class OnlineDTLoss(LossModule):
     Presented in `"Online Decision Transformer" <https://arxiv.org/abs/2202.05607>`
 
     Args:
-        actor_network (ProbabilisticActor): stochastic actor
+        actor_network (ProbabilisticTensorDictSequential): stochastic actor
 
     Keyword Args:
         alpha_init (:obj:`float`, optional): initial entropy multiplier.
@@ -77,7 +77,7 @@ class OnlineDTLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: ProbabilisticActor,
+        actor_network: ProbabilisticTensorDictSequential,
         *,
         alpha_init: float = 1.0,
         min_alpha: float | None = None,
@@ -85,7 +85,8 @@ class OnlineDTLoss(LossModule):
         fixed_alpha: bool = False,
         target_entropy: str | float = "auto",
         samples_mc_entropy: int = 1,
-        reduction: str = None,
+        reduction: str | None = None,
+        scalar_output_mode: str | None = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -159,6 +160,22 @@ class OnlineDTLoss(LossModule):
         self._set_in_keys()
         self.reduction = reduction
 
+        # Handle scalar_output_mode for reduction="none"
+        if reduction == "none" and scalar_output_mode is None:
+            warnings.warn(
+                "OnlineDTLoss with reduction='none' cannot include scalar values (alpha, entropy) "
+                "in the output TensorDict without changing their shape. These values will be "
+                "excluded from the output. You can access alpha via `loss_module.alpha` and "
+                "compute entropy from the actor distribution. "
+                "To suppress this warning, pass `scalar_output_mode='exclude'` to the constructor. "
+                "Alternatively, pass `scalar_output_mode='non_tensor'` to include them as non-tensor data. "
+                "This is a known limitation we're working on improving.",
+                category=UserWarning,
+                stacklevel=2,
+            )
+            scalar_output_mode = "exclude"
+        self.scalar_output_mode = scalar_output_mode
+
     def _set_in_keys(self):
         keys = self.actor_network.in_keys
         keys = set(keys)
@@ -231,15 +248,24 @@ class OnlineDTLoss(LossModule):
             "loss_log_likelihood": -log_likelihood,
             "loss_entropy": -entropy_bonus,
             "loss_alpha": loss_alpha,
-            "entropy": entropy.detach().mean(),
-            "alpha": self.alpha.detach(),
         }
-        td_out = TensorDict(out, [])
-        td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
-            if name.startswith("loss_")
-            else value,
-        )
+
+        # Handle batch_size and scalar values (alpha, entropy) based on reduction mode
+        if self.reduction == "none":
+            batch_size = tensordict.batch_size
+            td_out = TensorDict(out, batch_size=batch_size)
+            if self.scalar_output_mode == "non_tensor":
+                td_out.set_non_tensor("alpha", self.alpha.detach())
+                td_out.set_non_tensor("entropy", entropy.detach().mean())
+        else:
+            out["entropy"] = entropy.detach().mean()
+            out["alpha"] = self.alpha.detach()
+            td_out = TensorDict(out, [])
+            td_out = td_out.named_apply(
+                lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+                if name.startswith("loss_")
+                else value,
+            )
         self._clear_weakrefs(
             tensordict,
             td_out,
@@ -255,7 +281,7 @@ class DTLoss(LossModule):
     Presented in `"Decision Transformer: Reinforcement Learning via Sequence Modeling" <https://arxiv.org/abs/2106.01345>`
 
     Args:
-        actor_network (ProbabilisticActor): stochastic actor
+        actor_network (ProbabilisticTensorDictSequential): stochastic actor
 
     Keyword Args:
         loss_function (str): loss function to use. Defaults to ``"l2"``.
@@ -293,10 +319,10 @@ class DTLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: ProbabilisticActor,
+        actor_network: ProbabilisticTensorDictSequential,
         *,
         loss_function: str = "l2",
-        reduction: str = None,
+        reduction: str | None = None,
         device: torch.device | None = None,
     ) -> None:
         self._in_keys = None

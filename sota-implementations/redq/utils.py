@@ -4,8 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from copy import copy
-from typing import Callable, Sequence
+from functools import partial
 
 import torch
 from omegaconf import OmegaConf
@@ -19,7 +20,7 @@ from torch import distributions as d, nn, optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torchrl._utils import logger as torchrl_logger, VERBOSE
-from torchrl.collectors.collectors import DataCollectorBase
+from torchrl.collectors import DataCollectorBase
 from torchrl.data import (
     LazyMemmapStorage,
     MultiStep,
@@ -195,7 +196,7 @@ def make_trainer(
         >>> from torchrl.trainers.loggers import TensorboardLogger
         >>> from torchrl.trainers import Trainer
         >>> from torchrl.envs import EnvCreator
-        >>> from torchrl.collectors.collectors import SyncDataCollector
+        >>> from torchrl.collectors import SyncDataCollector
         >>> from torchrl.data import TensorDictReplayBuffer
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.modules import TensorDictModuleWrapper, SafeModule, ValueOperator, EGreedyWrapper
@@ -416,7 +417,11 @@ def make_redq_model(
     if qvalue_net_kwargs is None:
         qvalue_net_kwargs = {}
 
-    linear_layer_class = torch.nn.Linear if not cfg.exploration.noisy else NoisyLinear
+    linear_layer_class = (
+        torch.nn.Linear
+        if not cfg.exploration.noisy
+        else partial(NoisyLinear, use_exploration_type=True)
+    )
 
     out_features_actor = (2 - gSDE) * action_spec.shape[-1]
     if cfg.env.from_pixels:

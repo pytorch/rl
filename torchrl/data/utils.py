@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import functools
 import typing
-from typing import Any, Callable, List, Tuple, Union
+from collections.abc import Callable
+from typing import Any, Union
 
+import cloudpickle
 import numpy as np
 import torch
 from torch import Tensor
@@ -45,7 +47,7 @@ if hasattr(typing, "get_args"):
 else:
     DEVICE_TYPING_ARGS = (torch.device, str, int)
 
-INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
+INDEX_TYPING = Union[None, int, slice, str, Tensor, list[Any], tuple[Any, ...]]
 
 
 ACTION_SPACE_MAP = {
@@ -145,12 +147,12 @@ def _empty_like_spec(specs: list[TensorSpec], shape):
             )
     spec = specs[0]
     if isinstance(spec, (Composite, StackedComposite)):
-        # the exclusive key has values which are CompositeSpecs ->
+        # the exclusive key has values which are Composite specs ->
         # we create an empty composite spec with same batch size
         return spec.empty()
     elif isinstance(spec, Stacked):
-        # the exclusive key has values which are LazyStackedTensorSpecs ->
-        # we create a LazyStackedTensorSpec with the same shape (aka same -1s) as the first in the list.
+        # the exclusive key has values which are Stacked specs ->
+        # we create a Stacked spec with the same shape (aka same -1s) as the first in the list.
         # this will not add any new -1s when they are stacked
         shape = list(shape[: spec.stack_dim]) + list(shape[spec.stack_dim + 1 :])
         return Stacked(
@@ -245,15 +247,11 @@ class CloudpickleWrapper(metaclass=_CloudpickleWrapperMeta):
         functools.update_wrapper(self, getattr(fn, "forward", fn))
 
     def __getstate__(self):
-        import cloudpickle
-
         return cloudpickle.dumps((self.fn, self.kwargs))
 
     def __setstate__(self, ob: bytes):
-        import pickle
-
-        self.fn, self.kwargs = pickle.loads(ob)
-        functools.update_wrapper(self, self.fn)
+        self.fn, self.kwargs = cloudpickle.loads(ob)
+        functools.update_wrapper(self, getattr(self.fn, "forward", self.fn))
 
     def __call__(self, *args, **kwargs) -> Any:
         kwargs.update(self.kwargs)

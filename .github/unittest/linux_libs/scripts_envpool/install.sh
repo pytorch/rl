@@ -40,4 +40,4 @@ python -c "import functorch"
 pip install git+https://github.com/pytorch/tensordict
 
 printf "* Installing torchrl\n"
-python setup.py develop
+python -m pip install -e . --no-build-isolation

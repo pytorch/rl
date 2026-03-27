@@ -29,7 +29,7 @@ data utilities (e.g. collectors and containers), etc.
 TorchRL aims at having as few dependencies as possible (python standard library, numpy and pytorch).
 Common environment libraries (e.g. OpenAI gym) are only optional.
 
-On the low-level end, torchrl comes with a set of highly re-usable functionals
+On the low-level end, torchrl comes with a set of highly reusable functionals
 for :ref:`cost functions <ref_objectives>`, :ref:`returns <ref_returns>` and data processing.
 
 TorchRL aims at a high modularity and good runtime performance.
@@ -61,6 +61,19 @@ or via a ``git clone`` if you're willing to contribute to the library:
   $ python setup.py develop
   $ cd ../rl
   $ python setup.py develop
+
+If you use ``uv`` and you installed a specific PyTorch build beforehand (e.g. a nightly wheel),
+use ``--no-deps`` for the editable installs to prevent dependency re-resolution (and potential PyTorch downgrades):
+
+.. code-block:: bash
+
+  $ cd path/to/root
+  $ git clone https://github.com/pytorch/tensordict
+  $ git clone https://github.com/pytorch/rl
+  $ cd tensordict
+  $ uv pip install --no-deps -e .
+  $ cd ../rl
+  $ uv pip install --no-deps -e .
 
 Getting started
 ===============
@@ -105,7 +118,6 @@ Intermediate
    tutorials/dqn_with_rnn
    tutorials/rb_tutorial
    tutorials/export
-   tutorials/llm_browser
 
 Advanced
 --------

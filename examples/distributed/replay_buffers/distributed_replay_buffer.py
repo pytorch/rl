@@ -172,7 +172,7 @@ class ReplayBufferNode(RemoteTensorDictReplayBuffer):
 if __name__ == "__main__":
     args = parser.parse_args()
     rank = args.rank
-    torchrl_logger.info(f"Rank: {rank}")
+    torchrl_logger.debug(f"RANK: {rank}")
 
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "29500"

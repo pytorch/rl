@@ -29,7 +29,7 @@ from torchrl.objectives.utils import (
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import TDLambdaEstimator
+from torchrl.objectives.value import TDLambdaEstimator, ValueEstimatorBase
 from torchrl.objectives.value.advantages import TD0Estimator, TD1Estimator
 
 
@@ -160,6 +160,7 @@ class DQNLoss(LossModule):
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
+        priority_weight: NestedKey = "priority_weight"
 
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
@@ -179,12 +180,14 @@ class DQNLoss(LossModule):
         double_dqn: bool = False,
         gamma: float | None = None,
         action_space: str | TensorSpec = None,
-        priority_key: str = None,
-        reduction: str = None,
+        priority_key: str | None = None,
+        reduction: str | None = None,
+        use_prioritized_weights: str | bool = "auto",
     ) -> None:
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self.use_prioritized_weights = use_prioritized_weights
         self._in_keys = None
         if double_dqn and not delay_value:
             raise ValueError("double_dqn=True requires delay_value=True.")
@@ -263,6 +266,13 @@ class DQNLoss(LossModule):
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
+
+        # Handle ValueEstimatorBase instance or class
+        if isinstance(value_type, ValueEstimatorBase) or (
+            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
+        ):
+            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+
         self.value_type = value_type
         hp = dict(default_value_kwargs(value_type))
         if hasattr(self, "gamma"):
@@ -364,7 +374,14 @@ class DQNLoss(LossModule):
             inplace=True,
         )
         loss = distance_loss(pred_val_index, target_value, self.loss_function)
-        loss = _reduce(loss, reduction=self.reduction)
+        # Extract weights for prioritized replay buffer
+        weights = None
+        if (
+            self.use_prioritized_weights in (True, "auto")
+            and self.tensor_keys.priority_weight in tensordict.keys()
+        ):
+            weights = tensordict.get(self.tensor_keys.priority_weight)
+        loss = _reduce(loss, reduction=self.reduction, weights=weights)
         td_out = TensorDict(loss=loss)
 
         self._clear_weakrefs(
@@ -393,10 +410,12 @@ class DistributionalDQNLoss(LossModule):
         value_network (DistributionalQValueActor or nn.Module): the distributional Q
             value operator.
         gamma (scalar): a discount factor for return computation.
+
             .. note::
-              Unlike :class:`DQNLoss`, this class does not currently support
-              custom value functions. The next value estimation is always
-              bootstrapped.
+               Unlike :class:`DQNLoss`, this class does not currently support
+               custom value functions. The next value estimation is always
+               bootstrapped.
+
         delay_value (bool): whether to duplicate the value network into a new
             target value network to create double DQN
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
@@ -440,6 +459,7 @@ class DistributionalDQNLoss(LossModule):
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
         steps_to_next_obs: NestedKey = "steps_to_next_obs"
+        priority_weight: NestedKey = "priority_weight"
 
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
@@ -455,12 +475,14 @@ class DistributionalDQNLoss(LossModule):
         *,
         gamma: float,
         delay_value: bool = True,
-        priority_key: str = None,
-        reduction: str = None,
+        priority_key: str | None = None,
+        reduction: str | None = None,
+        use_prioritized_weights: str | bool = "auto",
     ):
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self.use_prioritized_weights = use_prioritized_weights
         self._set_deprecated_ctor_keys(priority=priority_key)
         self.register_buffer("gamma", torch.tensor(gamma))
         self.delay_value = delay_value
@@ -611,7 +633,14 @@ class DistributionalDQNLoss(LossModule):
             loss.detach().unsqueeze(1).to(input_tensordict.device),
             inplace=True,
         )
-        loss = _reduce(loss, reduction=self.reduction)
+        # Extract weights for prioritized replay buffer
+        weights = None
+        if (
+            self.use_prioritized_weights in (True, "auto")
+            and self.tensor_keys.priority_weight in tensordict.keys()
+        ):
+            weights = tensordict.get(self.tensor_keys.priority_weight)
+        loss = _reduce(loss, reduction=self.reduction, weights=weights)
         td_out = TensorDict(loss=loss)
         self._clear_weakrefs(
             tensordict,
@@ -624,6 +653,13 @@ class DistributionalDQNLoss(LossModule):
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
+
+        # Handle ValueEstimatorBase instance or class
+        if isinstance(value_type, ValueEstimatorBase) or (
+            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
+        ):
+            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+
         self.value_type = value_type
         if value_type is ValueEstimators.TD1:
             raise NotImplementedError(

@@ -4,8 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
+
 from copy import deepcopy
-from typing import Any, Callable, List, Mapping, TypeVar
+from typing import Any, TypeVar
 
 import torch
 import torch.nn as nn
@@ -122,7 +124,7 @@ class QueryModule(TensorDictModuleBase):
     ):
         if len(in_keys) == 0:
             raise ValueError("`in_keys` cannot be empty.")
-        in_keys = in_keys if isinstance(in_keys, List) else [in_keys]
+        in_keys = in_keys if isinstance(in_keys, list) else [in_keys]
 
         super().__init__()
         in_keys = self.in_keys = in_keys

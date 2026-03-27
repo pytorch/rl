@@ -9,7 +9,6 @@ import pickle
 
 import time
 from pathlib import Path
-from typing import Dict
 
 import numpy as np
 
@@ -93,7 +92,7 @@ def run_vmas_rllib(
                 - result["timers"]["learn_time_ms"]
             )
 
-    def env_creator(config: Dict):
+    def env_creator(config: dict):
         env = vmas.make_env(
             scenario=config["scenario_name"],
             num_envs=config["num_envs"],

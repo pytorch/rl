@@ -9,13 +9,16 @@ import functools
 import gc
 import os
 import time
+import warnings
 import weakref
 from collections import OrderedDict
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from functools import wraps
 from multiprocessing import connection
+from multiprocessing.connection import wait as connection_wait
 from multiprocessing.synchronize import Lock as MpLock
-from typing import Any, Callable, Sequence
+from typing import Any
 from warnings import warn
 
 import torch
@@ -32,21 +35,19 @@ from torch import multiprocessing as mp
 
 from torchrl._utils import (
     _check_for_faulty_process,
+    _get_default_mp_start_method,
     _make_ordinal_device,
-    _ProcessNoWarn,
     logger as torchrl_logger,
+    rl_warnings,
+    timeit,
     VERBOSE,
 )
 from torchrl.data.tensor_specs import Composite, NonTensor
 from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
 from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, EnvMetaData
-from torchrl.envs.env_creator import get_env_metadata
 
-# legacy
-from torchrl.envs.libs.envpool import (  # noqa: F401
-    MultiThreadedEnv,
-    MultiThreadedEnvWrapper,
-)
+from torchrl.envs.env_creator import EnvCreator, get_env_metadata
+
 from torchrl.envs.utils import (
     _aggregate_end_of_traj,
     _sort_keys,
@@ -58,6 +59,54 @@ _CONSOLIDATE_ERR_CAPTURE = (
     "TensorDict.consolidate failed. You can deactivate the tensordict consolidation via the "
     "`consolidate` keyword argument of the ParallelEnv constructor."
 )
+
+
+def _to_device_mps_safe(
+    tensor: torch.Tensor,
+    device: torch.device,
+    *,
+    non_blocking: bool = False,
+) -> torch.Tensor:
+    """Move a tensor to the target device, downcasting float64 to float32 for MPS.
+
+    MPS does not support float64. When the target device is MPS and the source
+    tensor is float64, this automatically downcasts to float32 during the transfer.
+    For all other devices the call is equivalent to ``tensor.to(device, ...)``.
+    """
+    if device.type == "mps" and tensor.dtype == torch.float64:
+        return tensor.to(device=device, dtype=torch.float32, non_blocking=non_blocking)
+    return tensor.to(device=device, non_blocking=non_blocking)
+
+
+def _td_to_device_mps_safe(
+    td: TensorDictBase,
+    device: torch.device,
+    *,
+    non_blocking: bool = False,
+) -> TensorDictBase:
+    """Move a TensorDict to the target device, handling MPS float64 via :func:`_to_device_mps_safe`.
+
+    For non-MPS devices this falls back to ``td.to(device, ...)``.
+    For MPS it applies :func:`_to_device_mps_safe` per-tensor to avoid the
+    float64-on-MPS limitation.
+    """
+    if device.type == "mps":
+        return td._fast_apply(
+            functools.partial(
+                _to_device_mps_safe, device=device, non_blocking=non_blocking
+            ),
+            device=device,
+            filter_empty=True,
+        )
+    return td.to(device, non_blocking=non_blocking)
+
+
+def _has_float64_leaf(spec) -> bool:
+    """Return True if any non-Composite leaf spec in *spec* has dtype float64."""
+    for _, s in spec.items(include_nested=True, leaves_only=True):
+        if getattr(s, "dtype", None) == torch.float64:
+            return True
+    return False
 
 
 def _check_start(fun):
@@ -95,6 +144,22 @@ class _dispatch_caller_parallel:
         # if the object returned is not a callable
         return iter(self.__call__())
 
+    def __getattr__(self, name):
+        """Support chained attribute access: env_parallel.a.b -> sends ('a','b') to workers."""
+        # Don't chain special/dunder methods - these are often called by
+        # display systems (e.g., Jupyter's _repr_html_) and shouldn't be
+        # dispatched to workers
+        if name.startswith("_"):
+            raise AttributeError(
+                f"Accessing private/special attribute {name!r} is not supported "
+                f"on dispatched parallel env attributes."
+            )
+        if isinstance(self.attr, tuple):
+            new_attr = self.attr + (name,)
+        else:
+            new_attr = (self.attr, name)
+        return _dispatch_caller_parallel(new_attr, self.parallel_env)
+
 
 class _dispatch_caller_serial:
     def __init__(self, list_callable: list[Callable, Any]):
@@ -121,6 +186,18 @@ def lazy(fun):
     return new_fun
 
 
+def _is_unpicklable_lambda(fn: Callable) -> bool:
+    """Check if a callable is a lambda function that needs cloudpickle wrapping.
+
+    Lambda functions cannot be pickled with standard pickle, so they need to be
+    wrapped with EnvCreator (which uses CloudpickleWrapper) for multiprocessing.
+    functools.partial objects are picklable, so they don't need wrapping.
+    """
+    if isinstance(fn, functools.partial):
+        return False
+    return callable(fn) and getattr(fn, "__name__", None) == "<lambda>"
+
+
 class _PEnvMeta(_EnvPostInit):
     def __call__(cls, *args, **kwargs):
         serial_for_single = kwargs.pop("serial_for_single", False)
@@ -133,6 +210,55 @@ class _PEnvMeta(_EnvPostInit):
             if num_workers == 1:
                 # We still use a serial to keep the shape unchanged
                 return SerialEnv(*args, **kwargs)
+
+        # Wrap lambda functions with EnvCreator so they can be pickled for
+        # multiprocessing with the spawn start method. Lambda functions cannot
+        # be serialized with standard pickle, but EnvCreator uses cloudpickle.
+        auto_wrap_envs = kwargs.pop("auto_wrap_envs", True)
+
+        def _warn_lambda():
+            if rl_warnings():
+                warnings.warn(
+                    "A lambda function was passed to ParallelEnv and will be wrapped "
+                    "in an EnvCreator. This causes the environment to be instantiated "
+                    "in the main process to extract metadata. Consider using "
+                    "functools.partial instead, which is natively serializable and "
+                    "avoids this overhead. To suppress this warning, set the "
+                    "RL_WARNINGS=0 environment variable.",
+                    category=UserWarning,
+                    stacklevel=4,
+                )
+
+        def _wrap_lambdas(create_env_fn):
+            if callable(create_env_fn) and _is_unpicklable_lambda(create_env_fn):
+                _warn_lambda()
+                return EnvCreator(create_env_fn)
+            if isinstance(create_env_fn, Sequence):
+                # Reuse EnvCreator for identical function objects to preserve
+                # _single_task detection (e.g., when [lambda_fn] * 3 is passed)
+                wrapped = {}
+                result = []
+                warned = False
+                for fn in create_env_fn:
+                    if _is_unpicklable_lambda(fn):
+                        fn_id = id(fn)
+                        if fn_id not in wrapped:
+                            if not warned:
+                                _warn_lambda()
+                                warned = True
+                            wrapped[fn_id] = EnvCreator(fn)
+                        result.append(wrapped[fn_id])
+                    else:
+                        result.append(fn)
+                return result
+            return create_env_fn
+
+        if auto_wrap_envs:
+            if "create_env_fn" in kwargs:
+                kwargs["create_env_fn"] = _wrap_lambdas(kwargs["create_env_fn"])
+            elif len(args) >= 2:
+                args = (args[0], _wrap_lambdas(args[1])) + args[2:]
+
         return super().__call__(*args, **kwargs)
 
 
@@ -141,6 +267,8 @@ class BatchedEnvBase(EnvBase):
 
     Those queries will return a list of length equal to the number of workers containing the
     values resulting from those queries.
+
+    Example:
         >>> env = ParallelEnv(3, my_env_fun)
         >>> custom_attribute_list = env.custom_attribute
         >>> custom_method_list = env.custom_method(*args)
@@ -168,7 +296,7 @@ class BatchedEnvBase(EnvBase):
             from the sub-environment device(s). In that case, the data will be
             automatically cast to the appropriate device during collection.
             This can be used to speed up collection in case casting to device
-            introduces an overhead (eg, numpy-based environents etc.): by using
+            introduces an overhead (eg, numpy-based environments etc.): by using
             a ``"cuda"`` device for the batched environment but a ``"cpu"``
             device for the nested environments, one can keep the overhead to a
             minimum.
@@ -195,6 +323,23 @@ class BatchedEnvBase(EnvBase):
             one of the environment has dynamic specs.
 
               .. note:: Learn more about dynamic specs and environments :ref:`here <dynamic_envs>`.
+        daemon (bool, optional): whether the processes should be daemonized.
+            This is only applicable to parallel environments such as :class:`~torchrl.envs.ParallelEnv`.
+            Defaults to ``False``.
+        auto_wrap_envs (bool, optional): if ``True`` (default), lambda functions passed as
+            ``create_env_fn`` will be automatically wrapped in an :class:`~torchrl.envs.EnvCreator`
+            to enable pickling for multiprocessing with the ``spawn`` start method.
+            This wrapping causes the environment to be instantiated once in the main process
+            (to extract metadata) before workers are started.
+            If this is undesirable, set ``auto_wrap_envs=False``. Otherwise, ensure your callable is
+            serializable (e.g., use :func:`functools.partial` instead of lambdas).
+            This parameter only affects :class:`~torchrl.envs.ParallelEnv`.
+            Defaults to ``True``.
+
+    .. note::
+        For :class:`~torchrl.envs.ParallelEnv`, it is recommended to use :func:`functools.partial`
+        instead of lambda functions when possible, as ``partial`` objects are natively serializable
+        and avoid the overhead of :class:`~torchrl.envs.EnvCreator` wrapping.
 
     .. note::
         One can pass keyword arguments to each sub-environments using the following
@@ -307,9 +452,10 @@ class BatchedEnvBase(EnvBase):
         num_sub_threads: int = 1,
         serial_for_single: bool = False,
         non_blocking: bool = False,
-        mp_start_method: str = None,
+        mp_start_method: str | None = None,
         use_buffers: bool | None = None,
         consolidate: bool = True,
+        daemon: bool = False,
     ):
         super().__init__(device=device)
         self.serial_for_single = serial_for_single
@@ -319,6 +465,7 @@ class BatchedEnvBase(EnvBase):
         self._cache_in_keys = None
         self._use_buffers = use_buffers
         self.consolidate = consolidate
+        self.daemon = daemon
 
         self._single_task = callable(create_env_fn) or (len(set(create_env_fn)) == 1)
         if callable(create_env_fn):
@@ -330,7 +477,7 @@ class BatchedEnvBase(EnvBase):
             )
 
         create_env_kwargs = {} if create_env_kwargs is None else create_env_kwargs
-        if isinstance(create_env_kwargs, dict):
+        if isinstance(create_env_kwargs, Mapping):
             create_env_kwargs = [
                 deepcopy(create_env_kwargs) for _ in range(num_workers)
             ]
@@ -380,12 +527,81 @@ class BatchedEnvBase(EnvBase):
 
     is_spec_locked = EnvBase.is_spec_locked
 
+    def configure_parallel(
+        self,
+        *,
+        use_buffers: bool | None = None,
+        shared_memory: bool | None = None,
+        memmap: bool | None = None,
+        mp_start_method: str | None = None,
+        num_threads: int | None = None,
+        num_sub_threads: int | None = None,
+        non_blocking: bool | None = None,
+        daemon: bool | None = None,
+    ) -> BatchedEnvBase:
+        """Configure parallel execution parameters before the environment starts.
+
+        This method allows configuring parameters for parallel environment
+        execution. It must be called before the environment is started
+        (i.e., before accessing specs or calling reset/step).
+
+        Args:
+            use_buffers (bool, optional): whether communication between workers should
+                occur via circular preallocated memory buffers.
+            shared_memory (bool, optional): whether the returned tensordict will be
+                placed in shared memory.
+            memmap (bool, optional): whether the returned tensordict will be placed
+                in memory map.
+            mp_start_method (str, optional): the multiprocessing start method.
+            num_threads (int, optional): number of threads for this process.
+            num_sub_threads (int, optional): number of threads of the subprocesses.
+            non_blocking (bool, optional): if ``True``, device moves will be done using
+                the ``non_blocking=True`` option.
+            daemon (bool, optional): whether the processes should be daemonized.
+
+        Returns:
+            self: Returns self for method chaining.
+
+        Raises:
+            RuntimeError: If called after the environment has already started.
+
+        Example:
+            >>> env = ParallelEnv(4, lambda: GymEnv("Pendulum-v1"))
+            >>> env.configure_parallel(use_buffers=True, num_threads=2)
+            >>> env.reset()  # Environment starts here
+
+        """
+        if not self.is_closed:
+            raise RuntimeError(
+                "configure_parallel() cannot be called after the environment has started. "
+                "Call configure_parallel() before accessing specs or calling reset/step."
+            )
+        if use_buffers is not None:
+            self._use_buffers = use_buffers
+        if shared_memory is not None:
+            self._share_memory = shared_memory
+        if memmap is not None:
+            self._memmap = memmap
+        if mp_start_method is not None:
+            self._mp_start_method = mp_start_method
+        if num_threads is not None:
+            self.num_threads = num_threads
+        if num_sub_threads is not None:
+            self.num_sub_threads = num_sub_threads
+        if non_blocking is not None:
+            self._non_blocking = non_blocking
+        if daemon is not None:
+            self.daemon = daemon
+        return self
+
     def select_and_clone(self, name, tensor, selected_keys=None):
         if selected_keys is None:
             selected_keys = self._selected_step_keys
         if name in selected_keys:
             if self.device is not None and tensor.device != self.device:
-                return tensor.to(self.device, non_blocking=self.non_blocking)
+                return _to_device_mps_safe(
+                    tensor, self.device, non_blocking=self.non_blocking
+                )
             return tensor.clone()
 
     @property
@@ -609,11 +825,29 @@ class BatchedEnvBase(EnvBase):
                 meta_data.specs["output_spec"].to(device)
             )
 
-            self.action_spec = input_spec["full_action_spec"]
-            self.state_spec = input_spec["full_state_spec"]
-            self.observation_spec = output_spec["full_observation_spec"]
-            self.reward_spec = output_spec["full_reward_spec"]
-            self.done_spec = output_spec["full_done_spec"]
+            if (
+                self._device is not None
+                and torch.device(self._device).type == "mps"
+                and (_has_float64_leaf(input_spec) or _has_float64_leaf(output_spec))
+            ):
+                warnings.warn(
+                    f"Sub-environments produce float64 data but the batched env device is "
+                    f"'{self._device}' which does not support float64. "
+                    f"All float64 specs and tensors will be downcast to float32.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="MPS device does not support float64",
+                    category=UserWarning,
+                )
+                self.action_spec = input_spec["full_action_spec"]
+                self.state_spec = input_spec["full_state_spec"]
+                self.observation_spec = output_spec["full_observation_spec"]
+                self.reward_spec = output_spec["full_reward_spec"]
+                self.done_spec = output_spec["full_done_spec"]
 
             self._dummy_env_str = meta_data.env_str
             self._env_tensordict = meta_data.tensordict
@@ -653,12 +887,34 @@ class BatchedEnvBase(EnvBase):
                 output_spec.append(_check_for_empty_spec(md.specs["output_spec"]))
             output_spec = torch.stack(output_spec, 0)
 
-            self.action_spec = input_spec["full_action_spec"]
-            self.state_spec = input_spec["full_state_spec"]
+            if (
+                self._device is not None
+                and torch.device(self._device).type == "mps"
+                and any(
+                    _has_float64_leaf(md.specs["input_spec"])
+                    or _has_float64_leaf(md.specs["output_spec"])
+                    for md in meta_data
+                )
+            ):
+                warnings.warn(
+                    f"Sub-environments produce float64 data but the batched env device is "
+                    f"'{self._device}' which does not support float64. "
+                    f"All float64 specs and tensors will be downcast to float32.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="MPS device does not support float64",
+                    category=UserWarning,
+                )
+                self.action_spec = input_spec["full_action_spec"]
+                self.state_spec = input_spec["full_state_spec"]
 
-            self.observation_spec = output_spec["full_observation_spec"]
-            self.reward_spec = output_spec["full_reward_spec"]
-            self.done_spec = output_spec["full_done_spec"]
+                self.observation_spec = output_spec["full_observation_spec"]
+                self.reward_spec = output_spec["full_reward_spec"]
+                self.done_spec = output_spec["full_done_spec"]
 
             self._dummy_env_str = str(meta_data[0])
             if self.share_individual_td:
@@ -1027,7 +1283,7 @@ class SerialEnv(BatchedEnvBase):
                     if self.device is None:
                         ftd.clear_device_()
                     else:
-                        ftd = ftd.to(self.device)
+                        ftd = _td_to_device_mps_safe(ftd, self.device)
                     out_tds[i] = ftd
                 continue
             if tensordict is not None:
@@ -1078,7 +1334,9 @@ class SerialEnv(BatchedEnvBase):
                 if device is None:
                     result = result.clear_device_()
                 else:
-                    result = result.to(device, non_blocking=self.non_blocking)
+                    result = _td_to_device_mps_safe(
+                        result, device, non_blocking=self.non_blocking
+                    )
                     self._sync_w2m()
             return result
 
@@ -1143,6 +1401,8 @@ class SerialEnv(BatchedEnvBase):
         if not self._use_buffers or self._non_tensor_keys:
             out_tds = []
 
+        device = self.device
+
         if self._use_buffers:
             next_td = self.shared_tensordict_parent.get("next")
             for i, _data_in in zip(workers_range, data_in):
@@ -1159,7 +1419,6 @@ class SerialEnv(BatchedEnvBase):
 
             # We must pass a clone of the tensordict, as the values of this tensordict
             # will be modified in-place at further steps
-            device = self.device
 
             selected_keys = self._selected_step_keys
 
@@ -1187,6 +1446,14 @@ class SerialEnv(BatchedEnvBase):
                 out_td = self._envs[i]._step(_data_in)
                 out_tds.append(out_td)
             out = LazyStackedTensorDict.maybe_dense_stack(out_tds)
+            if out.device != device:
+                if device is None:
+                    out = out.clear_device_()
+                else:
+                    out = _td_to_device_mps_safe(
+                        out, device, non_blocking=self.non_blocking
+                    )
+                    self._sync_w2m()
 
         if partial_steps is not None and not partial_steps.all():
             result = out.new_zeros(tensordict_save.shape)
@@ -1415,8 +1682,6 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         self._timeout = 10.0
         self.BATCHED_PIPE_TIMEOUT = torchrl._utils.BATCHED_PIPE_TIMEOUT
 
-        from torchrl.envs.env_creator import EnvCreator
-
         num_threads = max(
             1, torch.get_num_threads() - self.num_workers
         )  # 1 more thread for this proc
@@ -1429,16 +1694,13 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         if self._mp_start_method is not None:
             ctx = mp.get_context(self._mp_start_method)
-            proc_fun = ctx.Process
-            num_sub_threads = self.num_sub_threads
         else:
-            ctx = mp.get_context("spawn")
-            proc_fun = functools.partial(
-                _ProcessNoWarn,
-                num_threads=self.num_sub_threads,
-                _start_method=self._mp_start_method,
-            )
-            num_sub_threads = None
+            ctx = mp.get_context(_get_default_mp_start_method())
+        # Use ctx.Process directly to ensure all multiprocessing primitives
+        # (Queue, Pipe, Process, Event) come from the same context.
+        # Warning filtering and num_threads are handled in the worker functions.
+        proc_fun = ctx.Process
+        num_sub_threads = self.num_sub_threads
 
         _num_workers = self.num_workers
 
@@ -1464,7 +1726,20 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         else:
             self.event = None
         self._events = [ctx.Event() for _ in range(_num_workers)]
+
+        # Shared-memory done flags: workers write 1 when done, parent spin-polls.
+        # Eliminates futex syscalls from mp.Event on the critical path.
+        self._shm_done_flags = mp.RawArray("b", _num_workers)
+
         kwargs = [{"mp_event": self._events[i]} for i in range(_num_workers)]
+        if self._use_buffers:
+            for i in range(_num_workers):
+                kwargs[i].update(
+                    {
+                        "worker_idx": i,
+                        "shm_done_flags": self._shm_done_flags,
+                    }
+                )
         with clear_mpi_env_vars():
             for idx in range(_num_workers):
                 if self._verbose:
@@ -1474,6 +1749,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 env_fun = self.create_env_fn[idx]
                 if not isinstance(env_fun, (EnvCreator, CloudpickleWrapper)):
                     env_fun = CloudpickleWrapper(env_fun)
+
                 kwargs[idx].update(
                     {
                         "parent_pipe": parent_pipe,
@@ -1483,6 +1759,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                         "has_lazy_inputs": self.has_lazy_inputs,
                         "num_threads": num_sub_threads,
                         "non_blocking": self.non_blocking,
+                        "filter_warnings": self._filter_warnings_subprocess(),
                     }
                 )
                 if self._use_buffers:
@@ -1502,7 +1779,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                         }
                     )
                 process = proc_fun(target=func, kwargs=kwargs[idx])
-                process.daemon = True
+                process.daemon = self.daemon
                 process.start()
                 child_pipe.close()
                 self.parent_channels.append(parent_pipe)
@@ -1517,6 +1794,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             channel.send(("init", None))
         self.is_closed = False
         self.set_spec_lock_()
+
+    def _filter_warnings_subprocess(self) -> bool:
+        from torchrl import filter_warnings_subprocess
+
+        return filter_warnings_subprocess
 
     @_check_start
     def state_dict(self) -> OrderedDict:
@@ -1560,7 +1842,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if self.consolidate:
             try:
                 td = tensordict.consolidate(
-                    share_memory=True, inplace=True, num_threads=1
+                    # share_memory=False: avoid resource_sharer which causes
+                    # progressive slowdown with fork on Linux
+                    share_memory=False,
+                    inplace=True,
+                    num_threads=1,
                 )
             except Exception as err:
                 raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
@@ -1708,33 +1994,44 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         device = self.device
-        if shared_tensordict_parent.device == device:
+        shared_device = shared_tensordict_parent.device
+        if shared_device == device:
             next_td = next_td.clone()
             tensordict_ = tensordict_.clone()
         elif device is not None:
-            next_td = next_td._fast_apply(
-                lambda x: x.to(device, non_blocking=self.non_blocking)
-                if x.device != device
-                else x.clone(),
-                device=device,
-                filter_empty=True,
-            )
-            tensordict_ = tensordict_._fast_apply(
-                lambda x: x.to(device, non_blocking=self.non_blocking)
-                if x.device != device
-                else x.clone(),
-                device=device,
-                filter_empty=True,
-            )
-            if tensordict.device != device:
-                tensordict = tensordict._fast_apply(
-                    lambda x: x.to(device, non_blocking=self.non_blocking)
-                    if x.device != device
-                    else x,
+            _non_blocking = self.non_blocking
+            if shared_device is not None and shared_device != device:
+                # Fast path: all tensors on one device, transferring to another.
+                # .to(device) creates new tensors so no need for per-tensor clone.
+                next_td = next_td.to(device, non_blocking=_non_blocking)
+                tensordict_ = tensordict_.to(device, non_blocking=_non_blocking)
+                if tensordict.device != device:
+                    tensordict = tensordict.to(device, non_blocking=_non_blocking)
+            else:
+                # Mixed devices: per-tensor check needed
+                def _to_or_clone(x, _device=device, _nb=_non_blocking):
+                    if x.device != _device:
+                        return x.to(_device, non_blocking=_nb)
+                    return x.clone()
+
+                next_td = next_td._fast_apply(
+                    _to_or_clone,
                     device=device,
                     filter_empty=True,
                 )
-            self._sync_w2m()
+                tensordict_ = tensordict_._fast_apply(
+                    _to_or_clone,
+                    device=device,
+                    filter_empty=True,
+                )
+                if tensordict.device != device:
+                    tensordict = tensordict._fast_apply(
+                        _to_or_clone,
+                        device=device,
+                        filter_empty=True,
+                    )
+            if shared_device != device:
+                self._sync_w2m()
         else:
             next_td = next_td.clone().clear_device_()
             tensordict_ = tensordict_.clone().clear_device_()
@@ -1796,34 +2093,77 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         return tensordict, tensordict_
 
     def _wait_for_workers(self, workers_range):
-        workers_range_consume = set(workers_range)
+        """Wait for all workers to signal completion.
+
+        Uses shared-memory byte flags for the hot path (step_and_maybe_reset)
+        to avoid syscalls. Falls back to mp.Event for other commands.
+        """
+        timeout = self.BATCHED_PIPE_TIMEOUT
         t0 = time.time()
-        while (
-            len(workers_range_consume)
-            and (time.time() - t0) < self.BATCHED_PIPE_TIMEOUT
-        ):
-            for i in workers_range:
-                if i not in workers_range_consume:
-                    continue
-                worker = self._workers[i]
-                if worker.is_alive():
-                    event: mp.Event = self._events[i]
-                    if event.is_set():
-                        workers_range_consume.discard(i)
-                        event.clear()
-                    else:
-                        continue
-                else:
-                    try:
-                        self._shutdown_workers()
-                    finally:
-                        raise RuntimeError(f"Cannot proceed, worker {i} dead.")
-                # event.wait(self.BATCHED_PIPE_TIMEOUT)
-        if len(workers_range_consume):
-            raise RuntimeError(
-                f"Failed to run all workers within the {self.BATCHED_PIPE_TIMEOUT} sec time limit. This "
-                f"threshold can be increased via the BATCHED_PIPE_TIMEOUT env variable."
-            )
+
+        # Spin-poll shared memory done flags (no syscalls on the fast path).
+        if self._use_buffers:
+            done_flags = self._shm_done_flags
+            n_spins = 0
+            while True:
+                all_done = True
+                for i in workers_range:
+                    if not done_flags[i]:
+                        all_done = False
+                        break
+                if all_done:
+                    # Clear flags for next round
+                    for i in workers_range:
+                        done_flags[i] = 0
+                    return
+
+                n_spins += 1
+                # Periodically check timeout and worker health
+                if (n_spins & 0xFFFF) == 0:  # every 65536 spins (~1ms on modern CPUs)
+                    if time.time() - t0 > timeout:
+                        raise RuntimeError(
+                            f"Failed to run all workers within the {timeout} sec time limit. This "
+                            f"threshold can be increased via the BATCHED_PIPE_TIMEOUT env variable."
+                        )
+                    for wi in workers_range:
+                        if not done_flags[wi] and not self._workers[wi].is_alive():
+                            try:
+                                self._shutdown_workers()
+                            finally:
+                                raise RuntimeError(f"Cannot proceed, worker {wi} dead.")
+            return
+
+        # No-buffer mode: workers send back data on the pipe, so we can efficiently
+        # block on readability.
+        pipes_pending = {self.parent_channels[i]: i for i in workers_range}
+        i = 0
+        while pipes_pending:
+            i += 1
+            should_check_for_dead_workers = (i % 20) == 0
+            remaining = timeout - (time.time() - t0)
+            if remaining <= 0:
+                raise RuntimeError(
+                    f"Failed to run all workers within the {timeout} sec time limit. This "
+                    f"threshold can be increased via the BATCHED_PIPE_TIMEOUT env variable."
+                )
+
+            # Wait for any pipes to become readable (OS-level select/poll)
+            ready = connection_wait(list(pipes_pending.keys()), timeout=remaining)
+
+            if not ready and should_check_for_dead_workers:
+                # Timeout with no pipes ready - check for dead workers
+                for wi in pipes_pending.values():
+                    if not self._workers[wi].is_alive():
+                        try:
+                            self._shutdown_workers()
+                        finally:
+                            raise RuntimeError(f"Cannot proceed, worker {wi} dead.")
+                continue
+
+            # Clear events for ready workers (best-effort)
+            for pipe in ready:
+                wi = pipes_pending.pop(pipe)
+                self._events[wi].clear()
 
     def _step_no_buffers(
         self, tensordict: TensorDictBase
@@ -1842,7 +2182,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if self.consolidate:
             try:
                 data = tensordict.consolidate(
-                    share_memory=True, inplace=True, num_threads=1
+                    # share_memory=False: avoid resource_sharer which causes
+                    # progressive slowdown with fork on Linux
+                    share_memory=False,
+                    inplace=False,
+                    num_threads=1,
                 )
             except Exception as err:
                 raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
@@ -1861,8 +2205,6 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 else:
                     local_data = local_data.to(env_device)
             self.parent_channels[i].send(("step", local_data))
-        # for i in range(data.shape[0]):
-        #     self.parent_channels[i].send(("step", (data, i)))
 
         self._wait_for_workers(workers_range)
 
@@ -1874,7 +2216,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         out = LazyStackedTensorDict.maybe_dense_stack(out_tds)
         if self.device is not None and out.device != self.device:
-            out = out.to(self.device, non_blocking=self.non_blocking)
+            out = _td_to_device_mps_safe(
+                out, self.device, non_blocking=self.non_blocking
+            )
         if partial_steps is not None:
             result = out.new_zeros(tensordict_save.shape)
 
@@ -2005,6 +2349,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if self.event is not None:
             self.event.record()
             self.event.synchronize()
+
         for i in workers_range:
             self.parent_channels[i].send(("step", data[i]))
 
@@ -2070,11 +2415,13 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         needs_resetting,
     ) -> tuple[TensorDictBase, TensorDictBase]:
         if is_tensor_collection(tensordict):
-            # tensordict = tensordict.consolidate(share_memory=True, num_threads=1)
             if self.consolidate:
                 try:
                     tensordict = tensordict.consolidate(
-                        share_memory=True, num_threads=1
+                        # share_memory=False: avoid resource_sharer which causes
+                        # progressive slowdown with fork on Linux
+                        share_memory=False,
+                        num_threads=1,
                     )
                 except Exception as err:
                     raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
@@ -2105,7 +2452,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         result = LazyStackedTensorDict.maybe_dense_stack(out_tds)
         device = self.device
         if device is not None and result.device != device:
-            return result.to(self.device, non_blocking=self.non_blocking)
+            return _td_to_device_mps_safe(
+                result, self.device, non_blocking=self.non_blocking
+            )
         return result
 
     @torch.no_grad()
@@ -2232,6 +2581,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 if self._verbose:
                     torchrl_logger.info(f"closing {i}")
                 channel.send(("close", None))
+            # Wait on mp.Event (not _wait_for_workers) because the "close"
+            # handler doesn't send data on the pipe — it just closes it — and
+            # connection_wait does not reliably detect socketpair closure
+            # on all platforms (macOS with forked workers).
             for i in range(self.num_workers):
                 self._events[i].wait(self._timeout)
                 self._events[i].clear()
@@ -2321,6 +2674,23 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             self.set_seed(self._seeds[0])
         return self
 
+    @classmethod
+    def make_parallel(cls, *args, num_envs: int = 1, **parallel_kwargs) -> EnvBase:
+        """Backward-compatible factory matching EnvBase.make_parallel signature.
+
+        Supports calls like:
+          ParallelEnv.make_parallel(create_env_fn, num_envs=4, ...)
+        or the constructor form:
+          ParallelEnv.make_parallel(num_workers, create_env_fn, ...)
+        """
+        if len(args) >= 1 and isinstance(args[0], int):
+            return cls(*args, **parallel_kwargs)
+        if len(args) >= 1:
+            create_env_fn = args[0]
+            other_args = args[1:]
+            return cls(int(num_envs), create_env_fn, *other_args, **parallel_kwargs)
+        return cls(int(num_envs), **parallel_kwargs)
+
 
 def _recursively_strip_locks_from_state_dict(state_dict: OrderedDict) -> OrderedDict:
     return OrderedDict(
@@ -2350,7 +2720,14 @@ def _run_worker_pipe_shared_mem(
     has_lazy_inputs: bool = False,
     verbose: bool = False,
     num_threads: int | None = None,  # for fork start method
+    filter_warnings: bool = False,
+    worker_idx: int | None = None,
+    shm_done_flags=None,
 ) -> None:
+    pid = os.getpid()
+    # Handle warning filtering (moved from _ProcessNoWarn)
+    if filter_warnings:
+        warnings.filterwarnings("ignore")
     if num_threads is not None:
         torch.set_num_threads(num_threads)
     device = shared_tensordict.device
@@ -2370,7 +2747,6 @@ def _run_worker_pipe_shared_mem(
     else:
         event = None
     parent_pipe.close()
-    pid = os.getpid()
     if not isinstance(env_fun, EnvBase):
         env = env_fun(**env_fun_kwargs)
     else:
@@ -2391,17 +2767,51 @@ def _run_worker_pipe_shared_mem(
 
     child_pipe.send("started")
     next_shared_tensordict, root_shared_tensordict = (None,) * 2
+    _cmd_count = 0
+    _last_cmd = "N/A"
+    # Create a timeit instance to track elapsed time since worker start
+    # Use shared memory for done signaling (avoids futex syscalls).
+    # Command delivery still goes through pipes (kernel wakeup is efficient).
+    if shm_done_flags is not None and worker_idx is not None:
+
+        def _signal_done():
+            shm_done_flags[worker_idx] = 1
+
+    else:
+
+        def _signal_done():
+            mp_event.set()
+
+    _worker_timer = timeit(f"batched_env_worker/{pid}/lifetime").start()
     while True:
         try:
             if child_pipe.poll(_timeout):
                 cmd, data = child_pipe.recv()
+                _cmd_count += 1
+                _last_cmd = cmd
+                # Log every 1000 commands
+                if _cmd_count % 1000 == 0:
+                    torchrl_logger.debug(
+                        f"batched_env worker {pid}: cmd_count={_cmd_count}, "
+                        f"elapsed={_worker_timer.elapsed():.1f}s, last_cmd={cmd}"
+                    )
             else:
+                torchrl_logger.debug(
+                    f"batched_env worker {pid}: TIMEOUT after {_timeout}s waiting for cmd, "
+                    f"elapsed_since_start={_worker_timer.elapsed():.1f}s, "
+                    f"last_cmd={_last_cmd}, cmd_count={_cmd_count}"
+                )
                 raise TimeoutError(
                     f"Worker timed out after {_timeout}s, "
                     f"increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable."
                 )
         except EOFError as err:
-            raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err
+            torchrl_logger.debug(
+                f"batched_env worker {pid}: EOFError - pipe closed, "
+                f"elapsed_since_start={_worker_timer.elapsed():.1f}s, "
+                f"last_cmd={_last_cmd}, cmd_count={_cmd_count}"
+            )
+            raise EOFError(f"proc {pid} failed, last command: {_last_cmd}.") from err
         if cmd == "seed":
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
@@ -2450,12 +2860,14 @@ def _run_worker_pipe_shared_mem(
             if event is not None:
                 event.record()
                 event.synchronize()
-            mp_event.set()
 
             if _non_tensor_keys:
+                _signal_done()
                 child_pipe.send(
                     ("non_tensor", cur_td.select(*_non_tensor_keys, strict=False))
                 )
+            else:
+                _signal_done()
 
             del cur_td
 
@@ -2482,15 +2894,17 @@ def _run_worker_pipe_shared_mem(
             if event is not None:
                 event.record()
                 event.synchronize()
-            mp_event.set()
 
             # Make sure the root is updated
             root_shared_tensordict.update_(env._step_mdp(input))
 
             if _non_tensor_keys:
+                _signal_done()
                 child_pipe.send(
                     ("non_tensor", next_td.select(*_non_tensor_keys, strict=False))
                 )
+            else:
+                _signal_done()
 
             del next_td
 
@@ -2524,12 +2938,16 @@ def _run_worker_pipe_shared_mem(
             if event is not None:
                 event.record()
                 event.synchronize()
-            mp_event.set()
 
             if _non_tensor_keys:
                 ntd = root_next_td.select(*_non_tensor_keys)
                 ntd.set("next", td_next.select(*_non_tensor_keys))
+                # Signal done BEFORE sending pipe data to avoid deadlocks when
+                # the pipe buffer is full.
+                _signal_done()
                 child_pipe.send(("non_tensor", ntd))
+            else:
+                _signal_done()
 
             del td, root_next_td
 
@@ -2544,6 +2962,9 @@ def _run_worker_pipe_shared_mem(
                 next_shared_tensordict,
                 root_shared_tensordict,
             )
+            _signal_done()
+            # Also set mp_event so _shutdown_workers (which waits on events,
+            # not shm flags) can detect completion.
             mp_event.set()
             child_pipe.close()
             if verbose:
@@ -2553,6 +2974,9 @@ def _run_worker_pipe_shared_mem(
 
         elif cmd == "load_state_dict":
             env.load_state_dict(data)
+            _signal_done()
+            # Also set mp_event so the parent's load_state_dict (which waits
+            # on events) can detect completion.
             mp_event.set()
 
         elif cmd == "state_dict":
@@ -2564,7 +2988,16 @@ def _run_worker_pipe_shared_mem(
         else:
             err_msg = f"{cmd} from env"
             try:
-                attr = getattr(env, cmd)
+
+                def _resolve_nested_attr(obj, attr):
+                    if isinstance(attr, (tuple, list)):
+                        cur = obj
+                        for _a in attr:
+                            cur = getattr(cur, _a)
+                        return cur
+                    return getattr(obj, attr)
+
+                attr = _resolve_nested_attr(env, cmd)
                 if callable(attr):
                     args, kwargs = data
                     args_replace = []
@@ -2580,11 +3013,12 @@ def _run_worker_pipe_shared_mem(
                 raise AttributeError(
                     f"querying {err_msg} resulted in an error."
                 ) from err
-            if cmd not in ("to"):
-                child_pipe.send(("_".join([cmd, "done"]), result))
+            cmd_str = "_".join(cmd) if isinstance(cmd, (tuple, list)) else cmd
+            if cmd != "to":
+                child_pipe.send((f"{cmd_str}_done", result))
             else:
                 # don't send env through pipe
-                child_pipe.send(("_".join([cmd, "done"]), None))
+                child_pipe.send((f"{cmd_str}_done", None))
 
 
 def _run_worker_pipe_direct(
@@ -2598,7 +3032,11 @@ def _run_worker_pipe_direct(
     verbose: bool = False,
     num_threads: int | None = None,  # for fork start method
     consolidate: bool = True,
+    filter_warnings: bool = False,
 ) -> None:
+    # Handle warning filtering (moved from _ProcessNoWarn)
+    if filter_warnings:
+        warnings.filterwarnings("ignore")
     if num_threads is not None:
         torch.set_num_threads(num_threads)
 
@@ -2672,10 +3110,9 @@ def _run_worker_pipe_direct(
                 raise RuntimeError("call 'init' before resetting")
             # we use 'data' to pass the keys that we need to pass to reset,
             # because passing the entire buffer may have unwanted consequences
-            # data, idx, reset_kwargs = data
-            # data = data[idx]
             data, reset_kwargs = data
             if data is not None:
+                data.unlock_()
                 data._fast_apply(
                     lambda x: x.clone() if x.device.type == "cuda" else x, out=data
                 )
@@ -2686,18 +3123,21 @@ def _run_worker_pipe_direct(
             if event is not None:
                 event.record()
                 event.synchronize()
-            mp_event.set()
             if consolidate:
                 try:
-                    child_pipe.send(
-                        cur_td.consolidate(
-                            share_memory=True, inplace=True, num_threads=1
-                        )
+                    cur_td = cur_td.consolidate(
+                        # share_memory=False: avoid resource_sharer which causes
+                        # progressive slowdown with fork on Linux
+                        share_memory=False,
+                        inplace=True,
+                        num_threads=1,
                     )
                 except Exception as err:
                     raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
-            else:
-                child_pipe.send(cur_td)
+            # Set event BEFORE send so parent starts reading, which unblocks send
+            # if pipe buffer was full (prevents deadlock)
+            mp_event.set()
+            child_pipe.send(cur_td)
 
             del cur_td
 
@@ -2705,20 +3145,24 @@ def _run_worker_pipe_direct(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            # data, idx = data
-            # data = data[idx]
             next_td = env._step(data)
             if event is not None:
                 event.record()
                 event.synchronize()
-            mp_event.set()
             if consolidate:
                 try:
                     next_td = next_td.consolidate(
-                        share_memory=True, inplace=True, num_threads=1
+                        # share_memory=False: avoid resource_sharer which causes
+                        # progressive slowdown with fork on Linux
+                        share_memory=False,
+                        inplace=True,
+                        num_threads=1,
                     )
                 except Exception as err:
                     raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
+            # Set event BEFORE send so parent starts reading, which unblocks send
+            # if pipe buffer was full (prevents deadlock)
+            mp_event.set()
             child_pipe.send(next_td)
 
             del next_td
@@ -2782,11 +3226,11 @@ def _run_worker_pipe_direct(
                 raise AttributeError(
                     f"querying {err_msg} resulted in an error."
                 ) from err
-            if cmd not in ("to"):
-                child_pipe.send(("_".join([cmd, "done"]), result))
+            if cmd != "to":
+                child_pipe.send((f"{cmd}_done", result))
             else:
                 # don't send env through pipe
-                child_pipe.send(("_".join([cmd, "done"]), None))
+                child_pipe.send((f"{cmd}_done", None))
 
 
 def _filter_empty(tensordict):
@@ -2812,3 +3256,9 @@ def _mps_sync(device):
 
 # Create an alias for possible imports
 _BatchedEnv = BatchedEnvBase
+
+# legacy re-exports (must be at end of file to avoid circular imports)
+from torchrl.envs.libs.envpool import (  # noqa: F401, E402
+    MultiThreadedEnv,
+    MultiThreadedEnvWrapper,
+)

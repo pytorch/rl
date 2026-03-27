@@ -7,9 +7,11 @@ from __future__ import annotations
 import math
 import uuid
 import warnings
+from collections import OrderedDict
+from collections.abc import Sequence
 from copy import copy
 
-from typing import Any, OrderedDict, Sequence
+from typing import Any
 
 import torch
 from tensordict import NestedKey, TensorDict, TensorDictBase, unravel_key
@@ -81,6 +83,7 @@ class VecNormV2(Transform):
         unfreeze(): Unfreezes the VecNorm, allowing updates to statistics.
         frozen_copy(): Returns a frozen copy of the VecNorm.
         clone(): Returns a clone of the VecNorm.
+        denorm(tensordict): Denormalizes data using the inverse of the normalization (stateful mode only).
         transform_observation_spec(observation_spec): Transforms the observation specification.
         transform_reward_spec(reward_spec, observation_spec): Transforms the reward specification.
         transform_output_spec(output_spec): Transforms the output specification.
@@ -215,6 +218,12 @@ class VecNormV2(Transform):
         Remotely updated loc / scale tensor([-0.4307]) tensor([0.9613])
         ...     env.close()
 
+    To recover the original (denormalized) values from normalized data, use :meth:`~.denorm`:
+
+        >>> denormed = env_trsf.transform.denorm(r)
+
+    .. note:: The :meth:`~.denorm` method is only available in stateful mode.
+
     """
 
     # TODO:
@@ -347,6 +356,33 @@ class VecNormV2(Transform):
                 other._count = self._count.clone()
         return other
 
+    def _apply(self, fn, recurse=True):
+        """Apply device/dtype transformation to the module and its TensorDict state.
+
+        This method is called internally by PyTorch when using .to(), .cuda(), .cpu(), etc.
+        In stateful mode, we manually apply the transformation to _loc, _var, and _count
+        since they are TensorDict instances, not registered buffers.
+        """
+        super()._apply(fn, recurse=recurse)
+
+        if self.stateful and self._loc is not None:
+            self._loc = self._loc.apply(fn)
+            self._var = self._var.apply(fn)
+            # Move _count to same device as _loc, but preserve its int dtype.
+            # We extract the device from an actual leaf tensor because TensorDict.device
+            # can be stale after .apply(fn) moves the leaves.
+            iterator = iter(self._loc.values(True, True))
+            leaf_tensor = next(iterator)
+            while not isinstance(leaf_tensor, torch.Tensor):
+                leaf_tensor = next(iterator)
+            target_device = leaf_tensor.device
+            if isinstance(self._count, TensorDictBase):
+                self._count = self._count.to(device=target_device)
+            else:
+                self._count = self._count.to(device=target_device)
+
+        return self
+
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
@@ -406,6 +442,60 @@ class VecNormV2(Transform):
                 lambda x: x.to(dtype) if not x.dtype.is_floating_point else x
             )
         return data
+
+    def denorm(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Denormalize a tensordict using the inverse of the normalization transform.
+
+        Applies the inverse of the normalization: ``original = normalized * scale + loc``.
+
+        Reads normalized values from ``out_keys`` and writes denormalized values to ``in_keys``.
+
+        .. note:: This method is only available in stateful mode.
+
+        Args:
+            tensordict (TensorDictBase): the tensordict containing normalized values.
+
+        Returns:
+            A shallow copy of the tensordict with denormalized values written to ``in_keys``.
+
+        Raises:
+            NotImplementedError: if the transform is in stateless mode.
+            RuntimeError: if the transform has not been initialized (no data seen yet).
+
+        Examples:
+            >>> from torchrl.envs import GymEnv
+            >>> from torchrl.envs.transforms import VecNormV2
+            >>> env = GymEnv("Pendulum-v1")
+            >>> vecnorm = VecNormV2(
+            ...     in_keys=["observation"],
+            ...     out_keys=["observation_norm"],
+            ...     stateful=True,
+            ... )
+            >>> env = env.append_transform(vecnorm)
+            >>> # Collect some data to initialize statistics
+            >>> rollout = env.rollout(10)
+            >>> # Denormalize the normalized observations
+            >>> denormed = vecnorm.denorm(rollout)
+            >>> # denormed["observation"] now contains the original scale values
+
+        """
+        if not self.stateful:
+            raise NotImplementedError(
+                "denorm is not implemented for stateless VecNormV2."
+            )
+        if self._loc is None:
+            raise RuntimeError("VecNormV2 must be initialized before calling denorm.")
+
+        tensordict = tensordict.copy()
+        loc, scale = self._get_loc_scale()
+        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+            if out_key not in tensordict.keys(include_nested=True):
+                continue
+            value = tensordict.get(out_key)
+            # Denormalize: value * scale + loc
+            original_value = value * scale.get(in_key) + loc.get(in_key)
+            tensordict.set(in_key, original_value)
+        return tensordict
 
     @staticmethod
     def _maybe_make_float(x):
@@ -573,7 +663,7 @@ class VecNormV2(Transform):
         return self._transform_spec(reward_spec, observation_spec)
 
     def transform_output_spec(self, output_spec: Composite) -> Composite:
-        # This is a copy-paste of the parent methd to ensure that we correct the reward spec properly
+        # This is a copy-paste of the parent method to ensure that we correct the reward spec properly
         output_spec = output_spec.clone()
         observation_spec = self.transform_observation_spec(
             output_spec["full_observation_spec"]

@@ -9,7 +9,8 @@ import abc
 import functools
 import re
 import warnings
-from typing import Any, Callable, Mapping, Sequence, TypeVar
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any, TypeVar
 
 import numpy as np
 import torch

@@ -1,5 +1,5 @@
 @echo off
-set TORCHRL_BUILD_VERSION=0.9.0
+set TORCHRL_BUILD_VERSION=0.11.0
 echo TORCHRL_BUILD_VERSION is set to %TORCHRL_BUILD_VERSION%
 
 @echo on
@@ -38,6 +38,19 @@ set DISTUTILS_USE_SDK=1
 
 :: Upgrade setuptools before installing PyTorch
 pip install --upgrade setuptools==72.1.0 || exit /b 1
+
+:: Workaround for free-threaded Python on Windows
+:: The library is python3XXt.lib but linker expects python3XX.lib
+if exist "%CONDA_PREFIX%\libs\python313t.lib" (
+    if not exist "%CONDA_PREFIX%\libs\python313.lib" (
+        copy "%CONDA_PREFIX%\libs\python313t.lib" "%CONDA_PREFIX%\libs\python313.lib"
+    )
+)
+if exist "%CONDA_PREFIX%\libs\python314t.lib" (
+    if not exist "%CONDA_PREFIX%\libs\python314.lib" (
+        copy "%CONDA_PREFIX%\libs\python314t.lib" "%CONDA_PREFIX%\libs\python314.lib"
+    )
+)
 
 set args=%1
 shift

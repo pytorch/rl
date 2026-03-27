@@ -64,5 +64,4 @@ def make_gail_discriminator(cfg, train_env, device="cpu"):
 
 def log_metrics(logger, metrics, step):
     if logger is not None:
-        for metric_name, metric_value in metrics.items():
-            logger.log_scalar(metric_name, metric_value, step)
+        logger.log_metrics(metrics, step)

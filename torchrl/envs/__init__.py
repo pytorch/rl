@@ -6,7 +6,13 @@
 from .async_envs import AsyncEnvPool, ProcessorAsyncEnvPool, ThreadingAsyncEnvPool
 from .batched_envs import ParallelEnv, SerialEnv
 from .common import EnvBase, EnvMetaData, make_tensordict
-from .custom import ChessEnv, LLMHashingEnv, PendulumEnv, TicTacToeEnv
+from .custom import (
+    ChessEnv,
+    FinancialRegimeEnv,
+    LLMHashingEnv,
+    PendulumEnv,
+    TicTacToeEnv,
+)
 from .env_creator import env_creator, EnvCreator, get_env_metadata
 from .gym_like import default_info_dict_reader, GymLikeEnv
 from .libs import (
@@ -34,6 +40,8 @@ from .libs import (
     OpenSpielWrapper,
     PettingZooEnv,
     PettingZooWrapper,
+    ProcgenEnv,
+    ProcgenWrapper,
     register_gym_spec_conversion,
     RoboHiveEnv,
     set_gym_backend,
@@ -74,7 +82,6 @@ from .transforms import (
     gSDENoise,
     Hash,
     InitTracker,
-    KLRewardTransform,
     LineariseRewards,
     MultiAction,
     MultiStepTransform,
@@ -123,7 +130,6 @@ from .utils import (
     get_available_libraries,
     make_composite_from_td,
     MarlGroupMapType,
-    RandomPolicy,
     set_exploration_type,
     step_mdp,
     terminated_or_truncated,
@@ -167,6 +173,7 @@ __all__ = [
     "EnvMetaData",
     "ExcludeTransform",
     "ExplorationType",
+    "FinancialRegimeEnv",
     "FiniteTensorDictCheck",
     "FlattenObservation",
     "FrameSkipTransform",
@@ -181,7 +188,6 @@ __all__ = [
     "IsaacGymWrapper",
     "JumanjiEnv",
     "JumanjiWrapper",
-    "KLRewardTransform",
     "LLMHashingEnv",
     "LineariseRewards",
     "MOGymEnv",
@@ -206,9 +212,10 @@ __all__ = [
     "PettingZooEnv",
     "PettingZooWrapper",
     "PinMemoryTransform",
+    "ProcgenEnv",
+    "ProcgenWrapper",
     "R3MTransform",
     "RandomCropTensorDict",
-    "RandomPolicy",
     "RemoveEmptySpecs",
     "RenameTransform",
     "Resize",

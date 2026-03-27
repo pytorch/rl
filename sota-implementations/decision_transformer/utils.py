@@ -553,8 +553,7 @@ def make_logger(cfg):
 
 
 def log_metrics(logger, metrics, step):
-    for metric_name, metric_value in metrics.items():
-        logger.log_scalar(metric_name, metric_value, step)
+    logger.log_metrics(metrics, step)
 
 
 def dump_video(module):

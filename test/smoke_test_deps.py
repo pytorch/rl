@@ -5,12 +5,16 @@
 from __future__ import annotations
 
 import argparse
-import os
+import sys
 import tempfile
 
 import pytest
 
 
+@pytest.mark.skipif(
+    sys.version_info >= (3, 13),
+    reason="dm_control not available on Python 3.13+ (labmaze lacks wheels)",
+)
 def test_dm_control():
     import dm_control  # noqa: F401
     import dm_env  # noqa: F401
@@ -23,21 +27,29 @@ def test_dm_control():
     env.reset()
 
 
+@pytest.mark.skipif(
+    sys.version_info >= (3, 13),
+    reason="dm_control not available on Python 3.13+ (labmaze lacks wheels)",
+)
 @pytest.mark.skip(reason="Not implemented yet")
 def test_dm_control_pixels():
-    from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv  # noqa
+    from torchrl.envs.libs.dm_control import DMControlEnv
 
     env = DMControlEnv("cheetah", "run", from_pixels=True)
     env.reset()
 
 
+@pytest.mark.skipif(
+    sys.version_info >= (3, 14),
+    reason="gymnasium[atari] / ALE not available on Python 3.14 in CI (ale-py install failing)",
+)
 def test_gym():
     try:
         import gymnasium as gym
     except ImportError as err:
         ERROR = err
         try:
-            import gym  # noqa: F401
+            import gym as gym  # noqa: F401
         except ImportError as err:
             raise ImportError(
                 f"gym and gymnasium load failed. Gym got error {err}."
@@ -46,12 +58,30 @@ def test_gym():
     from torchrl.envs.libs.gym import _has_gym, GymEnv  # noqa
 
     assert _has_gym
-    if os.getenv("PYTORCH_TEST_FBCODE"):
-        from pytorch.rl.test._utils_internal import PONG_VERSIONED
-    else:
-        from _utils_internal import PONG_VERSIONED
+    # If gymnasium is installed without the atari extra, ALE won't be registered.
+    # In that case we skip rather than hard-failing the dependency smoke test.
+    try:
+        import ale_py  # noqa: F401
+    except Exception:  # pragma: no cover
+        pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
+    from torchrl.testing import PONG_VERSIONED
 
-    env = GymEnv(PONG_VERSIONED())
+    try:
+        env = GymEnv(PONG_VERSIONED())
+    except Exception as err:  # gymnasium.error.NamespaceNotFound and similar
+        namespace_not_found = err.__class__.__name__ == "NamespaceNotFound"
+        if hasattr(gym, "error") and hasattr(gym.error, "NamespaceNotFound"):
+            namespace_not_found = namespace_not_found or isinstance(
+                err, gym.error.NamespaceNotFound
+            )
+        if namespace_not_found:
+            pytest.skip(
+                "ALE namespace not registered (gymnasium installed without atari extra)."
+            )
+        # Handle ale-py compatibility issues with older gym versions
+        if isinstance(err, AttributeError) and "ale_py" in str(err):
+            pytest.skip(f"ALE/gym version incompatibility: {err}")
+        raise
     env.reset()
 
 

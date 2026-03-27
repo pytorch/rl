@@ -7,15 +7,17 @@ from __future__ import annotations
 import importlib.util
 
 import os
-import warnings
-from typing import Sequence
+from collections.abc import Sequence
+from typing import Any
 
+from tensordict import TensorDictBase
 from torch import Tensor
 
-from .common import Logger
+from .common import _make_metrics_safe, Logger
 
 _has_wandb = importlib.util.find_spec("wandb") is not None
 _has_omegaconf = importlib.util.find_spec("omegaconf") is not None
+_has_moviepy = importlib.util.find_spec("moviepy") is not None
 
 
 class WandbLogger(Logger):
@@ -47,16 +49,15 @@ class WandbLogger(Logger):
 
     @classmethod
     def __new__(cls, *args, **kwargs):
-        cls._prev_video_step = -1
         return super().__new__(cls)
 
     def __init__(
         self,
         exp_name: str,
         offline: bool = False,
-        save_dir: str = None,
-        id: str = None,
-        project: str = None,
+        save_dir: str | None = None,
+        id: str | None = None,
+        project: str | None = None,
         *,
         video_fps: int = 32,
         **kwargs,
@@ -84,25 +85,19 @@ class WandbLogger(Logger):
             "resume": "allow",
             **kwargs,
         }
-        self._has_imported_wandb = False
+
         super().__init__(exp_name=exp_name, log_dir=save_dir)
         if self.offline:
             os.environ["WANDB_MODE"] = "dryrun"
 
-        self._has_imported_moviepy = False
-
-        self._has_imported_omgaconf = False
-
-        self.video_log_counter = 0
-
-    def _create_experiment(self) -> WandbLogger:
+    def _create_experiment(self):
         """Creates a wandb experiment.
 
         Args:
             exp_name (str): The name of the experiment.
 
         Returns:
-            WandbLogger: The wandb experiment logger.
+            A wandb.Experiment object.
         """
         if not _has_wandb:
             raise ImportError("Wandb is not installed")
@@ -113,7 +108,9 @@ class WandbLogger(Logger):
 
         return wandb.init(**self._wandb_kwargs)
 
-    def log_scalar(self, name: str, value: float, step: int | None = None) -> None:
+    def log_scalar(
+        self, name: str, value: float, step: int | None = None, commit: bool = False
+    ) -> None:
         """Logs a scalar value to wandb.
 
         Args:
@@ -121,11 +118,10 @@ class WandbLogger(Logger):
             value (float): The value of the scalar.
             step (int, optional): The step at which the scalar is logged.
                 Defaults to None.
+            commit: If true, data for current step is assumed to be final (and
+                no further data for this step should be logged).
         """
-        if step is not None:
-            self.experiment.log({name: value, "trainer/step": step})
-        else:
-            self.experiment.log({name: value})
+        self.experiment.log({name: value}, step=step, commit=commit)
 
     def log_video(self, name: str, video: Tensor, **kwargs) -> None:
         """Log videos inputs to wandb.
@@ -137,41 +133,22 @@ class WandbLogger(Logger):
                 supports 'step' (integer indicating the step index), 'format'
                 (default is 'mp4') and 'fps' (defaults to ``self.video_fps``). Other kwargs are
                 passed as-is to the :obj:`experiment.log` method.
+
+        Raises:
+            ImportError: If moviepy is not installed (required by wandb for video encoding).
         """
+        if not _has_moviepy:
+            raise ImportError(
+                "Video logging with wandb requires moviepy. "
+                "Install with: pip install moviepy\n"
+                "Or install wandb with media support: pip install 'wandb[media]'"
+            )
         import wandb
 
-        # check for correct format of the video tensor ((N), T, C, H, W)
-        # check that the color channel (C) is either 1 or 3
-        if video.dim() != 5 or video.size(dim=2) not in {1, 3}:
-            raise Exception(
-                "Wrong format of the video tensor. Should be ((N), T, C, H, W)"
-            )
-        if not self._has_imported_moviepy:
-            try:
-                import moviepy  # noqa
-
-                self._has_imported_moviepy = True
-            except ImportError:
-                raise Exception(
-                    "moviepy not found, videos cannot be logged with TensorboardLogger"
-                )
-        self.video_log_counter += 1
         fps = kwargs.pop("fps", self.video_fps)
-        step = kwargs.pop("step", None)
         format = kwargs.pop("format", "mp4")
-        if step not in (None, self._prev_video_step, self._prev_video_step + 1):
-            warnings.warn(
-                "when using step with wandb_logger.log_video, it is expected "
-                "that the step is equal to the previous step or that value incremented "
-                f"by one. Got step={step} but previous value was {self._prev_video_step}. "
-                f"The step value will be set to {self._prev_video_step+1}. This warning will "
-                f"be silenced from now on but the values will keep being incremented."
-            )
-            step = self._prev_video_step + 1
-        self._prev_video_step = step if step is not None else self._prev_video_step + 1
         self.experiment.log(
             {name: wandb.Video(video, fps=fps, format=format)},
-            # step=step,
             **kwargs,
         )
 
@@ -237,3 +214,31 @@ class WandbLogger(Logger):
             self.experiment.log({name: value}, step=step)
         else:
             self.experiment.log({name: table})
+
+    def log_metrics(
+        self,
+        metrics: dict[str, Any] | TensorDictBase,
+        step: int | None = None,
+        *,
+        keys_sep: str = "/",
+    ) -> dict[str, Any]:
+        """Log multiple scalar metrics at once to wandb.
+
+        This method efficiently handles tensor values by batching CUDA->CPU
+        transfers and performing a single synchronization, then logs all
+        metrics in a single wandb API call.
+
+        Args:
+            metrics: Dictionary or TensorDict mapping metric names to values.
+                Tensor values are automatically converted to Python scalars/lists.
+                For TensorDict inputs, nested keys are flattened using ``keys_sep``.
+            step: Optional step value for all metrics.
+            keys_sep: Separator used to flatten nested TensorDict keys into strings.
+                Defaults to "/". Only used for TensorDict inputs.
+
+        Returns:
+            The converted metrics dictionary (with tensors converted to Python types).
+        """
+        safe_metrics = _make_metrics_safe(metrics, keys_sep=keys_sep)
+        self.experiment.log(safe_metrics, step=step)
+        return safe_metrics

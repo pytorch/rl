@@ -147,7 +147,7 @@ def main(cfg):
         elif it % log_interval == 0:
             # loss as float. note: this is a CPU-GPU sync point
             loss = batch.loss.item()
-            msg = f"TRAIN: {it=}: {loss=:.4f}, time {dt*1000:.2f}ms"
+            msg = f"TRAIN: {it=}: {loss=:.4f}, time {dt * 1000:.2f}ms"
             torchrl_logger.info(msg)
             loss_logger.info(msg)
 

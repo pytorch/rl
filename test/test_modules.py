@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import re
 
 from numbers import Number
@@ -13,13 +12,6 @@ from numbers import Number
 import numpy as np
 import pytest
 import torch
-
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import get_default_devices, retry
-    from pytorch.rl.test.mocking_classes import MockBatchedUnLockedEnv
-else:
-    from _utils_internal import get_default_devices, retry
-    from mocking_classes import MockBatchedUnLockedEnv
 from packaging import version
 from tensordict import TensorDict
 from torch import nn
@@ -61,9 +53,14 @@ from torchrl.modules.models.model_based import (
     RSSMPrior,
     RSSMRollout,
 )
+from torchrl.modules.models.multiagent import MultiAgentNetBase
 from torchrl.modules.models.utils import SquashDims
 from torchrl.modules.planners.mppi import MPPIPlanner
 from torchrl.objectives.value import TDLambdaEstimator
+
+from torchrl.testing import get_default_devices, retry
+
+from torchrl.testing.mocking_classes import MockBatchedUnLockedEnv
 
 
 @pytest.fixture
@@ -468,6 +465,19 @@ class TestDreamerComponents:
         det_state = torch.randn(*batch_size, *temporal_size, deter_size, device=device)
         obs = decoder(stoch_state, det_state)
         assert obs.shape == (*batch_size, *temporal_size, 3, 64, 64)
+
+    @pytest.mark.parametrize("depth", [32, 64])
+    @pytest.mark.parametrize("out_channels", [1, 3])
+    @pytest.mark.parametrize("stoch_size", [10])
+    @pytest.mark.parametrize("deter_size", [20])
+    def test_dreamer_decoder_out_channels(
+        self, device, batch_size, depth, out_channels, stoch_size, deter_size
+    ):
+        decoder = ObsDecoder(channels=depth, out_channels=out_channels).to(device)
+        stoch_state = torch.randn(*batch_size, stoch_size, device=device)
+        det_state = torch.randn(*batch_size, deter_size, device=device)
+        obs = decoder(stoch_state, det_state)
+        assert obs.shape == (*batch_size, out_channels, 64, 64)
 
     @pytest.mark.parametrize("stoch_size", [10, 20])
     @pytest.mark.parametrize("deter_size", [20, 30])
@@ -1014,6 +1024,89 @@ class TestMultiAgent:
                 .any()
             )
 
+    @pytest.mark.parametrize("share_params", [True, False])
+    @pytest.mark.parametrize("agent_dim", [1, -3])
+    def test_multiagent_custom_agent_dim(self, share_params, agent_dim):
+        """Test that custom agent_dim values work correctly.
+
+        Regression test for https://github.com/pytorch/rl/issues/3288
+        """
+        n_agents = 3
+        obs_dim = 5
+        seq_len = 6
+        output_dim = 4
+
+        class SingleAgentMLP(nn.Module):
+            def __init__(self, in_dim, out_dim):
+                super().__init__()
+                self.net = nn.Sequential(
+                    nn.Linear(in_dim, 32),
+                    nn.Tanh(),
+                    nn.Linear(32, out_dim),
+                )
+
+            def forward(self, x):
+                return self.net(x)
+
+        class MultiAgentPolicyNet(MultiAgentNetBase):
+            def __init__(
+                self,
+                obs_dim,
+                output_dim,
+                n_agents,
+                share_params,
+                agent_dim,
+                device=None,
+            ):
+                self.obs_dim = obs_dim
+                self.output_dim = output_dim
+                self._agent_dim = agent_dim
+
+                super().__init__(
+                    n_agents=n_agents,
+                    centralized=False,
+                    share_params=share_params,
+                    agent_dim=agent_dim,
+                    device=device,
+                )
+
+            def _build_single_net(self, *, device, **kwargs):
+                net = SingleAgentMLP(self.obs_dim, self.output_dim)
+                return net.to(device) if device is not None else net
+
+            def _pre_forward_check(self, inputs):
+                if inputs.shape[self._agent_dim] != self.n_agents:
+                    raise ValueError(
+                        f"Multi-agent network expected input with shape[{self._agent_dim}]={self.n_agents},"
+                        f" but got {inputs.shape}"
+                    )
+                return inputs
+
+        policy_net = MultiAgentPolicyNet(
+            obs_dim=obs_dim,
+            output_dim=output_dim,
+            n_agents=n_agents,
+            share_params=share_params,
+            agent_dim=agent_dim,
+        )
+
+        # Input shape: (batch, n_agents, seq_len, obs_dim) with agents at dim 1
+        batch_size = 4
+        obs = torch.randn(batch_size, n_agents, seq_len, obs_dim)
+        out = policy_net(obs)
+
+        # Output should preserve agent dimension position
+        expected_shape = (batch_size, n_agents, seq_len, output_dim)
+        assert (
+            out.shape == expected_shape
+        ), f"Expected {expected_shape}, got {out.shape}"
+
+        # Verify different agents produce different outputs (unless share_params with same input)
+        if not share_params:
+            for i in range(n_agents):
+                for j in range(i + 1, n_agents):
+                    assert not torch.allclose(out[:, i], out[:, j])
+
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
     @pytest.mark.parametrize("centralized", [True, False])
@@ -1080,6 +1173,7 @@ class TestMultiAgent:
                     assert not torch.allclose(out[..., i, :], out[..., j, :])
 
     def test_multiagent_cnn_lazy(self):
+        torch.manual_seed(42)
         n_agents = 5
         n_channels = 3
         cnn = MultiAgentConvNet(
@@ -1135,6 +1229,7 @@ class TestMultiAgent:
         centralized,
         share_params,
     ):
+        torch.manual_seed(42)
         actor_net = MultiAgentConvNet(
             in_features=4,
             num_cells=[5, 5],
@@ -1584,6 +1679,21 @@ class TestBatchRenorm:
         bn.eval()
         brn.eval()
         torch.testing.assert_close(bn(data_test), brn(data_test))
+
+
+def test_convnetblock_uses_both_resnets():
+    """Regression test for https://github.com/pytorch/rl/issues/3519."""
+    from torchrl.modules.models.recipes.impala import _ConvNetBlock
+
+    block = _ConvNetBlock(num_ch=16)
+    x = torch.randn(2, 3, 8, 8)
+    out = block(x).mean()
+    out.backward()
+
+    resnet1_grad = sum(p.grad.abs().sum() for p in block.resnet1.parameters())
+    resnet2_grad = sum(p.grad.abs().sum() for p in block.resnet2.parameters())
+    assert resnet1_grad > 0, "resnet1 parameters received no gradients"
+    assert resnet2_grad > 0, "resnet2 parameters received no gradients"
 
 
 if __name__ == "__main__":

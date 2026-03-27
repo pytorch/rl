@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 import torch
 
@@ -28,10 +28,10 @@ class LLMHashingEnv(EnvBase):
     The primary goal of this environment is to identify token chains using a hashing function.
     This allows the data to be stored in a :class:`~torchrl.data.MCTSForest` using nothing but hashes as node
     identifiers, or easily prune repeated token chains in a data structure.
-    The following figure gives an overview of this workflow:
 
-    .. figure:: /_static/img/rollout-llm.png
-        :alt: Data collection loop with our LLM environment.
+    .. The following figure gives an overview of this workflow:
+    .. .. figure:: /_static/img/rollout-llm.png
+    ..     :alt: Data collection loop with our LLM environment.
 
     Args:
         vocab_size (int): The size of the vocabulary. Can be omitted if the tokenizer is passed.

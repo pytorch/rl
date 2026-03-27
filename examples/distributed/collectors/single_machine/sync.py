@@ -27,11 +27,11 @@ import torch
 import tqdm
 from torchrl._utils import logger as torchrl_logger
 
-from torchrl.collectors.collectors import MultiSyncDataCollector, SyncDataCollector
+from torchrl.collectors import Collector, MultiSyncCollector
 from torchrl.collectors.distributed import DistributedSyncDataCollector
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
-from torchrl.envs.utils import RandomPolicy
+from torchrl.modules import RandomPolicy
 
 parser = ArgumentParser()
 parser.add_argument(
@@ -100,13 +100,13 @@ if __name__ == "__main__":
         action_spec = make_env.action_spec
 
     if args.worker_parallelism == "collector" and num_workers > 1:
-        sub_collector_class = MultiSyncDataCollector
+        sub_collector_class = MultiSyncCollector
         num_workers_per_collector = num_workers
-        device_str = "devices"  # MultiSyncDataCollector expects a devices kwarg
+        device_str = "devices"  # MultiSyncCollector expects a devices kwarg
     else:
-        sub_collector_class = SyncDataCollector
+        sub_collector_class = Collector
         num_workers_per_collector = 1
-        device_str = "device"  # SyncDataCollector expects a device kwarg
+        device_str = "device"  # Collector expects a device kwarg
 
     if args.backend == "nccl":
         if num_nodes > device_count - 1:
@@ -149,5 +149,5 @@ if __name__ == "__main__":
             t0 = time.time()
     collector.shutdown()
     t1 = time.time()
-    torchrl_logger.info(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
+    torchrl_logger.info(f"time elapsed: {t1 - t0}s, rate: {counter / (t1 - t0)} fps")
     exit()

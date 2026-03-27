@@ -22,12 +22,12 @@ TorchRL envs
 #
 # Gym environments
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# To run this part of the tutorial, you will need to have a recent version of
-# the gym library installed, as well as the atari suite. You can get this
-# installed by installing the following packages:
+# To run this part of the tutorial, you will need to have gymnasium installed
+# with ALE support. You can get this installed by installing the following packages:
 #
-#   .. code-block::
-#     $ pip install gym atari-py ale-py gym[accept-rom-license] pygame
+#   .. code-block:: bash
+#
+#     $ pip install "gymnasium[atari]" pygame
 #
 # To unify all frameworks, torchrl environments are built inside the
 # ``__init__`` method with a private method called ``_build_env`` that
@@ -42,24 +42,17 @@ from tensordict.nn import TensorDictModule
 
 warnings.filterwarnings("ignore")
 
+# Set multiprocessing start method to fork if not already set
+# This allows the tutorial to run as a script without if __name__ == "__main__"
 from torch import multiprocessing
 
-# TorchRL prefers spawn method, that restricts creation of  ``~torchrl.envs.ParallelEnv`` inside
-# `__main__` method call, but for the easy of reading the code switch to fork
-# which is also a default spawn method in Google's Colaboratory
-try:
-    is_sphinx = __sphinx_build__
-except NameError:
-    is_sphinx = False
-
-try:
-    multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
-except RuntimeError:
-    pass
-
+if multiprocessing.get_start_method(allow_none=True) is None:
+    multiprocessing.set_start_method("fork")
+mp_context = multiprocessing.get_start_method()
 
 # sphinx_gallery_end_ignore
 
+import ale_py  # noqa: F401 - registers ALE environments with gymnasium
 import torch
 from matplotlib import pyplot as plt
 from tensordict import TensorDict
@@ -83,7 +76,7 @@ list(GymEnv.available_envs)[:10]
 # Like other frameworks, TorchRL envs have attributes that indicate what
 # space is for the observations, action, done and reward. Because it often happens
 # that more than one observation is retrieved, we expect the observation spec
-# to be of type ``CompositeSpec``.
+# to be of type ``Composite``.
 # Reward and action do not have this restriction:
 
 print("Env observation_spec: \n", env.observation_spec)
@@ -118,7 +111,7 @@ print(env.done_spec)
 
 ###############################################################################
 # Envs are also packed with an ``env.state_spec`` attribute of type
-# ``CompositeSpec`` which contains all the specs that are inputs to the env
+# ``Composite`` which contains all the specs that are inputs to the env
 # but are not the action.
 # For stateful
 # envs (e.g. gym) this will be void most of the time.
@@ -415,7 +408,7 @@ print("CatTensors transform parent env: \n", env.transform[0].parent)
 # Environment device
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # Transforms can work on device, which can bring a significant speedup when
-# operations are moderetely or highly computationally demanding. These include
+# operations are moderately or highly computationally demanding. These include
 # ``ToTensorImage``, ``Resize``, ``GrayScale`` etc.
 #
 # One could legitimately ask what that implies on the wrapped environment
@@ -455,9 +448,11 @@ def env_make():
     return GymEnv("Pendulum-v1")
 
 
-parallel_env = ParallelEnv(3, env_make)  # -> creates 3 envs in parallel
 parallel_env = ParallelEnv(
-    3, [env_make, env_make, env_make]
+    3, env_make, mp_start_method=mp_context
+)  # -> creates 3 envs in parallel
+parallel_env = ParallelEnv(
+    3, [env_make, env_make, env_make], mp_start_method=mp_context
 )  # similar to the previous command
 
 ###############################################################################
@@ -538,7 +533,9 @@ env.foo
 
 ###############################################################################
 
-parallel_env = ParallelEnv(3, env_make)  # -> creates 3 envs in parallel
+parallel_env = ParallelEnv(
+    3, env_make, mp_start_method=mp_context
+)  # -> creates 3 envs in parallel
 
 # env has not been started --> error:
 try:
@@ -592,6 +589,7 @@ parallel_env = ParallelEnv(
     2,
     [env_make, env_make],
     create_env_kwargs=[{"env_name": "ALE/AirRaid-v5"}, {"env_name": "ALE/Pong-v5"}],
+    mp_start_method=mp_context,
 )
 data = parallel_env.reset()
 
@@ -636,6 +634,7 @@ parallel_env = ParallelEnv(
     2,
     [env_make, env_make],
     create_env_kwargs=[{"env_name": "ALE/AirRaid-v5"}, {"env_name": "ALE/Pong-v5"}],
+    mp_start_method=mp_context,
 )
 parallel_env = TransformedEnv(parallel_env, GrayScale())  # transforms on main process
 data = parallel_env.reset()
@@ -693,7 +692,7 @@ from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 
 make_env = EnvCreator(lambda: TransformedEnv(GymEnv("CartPole-v1"), VecNorm(decay=1.0)))
-env = ParallelEnv(3, make_env)
+env = ParallelEnv(3, make_env, mp_start_method=mp_context)
 print("env state dict:")
 sd = TensorDict(make_env.state_dict())
 print(sd)

@@ -28,8 +28,8 @@ loss:
   gamma: 0.99
   mini_batch_size: 64
   gae_lambda: 0.95
-  critic_coef: 0.25
-  entropy_coef: 0.0
+  critic_coeff: 0.25
+  entropy_coeff: 0.0
   loss_critic_type: l2
   device:
 

@@ -4,9 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from enum import Enum
 from functools import wraps
-from typing import Sequence
 
 import torch
 import torch.distributions as D
@@ -73,8 +74,8 @@ class OneHotCategorical(D.Categorical):
         grad_method (ReparamGradientStrategy, optional): strategy to gather
             reparameterized samples.
             ``ReparamGradientStrategy.PassThrough`` will compute the sample gradients
-             by using the softmax valued log-probability as a proxy to the
-             sample gradients.
+            by using the softmax valued log-probability as a proxy to the
+            sample gradients.
             ``ReparamGradientStrategy.RelaxedOneHot`` will use
             :class:`torch.distributions.RelaxedOneHot` to sample from the distribution.
 
@@ -352,7 +353,7 @@ class MaskedCategorical(D.Categorical):
                 logits = self.logits
                 if logits.ndim > 2:
                     # Bring channels in 2nd dim
-                    logits = logits.transpose(-1, 1)
+                    logits = logits.permute(0, -1, *range(1, logits.ndim - 1))
                 original_value_shape = None
                 if logits.ndim == 1 and value.ndim >= 1:
                     if value.ndim >= 2:
@@ -621,7 +622,7 @@ class Ordinal(D.Categorical):
     not impose any notion of proximity or ordering over its support's atoms.
     The `Ordinal` distribution explicitly encodes those concepts, which is
     useful for learning discrete sampling from continuous sets. See §5 of
-    `Tang & Agrawal, 2020<https://arxiv.org/pdf/1901.10500.pdf>`_ for details.
+    `Tang & Agrawal, 2020 <https://arxiv.org/pdf/1901.10500.pdf>`_ for details.
 
     .. note::
         This class is mostly useful when you want to learn a distribution over

@@ -15,17 +15,12 @@ GRPO is a method for training language models using reinforcement learning, with
 
 ## Installation
 
-1. Install dependencies:
+Install dependencies:
 ```bash
 # GSM8K deps
 pip install -r sota-implementations/grpo/requirements_gsm8k.txt
 # IFEval deps
 pip install -r sota-implementations/grpo/requirements_ifeval.txt
-```
-
-2. Set required environment variables:
-```bash
-export VLLM_USE_V1=0  # Required for vLLM compatibility
 ```
 
 ## Hardware Requirements
@@ -63,12 +58,12 @@ There are two training modes available:
 
 #### Synchronous Mode (Default)
 ```bash
-VLLM_USE_V1=0 python sota-implementations/grpo/grpo-sync.py mode=sync train_model.num_devices=2 ref_model.num_devices=2 inference_model.num_devices=2
+python sota-implementations/grpo/grpo-sync.py mode=sync train_model.num_devices=2 ref_model.num_devices=2 inference_model.num_devices=2
 ```
 
 #### Asynchronous Mode (Recommended)
 ```bash
-VLLM_USE_V1=0 python sota-implementations/grpo/grpo-async.py mode=async train_model.num_devices=2 ref_model.num_devices=2 inference_model.num_devices=2
+python sota-implementations/grpo/grpo-async.py mode=async train_model.num_devices=2 ref_model.num_devices=2 inference_model.num_devices=2
 ```
 
 The key difference between sync and async modes is how data collection and optimization are handled:
@@ -123,7 +118,7 @@ Key differences:
    - Async: Each piece of data is processed a non-deterministic number of times.
 
 4. **Weight updates**:
-   - Sync: Weights are updated befor every collection of data.
+   - Sync: Weights are updated before every collection of data.
    - Async: Weights are updated at a given interval (in gradient steps). This will require a synchronization between the training
      and inference processes, and frequent updates will cause both workers to often wait for each other.
 

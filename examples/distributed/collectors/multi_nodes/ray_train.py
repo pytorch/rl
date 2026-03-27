@@ -13,7 +13,7 @@ from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
 from torchrl._utils import logger as torchrl_logger
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.collectors.distributed.ray import RayCollector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -119,7 +119,7 @@ if __name__ == "__main__":
     collector = RayCollector(
         create_env_fn=[env] * num_collectors,
         policy=policy_module,
-        collector_class=SyncDataCollector,
+        collector_class=Collector,
         collector_kwargs={
             "max_frames_per_traj": 50,
             "device": device,
@@ -149,9 +149,9 @@ if __name__ == "__main__":
         advantage_key="advantage",
         clip_epsilon=clip_epsilon,
         entropy_bonus=bool(entropy_eps),
-        entropy_coef=entropy_eps,  # these keys match by default but we set this for completeness
+        entropy_coeff=entropy_eps,  # these keys match by default but we set this for completeness
         value_target_key=advantage_module.value_target_key,
-        critic_coef=1.0,
+        critic_coeff=1.0,
         loss_critic_type="smooth_l1",
     )
     loss_module.make_value_estimator(gamma=0.99)

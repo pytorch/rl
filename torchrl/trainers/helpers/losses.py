@@ -86,7 +86,7 @@ class A2CLossConfig:
     # Decay factor for return computation. Default=0.99.
     entropy_coeff: float = 1e-3
     # Entropy factor for the A2C loss
-    critic_coef: float = 1.0
+    critic_coeff: float = 1.0
     # Critic factor for the A2C loss
     critic_loss_function: str = "smooth_l1"
     # loss function for the value network. Either one of l1, l2 or smooth_l1 (default).
@@ -112,7 +112,7 @@ class PPOLossConfig:
     # Number of samples to use for a Monte-Carlo estimate if the policy distribution has not closed formula.
     loss_function: str = "smooth_l1"
     # loss function for the value network. Either one of l1, l2 or smooth_l1 (default).
-    critic_coef: float = 1.0
+    critic_coeff: float = 1.0
     # Critic loss multiplier when computing the total loss.
 
     # ClipPPOLoss parameters:

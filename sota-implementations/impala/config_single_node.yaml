@@ -1,6 +1,6 @@
 # Environment
 env:
-  env_name: PongNoFrameskip-v4
+  env_name: ALE/Pong-v5
   backend: gymnasium
 
 # Device for the forward and backward passes
@@ -36,6 +36,6 @@ loss:
   gamma: 0.99
   batch_size: 32
   sgd_updates: 1
-  critic_coef: 0.5
-  entropy_coef: 0.01
+  critic_coeff: 0.5
+  entropy_coeff: 0.01
   loss_critic_type: l2

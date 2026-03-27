@@ -9,16 +9,16 @@ import pytest
 import torch.cuda
 import tqdm
 
-from torchrl.collectors import SyncDataCollector
-from torchrl.collectors.collectors import (
+from torchrl.collectors import (
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
+    SyncDataCollector,
 )
 from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import EnvCreator, GymEnv, ParallelEnv, StepCounter, TransformedEnv
 from torchrl.envs.libs.dm_control import DMControlEnv
-from torchrl.envs.utils import RandomPolicy
+from torchrl.modules import RandomPolicy
 
 
 def single_collector_setup():
@@ -149,6 +149,69 @@ def async_collector_setup_pixels():
 def execute_collector(c):
     # will run for 9 iterations (1 during setup)
     next(c)
+
+
+def execute_collector_with_rb(c, rb):
+    """Execute collector iteration and verify data was stored in replay buffer."""
+    next(c)
+
+
+# --- Benchmarks for collector with replay buffer (lazy stack optimization) ---
+
+
+def single_collector_with_rb_setup():
+    """Setup single collector with replay buffer - tests lazy stack optimization."""
+    device = "cuda:0" if torch.cuda.device_count() else "cpu"
+    env = TransformedEnv(DMControlEnv("cheetah", "run", device=device), StepCounter(50))
+    rb = ReplayBuffer(storage=LazyTensorStorage(10000))
+    c = SyncDataCollector(
+        env,
+        RandomPolicy(env.action_spec),
+        total_frames=-1,
+        frames_per_batch=100,
+        device=device,
+        replay_buffer=rb,
+    )
+    c = iter(c)
+    # Warmup
+    for i, _ in enumerate(c):
+        if i == 10:
+            break
+    return ((c, rb), {})
+
+
+def single_collector_with_rb_setup_pixels():
+    """Setup single collector with replay buffer for pixel observations."""
+    device = "cuda:0" if torch.cuda.device_count() else "cpu"
+    env = TransformedEnv(GymEnv("ALE/Pong-v5"), StepCounter(50))
+    rb = ReplayBuffer(storage=LazyTensorStorage(10000))
+    c = SyncDataCollector(
+        env,
+        RandomPolicy(env.action_spec),
+        total_frames=-1,
+        frames_per_batch=100,
+        device=device,
+        replay_buffer=rb,
+    )
+    c = iter(c)
+    # Warmup
+    for i, _ in enumerate(c):
+        if i == 10:
+            break
+    return ((c, rb), {})
+
+
+def test_single_with_rb(benchmark):
+    """Benchmark single collector with replay buffer (lazy stack path)."""
+    (c, rb), _ = single_collector_with_rb_setup()
+    benchmark(execute_collector_with_rb, c, rb)
+
+
+@pytest.mark.skipif(not torch.cuda.device_count(), reason="no rendering without cuda")
+def test_single_with_rb_pixels(benchmark):
+    """Benchmark single collector with replay buffer for pixel observations."""
+    (c, rb), _ = single_collector_with_rb_setup_pixels()
+    benchmark(execute_collector_with_rb, c, rb)
 
 
 def test_single(benchmark):

@@ -4,6 +4,7 @@ unset PYTORCH_VERSION
 # For unittest, nightly PyTorch is used as the following section,
 # so no need to set PYTORCH_VERSION.
 # In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
+export DEBIAN_FRONTEND=noninteractive
 apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-dev g++ gcc libosmesa6-dev cmake
 
 set -e
@@ -52,6 +53,9 @@ else
   exit 1
 fi
 
+# tensordict requires cmake >= 3.22; the base image ships 3.16
+conda install -y cmake
+
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
   pip3 install git+https://github.com/pytorch/tensordict.git
@@ -63,7 +67,7 @@ fi
 python -c "import tensordict"
 
 printf "* Installing torchrl\n"
-python setup.py develop
+python -m pip install -e . --no-build-isolation
 python -c "import torchrl"
 
 # Extracted from run_test.sh to run once.
@@ -74,6 +78,8 @@ python -m torch.utils.collect_env
 git config --global --add safe.directory '*'
 
 root_dir="$(git rev-parse --show-toplevel)"
+
+bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
 env_dir="${root_dir}/env"
 lib_dir="${env_dir}/lib"
 
@@ -94,5 +100,5 @@ echo $MUJOCO_GL
 echo $sim_backend
 
 sim_backend=MUJOCO MUJOCO_GL=egl python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 20 -k "robohive" --error-for-skips
-coverage combine
+coverage combine -q
 coverage xml -i

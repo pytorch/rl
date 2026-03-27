@@ -13,20 +13,13 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
+# Set multiprocessing start method to fork if not already set
+# This allows the tutorial to run as a script without if __name__ == "__main__"
 from torch import multiprocessing
 
-# TorchRL prefers spawn method, that restricts creation of  ``~torchrl.envs.ParallelEnv`` inside
-# `__main__` method call, but for the easy of reading the code switch to fork
-# which is also a default spawn method in Google's Colaboratory
-try:
-    is_sphinx = __sphinx_build__
-except NameError:
-    is_sphinx = False
-
-try:
-    multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
-except RuntimeError:
-    pass
+if multiprocessing.get_start_method(allow_none=True) is None:
+    multiprocessing.set_start_method("fork")
+mp_context = multiprocessing.get_start_method()
 
 # sphinx_gallery_end_ignore
 
@@ -175,7 +168,7 @@ def env2_maker():
     )
 
 
-env = ParallelEnv(2, [env1_maker, env2_maker])
+env = ParallelEnv(2, [env1_maker, env2_maker], mp_start_method=mp_context)
 assert not env._single_task
 
 tdreset = env.reset()

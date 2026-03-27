@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import os
 import tempfile
 from argparse import Namespace
@@ -24,10 +25,6 @@ try:
 except ImportError:
     _has_tb = False
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import PONG_VERSIONED
-else:
-    from _utils_internal import PONG_VERSIONED
 from tensordict import TensorDict
 from torchrl.data import (
     LazyMemmapStorage,
@@ -37,6 +34,7 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.envs.libs.gym import _has_gym
+from torchrl.testing import PONG_VERSIONED
 from torchrl.trainers import LogValidationReward, Trainer
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.trainers import (
@@ -44,8 +42,10 @@ from torchrl.trainers.trainers import (
     _has_ts,
     BatchSubSampler,
     CountFramesLog,
+    DefaultOptimizationStepper,
     LogScalar,
     mask_batch,
+    OptimizationStepper,
     OptimizerHook,
     ReplayBufferTrainer,
     REWARD_KEY,
@@ -53,6 +53,8 @@ from torchrl.trainers.trainers import (
     SelectKeys,
     UpdateWeights,
 )
+
+_has_ale = importlib.util.find_spec("ale_py") is not None
 
 
 def _fun_checker(fun, checker):
@@ -230,7 +232,11 @@ class TestRB:
             [batch],
         )
         td_out = trainer._process_batch_hook(td)
-        assert td_out is td
+        # The ReplayBufferTrainer.extend method calls .cpu() which creates a new TensorDict
+        # so we can't expect the same object identity, but the content should be the same
+        assert td_out.shape == td.shape
+        assert td_out.device == torch.device("cpu")
+        assert td.device is None or td.device == torch.device("cpu")
 
         td_out = trainer._process_optim_batch_hook(td)
         assert td_out is not td
@@ -640,7 +646,7 @@ class TestLogReward:
         trainer = mocking_trainer()
         trainer.collected_frames = 0
 
-        log_reward = LogScalar(logname, log_pbar=pbar)
+        log_reward = LogScalar(REWARD_KEY, logname, log_pbar=pbar)
         trainer.register_op("pre_steps_log", log_reward)
         td = TensorDict({REWARD_KEY: torch.ones(3)}, [3])
         trainer._pre_steps_log_hook(td)
@@ -656,7 +662,7 @@ class TestLogReward:
         trainer = mocking_trainer()
         trainer.collected_frames = 0
 
-        log_reward = LogScalar(logname, log_pbar=pbar)
+        log_reward = LogScalar(REWARD_KEY, logname, log_pbar=pbar)
         log_reward.register(trainer)
         td = TensorDict({REWARD_KEY: torch.ones(3)}, [3])
         trainer._pre_steps_log_hook(td)
@@ -839,6 +845,10 @@ class TestSubSampler:
 
 @pytest.mark.skipif(not _has_gym, reason="No gym library")
 @pytest.mark.skipif(not _has_tb, reason="No tensorboard library")
+@pytest.mark.skipif(
+    not _has_ale,
+    reason="ALE not available (missing ale_py); skipping Atari gym tests.",
+)
 class TestRecorder:
     def _get_args(self):
         args = Namespace()
@@ -1067,6 +1077,204 @@ class TestCountFrames:
             assert load_state_dict_has_been_called[0]
         CountFramesLog.state_dict = CountFramesLog_state_dict
         CountFramesLog.load_state_dict = CountFramesLog_load_state_dict
+
+
+class _CountingLossModule(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.forward_calls = 0
+
+    def forward(self, td: TensorDict):
+        self.forward_calls += 1
+        return TensorDict({"loss": torch.zeros(())}, [])
+
+
+class _CountingStepper(OptimizationStepper):
+    def __init__(self):
+        self.calls = 0
+
+    def step(self, trainer: Trainer, sub_batch: TensorDict) -> TensorDict:
+        self.calls += 1
+        return TensorDict({"loss": torch.zeros(())}, [])
+
+    def state_dict(self):
+        return {"calls": self.calls}
+
+    def load_state_dict(self, state_dict):
+        self.calls = state_dict["calls"]
+
+
+class TestOptimizationStepper:
+    def _make_trainer(self, loss_module, optimization_stepper=None, optimizer=None):
+        trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=None,
+            frame_skip=None,
+            optim_steps_per_batch=1,
+            loss_module=loss_module,
+            optimizer=optimizer,
+            optimization_stepper=optimization_stepper,
+        )
+        trainer._pbar_str = OrderedDict()
+        return trainer
+
+    def test_custom_stepper_used(self):
+        loss_module = _CountingLossModule()
+        stepper = _CountingStepper()
+        trainer = self._make_trainer(
+            loss_module=loss_module,
+            optimization_stepper=stepper,
+        )
+        td = TensorDict({"x": torch.randn(3)}, [])
+        trainer.optim_steps(td)
+        assert stepper.calls == 1
+        assert loss_module.forward_calls == 0
+
+    def test_stepper_checkpoint_roundtrip(self, tmp_path):
+        """Stepper state survives save/load via Trainer checkpointing."""
+        import os
+
+        os.environ["CKPT_BACKEND"] = "torch"
+
+        loss_module = _CountingLossModule()
+        stepper = _CountingStepper()
+        trainer1 = self._make_trainer(
+            loss_module=loss_module,
+            optimization_stepper=stepper,
+            optimizer=None,
+        )
+        stepper.calls = 5
+
+        file = str(tmp_path / "trainer.pt")
+        trainer1.save_trainer_file = file
+        trainer1.save_trainer(force_save=True)
+
+        stepper2 = _CountingStepper()
+        trainer2 = self._make_trainer(
+            loss_module=_CountingLossModule(),
+            optimization_stepper=stepper2,
+            optimizer=None,
+        )
+        trainer2.load_from_file(file)
+
+        assert stepper2.calls == 5
+        sd = torch.load(file)
+        assert "optimization_stepper" in sd
+
+
+class TestDefaultOptimizationStepper:
+    def test_loss_components_partial(self):
+        torch.manual_seed(0)
+        x = torch.randn(5, 10)
+        model1 = nn.Linear(10, 20)
+        model2 = nn.Linear(10, 20)
+        all_params = list(model1.parameters()) + list(model2.parameters())
+        optimizer = torch.optim.SGD(all_params, lr=1e-3)
+
+        class TwoLossModule(nn.Module):
+            def forward(self, td):
+                return TensorDict(
+                    {
+                        "loss_actor": model1(x).sum(),
+                        "loss_critic": model2(x).sum(),
+                    },
+                    [],
+                )
+
+        loss_module = TwoLossModule()
+        stepper = DefaultOptimizationStepper(loss_components=["loss_actor"])
+
+        trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=None,
+            frame_skip=None,
+            optim_steps_per_batch=None,
+            loss_module=loss_module,
+            optimizer=optimizer,
+            optimization_stepper=stepper,
+        )
+        trainer._pbar_str = OrderedDict()
+
+        model1_before = [p.clone() for p in model1.parameters()]
+        model2_before = [p.clone() for p in model2.parameters()]
+
+        td = TensorDict({"x": torch.randn(3)}, [])
+        losses = stepper.step(trainer, td)
+
+        assert "grad_norm" in losses.keys()
+        assert all(
+            not torch.equal(b, a) for b, a in zip(model1_before, model1.parameters())
+        )
+        assert all(
+            torch.equal(b, a) for b, a in zip(model2_before, model2.parameters())
+        )
+
+
+class TestProcessLossHook:
+    @pytest.mark.parametrize("factor", [0.5, 2.0, 10.0])
+    def test_scale_loss(self, factor):
+        trainer = mocking_trainer()
+        td_loss = TensorDict({"loss_a": torch.tensor(1.0)}, [])
+        td_sub_batch = TensorDict({"sub_batch": torch.tensor(1.0)}, [])
+
+        class ScaleLoss:
+            def __init__(self, scale):
+                self.scale = scale
+
+            def __call__(self, sub_batch, losses):
+                return losses.apply(lambda t: t * self.scale)
+
+        scale_hook = ScaleLoss(factor)
+        trainer.register_op("process_loss", scale_hook)
+        td_out = trainer._process_loss_hook(td_sub_batch.clone(), td_loss.clone())
+        assert torch.allclose(td_out["loss_a"], torch.tensor(factor))
+
+    def test_chained_hooks(self):
+        """Test that multiple process_loss hooks are applied in order."""
+        trainer = mocking_trainer()
+        td_loss = TensorDict({"loss_a": torch.tensor(2.0)}, [])
+        td_sub_batch = TensorDict({}, [])
+
+        call_order = []
+
+        class AddOne:
+            def __call__(self, sub_batch, losses):
+                call_order.append("add")
+                losses = losses.clone()
+                losses["loss_a"] = losses["loss_a"] + 1
+                return losses
+
+        class MultiplyTwo:
+            def __call__(self, sub_batch, losses):
+                call_order.append("mul")
+                losses = losses.clone()
+                losses["loss_a"] = losses["loss_a"] * 2
+                return losses
+
+        trainer.register_op("process_loss", AddOne())
+        trainer.register_op("process_loss", MultiplyTwo())
+
+        td_out = trainer._process_loss_hook(td_sub_batch, td_loss.clone())
+        # (2 + 1) * 2 = 6
+        assert torch.allclose(td_out["loss_a"], torch.tensor(6.0))
+        assert call_order == ["add", "mul"]
+
+    def test_hook_receives_sub_batch(self):
+        """Test that the hook can use information from the sub_batch."""
+        trainer = mocking_trainer()
+        td_loss = TensorDict({"loss_a": torch.tensor(1.0)}, [])
+        td_sub_batch = TensorDict({"importance_weight": torch.tensor(0.5)}, [])
+
+        class WeightedLoss:
+            def __call__(self, sub_batch, losses):
+                weight = sub_batch.get("importance_weight")
+                losses = losses.clone()
+                losses["loss_a"] = losses["loss_a"] * weight
+                return losses
+
+        trainer.register_op("process_loss", WeightedLoss())
+        td_out = trainer._process_loss_hook(td_sub_batch, td_loss.clone())
+        assert torch.allclose(td_out["loss_a"], torch.tensor(0.5))
 
 
 if __name__ == "__main__":

@@ -5,14 +5,23 @@
 from __future__ import annotations
 
 import abc
+import atexit
+import importlib
 import logging
+import multiprocessing as mp
 import os
+import shutil
+import signal
+import sys
+import tempfile
 import textwrap
 import warnings
+import weakref
 from collections import OrderedDict
+from collections.abc import Callable, Mapping, Sequence
 from copy import copy
 from multiprocessing.context import get_spawning_popen
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 import tensordict
@@ -27,11 +36,11 @@ from tensordict import (
 from tensordict.base import _NESTED_TENSORS_AS_LISTS
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import _zip_strict
-from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
 
 from torchrl._utils import _make_ordinal_device, implement_for, logger as torchrl_logger
 from torchrl.data.replay_buffers.checkpointers import (
+    CompressedListStorageCheckpointer,
     ListStorageCheckpointer,
     StorageCheckpointerBase,
     StorageEnsembleCheckpointer,
@@ -43,6 +52,120 @@ from torchrl.data.replay_buffers.utils import (
     INT_CLASSES,
     tree_iter,
 )
+
+try:
+    from torch.compiler import disable as compile_disable, is_compiling
+except ImportError:
+    from torch._dynamo import disable as compile_disable, is_compiling
+
+
+_has_store = (
+    importlib.util.find_spec("redis", None) is not None
+    and importlib.util.find_spec("tensordict.store", None) is not None
+)
+
+
+# =============================================================================
+# Memmap Storage Cleanup Infrastructure
+# =============================================================================
+# This module-level infrastructure ensures that memmap files created by
+# LazyMemmapStorage are cleaned up even when scripts are interrupted with
+# Ctrl+C (SIGINT) or killed with SIGTERM.
+
+# Registry of storages to clean up (weak references to avoid preventing GC)
+_MEMMAP_STORAGE_REGISTRY: weakref.WeakSet = weakref.WeakSet()
+
+# Track if cleanup has already run (to avoid double cleanup)
+_CLEANUP_DONE = False
+
+# Store original signal handlers to restore after cleanup
+_ORIGINAL_SIGINT_HANDLER = None
+_ORIGINAL_SIGTERM_HANDLER = None
+
+
+def _cleanup_all_memmap_storages():
+    """Clean up all registered memmap storages.
+
+    This function is called on exit (via atexit) and on signal interrupts.
+    It removes all temporary memmap directories that were created with
+    auto_cleanup=True.
+    """
+    global _CLEANUP_DONE
+    if _CLEANUP_DONE:
+        return
+    _CLEANUP_DONE = True
+
+    for storage in list(_MEMMAP_STORAGE_REGISTRY):
+        try:
+            storage.cleanup()
+        except Exception:
+            # Ignore errors during cleanup - the storage might already be gone
+            pass
+
+
+def _signal_cleanup_handler(signum, frame):
+    """Signal handler that cleans up memmap storages before exiting.
+
+    This handler is robust to cleanup failures - it will always re-raise the
+    signal to ensure proper process termination.
+    """
+    # Always ensure we re-raise the signal, even if cleanup fails
+    try:
+        _cleanup_all_memmap_storages()
+    except Exception:
+        # Ignore any cleanup errors - we must re-raise the signal
+        pass
+
+    # Re-raise the signal with the original handler (or default behavior)
+    if signum == signal.SIGINT:
+        original = _ORIGINAL_SIGINT_HANDLER
+    elif signum == signal.SIGTERM:
+        original = _ORIGINAL_SIGTERM_HANDLER
+    else:
+        original = signal.SIG_DFL
+
+    # Restore original handler and re-raise
+    signal.signal(signum, original if original else signal.SIG_DFL)
+    os.kill(os.getpid(), signum)
+
+
+def _register_cleanup_handlers():
+    """Register atexit and signal handlers for memmap cleanup.
+
+    This is called once when the first storage with auto_cleanup=True is created.
+    """
+    global _ORIGINAL_SIGINT_HANDLER, _ORIGINAL_SIGTERM_HANDLER
+
+    # Register atexit handler (for normal exits)
+    atexit.register(_cleanup_all_memmap_storages)
+
+    # Register signal handlers (for Ctrl+C and kill)
+    # Only register if we're in the main thread (signals can only be handled in main thread)
+    try:
+        import threading
+
+        if threading.current_thread() is threading.main_thread():
+            _ORIGINAL_SIGINT_HANDLER = signal.signal(
+                signal.SIGINT, _signal_cleanup_handler
+            )
+            _ORIGINAL_SIGTERM_HANDLER = signal.signal(
+                signal.SIGTERM, _signal_cleanup_handler
+            )
+    except (ValueError, RuntimeError):
+        # Signal handling not available (e.g., not main thread)
+        pass
+
+
+# Flag to track if handlers have been registered
+_CLEANUP_HANDLERS_REGISTERED = False
+
+
+def _ensure_cleanup_handlers():
+    """Ensure cleanup handlers are registered (called once per process)."""
+    global _CLEANUP_HANDLERS_REGISTERED
+    if not _CLEANUP_HANDLERS_REGISTERED:
+        _register_cleanup_handlers()
+        _CLEANUP_HANDLERS_REGISTERED = True
 
 
 class Storage:
@@ -76,6 +199,20 @@ class Storage:
     def checkpointer(self):
         return self._checkpointer
 
+    def register_save_hook(self, hook):
+        """Register a save hook for this storage.
+
+        The hook is forwarded to the checkpointer.
+        """
+        self._checkpointer.register_save_hook(hook)
+
+    def register_load_hook(self, hook):
+        """Register a load hook for this storage.
+
+        The hook is forwarded to the checkpointer.
+        """
+        self._checkpointer.register_load_hook(hook)
+
     @checkpointer.setter
     def checkpointer(self, value: StorageCheckpointerBase | None) -> None:
         if value is None:
@@ -95,6 +232,7 @@ class Storage:
             self._attached_entities_list = _attached_entities_list = []
         return _attached_entities_list
 
+    # TODO: Check this
     @torch._dynamo.assume_constant_result
     def _attached_entities_iter(self):
         return self._attached_entities
@@ -154,6 +292,8 @@ class Storage:
     def _empty(self):
         ...
 
+    # TODO: Without this disable, compiler recompiles due to changing len(self) guards.
+    @compile_disable()
     def _rand_given_ndim(self, batch_size):
         # a method to return random indices given the storage ndim
         if self.ndim == 1:
@@ -278,7 +418,7 @@ class ListStorage(Storage):
                 return
             if isinstance(cursor, slice):
                 data = self._to_device(data)
-                self._storage[cursor] = data
+                self._set_slice(cursor, data)
                 return
             if isinstance(
                 data,
@@ -305,7 +445,7 @@ class ListStorage(Storage):
             if cursor > len(self._storage):
                 raise RuntimeError(
                     "Cannot append data located more than one item away from "
-                    f"the storage size: the storage size is {len(self)} "
+                    f"the storage size: the storage size is {len(self._storage)} "
                     f"and the index of the item to be set is {cursor}."
                 )
             if cursor >= self.max_size:
@@ -315,14 +455,24 @@ class ListStorage(Storage):
                     f"and the index of the item to be set is {cursor}."
                 )
             data = self._to_device(data)
-            if cursor == len(self._storage):
-                self._storage.append(data)
-            else:
-                self._storage[cursor] = data
+            self._set_item(cursor, data)
+
+    def _set_item(self, cursor: int, data: Any) -> None:
+        """Set a single item in the storage."""
+        if cursor == len(self._storage):
+            self._storage.append(data)
+        else:
+            self._storage[cursor] = data
+
+    def _set_slice(self, cursor: slice, data: Any) -> None:
+        """Set a slice in the storage."""
+        self._storage[cursor] = data
 
     def get(self, index: int | Sequence[int] | slice) -> Any:
-        if isinstance(index, (INT_CLASSES, slice)):
-            return self._storage[index]
+        if isinstance(index, INT_CLASSES):
+            return self._get_item(index)
+        elif isinstance(index, slice):
+            return self._get_slice(index)
         elif isinstance(index, tuple):
             if len(index) > 1:
                 raise RuntimeError(
@@ -332,9 +482,22 @@ class ListStorage(Storage):
         else:
             if isinstance(index, torch.Tensor) and index.device.type != "cpu":
                 index = index.cpu().tolist()
-            return [self._storage[i] for i in index]
+            return self._get_list(index)
+
+    def _get_item(self, index: int) -> Any:
+        """Get a single item from the storage."""
+        return self._storage[index]
+
+    def _get_slice(self, index: slice) -> Any:
+        """Get a slice from the storage."""
+        return self._storage[index]
+
+    def _get_list(self, index: list) -> list:
+        """Get a list of items from the storage."""
+        return [self._storage[i] for i in index]
 
     def __len__(self):
+        """Get the length of the storage."""
         return len(self._storage)
 
     def state_dict(self) -> dict[str, Any]:
@@ -379,8 +542,7 @@ class ListStorage(Storage):
         if isinstance(item, int):
             if item < 0:
                 item += len(self._storage)
-
-            return 0 <= item < len(self._storage)
+            return self._contains_int(item)
         if isinstance(item, torch.Tensor):
             return torch.tensor(
                 [self.contains(elt) for elt in item.tolist()],
@@ -388,6 +550,10 @@ class ListStorage(Storage):
                 device=item.device,
             ).reshape_as(item)
         raise NotImplementedError(f"type {type(item)} is not supported yet.")
+
+    def _contains_int(self, item: int) -> bool:
+        """Check if an integer index is contained in the storage."""
+        return 0 <= item < len(self._storage)
 
 
 class LazyStackStorage(ListStorage):
@@ -541,7 +707,7 @@ class TensorStorage(Storage):
         storage,
         max_size=None,
         *,
-        device: torch.device = "cpu",
+        device: torch.device | str = "cpu",
         ndim: int = 1,
         compilable: bool = False,
     ):
@@ -574,10 +740,37 @@ class TensorStorage(Storage):
         )
         self._storage = storage
         self._last_cursor = None
+        self.__dict__["_storage_keys"] = None
+
+    @property
+    def _storage_keys(self) -> list | None:
+        """Cached list of storage keys for filtering incoming data.
+
+        Returns None if storage is not locked, not a tensor collection, or not initialized.
+        Only locked storage (shared memory) needs key filtering to prevent adding
+        keys that won't propagate in multiprocessing pipelines.
+        """
+        keys = self.__dict__.get("_storage_keys")
+        if keys is None and self.initialized and is_tensor_collection(self._storage):
+            # Only cache keys if storage is locked - unlocked storage can accept new keys
+            if self._storage.is_locked:
+                keys = list(
+                    self._storage.keys(
+                        include_nested=True,
+                        leaves_only=True,
+                        is_leaf=_NESTED_TENSORS_AS_LISTS,
+                    )
+                )
+                self.__dict__["_storage_keys"] = keys
+        return keys
+
+    @_storage_keys.setter
+    def _storage_keys(self, value):
+        self.__dict__["_storage_keys"] = value
 
     @property
     def _len(self):
-        _len_value = self.__dict__.get("_len_value", None)
+        _len_value = getattr(self, "_len_value", None)
         if not self._compilable:
             if _len_value is None:
                 _len_value = self._len_value = mp.Value("i", 0)
@@ -589,8 +782,8 @@ class TensorStorage(Storage):
 
     @_len.setter
     def _len(self, value):
-        if not self._compilable:
-            _len_value = self.__dict__.get("_len_value", None)
+        if not is_compiling() and not self._compilable:
+            _len_value = getattr(self, "_len_value", None)
             if _len_value is None:
                 _len_value = self._len_value = mp.Value("i", 0)
             _len_value.value = value
@@ -600,7 +793,7 @@ class TensorStorage(Storage):
     @property
     def _total_shape(self):
         # Total shape, irrespective of how full the storage is
-        _total_shape = self.__dict__.get("_total_shape_value", None)
+        _total_shape = getattr(self, "_total_shape_value", None)
         if _total_shape is None and self.initialized:
             if is_tensor_collection(self._storage):
                 _total_shape = self._storage.shape[: self.ndim]
@@ -664,12 +857,12 @@ class TensorStorage(Storage):
 
     # TODO: Without this disable, compiler recompiles for back-to-back calls.
     # Figuring out a way to avoid this disable would give better performance.
-    @torch._dynamo.disable()
+    @compile_disable()
     def _rand_given_ndim(self, batch_size):
         return self._rand_given_ndim_impl(batch_size)
 
     # At the moment, this is separated into its own function so that we can test
-    # it without the `torch._dynamo.disable` and detect if future updates to the
+    # it without the `disable` and detect if future updates to the
     # compiler fix the recompile issue.
     def _rand_given_ndim_impl(self, batch_size):
         if self.ndim == 1:
@@ -709,13 +902,15 @@ class TensorStorage(Storage):
             del state["_len_value"]
             state["len__context"] = length
         elif not self.initialized:
-            # check that the storage is initialized
-            raise RuntimeError(
-                f"Cannot share a storage of type {type(self)} between processes if "
-                f"it has not been initialized yet. Populate the buffer with "
-                f"some data in the main process before passing it to the other "
-                f"subprocesses (or create the buffer explicitly with a TensorStorage)."
-            )
+            if not self.shared_init:
+                # check that the storage is initialized
+                raise RuntimeError(
+                    f"Cowardly refusing to share a storage of type {type(self)} between processes if "
+                    f"it has not been initialized yet. You can either:\n"
+                    f"- Populate the buffer with some data in the main process before passing it to the other processes (or create the buffer explicitly with a TensorStorage).\n"
+                    f"- set shared_init=True when creating the storage such that it can be initialized by the remote processes."
+                )
+            return state
         else:
             # check that the content is shared, otherwise tell the user we can't help
             storage = self._storage
@@ -745,10 +940,10 @@ class TensorStorage(Storage):
         len = state.pop("len__context", None)
         if len is not None:
             if not state["_compilable"]:
-                state["_len_value"] = len
-            else:
                 _len_value = mp.Value("i", len)
                 state["_len_value"] = _len_value
+            else:
+                state["_len_value"] = len
         self.__dict__.update(state)
 
     def state_dict(self) -> dict[str, Any]:
@@ -859,8 +1054,37 @@ class TensorStorage(Storage):
                     self._init(tree_map(lambda x: x[0], data))
             else:
                 self._init(data)
+
         if is_tensor_collection(data):
-            self._storage[cursor] = data
+            # Filter data to only include keys present in storage.
+            # _storage_keys is only set when storage is locked (shared memory),
+            # so this handles cases where policy outputs extra keys that can't
+            # be added to locked shared memory.
+            storage_keys = self._storage_keys
+            if storage_keys is not None:
+                data = data.select(*storage_keys, strict=False)
+            try:
+                # Optimize lazy stack writes: write each tensordict directly to
+                # storage to avoid creating an intermediate contiguous copy.
+                if isinstance(data, LazyStackedTensorDict):
+                    stack_dim = data.stack_dim
+                    if isinstance(cursor, slice):
+                        # For slices, storage[slice] typically returns a view.
+                        # Use _stack_onto_ to write directly without intermediate copy.
+                        self._storage[cursor]._stack_onto_(
+                            list(data.unbind(stack_dim)), dim=stack_dim
+                        )
+                    else:
+                        # For tensor/sequence indices, use update_at_ which handles
+                        # lazy stacks efficiently in a single call.
+                        self._storage.update_at_(data, cursor)
+                else:
+                    self._storage[cursor] = data
+            except RuntimeError as e:
+                if "locked" in str(e).lower():
+                    # Provide informative error about key differences
+                    self._raise_informative_lock_error(data, e)
+                raise
         else:
             self._set_tree_map(cursor, data, self._storage)
 
@@ -872,7 +1096,6 @@ class TensorStorage(Storage):
         *,
         set_cursor: bool = True,
     ):
-
         if set_cursor:
             self._last_cursor = cursor
 
@@ -903,6 +1126,7 @@ class TensorStorage(Storage):
                 self._init(data[0])
             else:
                 self._init(data)
+
         if not isinstance(cursor, (*INT_CLASSES, slice)):
             if not isinstance(cursor, torch.Tensor):
                 cursor = torch.tensor(cursor, dtype=torch.long)
@@ -917,12 +1141,103 @@ class TensorStorage(Storage):
                     "Make sure that the storage capacity is big enough to support the "
                     "batch size provided."
                 )
-        self._storage[cursor] = data
+        # Filter data to only include keys present in storage.
+        # _storage_keys is only set when storage is locked (shared memory),
+        # so this handles cases where policy outputs extra keys that can't
+        # be added to locked shared memory.
+        if is_tensor_collection(data):
+            storage_keys = self._storage_keys
+            if storage_keys is not None:
+                data = data.select(*storage_keys, strict=False)
+        try:
+            # Optimize lazy stack writes: write each tensordict directly to
+            # storage to avoid creating an intermediate contiguous copy.
+            if is_tensor_collection(data) and isinstance(data, LazyStackedTensorDict):
+                stack_dim = data.stack_dim
+                if isinstance(cursor, slice):
+                    # For slices, storage[slice] typically returns a view.
+                    # Use _stack_onto_ to write directly without intermediate copy.
+                    self._storage[cursor]._stack_onto_(
+                        list(data.unbind(stack_dim)), dim=stack_dim
+                    )
+                else:
+                    # For tensor/sequence indices, use update_at_ which handles
+                    # lazy stacks efficiently in a single call.
+                    self._storage.update_at_(data, cursor)
+            else:
+                self._storage[cursor] = data
+        except RuntimeError as e:
+            if "locked" in str(e).lower():
+                # Provide informative error about key differences
+                self._raise_informative_lock_error(data, e)
+            raise
+
+    def _wait_for_init(self):
+        pass
+
+    def _raise_informative_lock_error(
+        self, data: TensorDictBase | torch.Tensor, original_error: RuntimeError
+    ) -> None:
+        """Raise an informative error when storage is locked and data has different keys.
+
+        This method is called when an assignment to the storage fails due to a lock error.
+        It provides detailed information about which keys are new in the data vs what the
+        storage expects.
+        """
+        if not is_tensor_collection(data) or not is_tensor_collection(self._storage):
+            # Can only provide detailed info for tensor collections
+            raise original_error
+
+        # Get all keys from both storage and data
+        storage_keys = set(
+            self._storage.keys(
+                include_nested=True, leaves_only=True, is_leaf=_NESTED_TENSORS_AS_LISTS
+            )
+        )
+        data_keys = set(
+            data.keys(
+                include_nested=True, leaves_only=True, is_leaf=_NESTED_TENSORS_AS_LISTS
+            )
+        )
+
+        new_keys = data_keys - storage_keys
+        missing_keys = storage_keys - data_keys
+
+        error_parts = [
+            "Cannot write to locked storage due to key mismatch.",
+            f"\nOriginal error: {original_error}",
+        ]
+
+        if new_keys:
+            error_parts.append(
+                f"\n\nNew keys in data (not in storage): {sorted(str(k) for k in new_keys)}"
+            )
+        if missing_keys:
+            error_parts.append(
+                f"\n\nMissing keys in data (present in storage): {sorted(str(k) for k in missing_keys)}"
+            )
+
+        if new_keys or missing_keys:
+            error_parts.append(
+                "\n\nThis typically happens when:"
+                "\n  1. The policy is called on some steps but not others (e.g., during init_random_frames)"
+                "\n  2. A transform conditionally adds keys based on data content"
+                "\n  3. Different collectors/workers produce data with different keys"
+                "\n\nTo fix this, ensure all data written to the buffer has consistent keys."
+            )
+        else:
+            error_parts.append(
+                "\n\nNo key differences detected. The lock error may be due to shape or dtype mismatches."
+            )
+
+        raise RuntimeError("".join(error_parts)) from original_error
 
     def get(self, index: int | Sequence[int] | slice) -> Any:
         _storage = self._storage
         is_tc = is_tensor_collection(_storage)
         if not self.initialized:
+            if getattr(self, "shared_init", False):
+                self._wait_for_init()
             raise RuntimeError("Cannot get elements out of a non-initialized storage.")
         if not self._is_full:
             if is_tc:
@@ -940,6 +1255,8 @@ class TensorStorage(Storage):
         else:
             return tree_map(lambda x: x[index], storage)
 
+    # TODO: Without this disable, compiler recompiles due to changing _len_value guards.
+    @compile_disable()
     def __len__(self):
         return self._len
 
@@ -1020,6 +1337,12 @@ class LazyTensorStorage(TensorStorage):
             Defaults to ``False``.
         consolidated (bool, optional): if ``True``, the storage will be consolidated after
             its first expansion. Defaults to ``False``.
+        shared_init (bool, optional): if ``True``, enables multiprocess coordination
+            during storage initialization. First process initializes with memmap,
+            others wait and load from the shared memmap. Defaults to ``False``.
+        cleanup_memmap (bool, optional): if ``True`` and ``shared_init=True``,
+            the temporary memmap will be deleted after initialization and the
+            storage will operate in RAM. Defaults to ``True``.
 
     Examples:
         >>> data = TensorDict({
@@ -1077,10 +1400,12 @@ class LazyTensorStorage(TensorStorage):
         self,
         max_size: int,
         *,
-        device: torch.device = "cpu",
+        device: torch.device | str = "cpu",
         ndim: int = 1,
         compilable: bool = False,
         consolidated: bool = False,
+        shared_init: bool = False,
+        cleanup_memmap: bool = True,
     ):
         super().__init__(
             storage=None,
@@ -1090,11 +1415,59 @@ class LazyTensorStorage(TensorStorage):
             compilable=compilable,
         )
         self.consolidated = consolidated
+        self.shared_init = shared_init
+        self.cleanup_memmap = cleanup_memmap
+
+        # Initialize multiprocess coordination objects if shared_init is enabled
+        if self.shared_init:
+            if self._compilable:
+                raise RuntimeError(
+                    "Cannot share a compilable storage between processes."
+                )
+            self._init_lock = mp.Lock()
+            self._init_event = mp.Event()
+            self._make_init_directory()
+
+    def _make_init_directory(self):
+        if getattr(self, "scratch_dir", None) is not None:
+            self._init_directory = self.scratch_dir
+            return
+        # Create a shared directory
+        self.scratch_dir = self._init_directory = tempfile.mkdtemp(
+            prefix="torchrl_storage_init_"
+        )
+        return
 
     def _init(
         self,
         data: TensorDictBase | torch.Tensor | PyTree,  # noqa: F821
     ) -> None:
+        if not self.shared_init:
+            return self._init_standard(data)
+
+        # Try to become coordinator
+        is_coordinator = not self._init_event.is_set()
+        is_coordinator = is_coordinator and self._init_lock.acquire(block=False)
+
+        if is_coordinator:
+            try:
+                # We are the coordinator
+                self._init_coordinator(data)
+            finally:
+                # Signal other processes that initialization is complete
+                self._init_event.set()
+                self._init_lock.release()
+        else:
+            # Failed to acquire lock, wait for coordinator
+            self._wait_for_init()
+
+        self.initialized = True
+
+    def _init_standard(
+        self,
+        data: TensorDictBase | torch.Tensor | PyTree,  # noqa: F821
+    ) -> None:
+        """Standard initialization without multiprocess coordination."""
         if not self._compilable:
             # TODO: Investigate why this seems to have a performance impact with
             # the compiler
@@ -1134,6 +1507,43 @@ class LazyTensorStorage(TensorStorage):
 
         self._storage = out
         self.initialized = True
+        if hasattr(self._storage, "shape"):
+            torchrl_logger.info(
+                f"Initialized LazyTensorStorage with {self._storage.shape} shape"
+            )
+
+    def _init_coordinator(
+        self,
+        data: TensorDictBase | torch.Tensor | PyTree,  # noqa: F821
+    ) -> None:
+        """Initialize storage as the coordinating process using temporary memmap."""
+        # Use LazyMemmapStorage which does everything we want
+        temp_memmap_storage = LazyMemmapStorage(
+            max_size=self.max_size,
+            scratch_dir=self._init_directory,
+            ndim=self.ndim,
+            existsok=False,
+            shared_init=False,  # Don't recurse
+        )
+        temp_memmap_storage._init_standard(data)
+        self._storage = temp_memmap_storage._storage
+        return
+
+    def _wait_for_init(self) -> None:
+        # wait till coordinator has initialized
+        self._init_event.wait()
+        storage = TensorDict.load_memmap(self._init_directory)
+        self._storage = storage
+        self.initialized = True
+        return
+
+    # Read blocks
+    def get(self, indices: slice) -> TensorDictBase | torch.Tensor | Any:
+        if not self.initialized and self.shared_init:
+            # Trigger initialization with dummy data
+            self._wait_for_init()
+        idx = super().get(indices)
+        return idx
 
 
 class LazyMemmapStorage(LazyTensorStorage):
@@ -1145,6 +1555,8 @@ class LazyMemmapStorage(LazyTensorStorage):
 
     Keyword Args:
         scratch_dir (str or path): directory where memmap-tensors will be written.
+            If ``shared_init=True`` and no ``scratch_dir`` is provided, a shared
+            temporary directory will be created automatically.
         device (torch.device, optional): device where the sampled tensors will be
             stored and sent. Default is :obj:`torch.device("cpu")`.
             If ``None`` is provided, the device is automatically gathered from the
@@ -1157,11 +1569,21 @@ class LazyMemmapStorage(LazyTensorStorage):
         existsok (bool, optional): whether an error should be raised if any of the
             tensors already exists on disk. Defaults to ``True``. If ``False``, the
             tensor will be opened as is, not overewritten.
+        shared_init (bool, optional): if ``True``, enables multiprocess coordination
+            during storage initialization. First process initializes the memmap,
+            others wait and load from the shared directory. Defaults to ``False``.
+        auto_cleanup (bool, optional): if ``True``, automatically registers this
+            storage for cleanup when the process exits (normally or via Ctrl+C/SIGTERM).
+            This removes the memmap files from disk when no longer needed.
+            Defaults to ``True`` when ``scratch_dir`` is ``None`` (using temp directory),
+            and ``False`` when a custom ``scratch_dir`` is provided (preserving user data).
 
     .. note:: When checkpointing a ``LazyMemmapStorage``, one can provide a path identical to where the storage is
         already stored to avoid executing long copies of data that is already stored on disk.
         This will only work if the default :class:`~torchrl.data.TensorStorageCheckpointer` checkpointer is used.
-        Example:
+
+        Example::
+
             >>> from tensordict import TensorDict
             >>> from torchrl.data import TensorStorage, LazyMemmapStorage, ReplayBuffer
             >>> import tempfile
@@ -1231,19 +1653,28 @@ class LazyMemmapStorage(LazyTensorStorage):
         max_size: int,
         *,
         scratch_dir=None,
-        device: torch.device = "cpu",
+        device: torch.device | str = "cpu",
         ndim: int = 1,
         existsok: bool = False,
         compilable: bool = False,
+        shared_init: bool = False,
+        auto_cleanup: bool | None = None,
     ):
-        super().__init__(max_size, ndim=ndim, compilable=compilable)
         self.initialized = False
         self.scratch_dir = None
+        self._scratch_dir_is_temp = scratch_dir is None
         self.existsok = existsok
         if scratch_dir is not None:
             self.scratch_dir = str(scratch_dir)
             if self.scratch_dir[-1] != "/":
                 self.scratch_dir += "/"
+        super().__init__(
+            max_size,
+            ndim=ndim,
+            compilable=compilable,
+            shared_init=shared_init,
+            cleanup_memmap=False,
+        )
         self.device = (
             _make_ordinal_device(torch.device(device))
             if device != "auto"
@@ -1255,6 +1686,16 @@ class LazyMemmapStorage(LazyTensorStorage):
                 "use `buffer.append_transform(lambda x: x.to(device))` or a similar transform."
             )
         self._len = 0
+
+        # Auto cleanup: default to True for temp dirs, False for user-specified dirs
+        if auto_cleanup is None:
+            auto_cleanup = self._scratch_dir_is_temp
+        self._auto_cleanup = auto_cleanup
+        self._cleaned_up = False
+
+        if self._auto_cleanup:
+            _ensure_cleanup_handlers()
+            _MEMMAP_STORAGE_REGISTRY.add(self)
 
     def state_dict(self) -> dict[str, Any]:
         _storage = self._storage
@@ -1313,7 +1754,31 @@ class LazyMemmapStorage(LazyTensorStorage):
         self.initialized = state_dict["initialized"]
         self._len = state_dict["_len"]
 
-    def _init(self, data: TensorDictBase | torch.Tensor) -> None:
+    def _init(
+        self,
+        data: TensorDictBase | torch.Tensor | PyTree,  # noqa: F821
+    ) -> None:
+        if not self.shared_init:
+            return self._init_standard(data)
+        is_coordinator = not self._init_event.is_set()
+        is_coordinator = is_coordinator and self._init_lock.acquire(block=False)
+
+        if is_coordinator:
+            # coordinator init
+            try:
+                return self._init_coordinator(data)
+            finally:
+                self._init_event.set()
+                self._init_lock.release()
+        else:
+            # Standard initialization
+            self._wait_for_init()
+        self.initialized = True
+
+    def _init_coordinator(self, data: TensorDictBase | torch.Tensor | Any) -> None:
+        return self._init_standard(data)
+
+    def _init_standard(self, data: TensorDictBase | torch.Tensor) -> None:
         torchrl_logger.debug("Creating a MemmapStorage...")
         if self.device == "auto":
             self.device = data.device
@@ -1353,11 +1818,399 @@ class LazyMemmapStorage(LazyTensorStorage):
         else:
             out = _init_pytree(self.scratch_dir, max_size_along_dim0, data)
         self._storage = out
+        if hasattr(self._storage, "shape"):
+            torchrl_logger.info(
+                f"Initialized LazyMemmapStorage with {self._storage.shape} shape"
+            )
         self.initialized = True
 
     def get(self, index: int | Sequence[int] | slice) -> Any:
+        if not self.initialized and self.shared_init:
+            # Trigger initialization with dummy data
+            self._wait_for_init()
         result = super().get(index)
         return result
+
+    def cleanup(self) -> bool:
+        """Clean up memmap files from disk.
+
+        This method removes the memmap directory and all its contents from disk.
+        It is automatically called on process exit if ``auto_cleanup=True``.
+
+        Returns:
+            bool: ``True`` if cleanup was performed, ``False`` if already cleaned up
+                or no cleanup needed.
+
+        Note:
+            After cleanup, the storage is no longer usable. Any attempt to access
+            the storage will result in undefined behavior.
+
+        Example:
+            >>> storage = LazyMemmapStorage(1000, auto_cleanup=True)
+            >>> # ... use storage ...
+            >>> storage.cleanup()  # Manually clean up when done
+        """
+        if getattr(self, "_cleaned_up", False):
+            return False
+
+        self._cleaned_up = True
+
+        # Get the directory to clean up
+        scratch_dir = getattr(self, "scratch_dir", None)
+        if scratch_dir is None:
+            # No scratch dir - check if storage has memmap tensors with temp paths
+            storage = getattr(self, "_storage", None)
+            if storage is not None and is_tensor_collection(storage):
+                # Get all memmap file paths and find their common directory
+                paths = set()
+                try:
+                    for tensor in storage.values(include_nested=True, leaves_only=True):
+                        if hasattr(tensor, "filename") and tensor.filename:
+                            paths.add(os.path.dirname(tensor.filename))
+                except Exception:
+                    # Storage might be in an invalid state during cleanup
+                    pass
+                for path in paths:
+                    if (
+                        path
+                        and os.path.isdir(path)
+                        and path.startswith(tempfile.gettempdir())
+                    ):
+                        try:
+                            shutil.rmtree(path)
+                            torchrl_logger.debug(f"Cleaned up memmap directory: {path}")
+                        except Exception:
+                            # Ignore errors - file might be in use or already deleted
+                            pass
+                return bool(paths)
+            return False
+
+        # Clean up the scratch directory
+        scratch_dir = scratch_dir.rstrip("/")
+        if os.path.isdir(scratch_dir):
+            try:
+                shutil.rmtree(scratch_dir)
+                torchrl_logger.debug(f"Cleaned up memmap directory: {scratch_dir}")
+                return True
+            except Exception as e:
+                torchrl_logger.warning(f"Failed to clean up memmap directory: {e}")
+                return False
+        return False
+
+    def __del__(self):
+        """Ensure cleanup on garbage collection if auto_cleanup is enabled."""
+        if getattr(self, "_auto_cleanup", False) and not getattr(
+            self, "_cleaned_up", True
+        ):
+            self.cleanup()
+
+
+class CompressedListStorage(ListStorage):
+    """A storage that compresses and decompresses data.
+
+    This storage compresses data when storing and decompresses when retrieving.
+    It's particularly useful for storing raw sensory observations like images
+    that can be compressed significantly to save memory.
+
+    Args:
+        max_size (int): size of the storage, i.e. maximum number of elements stored
+            in the buffer.
+        compression_fn (callable, optional): function to compress data. Should take
+            a tensor and return a compressed byte tensor. Defaults to zstd compression.
+        decompression_fn (callable, optional): function to decompress data. Should take
+            a compressed byte tensor and return the original tensor. Defaults to zstd decompression.
+        compression_level (int, optional): compression level (1-22 for zstd) when using the default compression function.
+            Defaults to 3.
+        device (torch.device, optional): device where the sampled tensors will be
+            stored and sent. Default is :obj:`torch.device("cpu")`.
+        compilable (bool, optional): whether the storage is compilable.
+            If ``True``, the writer cannot be shared between multiple processes.
+            Defaults to ``False``.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.data import CompressedListStorage, ReplayBuffer
+        >>> from tensordict import TensorDict
+        >>>
+        >>> # Create a compressed storage for image data
+        >>> storage = CompressedListStorage(max_size=1000, compression_level=3)
+        >>> rb = ReplayBuffer(storage=storage, batch_size=5)
+        >>>
+        >>> # Add some image data
+        >>> images = torch.randn(10, 3, 84, 84)  # Atari-like frames
+        >>> data = TensorDict({"obs": images}, batch_size=[10])
+        >>> rb.extend(data)
+        >>>
+        >>> # Sample and verify data is decompressed correctly
+        >>> sample = rb.sample(3)
+        >>> print(sample["obs"].shape)  # torch.Size([3, 3, 84, 84])
+
+    """
+
+    _default_checkpointer = CompressedListStorageCheckpointer
+
+    def __init__(
+        self,
+        max_size: int,
+        *,
+        compression_fn: Callable | None = None,
+        decompression_fn: Callable | None = None,
+        compression_level: int = 3,
+        device: torch.device = "cpu",
+        compilable: bool = False,
+    ):
+        super().__init__(max_size, compilable=compilable, device=device)
+        self.compression_level = compression_level
+
+        # Set up compression functions
+        if compression_fn is None:
+            self.compression_fn = self._default_compression_fn
+        else:
+            self.compression_fn = compression_fn
+
+        if decompression_fn is None:
+            self.decompression_fn = self._default_decompression_fn
+        else:
+            self.decompression_fn = decompression_fn
+
+        # Store compressed data and metadata
+        self._storage = []
+        self._metadata = []  # Store shape, dtype, device info for each item
+
+    def _default_compression_fn(self, tensor: torch.Tensor) -> torch.Tensor:
+        """Default compression using zstd."""
+        if sys.version_info >= (3, 14):
+            from compression import zstd
+
+            compressor_fn = zstd.compress
+
+        else:
+            import zlib
+
+            compressor_fn = zlib.compress
+
+        # Convert tensor to bytes
+        tensor_bytes = self.to_bytestream(tensor)
+
+        # Compress with zstd
+        compressed_bytes = compressor_fn(tensor_bytes, level=self.compression_level)
+
+        # Convert to tensor
+        return torch.frombuffer(bytearray(compressed_bytes), dtype=torch.uint8)
+
+    def _default_decompression_fn(
+        self, compressed_tensor: torch.Tensor, metadata: dict
+    ) -> torch.Tensor:
+        """Default decompression using zstd."""
+        if sys.version_info >= (3, 14):
+            from compression import zstd
+
+            decompressor_fn = zstd.decompress
+
+        else:
+            import zlib
+
+            decompressor_fn = zlib.decompress
+
+        # Convert tensor to bytes
+        compressed_bytes = self.to_bytestream(compressed_tensor.cpu())
+
+        # Decompress with zstd
+        decompressed_bytes = decompressor_fn(compressed_bytes)
+
+        # Convert back to tensor
+        tensor = torch.frombuffer(
+            bytearray(decompressed_bytes), dtype=metadata["dtype"]
+        )
+        tensor = tensor.reshape(metadata["shape"])
+        tensor = tensor.to(metadata["device"])
+
+        return tensor
+
+    def _compress_item(self, item: Any) -> tuple[torch.Tensor, dict]:
+        """Compress a single item and return compressed data with metadata."""
+        if isinstance(item, torch.Tensor):
+            metadata = {
+                "type": "tensor",
+                "shape": item.shape,
+                "dtype": item.dtype,
+                "device": item.device,
+            }
+            compressed = self.compression_fn(item)
+        elif is_tensor_collection(item):
+            # For TensorDict, compress each tensor field
+            compressed_fields = {}
+            metadata = {"type": "tensordict", "fields": {}}
+
+            for key, value in item.items():
+                if isinstance(value, torch.Tensor):
+                    compressed_fields[key] = self.compression_fn(value)
+                    metadata["fields"][key] = {
+                        "type": "tensor",
+                        "shape": value.shape,
+                        "dtype": value.dtype,
+                        "device": value.device,
+                    }
+                else:
+                    # For non-tensor data, store as-is
+                    compressed_fields[key] = value
+                    metadata["fields"][key] = {"type": "non_tensor", "value": value}
+
+            compressed = compressed_fields
+        else:
+            # For other types, store as-is
+            compressed = item
+            metadata = {"type": "other", "value": item}
+
+        return compressed, metadata
+
+    def _decompress_item(self, compressed_data: Any, metadata: dict) -> Any:
+        """Decompress a single item using its metadata."""
+        if metadata["type"] == "tensor":
+            return self.decompression_fn(compressed_data, metadata)
+        elif metadata["type"] == "tensordict":
+            # Reconstruct TensorDict
+            result = TensorDict({}, batch_size=metadata.get("batch_size", []))
+
+            for key, field_metadata in metadata["fields"].items():
+                if field_metadata["type"] == "non_tensor":
+                    result[key] = field_metadata["value"]
+                else:
+                    # Decompress tensor field
+                    result[key] = self.decompression_fn(
+                        compressed_data[key], field_metadata
+                    )
+
+            return result
+        else:
+            # Return as-is for other types
+            return metadata["value"]
+
+    def _set_item(self, cursor: int, data: Any) -> None:
+        """Set a single item in the compressed storage."""
+        # Ensure we have enough space
+        while len(self._storage) <= cursor:
+            self._storage.append(None)
+            self._metadata.append(None)
+
+        # Compress and store
+        compressed_data, metadata = self._compress_item(data)
+        self._storage[cursor] = compressed_data
+        self._metadata[cursor] = metadata
+
+    def _set_slice(self, cursor: slice, data: Any) -> None:
+        """Set a slice in the compressed storage."""
+        # Handle slice assignment
+        if not hasattr(data, "__iter__"):
+            data = [data]
+        start, stop, step = cursor.indices(len(self._storage))
+        indices = list(range(start, stop, step))
+
+        for i, value in zip(indices, data):
+            self._set_item(i, value)
+
+    def _get_item(self, index: int) -> Any:
+        """Get a single item from the compressed storage."""
+        if index >= len(self._storage) or self._storage[index] is None:
+            raise IndexError(f"Index {index} out of bounds or not set")
+
+        compressed_data = self._storage[index]
+        metadata = self._metadata[index]
+        return self._decompress_item(compressed_data, metadata)
+
+    def _get_slice(self, index: slice) -> list:
+        """Get a slice from the compressed storage."""
+        start, stop, step = index.indices(len(self._storage))
+        results = []
+        for i in range(start, stop, step):
+            if i < len(self._storage) and self._storage[i] is not None:
+                results.append(self._get_item(i))
+        return results
+
+    def _get_list(self, index: list) -> list:
+        """Get a list of items from the compressed storage."""
+        if isinstance(index, torch.Tensor) and index.device.type != "cpu":
+            index = index.cpu().tolist()
+
+        results = []
+        for i in index:
+            if i >= len(self._storage) or self._storage[i] is None:
+                raise IndexError(f"Index {i} out of bounds or not set")
+            results.append(self._get_item(i))
+        return results
+
+    def __len__(self) -> int:
+        """Get the length of the compressed storage."""
+        return len([item for item in self._storage if item is not None])
+
+    def _contains_int(self, item: int) -> bool:
+        """Check if an integer index is contained in the compressed storage."""
+        return 0 <= item < len(self._storage) and self._storage[item] is not None
+
+    def _empty(self):
+        """Empty the storage."""
+        self._storage = []
+        self._metadata = []
+
+    def state_dict(self) -> dict[str, Any]:
+        """Save the storage state."""
+        return {
+            "_storage": self._storage,
+            "_metadata": self._metadata,
+        }
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        """Load the storage state."""
+        self._storage = state_dict["_storage"]
+        self._metadata = state_dict["_metadata"]
+
+    def to_bytestream(self, data_to_bytestream: torch.Tensor | np.array | Any) -> bytes:
+        """Convert data to a byte stream."""
+        if isinstance(data_to_bytestream, torch.Tensor):
+            byte_stream = data_to_bytestream.cpu().numpy().tobytes()
+
+        elif isinstance(data_to_bytestream, np.array):
+            byte_stream = bytes(data_to_bytestream.tobytes())
+
+        else:
+            import io
+            import pickle
+
+            buffer = io.BytesIO()
+            pickle.dump(data_to_bytestream, buffer)
+            buffer.seek(0)
+            byte_stream = bytes(buffer.read())
+
+        return byte_stream
+
+    def bytes(self):
+        """Return the number of bytes in the storage."""
+
+        def compressed_size_from_list(data: Any) -> int:
+            if data is None:
+                return 0
+            elif isinstance(data, (bytes,)):
+                return len(data)
+            elif isinstance(data, (np.ndarray,)):
+                return data.nbytes
+            elif isinstance(data, (torch.Tensor)):
+                return compressed_size_from_list(data.cpu().numpy())
+            elif isinstance(data, (tuple, list, Sequence)):
+                return sum(compressed_size_from_list(item) for item in data)
+            elif isinstance(data, Mapping) or is_tensor_collection(data):
+                return sum(compressed_size_from_list(value) for value in data.values())
+            else:
+                return 0
+
+        compressed_size_estimate = compressed_size_from_list(self._storage)
+        if compressed_size_estimate == 0:
+            if len(self._storage) > 0:
+                raise RuntimeError(
+                    "Compressed storage is not empty but the compressed size is 0. This is a bug."
+                )
+            warnings.warn("Compressed storage is empty, returning 0 bytes.")
+
+        return compressed_size_estimate
 
 
 class StorageEnsemble(Storage):
@@ -1395,7 +2248,7 @@ class StorageEnsemble(Storage):
         self._transforms = transforms
         if transforms is not None and len(transforms) != len(storages):
             raise TypeError(
-                "transforms must have the same length as the storages " "provided."
+                "transforms must have the same length as the storages provided."
             )
 
     @property
@@ -1419,7 +2272,7 @@ class StorageEnsemble(Storage):
         buffer_ids = item.get("buffer_ids")
         index = item.get("index")
         results = []
-        for (buffer_id, sample) in zip(buffer_ids, index):
+        for buffer_id, sample in zip(buffer_ids, index):
             buffer_id = self._convert_id(buffer_id)
             results.append((buffer_id, self._get_storage(buffer_id).get(sample)))
         if self._transforms is not None:
@@ -1512,6 +2365,281 @@ class StorageEnsemble(Storage):
         return f"StorageEnsemble(\n{storages}, \n{transforms})"
 
 
+class StoreStorage(Storage):
+    """A replay buffer storage backed by a key-value store (Redis, Dragonfly, etc.).
+
+    Uses :class:`~tensordict.store.TensorDictStore` for out-of-core storage of
+    tensors, non-tensor data (strings, Python objects), TensorDicts, and
+    TensorClasses. This enables replay buffers whose data lives in a
+    Redis-compatible server rather than local RAM or disk.
+
+    The storage is lazily initialized: the backing
+    :class:`~tensordict.store.TensorDictStore` is created on the first call to
+    :meth:`set`, using the structure of the incoming data to determine the key
+    layout.
+
+    Args:
+        max_size (int): Maximum number of elements the storage can hold.
+
+    Keyword Args:
+        backend (str): Name of the store backend. Accepted values include
+            ``"redis"`` (default), ``"dragonfly"``, ``"keydb"``, or any
+            Redis-wire-compatible server name.
+        host (str): Server hostname. Defaults to ``"localhost"``.
+        port (int): Server port. Defaults to ``6379``.
+        db (int): Database number. Defaults to ``0``.
+        compilable (bool): Whether the storage is compilable. Defaults to ``False``.
+        **store_kwargs: Additional keyword arguments forwarded to
+            :class:`~tensordict.store.TensorDictStore`.
+
+    .. note:: Requires ``redis`` package: ``pip install redis``.
+
+    .. note:: Requires a tensordict version that includes the ``tensordict.store``
+        module (with per-element non-tensor indexing support).
+
+    Examples:
+        >>> from torchrl.data import ReplayBuffer
+        >>> from torchrl.data.replay_buffers import StoreStorage
+        >>> storage = StoreStorage(max_size=1000, host="localhost", port=6379)
+        >>> rb = ReplayBuffer(storage=storage, batch_size=32)
+        >>> data = TensorDict({"obs": torch.randn(10, 4), "action": torch.randn(10, 2)}, [10])
+        >>> rb.extend(data)
+        >>> sample = rb.sample()
+    """
+
+    _storage = None
+
+    def __init__(
+        self,
+        max_size: int,
+        *,
+        backend: str = "redis",
+        host: str = "localhost",
+        port: int = 6379,
+        db: int = 0,
+        compilable: bool = False,
+        **store_kwargs,
+    ):
+        if not _has_store:
+            raise ModuleNotFoundError(
+                "StoreStorage requires both the `redis` package and a version of "
+                "tensordict that includes `tensordict.store`. "
+                "Install redis with: pip install redis"
+            )
+        super().__init__(max_size=max_size, compilable=compilable)
+        self._backend = backend
+        self._host = host
+        self._port = port
+        self._db = db
+        self._store_kwargs = store_kwargs
+        self.initialized = False
+        self._len = 0
+        self._last_cursor = None
+        self._is_tensor = False
+        self._tensorclass_type = None
+
+    @property
+    def _len(self):
+        _len_value = getattr(self, "_len_value", None)
+        if not self._compilable:
+            if _len_value is None:
+                _len_value = self._len_value = mp.Value("i", 0)
+            return _len_value.value
+        if _len_value is None:
+            _len_value = self._len_value = 0
+        return _len_value
+
+    @_len.setter
+    def _len(self, value):
+        if not is_compiling() and not self._compilable:
+            _len_value = getattr(self, "_len_value", None)
+            if _len_value is None:
+                _len_value = self._len_value = mp.Value("i", 0)
+            _len_value.value = value
+        else:
+            self._len_value = value
+
+    def _init(self, data):
+        """Initialize the TensorDictStore from a single data element."""
+        from tensordict.store import TensorDictStore
+
+        if isinstance(data, torch.Tensor) and not is_tensor_collection(data):
+            self._is_tensor = True
+            # Wrap raw tensors under a "_tensor" key so TensorDictStore can manage them.
+            template = TensorDict(
+                {"_tensor": torch.empty(self.max_size, *data.shape, dtype=data.dtype)},
+                batch_size=[self.max_size],
+            )
+            self._storage = TensorDictStore.from_tensordict(
+                template,
+                backend=self._backend,
+                host=self._host,
+                port=self._port,
+                db=self._db,
+                **self._store_kwargs,
+            )
+            self.initialized = True
+            return
+
+        if not is_tensor_collection(data):
+            raise TypeError(
+                f"StoreStorage does not support data of type {type(data)}. "
+                "Use TensorDict, tensorclass, or torch.Tensor."
+            )
+
+        from tensordict.utils import _is_tensorclass
+
+        data_type = type(data)
+        self._tensorclass_type = data_type if _is_tensorclass(data_type) else None
+
+        # Create an empty TensorDictStore -- keys will be registered lazily on
+        # the first write via __setitem__.
+        self._storage = TensorDictStore(
+            batch_size=[self.max_size],
+            backend=self._backend,
+            host=self._host,
+            port=self._port,
+            db=self._db,
+            **self._store_kwargs,
+        )
+        self.initialized = True
+
+    def set(
+        self,
+        cursor: int | Sequence[int] | slice,
+        data: Any,
+        *,
+        set_cursor: bool = True,
+    ):
+        if set_cursor:
+            self._last_cursor = cursor
+
+        if isinstance(data, list):
+            data = _flip_list(data)
+
+        if set_cursor:
+            self._get_new_len(data, cursor)
+
+        if not self.initialized:
+            if not isinstance(cursor, INT_CLASSES):
+                if is_tensor_collection(data):
+                    self._init(data[0])
+                elif isinstance(data, torch.Tensor):
+                    self._init(data[0])
+                else:
+                    raise TypeError(
+                        f"StoreStorage does not support data of type {type(data)}."
+                    )
+            else:
+                self._init(data)
+
+        if self._is_tensor:
+            self._storage["_tensor"][cursor] = data
+        else:
+            self._storage[cursor] = data
+
+    def _get_new_len(self, data, cursor):
+        if is_tensor_collection(data) or isinstance(data, torch.Tensor):
+            numel = data.shape[0] if data.shape else 1
+        else:
+            numel = 1
+        self._len = min(self._len + numel, self.max_size)
+
+    def get(self, index: int | Sequence[int] | slice) -> Any:
+        if not self.initialized:
+            raise RuntimeError("Cannot get elements out of a non-initialized storage.")
+        if self._is_tensor:
+            return self._storage["_tensor"][index]
+        result = self._storage[index]
+        if self._tensorclass_type is not None:
+            result = self._tensorclass_type.from_tensordict(result)
+        return result
+
+    def __len__(self):
+        return self._len
+
+    def _empty(self):
+        self._len = 0
+
+    def state_dict(self) -> dict[str, Any]:
+        return {
+            "initialized": self.initialized,
+            "_len": self._len,
+            "_backend": self._backend,
+            "_host": self._host,
+            "_port": self._port,
+            "_db": self._db,
+            "_store_kwargs": self._store_kwargs,
+            "_td_id": self._storage._td_id if self._storage is not None else None,
+        }
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        self._len = state_dict["_len"]
+        self.initialized = state_dict["initialized"]
+        td_id = state_dict.get("_td_id")
+        if td_id is not None and self.initialized:
+            from tensordict.store import TensorDictStore
+
+            self._storage = TensorDictStore.from_store(
+                backend=state_dict["_backend"],
+                host=state_dict["_host"],
+                port=state_dict["_port"],
+                db=state_dict["_db"],
+                td_id=td_id,
+            )
+
+    def contains(self, item):
+        if isinstance(item, int):
+            if item < 0:
+                item += self._len
+            return 0 <= item < self._len
+        if isinstance(item, torch.Tensor):
+            if item.dtype == torch.bool:
+                return item.sum() <= self._len
+            if item.ndim:
+                return torch.tensor(
+                    [self.contains(idx.item()) for idx in item],
+                    dtype=torch.bool,
+                    device=item.device,
+                )
+            return torch.tensor(self.contains(item.item()), device=item.device)
+        raise NotImplementedError(f"type {type(item)} is not supported yet.")
+
+    def __getstate__(self):
+        state = copy(self.__dict__)
+        state["_rng"] = None
+        if get_spawning_popen() is None:
+            length = self._len
+            del state["_len_value"]
+            state["len__context"] = length
+        return state
+
+    def __setstate__(self, state):
+        length = state.pop("len__context", None)
+        if length is not None:
+            if not state.get("_compilable", False):
+                _len_value = mp.Value("i", length)
+                state["_len_value"] = _len_value
+            else:
+                state["_len_value"] = length
+        self.__dict__.update(state)
+
+    def __repr__(self):
+        if not self.initialized:
+            storage_str = textwrap.indent("data=<empty>", 4 * " ")
+        else:
+            storage_str = textwrap.indent(
+                f"data=TensorDictStore(td_id={self._storage._td_id!r})", 4 * " "
+            )
+        len_str = textwrap.indent(f"len={len(self)}", 4 * " ")
+        maxsize_str = textwrap.indent(f"max_size={self.max_size}", 4 * " ")
+        backend_str = textwrap.indent(
+            f"backend={self._backend!r}, host={self._host!r}, port={self._port}",
+            4 * " ",
+        )
+        return f"{self.__class__.__name__}(\n{storage_str}, \n{len_str}, \n{maxsize_str}, \n{backend_str})"
+
+
 # Utils
 def _mem_map_tensor_as_tensor(mem_map_tensor) -> torch.Tensor:
     if isinstance(mem_map_tensor, torch.Tensor):
@@ -1567,9 +2695,11 @@ def _collate_id(x):
 
 
 def _get_default_collate(storage, _is_tensordict=False):
-    if isinstance(storage, LazyStackStorage) or isinstance(storage, TensorStorage):
+    if isinstance(storage, (LazyStackStorage, TensorStorage, StoreStorage)):
         return _collate_id
-    elif isinstance(storage, ListStorage):
+    elif isinstance(storage, CompressedListStorage):
+        return lazy_stack
+    elif isinstance(storage, (ListStorage, StorageEnsemble)):
         return _stack_anything
     else:
         raise NotImplementedError(

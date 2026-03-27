@@ -36,7 +36,8 @@ import json
 import random
 import re
 import string
-from typing import Any, Dict, Literal, Optional, Sequence, Union
+from collections.abc import Sequence
+from typing import Any, Literal, Optional, Union
 
 from torchrl._utils import logger as torchrl_logger
 
@@ -50,7 +51,7 @@ from ._instructions_util import (
 )
 
 
-_InstructionArgsDtype = Optional[Dict[str, Union[int, str, Sequence[str]]]]
+_InstructionArgsDtype = Optional[dict[str, Union[int, str, Sequence[str]]]]
 
 _LANGUAGES = LANGUAGE_CODES
 
@@ -508,7 +509,7 @@ class HighlightSectionChecker(Instruction):
 
         Returns:
             True if the actual number of highlighted sections in the format of
-                *highlighed sections* meets the minimum requirement; otherwise False.
+                *highlighted sections* meets the minimum requirement; otherwise False.
         """
         num_highlights = 0
         highlights = re.findall(r"\*[^\n\*]*\*", value)
@@ -776,7 +777,7 @@ class RephraseChecker(Instruction):
 
 
 class KeywordChecker(Instruction):
-    """Check the exisitence of certain keywords."""
+    """Check the existence of certain keywords."""
 
     def build_description(self, *, keywords: Sequence[str] | None = None):
         """Build the instruction description.
@@ -1168,7 +1169,7 @@ class ForbiddenWords(Instruction):
         """Build the instruction description.
 
         Args:
-            forbidden_words (Sequence[str], optional): A sequences of strings respresenting words that are not
+            forbidden_words (Sequence[str], optional): A sequences of strings representing words that are not
                 allowed in the response.
 
         Returns:

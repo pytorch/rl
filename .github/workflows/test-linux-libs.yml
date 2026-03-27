@@ -2,17 +2,19 @@ name: Libs Tests on Linux
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches:
       - nightly
       - main
       - release/*
   workflow_dispatch:
+  workflow_call:
 
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
   # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
-  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  group: test-linux-libs-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
   cancel-in-progress: true
 
 permissions:
@@ -26,7 +28,7 @@ jobs:
   #     matrix:
   #       python_version: ["3.10"]
   #       cuda_arch_version: ["12.8"]
-  #   if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
+  #   if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') }}
   #   uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
   #   with:
   #     repository: pytorch/rl
@@ -60,7 +62,7 @@ jobs:
       matrix:
         python_version: ["3.11"]
         cuda_arch_version: ["12.8"]
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/brax') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
@@ -91,47 +93,47 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_brax/run_all.sh
 
-  unittests-d4rl:
-    strategy:
-      matrix:
-        python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
-    with:
-      repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
-      timeout: 120
-      script: |
-        if [[ "${{ github.ref }}" =~ release/* ]]; then
-          export RELEASE=1
-          export TORCH_VERSION=stable
-        else
-          export RELEASE=0
-          export TORCH_VERSION=nightly
-        fi
+  # unittests-d4rl:
+  #   strategy:
+  #     matrix:
+  #       python_version: ["3.10"]
+  #       cuda_arch_version: ["12.8"]
+  #   if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') }}
+  #   uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+  #   with:
+  #     repository: pytorch/rl
+  #     runner: "linux.g5.4xlarge.nvidia.gpu"
+  #     docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+  #     timeout: 120
+  #     script: |
+  #       if [[ "${{ github.ref }}" =~ release/* ]]; then
+  #         export RELEASE=1
+  #         export TORCH_VERSION=stable
+  #       else
+  #         export RELEASE=0
+  #         export TORCH_VERSION=nightly
+  #       fi
 
-        set -euo pipefail
-        export PYTHON_VERSION="3.10"
-        export CU_VERSION="cu128"
-        export TAR_OPTIONS="--no-same-owner"
-        export UPLOAD_CHANNEL="nightly"
-        export TF_CPP_MIN_LOG_LEVEL=0
-        export BATCHED_PIPE_TIMEOUT=60
-        export TD_GET_DEFAULTS_TO_NONE=1
+  #       set -euo pipefail
+  #       export PYTHON_VERSION="3.10"
+  #       export CU_VERSION="cu128"
+  #       export TAR_OPTIONS="--no-same-owner"
+  #       export UPLOAD_CHANNEL="nightly"
+  #       export TF_CPP_MIN_LOG_LEVEL=0
+  #       export BATCHED_PIPE_TIMEOUT=60
+  #       export TD_GET_DEFAULTS_TO_NONE=1
 
-        bash .github/unittest/linux_libs/scripts_d4rl/setup_env.sh
-        bash .github/unittest/linux_libs/scripts_d4rl/install.sh
-        bash .github/unittest/linux_libs/scripts_d4rl/run_test.sh
-        bash .github/unittest/linux_libs/scripts_d4rl/post_process.sh
+  #       bash .github/unittest/linux_libs/scripts_d4rl/setup_env.sh
+  #       bash .github/unittest/linux_libs/scripts_d4rl/install.sh
+  #       bash .github/unittest/linux_libs/scripts_d4rl/run_test.sh
+  #       bash .github/unittest/linux_libs/scripts_d4rl/post_process.sh
 
   unittests-envpool:
     strategy:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/envpool') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
@@ -156,17 +158,18 @@ jobs:
         export BATCHED_PIPE_TIMEOUT=60
         export TD_GET_DEFAULTS_TO_NONE=1
 
-        bash .github/unittest/linux_libs/scripts_d4rl/setup_env.sh
-        bash .github/unittest/linux_libs/scripts_d4rl/install.sh
-        bash .github/unittest/linux_libs/scripts_d4rl/run_test.sh
-        bash .github/unittest/linux_libs/scripts_d4rl/post_process.sh
+        bash .github/unittest/linux_libs/scripts_envpool/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_envpool/install.sh
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        bash .github/unittest/linux_libs/scripts_envpool/run_test.sh
+        bash .github/unittest/linux_libs/scripts_envpool/post_process.sh
 
   unittests-gendgrl:
     strategy:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') || contains(github.event.pull_request.labels.*.name, 'Data/gendgrl') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
@@ -192,13 +195,14 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_gen-dgrl/setup_env.sh
         bash .github/unittest/linux_libs/scripts_gen-dgrl/install.sh
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_gen-dgrl/run_test.sh
         bash .github/unittest/linux_libs/scripts_gen-dgrl/post_process.sh
 
   unittests-gym:
     strategy:
       matrix:
-        python_version: ["3.9"]
+        python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -218,7 +222,7 @@ jobs:
         fi
 
         set -euxo pipefail
-        export PYTHON_VERSION="3.9"
+        export PYTHON_VERSION="3.10"
         # export CU_VERSION="${{ inputs.gpu-arch-version }}"
         export CU_VERSION="11.4"
         export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/work/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin"
@@ -226,21 +230,19 @@ jobs:
         export BATCHED_PIPE_TIMEOUT=60
         export TD_GET_DEFAULTS_TO_NONE=1
 
-        ./.github/unittest/linux_libs/scripts_gym/setup_env.sh
-        ./.github/unittest/linux_libs/scripts_gym/batch_scripts.sh
-        ./.github/unittest/linux_libs/scripts_gym/post_process.sh
+        ./.github/unittest/linux_libs/scripts_gym/run_all.sh
 
   unittests-isaaclab:
     strategy:
       matrix:
-        python_version: ["3.10"]
+        python_version: ["3.11"]
         cuda_arch_version: ["12.8"]
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments/Isaac') }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/isaaclab') }}
     uses: vmoens/test-infra/.github/workflows/isaac_linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvcr.io/nvidia/isaac-lab:2.1.0"
+      docker-image: "nvcr.io/nvidia/isaac-lab:2.3.0"
       test-infra-repository: vmoens/test-infra
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
@@ -253,7 +255,7 @@ jobs:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/jumanji') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
@@ -284,12 +286,13 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_jumanji/setup_env.sh
         bash .github/unittest/linux_libs/scripts_jumanji/install.sh
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_jumanji/run_test.sh
         bash .github/unittest/linux_libs/scripts_jumanji/post_process.sh
 
   unittests-meltingpot:
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/meltingpot') }}
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
@@ -319,6 +322,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_meltingpot/setup_env.sh
         bash .github/unittest/linux_libs/scripts_meltingpot/install.sh
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_meltingpot/run_test.sh
         bash .github/unittest/linux_libs/scripts_meltingpot/post_process.sh
 
@@ -327,7 +331,7 @@ jobs:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/open_spiel') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
@@ -357,6 +361,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_open_spiel/setup_env.sh
         bash .github/unittest/linux_libs/scripts_open_spiel/install.sh
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_open_spiel/run_test.sh
         bash .github/unittest/linux_libs/scripts_open_spiel/post_process.sh
 
@@ -365,7 +370,7 @@ jobs:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/chess') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
@@ -395,6 +400,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_chess/setup_env.sh
         bash .github/unittest/linux_libs/scripts_chess/install.sh
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_chess/run_test.sh
         bash .github/unittest/linux_libs/scripts_chess/post_process.sh
 
@@ -403,7 +409,7 @@ jobs:
       matrix:
         python_version: ["3.10.12"]
         cuda_arch_version: ["12.8"]
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/unity_mlagents') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
@@ -433,6 +439,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_unity_mlagents/setup_env.sh
         bash .github/unittest/linux_libs/scripts_unity_mlagents/install.sh
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_unity_mlagents/run_test.sh
         bash .github/unittest/linux_libs/scripts_unity_mlagents/post_process.sh
 
@@ -441,7 +448,7 @@ jobs:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') || contains(github.event.pull_request.labels.*.name, 'Data/minari') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
@@ -466,17 +473,14 @@ jobs:
         export BATCHED_PIPE_TIMEOUT=60
         export TD_GET_DEFAULTS_TO_NONE=1
 
-        bash .github/unittest/linux_libs/scripts_minari/setup_env.sh
-        bash .github/unittest/linux_libs/scripts_minari/install.sh
-        bash .github/unittest/linux_libs/scripts_minari/run_test.sh
-        bash .github/unittest/linux_libs/scripts_minari/post_process.sh
+        bash .github/unittest/linux_libs/scripts_minari/run_all.sh
 
   unittests-openx:
     strategy:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') || contains(github.event.pull_request.labels.*.name, 'Data/openx') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
@@ -503,11 +507,12 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_openx/setup_env.sh
         bash .github/unittest/linux_libs/scripts_openx/install.sh
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_openx/run_test.sh
         bash .github/unittest/linux_libs/scripts_openx/post_process.sh
 
   unittests-pettingzoo:
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/pettingzoo') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
@@ -526,7 +531,7 @@ jobs:
         fi
 
         set -euo pipefail
-        export PYTHON_VERSION="3.9"
+        export PYTHON_VERSION="3.10"
         export CU_VERSION="12.8"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
@@ -538,15 +543,56 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_pettingzoo/setup_env.sh
         bash .github/unittest/linux_libs/scripts_pettingzoo/install.sh
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_pettingzoo/run_test.sh
         bash .github/unittest/linux_libs/scripts_pettingzoo/post_process.sh
+
+  unittests-procgen:
+    strategy:
+      matrix:
+        python_version: ["3.10"]
+        cuda_arch_version: ["12.8"]
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/procgen') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      gpu-arch-type: cuda
+      gpu-arch-version: "12.8"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.10"
+        export CU_VERSION="12.8"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+        export TD_GET_DEFAULTS_TO_NONE=1
+
+        nvidia-smi
+
+        bash .github/unittest/linux_libs/scripts_procgen/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_procgen/install.sh
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        bash .github/unittest/linux_libs/scripts_procgen/run_test.sh
+        bash .github/unittest/linux_libs/scripts_procgen/post_process.sh
 
   unittests-robohive:
     strategy:
       matrix:
-        python_version: ["3.9"]
+        python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/robohive') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
@@ -563,8 +609,8 @@ jobs:
         fi
 
         set -euo pipefail
-        export PYTHON_VERSION="3.9"
-        export CU_VERSION="cu117"
+        export PYTHON_VERSION="3.10"
+        export CU_VERSION="cu128"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -580,7 +626,7 @@ jobs:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') || contains(github.event.pull_request.labels.*.name, 'Data/roboset') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
@@ -607,6 +653,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_roboset/setup_env.sh
         bash .github/unittest/linux_libs/scripts_roboset/install.sh
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_roboset/run_test.sh
         bash .github/unittest/linux_libs/scripts_roboset/post_process.sh
 
@@ -643,6 +690,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_sklearn/setup_env.sh
         bash .github/unittest/linux_libs/scripts_sklearn/install.sh
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_sklearn/run_test.sh
         bash .github/unittest/linux_libs/scripts_sklearn/post_process.sh
 
@@ -651,7 +699,7 @@ jobs:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/smacv2') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
@@ -682,6 +730,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_smacv2/setup_env.sh
         bash .github/unittest/linux_libs/scripts_smacv2/install.sh
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_smacv2/run_test.sh
         bash .github/unittest/linux_libs/scripts_smacv2/post_process.sh
 
@@ -690,7 +739,7 @@ jobs:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') || contains(github.event.pull_request.labels.*.name, 'Data/vd4rl') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
@@ -717,6 +766,7 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_vd4rl/setup_env.sh
         bash .github/unittest/linux_libs/scripts_vd4rl/install.sh
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_vd4rl/run_test.sh
         bash .github/unittest/linux_libs/scripts_vd4rl/post_process.sh
 
@@ -725,7 +775,7 @@ jobs:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/vmas') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
@@ -756,5 +806,6 @@ jobs:
 
         bash .github/unittest/linux_libs/scripts_vmas/setup_env.sh
         bash .github/unittest/linux_libs/scripts_vmas/install.sh
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_vmas/run_test.sh
         bash .github/unittest/linux_libs/scripts_vmas/post_process.sh

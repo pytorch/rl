@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import abc
 import weakref
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 import torch
 from tensordict import TensorDict, TensorDictBase
@@ -19,13 +20,17 @@ Policy = TypeVar("Policy", bound=TensorDictModuleBase)
 class WeightUpdaterBase(metaclass=abc.ABCMeta):
     """A base class for updating remote policy weights on inference workers.
 
+    .. deprecated::
+        WeightUpdaterBase is deprecated and will be removed in a future version.
+        Please use WeightSyncScheme from torchrl.weight_update.weight_sync_schemes instead.
+
     The weight updater is the central piece of the weight update scheme:
 
     - In leaf collector nodes, it is responsible for sending the weights to the policy, which can be as simple as
       updating a state-dict, or more complex if an inference server is being used.
     - In server collector nodes, it is responsible for sending the weights to the leaf collectors.
 
-    In a collector, the updater is called within :meth:`~torchrl.collector.DataCollectorBase.update_policy_weights_`.`
+    In a collector, the updater is called within :meth:`~torchrl.collector.BaseCollector.update_policy_weights_`.`
 
     The main method of this class is the :meth:`~._push_weights` method, which updates the policy weights in the worker /
     policy. This method is called by :meth:`~.push_weights`, which also calls the post-hooks: only `_push_weights` should
@@ -63,12 +68,24 @@ class WeightUpdaterBase(metaclass=abc.ABCMeta):
             The post-hook will be called in the same process as the weight updater.
             The post-hook will be called in the same order as the post-hooks were registered.
 
-    .. seealso:: :meth:`~torchrl.collectors.DataCollectorBase.update_policy_weights_`.
+    .. seealso:: :meth:`~torchrl.collectors.BaseCollector.update_policy_weights_`.
 
     """
 
-    _collector_wr: Any = None
+    _collector_wrs: list[Any] = None
     _post_hooks: list[Callable[[], Any]] | None = None
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        import warnings
+
+        warnings.warn(
+            f"Creating {cls.__name__} which inherits from WeightUpdaterBase is deprecated. "
+            "Please use WeightSyncScheme from torchrl.weight_update.weight_sync_schemes instead. "
+            "This will be removed in a future version.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     @property
     def post_hooks(self) -> list[Callable[[], None]]:
@@ -94,26 +111,47 @@ class WeightUpdaterBase(metaclass=abc.ABCMeta):
         """
         return None
 
-    def register_collector(self, collector: DataCollectorBase):  # noqa
+    def register_collector(self, collector):  # noqa
         """Register a collector in the updater.
 
         Once registered, the updater will not accept another collector.
 
         Args:
-            collector (DataCollectorBase): The collector to register.
+            collector (BaseCollector): The collector to register.
 
         """
-        if self._collector_wr is not None:
-            raise RuntimeError("Cannot register collector twice.")
-        self._collector_wr = weakref.ref(collector)
+        if self._collector_wrs is None:
+            self._collector_wrs = []
+        self._collector_wrs.append(weakref.ref(collector))
 
     @property
-    def collector(self) -> torch.collector.DataCollectorBase:  # noqa
+    def collector(self) -> Any | None:  # noqa
         """The collector or container of the receiver.
 
         Returns `None` if the container is out-of-scope or not set.
         """
-        return self._collector_wr() if self._collector_wr is not None else None
+        if self._collector_wrs is None:
+            return None
+        if len(self._collector_wrs) > 1:
+            raise ValueError("Cannot access `collector` with multiple collectors.")
+        if self._collector_wrs:
+            collector = self._collector_wrs[0]()
+        else:
+            collector = None
+        return collector
+
+    @property
+    def collectors(self) -> list[Any] | None:
+        """The collectors or container of the receiver."""
+        if self._collector_wrs is None:
+            return None
+        if self._collector_wrs:
+            collectors = [
+                wr() if wr is not None else None for wr in self._collector_wrs
+            ]
+        else:
+            collectors = None
+        return collectors
 
     def _push_weights(
         self,
@@ -302,7 +340,8 @@ class WeightUpdaterBase(metaclass=abc.ABCMeta):
 
     def increment_version(self):
         """Increment the policy version."""
-        self.collector.increment_version()
+        for collector in self.collectors:
+            collector.increment_version()
 
 
 # Specialized classes
@@ -314,16 +353,16 @@ class VanillaWeightUpdater(WeightUpdaterBase):
     in scenarios where the weight update logic is straightforward and does not require any
     complex mapping or transformation.
 
-    This class is used by default in the `SyncDataCollector` when no custom weight sender
+    This class is used by default in the `Collector` when no custom weight sender
     is provided.
 
-    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and :class:`~torchrl.collectors.SyncDataCollector`.
+    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and :class:`~torchrl.collectors.Collector`.
 
     Keyword Args:
         weight_getter (Callable[[], TensorDictBase], optional): a callable that returns the weights from the server.
-            If not provided, the weights must be passed to :meth:`~.update_weights` directly.
+            If not provided, the weights must be passed to ``push_weights`` directly.
         policy_weights (TensorDictBase): a TensorDictBase containing the policy weights to be updated
-            in-place.
+            in-place. Use ``push_weights`` to update the weights.
     """
 
     @classmethod
@@ -352,7 +391,7 @@ class VanillaWeightUpdater(WeightUpdaterBase):
         self.weight_getter = weight_getter
         self.policy_weights = policy_weights
 
-    def _get_server_weights(self) -> TensorDictBase:
+    def _get_server_weights(self) -> TensorDictBase | None:
         return self.weight_getter() if self.weight_getter is not None else None
 
     def _get_local_weights(self) -> TensorDictBase:
@@ -366,7 +405,7 @@ class VanillaWeightUpdater(WeightUpdaterBase):
 
     def _sync_weights_with_worker(
         self, *, worker_id: None = None, server_weights: TensorDictBase
-    ) -> TensorDictBase:
+    ) -> None:
         if server_weights is None:
             return
         self.policy_weights.update_(server_weights)
@@ -394,7 +433,7 @@ class MultiProcessedWeightUpdater(WeightUpdaterBase):
         logic, consider extending `WeightUpdaterBase` with a custom implementation.
 
     .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and
-        :class:`~torchrl.collectors.DataCollectorBase`.
+        :class:`~torchrl.collectors.BaseCollector`.
 
     """
 
@@ -412,7 +451,7 @@ class MultiProcessedWeightUpdater(WeightUpdaterBase):
 
     def _sync_weights_with_worker(
         self, worker_id: int | torch.device, server_weights: TensorDictBase | None
-    ) -> TensorDictBase | None:
+    ) -> None:
         if server_weights is None:
             return
         self._policy_weights[worker_id].data.update_(server_weights)
@@ -428,6 +467,59 @@ class MultiProcessedWeightUpdater(WeightUpdaterBase):
 
     def _maybe_map_weights(self, server_weights: TensorDictBase) -> TensorDictBase:
         return server_weights
+
+
+class RemoteModuleWeightUpdater(WeightUpdaterBase):
+    """A weight updater for remote nn.Modules that requires explicit weight passing.
+
+    This weight updater is designed for scenarios where the master collector doesn't have
+    direct access to worker weights (e.g., when using policy_factory). It enforces that
+    weights must be passed explicitly when calling update_policy_weights_().
+
+    This updater does not try to retrieve weights from the server or workers automatically.
+    Instead, it raises an exception if weights are not provided, ensuring that the weight
+    synchronization is handled explicitly by the user.
+
+    Raises:
+        RuntimeError: If update_policy_weights_() is called without providing weights.
+
+    .. note::
+        This weight updater is primarily used to suppress warnings in tests and scenarios
+        where the weight synchronization is handled externally or the workers manage
+        their own weight updates.
+
+    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase`
+    """
+
+    def __init__(self):
+        pass
+
+    def _get_server_weights(self) -> TensorDictBase | None:
+        """Returns None since this updater doesn't manage server weights."""
+        return None
+
+    def _sync_weights_with_worker(
+        self,
+        *,
+        worker_id: int | torch.device | None = None,
+        server_weights: TensorDictBase,
+    ) -> None:
+        """Raises an error if weights are not provided explicitly.
+
+        Since this updater is for remote modules where the master doesn't have access
+        to worker weights, it enforces that weights must be passed explicitly.
+        """
+        if server_weights is None:
+            raise RuntimeError(
+                "RemoteModuleWeightUpdater requires weights to be passed explicitly. "
+                "Call update_policy_weights_(weights) with the weights to be synchronized."
+            )
+        # If weights are provided, we assume the synchronization is handled elsewhere
+        # This is a no-op updater that just validates the weight passing pattern
+
+    def all_worker_ids(self) -> None:
+        """Returns None since this updater doesn't manage specific workers."""
+        return None
 
 
 class RayWeightUpdater(WeightUpdaterBase):
@@ -486,7 +578,7 @@ class RayWeightUpdater(WeightUpdaterBase):
         return server_weights
 
     def _sync_weights_with_worker(self, worker_id: int, server_weights: Any) -> Any:
-        torchrl_logger.info(f"syncing weights with worker {worker_id}")
+        torchrl_logger.debug(f"syncing weights with worker {worker_id}")
         c = self.remote_collectors[worker_id]
         c.update_policy_weights_.remote(policy_weights=server_weights)
         self._batches_since_weight_update[worker_id] = 0

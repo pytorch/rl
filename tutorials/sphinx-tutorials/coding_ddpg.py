@@ -68,20 +68,12 @@ TorchRL objectives: Coding a DDPG loss
 import warnings
 
 warnings.filterwarnings("ignore")
+# Set multiprocessing start method to fork if not already set
+# This allows the tutorial to run as a script without if __name__ == "__main__"
 from torch import multiprocessing
 
-# TorchRL prefers spawn method, that restricts creation of  ``~torchrl.envs.ParallelEnv`` inside
-# `__main__` method call, but for the easy of reading the code switch to fork
-# which is also a default spawn method in Google's Colaboratory
-try:
-    is_sphinx = __sphinx_build__
-except NameError:
-    is_sphinx = False
-
-try:
-    multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
-except RuntimeError:
-    pass
+if multiprocessing.get_start_method(allow_none=True) is None:
+    multiprocessing.set_start_method("fork")
 
 # sphinx_gallery_end_ignore
 
@@ -117,7 +109,7 @@ collector_device = torch.device("cpu")  # Change the device to ``cuda`` to use C
 #   method will receive a TensorDict as input that contains all the necessary
 #   information to return a loss value.
 #
-#   .. code-block::Python
+#   .. code-block:: python
 #
 #       >>> data = replay_buffer.sample()
 #       >>> loss_dict = loss_module(data)
@@ -132,7 +124,7 @@ collector_device = torch.device("cpu")  # Change the device to ``cuda`` to use C
 #     optimizer for different sets of parameters for instance. Summing the losses
 #     can be simply done via
 #
-#     ..code - block::Python
+#     .. code-block:: python
 #
 #       >>> loss_val = sum(loss for key, loss in loss_dict.items() if key.startswith("loss_"))
 #
@@ -143,7 +135,7 @@ collector_device = torch.device("cpu")  # Change the device to ``cuda`` to use C
 # As many other components of the library, its :meth:`~torchrl.objectives.LossModule.forward` method expects
 # as input a :class:`tensordict.TensorDict` instance sampled from an experience
 # replay buffer, or any similar data structure. Using this format makes it
-# possible to re-use the module across
+# possible to reuse the module across
 # modalities, or in complex settings where the model needs to read multiple
 # entries for instance. In other words, it allows us to code a loss module that
 # is oblivious to the data type that is being given to is and that focuses on
@@ -605,6 +597,7 @@ def parallel_env_constructor(
         create_env_fn=EnvCreator(lambda: make_env()),
         create_env_kwargs=None,
         pin_memory=False,
+        mp_start_method="fork" if is_fork else "spawn",
     )
     env = make_transformed_env(parallel_env)
     # we call `init_stats` for a limited number of steps, just to instantiate

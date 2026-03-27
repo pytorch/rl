@@ -8,9 +8,9 @@ import importlib.util
 import os.path
 import shutil
 import tempfile
+from collections.abc import Callable
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Callable
 
 import torch
 from tensordict import PersistentTensorDict, TensorDict

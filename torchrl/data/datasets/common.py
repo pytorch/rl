@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import abc
 import shutil
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import torch
 from tensordict import TensorDictBase

@@ -18,9 +18,11 @@ from packaging import version
 from tensordict import MemoryMappedTensor
 
 from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
+from torchrl.record.loggers.common import _has_torchcodec, _has_tv
 from torchrl.record.loggers.csv import CSVLogger
-from torchrl.record.loggers.mlflow import _has_mlflow, _has_tv, MLFlowLogger
+from torchrl.record.loggers.mlflow import _has_mlflow, MLFlowLogger
 from torchrl.record.loggers.tensorboard import _has_tb, TensorboardLogger
+from torchrl.record.loggers.trackio import _has_trackio, TrackioLogger
 from torchrl.record.loggers.wandb import _has_wandb, WandbLogger
 from torchrl.record.recorder import PixelRenderTransform, VideoRecorder
 
@@ -32,6 +34,10 @@ if _has_tv:
     )
 else:
     TORCHVISION_VERSION = version.parse("0.0.1")
+
+_has_mp4 = (
+    _has_tv and version.parse("0.20") <= TORCHVISION_VERSION < version.parse("0.22")
+) or _has_torchcodec
 
 if _has_tb:
     from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
@@ -101,7 +107,10 @@ class TestTensorboard:
         # C - number of image channels (e.g. 3 for RGB), H, W - image dimensions.
         # the first 64 frames are black and the next 64 are white
         video = torch.cat(
-            (torch.zeros(64, 1, 32, 32), torch.full((64, 1, 32, 32), 255))
+            (
+                torch.zeros(64, 1, 32, 32, dtype=torch.uint8),
+                torch.full((64, 1, 32, 32), 255, dtype=torch.uint8),
+            )
         )
         video = video[None, :]
         for i in range(3):
@@ -169,10 +178,7 @@ class TestCSVLogger:
 
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
     @pytest.mark.parametrize(
-        "video_format", ["pt", "memmap"] + ["mp4"] if _has_tv else []
-    )
-    @pytest.mark.skipif(
-        TORCHVISION_VERSION < version.parse("0.20.0"), reason="av compatibility bug"
+        "video_format", ["pt", "memmap"] + (["mp4"] if _has_mp4 else [])
     )
     def test_log_video(self, steps, video_format, tmpdir):
         torch.manual_seed(0)
@@ -216,11 +222,18 @@ class TestCSVLogger:
             )
             assert torch.equal(video, logged_video), logged_video
         elif video_format == "mp4":
-            import torchvision
+            if _has_torchcodec:
+                from torchcodec.decoders import VideoDecoder
 
-            logged_video = torchvision.io.read_video(path, output_format="TCHW")[0][
-                :, :1
-            ]
+                logged_video = (
+                    VideoDecoder(path)
+                    .get_frames_in_range(start=0, stop=128)
+                    .data[:, :1]
+                )
+            else:
+                logged_video = torchvision.io.read_video(path, output_format="TCHW")[0][
+                    :, :1
+                ]
             logged_video = logged_video.unsqueeze(0)
             torch.testing.assert_close(video, logged_video)
 
@@ -280,6 +293,7 @@ class TestWandbLogger:
                 value=scalar_value,
                 name=scalar_name,
                 step=steps[i] if steps else None,
+                commit=True,
             )
 
         assert wandb_logger.experiment.summary["foo"] == values[-1].item()
@@ -292,7 +306,10 @@ class TestWandbLogger:
         # C - number of image channels (e.g. 3 for RGB), H, W - image dimensions.
         # the first 64 frames are black and the next 64 are white
         video = torch.cat(
-            (torch.zeros(128, 1, 32, 32), torch.full((128, 1, 32, 32), 255))
+            (
+                torch.zeros(128, 1, 32, 32, dtype=torch.uint8),
+                torch.full((128, 1, 32, 32), 255, dtype=torch.uint8),
+            )
         )
         video = video[None, :]
         wandb_logger.log_video(
@@ -315,9 +332,8 @@ class TestWandbLogger:
         assert video_4fps_size > video_16fps_size, (video_4fps_size, video_16fps_size)
 
         # check that we catch the error in case the format of the tensor is wrong
-        video_wrong_format = torch.zeros(64, 2, 32, 32)
-        video_wrong_format = video_wrong_format[None, :]
-        with pytest.raises(Exception):
+        video_wrong_format = torch.zeros(2, 32, 32)
+        with pytest.raises(ValueError, match="Video must be at least"):
             wandb_logger.log_video(
                 name="foo",
                 video=video_wrong_format,
@@ -375,12 +391,15 @@ class TestMLFlowLogger:
             assert metric.value == values[i].item()
 
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
-    @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
+    @pytest.mark.skipif(not _has_mp4, reason="no mp4 video backend available")
     def test_log_video(self, steps, mlflow_fixture):
 
         logger, client = mlflow_fixture
         videos = torch.cat(
-            (torch.full((3, 64, 3, 32, 32), 255), torch.zeros(3, 64, 3, 32, 32)),
+            (
+                torch.full((3, 64, 3, 32, 32), 255, dtype=torch.uint8),
+                torch.zeros(3, 64, 3, 32, 32, dtype=torch.uint8),
+            ),
             dim=1,
         )
         fps = 6
@@ -453,6 +472,81 @@ class TestPixelRenderTransform:
         finally:
             if not env.is_closed:
                 env.close()
+
+
+@pytest.fixture()
+def trackio_logger():
+    exp_name = "ramala"
+    logger = TrackioLogger(project="test", exp_name=exp_name)
+    yield logger
+    logger.experiment.finish()
+    del logger
+
+
+@pytest.mark.skipif(not _has_trackio, reason="trackio not installed")
+class TestTrackioLogger:
+    @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
+    def test_log_scalar(self, steps, trackio_logger):
+        torch.manual_seed(0)
+
+        values = torch.rand(3)
+        for i in range(3):
+            scalar_name = "foo"
+            scalar_value = values[i].item()
+            trackio_logger.log_scalar(
+                value=scalar_value,
+                name=scalar_name,
+                step=steps[i] if steps else None,
+            )
+
+    @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
+    def test_log_str(self, steps, trackio_logger):
+        for i in range(3):
+            trackio_logger.log_str(
+                name="foo",
+                value="bar",
+                step=steps[i] if steps else None,
+            )
+
+    def test_log_video(self, trackio_logger):
+        torch.manual_seed(0)
+
+        # creating a sample video (T, C, H, W), where T - number of frames,
+        # C - number of image channels (e.g. 3 for RGB), H, W - image dimensions.
+        # the first 64 frames are black and the next 64 are white
+        video = torch.cat(
+            (
+                torch.zeros(128, 3, 32, 32, dtype=torch.uint8),
+                torch.full((128, 3, 32, 32), 255, dtype=torch.uint8),
+            )
+        )
+        video = video[None, :]
+        trackio_logger.log_video(
+            name="foo",
+            video=video,
+            fps=4,
+            format="mp4",
+        )
+        trackio_logger.log_video(
+            name="foo_16fps",
+            video=video,
+            fps=16,
+            format="mp4",
+        )
+
+    def test_log_hparams(self, trackio_logger, config):
+        trackio_logger.log_hparams(config)
+        for key, value in config.items():
+            assert trackio_logger.experiment.config[key] == value
+
+    @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
+    def test_log_histogram(self, steps, trackio_logger):
+        torch.manual_seed(0)
+        for i in range(3):
+            data = torch.randn(100)
+            trackio_logger.log_histogram(
+                "hist", data, step=steps[i] if steps else None, bins=10
+            )
 
 
 if __name__ == "__main__":

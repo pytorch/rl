@@ -23,7 +23,12 @@ from torchrl.objectives.utils import (
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+from torchrl.objectives.value import (
+    TD0Estimator,
+    TD1Estimator,
+    TDLambdaEstimator,
+    ValueEstimatorBase,
+)
 
 
 class DDPGLoss(LossModule):
@@ -171,6 +176,7 @@ class DDPGLoss(LossModule):
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
+        priority_weight: NestedKey = "priority_weight"
 
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
@@ -201,12 +207,14 @@ class DDPGLoss(LossModule):
         delay_value: bool = True,
         gamma: float | None = None,
         separate_losses: bool = False,
-        reduction: str = None,
+        reduction: str | None = None,
+        use_prioritized_weights: str | bool = "auto",
     ) -> None:
         self._in_keys = None
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self.use_prioritized_weights = use_prioritized_weights
         self.delay_actor = delay_actor
         self.delay_value = delay_value
 
@@ -268,6 +276,8 @@ class DDPGLoss(LossModule):
             *self.value_network.in_keys,
             *[unravel_key(("next", key)) for key in self.value_network.in_keys],
         }
+        if self.use_prioritized_weights:
+            in_keys.add(unravel_key(self.tensor_keys.priority_weight))
         self._in_keys = sorted(in_keys, key=str)
 
     @property
@@ -316,6 +326,7 @@ class DDPGLoss(LossModule):
         self,
         tensordict: TensorDictBase,
     ) -> [torch.Tensor, dict]:
+        weights = self._maybe_get_priority_weight(tensordict)
         td_copy = tensordict.select(
             *self.actor_in_keys, *self.value_exclusive_keys, strict=False
         ).detach()
@@ -325,7 +336,7 @@ class DDPGLoss(LossModule):
             td_copy = self.value_network(td_copy)
         loss_actor = -td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
         metadata = {}
-        loss_actor = _reduce(loss_actor, self.reduction)
+        loss_actor = _reduce(loss_actor, self.reduction, weights=weights)
         self._clear_weakrefs(
             tensordict,
             loss_actor,
@@ -340,6 +351,7 @@ class DDPGLoss(LossModule):
         self,
         tensordict: TensorDictBase,
     ) -> tuple[torch.Tensor, dict]:
+        weights = self._maybe_get_priority_weight(tensordict)
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys, strict=False).detach()
         with self.value_network_params.to_module(self.value_network):
@@ -372,7 +384,7 @@ class DDPGLoss(LossModule):
                 "target_value_max": target_value.max(),
                 "pred_value_max": pred_val.max(),
             }
-        loss_value = _reduce(loss_value, self.reduction)
+        loss_value = _reduce(loss_value, self.reduction, weights=weights)
         self._clear_weakrefs(
             tensordict,
             "value_network_params",
@@ -385,6 +397,13 @@ class DDPGLoss(LossModule):
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
+
+        # Handle ValueEstimatorBase instance or class
+        if isinstance(value_type, ValueEstimatorBase) or (
+            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
+        ):
+            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+
         self.value_type = value_type
         hp = dict(default_value_kwargs(value_type))
         if hasattr(self, "gamma"):

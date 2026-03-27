@@ -7,10 +7,10 @@ from __future__ import annotations
 import abc
 import functools
 import warnings
+from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from functools import wraps
-from typing import Callable
 
 import torch
 from tensordict import is_tensor_collection, TensorDictBase
@@ -27,7 +27,7 @@ from tensordict.nn.probabilistic import interaction_type
 from tensordict.utils import NestedKey, unravel_key
 from torch import Tensor
 
-from torchrl._utils import RL_WARNINGS
+from torchrl._utils import logger, rl_warnings
 from torchrl.envs.utils import step_mdp
 from torchrl.objectives.utils import (
     _maybe_get_or_select,
@@ -451,8 +451,8 @@ class ValueEstimatorBase(TensorDictModuleBase):
             try:
                 ndim = list(data.names).index("time") + 1
             except ValueError:
-                if RL_WARNINGS:
-                    warnings.warn(
+                if rl_warnings():
+                    logger.warning(
                         "Got a tensordict without a time-marked dimension, assuming time is along the last dimension. "
                         "This warning can be turned off by setting the environment variable RL_WARNINGS to False."
                     )
@@ -1081,6 +1081,16 @@ class TDLambdaEstimator(ValueEstimatorBase):
         self.vectorized = vectorized
         self.time_dim = time_dim
 
+    @property
+    def vectorized(self):
+        if is_dynamo_compiling():
+            return False
+        return self._vectorized
+
+    @vectorized.setter
+    def vectorized(self, value):
+        self._vectorized = value
+
     @_self_set_skip_existing
     @_self_set_grad_enabled
     @dispatch
@@ -1206,6 +1216,8 @@ class TDLambdaEstimator(ValueEstimatorBase):
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
 
+        if self.lmbda.device != device:
+            self.lmbda = self.lmbda.to(device)
         lmbda = self.lmbda
         if self.average_rewards:
             reward = reward - reward.mean()
@@ -1323,6 +1335,8 @@ class GAE(ValueEstimatorBase):
         Similarly, if `shifted=False`, the `"is_init"` entry of the root tensordict will be copied onto the
         `"is_init"` of the `"next"` entry, such that trajectories are well separated both for root and `"next"` data.
     """
+
+    value_network: TensorDictModule | None
 
     def __init__(
         self,

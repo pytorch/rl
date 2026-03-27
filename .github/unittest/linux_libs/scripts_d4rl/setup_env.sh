@@ -63,12 +63,12 @@ if [ ! -d "${env_dir}" ]; then
 fi
 conda activate "${env_dir}"
 
-python3 -m pip install pip --upgrade
+python -m pip install pip --upgrade
 
 #pip3 uninstall cython -y
 #pip uninstall cython -y
 #conda uninstall cython -y
-python3 -m pip install "cython<3" --upgrade
+python -m pip install "cython<3" --upgrade
 #conda install -c anaconda cython="<3.0.0" -y
 
 

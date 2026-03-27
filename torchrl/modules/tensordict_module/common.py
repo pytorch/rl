@@ -9,7 +9,7 @@ import importlib.util
 import inspect
 import re
 import warnings
-from typing import Iterable
+from collections.abc import Iterable
 
 import torch
 from tensordict import TensorDictBase, unravel_key_list
@@ -125,8 +125,8 @@ class SafeModule(TensorDictModule):
             output preserves type, device and batch-size). Defaults to `True`.
 
     Embedding a neural network in a TensorDictModule only requires to specify the input and output keys. The domain spec can
-        be passed along if needed. TensorDictModule support functional and regular :obj:`nn.Module` objects. In the functional
-        case, the 'params' (and 'buffers') keyword argument must be specified:
+    be passed along if needed. TensorDictModule support functional and regular :obj:`nn.Module` objects. In the functional
+    case, the 'params' (and 'buffers') keyword argument must be specified:
 
     Examples:
         >>> import torch

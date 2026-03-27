@@ -1,154 +1,175 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-#
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
-import argparse
-import distutils.command.clean
+from __future__ import annotations
+
+import contextlib
 import glob
+import importlib.util
+import json
 import logging
 import os
-import shutil
+import re
 import subprocess
 import sys
-from datetime import date
 from pathlib import Path
-from typing import List
 
-from setuptools import find_packages, setup
+import torch
+from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CppExtension
 
-cwd = os.path.dirname(os.path.abspath(__file__))
-try:
-    sha = (
-        subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=cwd)
-        .decode("ascii")
-        .strip()
-    )
-except Exception:
-    sha = "Unknown"
-
-
-def get_version():
-    version_txt = os.path.join(cwd, "version.txt")
-    with open(version_txt) as f:
-        version = f.readline().strip()
-    if os.getenv("TORCHRL_BUILD_VERSION"):
-        version = os.getenv("TORCHRL_BUILD_VERSION")
-    elif sha != "Unknown":
-        version += "+" + sha[:7]
-    return version
-
+logger = logging.getLogger(__name__)
 
 ROOT_DIR = Path(__file__).parent.resolve()
 
 
-package_name = "torchrl"
+def _check_pybind11():
+    """Check that pybind11 is installed and provide a clear error message if not.
+
+    Only checks when actually building extensions, not for commands like 'clean'.
+    """
+    # Commands that don't require building C++ extensions
+    skip_commands = {"clean", "egg_info", "sdist", "--version", "--help", "-h"}
+    if skip_commands.intersection(sys.argv):
+        return
+    if importlib.util.find_spec("pybind11") is None:
+        raise RuntimeError(
+            "pybind11 is required to build TorchRL's C++ extensions but was not found.\n"
+            "Please install it with:\n"
+            "    pip install 'pybind11[global]'\n"
+            "Then re-run the installation."
+        )
 
 
-def get_nightly_version():
-    today = date.today()
-    return f"{today.year}.{today.month}.{today.day}"
+_check_pybind11()
+_RELEASE_BRANCH_RE = re.compile(r"^release/v(?P<release_id>.+)$")
+_BUILD_INFO_FILE = ROOT_DIR / "build" / ".torchrl_build_info.json"
 
 
-def parse_args(argv: List[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="torchrl setup")
-    parser.add_argument(
-        "--package_name",
-        type=str,
-        default="torchrl",
-        help="the name of this output wheel",
-    )
-    return parser.parse_known_args(argv)
+def _check_and_clean_stale_builds():
+    """Check if existing build was made with a different PyTorch version and clean if so.
 
+    This prevents ABI incompatibility issues when switching between PyTorch versions.
+    """
+    current_torch_version = torch.__version__
+    current_python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
 
-def write_version_file(version):
-    version_path = os.path.join(cwd, "torchrl", "version.py")
-    with open(version_path, "w") as f:
-        f.write(f"__version__ = '{version}'\n")
-        f.write(f"git_version = {repr(sha)}\n")
+    if _BUILD_INFO_FILE.exists():
+        try:
+            with open(_BUILD_INFO_FILE) as f:
+                build_info = json.load(f)
+            old_torch = build_info.get("torch_version")
+            old_python = build_info.get("python_version")
 
+            if (
+                old_torch != current_torch_version
+                or old_python != current_python_version
+            ):
+                logger.warning(
+                    f"Detected PyTorch/Python version change: "
+                    f"PyTorch {old_torch} -> {current_torch_version}, "
+                    f"Python {old_python} -> {current_python_version}. "
+                    f"Cleaning stale build artifacts..."
+                )
+                # Clean stale extension files for current Python version
+                ext = ".pyd" if sys.platform == "win32" else ".so"
+                ext_pattern = (
+                    ROOT_DIR
+                    / "torchrl"
+                    / f"_torchrl.cpython-{sys.version_info.major}{sys.version_info.minor}*{ext}"
+                )
+                for so_file in glob.glob(str(ext_pattern)):
+                    logger.warning(f"Removing stale: {so_file}")
+                    os.remove(so_file)
+                # Clean build directory
+                build_dir = ROOT_DIR / "build"
+                if build_dir.exists():
+                    import shutil
 
-def _get_pytorch_version(is_nightly, is_local):
-    # if "PYTORCH_VERSION" in os.environ:
-    #     return f"torch=={os.environ['PYTORCH_VERSION']}"
-    return "torch>=2.1.0"
+                    for item in build_dir.iterdir():
+                        if item.name.startswith("temp.") or item.name.startswith(
+                            "lib."
+                        ):
+                            logger.warning(f"Removing stale build dir: {item}")
+                            shutil.rmtree(item)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Could not read build info: {e}")
 
-
-def _get_packages():
-    exclude = [
-        "build*",
-        "test*",
-        "torchrl.csrc*",
-        "third_party*",
-        "tools*",
-    ]
-    return find_packages(exclude=exclude)
-
-
-ROOT_DIR = Path(__file__).parent.resolve()
-
-
-class clean(distutils.command.clean.clean):
-    def run(self):
-        # Run default behavior first
-        distutils.command.clean.clean.run(self)
-
-        # Remove torchrl extension
-        for path in (ROOT_DIR / "torchrl").glob("**/*.so"):
-            logging.info(f"removing '{path}'")
-            path.unlink()
-        # Remove build directory
-        build_dirs = [
-            ROOT_DIR / "build",
-        ]
-        for path in build_dirs:
-            if path.exists():
-                logging.info(f"removing '{path}' (and everything under it)")
-                shutil.rmtree(str(path), ignore_errors=True)
-
-
-# def _run_cmd(cmd):
-#     try:
-#         return subprocess.check_output(cmd, cwd=ROOT_DIR).decode("ascii").strip()
-#     except Exception:
-#         return None
+    # Write current build info
+    _BUILD_INFO_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(_BUILD_INFO_FILE, "w") as f:
+        json.dump(
+            {
+                "torch_version": current_torch_version,
+                "python_version": current_python_version,
+            },
+            f,
+        )
 
 
 def get_extensions():
-    extension = CppExtension
+    """Build C++ extensions with platform-specific compiler flags.
 
+    This function configures the C++ extension build process with appropriate
+    compiler flags for different platforms:
+    - Windows (MSVC): Uses /O2, /std:c++17, /EHsc flags
+    - Unix-like (GCC/Clang): Uses -O3, -std=c++17, -fdiagnostics-color=always flags
+
+    Returns:
+        list: List of CppExtension objects to be built
+    """
+    extension = CppExtension
     extra_link_args = []
-    extra_compile_args = {
-        "cxx": [
-            "-O3",
-            "-std=c++17",
-            "-fdiagnostics-color=always",
-        ]
-    }
-    debug_mode = os.getenv("DEBUG", "0") == "1"
-    if debug_mode:
-        logging.info("Compiling in debug mode")
+
+    # Platform-specific compiler flags
+    if sys.platform == "win32":
+        # MSVC flags for Windows
         extra_compile_args = {
             "cxx": [
-                "-O0",
-                "-fno-inline",
-                "-g",
+                "/O2",  # Optimization level 2 (equivalent to -O3)
+                "/std:c++17",  # C++17 standard
+                "/EHsc",  # Exception handling model
+            ]
+        }
+        debug_mode = os.getenv("DEBUG", "0") == "1"
+        if debug_mode:
+            logging.info("Compiling in debug mode")
+            extra_compile_args = {
+                "cxx": [
+                    "/Od",  # No optimization (equivalent to -O0)
+                    "/Zi",  # Generate debug info
+                    "/std:c++17",  # C++17 standard
+                    "/EHsc",  # Exception handling model
+                ]
+            }
+            extra_link_args = ["/DEBUG"]
+    else:
+        # GCC/Clang flags for Unix-like systems
+        extra_compile_args = {
+            "cxx": [
+                "-O3",
                 "-std=c++17",
                 "-fdiagnostics-color=always",
             ]
         }
-        extra_link_args = ["-O0", "-g"]
+        debug_mode = os.getenv("DEBUG", "0") == "1"
+        if debug_mode:
+            logging.info("Compiling in debug mode")
+            extra_compile_args = {
+                "cxx": [
+                    "-O0",
+                    "-fno-inline",
+                    "-g",
+                    "-std=c++17",
+                    "-fdiagnostics-color=always",
+                ]
+            }
+            extra_link_args = ["-O0", "-g"]
 
-    this_dir = os.path.dirname(os.path.abspath(__file__))
-    extensions_dir = os.path.join(this_dir, "torchrl", "csrc")
+    extensions_dir = "torchrl/csrc"
 
-    extension_sources = {
-        os.path.join(extensions_dir, p)
-        for p in glob.glob(os.path.join(extensions_dir, "*.cpp"))
-    }
-    sources = list(extension_sources)
+    # Get just the filenames, not full paths
+    cpp_files = glob.glob(os.path.join(extensions_dir, "*.cpp"))
+    sources = [os.path.relpath(f) for f in cpp_files]
 
-    include_dirs = [this_dir]
+    include_dirs = ["."]
     python_include_dir = os.getenv("PYTHON_INCLUDE_DIR")
     if python_include_dir is not None:
         include_dirs.append(python_include_dir)
@@ -165,147 +186,90 @@ def get_extensions():
     return ext_modules
 
 
-def _main(argv):
-    args, unknown = parse_args(argv)
-    name = args.package_name
-    is_nightly = "nightly" in name
-    if is_nightly:
-        tensordict_dep = "tensordict-nightly"
-    else:
-        tensordict_dep = "tensordict>=0.9.0,<0.10.0"
+def _git_output(args) -> str | None:
+    try:
+        return (
+            subprocess.check_output(["git", *args], cwd=str(ROOT_DIR))
+            .decode("utf-8")
+            .strip()
+        )
+    except Exception:
+        return None
 
-    if is_nightly:
-        version = get_nightly_version()
-        write_version_file(version)
-    else:
-        version = get_version()
-        write_version_file(version)
-    TORCHRL_BUILD_VERSION = os.getenv("TORCHRL_BUILD_VERSION")
-    logging.info(f"Building wheel {package_name}-{version}")
-    logging.info(f"TORCHRL_BUILD_VERSION is {TORCHRL_BUILD_VERSION}")
 
-    is_local = TORCHRL_BUILD_VERSION is None
-    pytorch_package_dep = _get_pytorch_version(is_nightly, is_local)
-    logging.info("-- PyTorch dependency:", pytorch_package_dep)
-    # branch = _run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"])
-    # tag = _run_cmd(["git", "describe", "--tags", "--exact-match", "@"])
+def _branch_name() -> str | None:
+    for key in (
+        "GITHUB_REF_NAME",
+        "GIT_BRANCH",
+        "BRANCH_NAME",
+        "CI_COMMIT_REF_NAME",
+    ):
+        val = os.environ.get(key)
+        if val:
+            return val
+    branch = _git_output(["rev-parse", "--abbrev-ref", "HEAD"])
+    if not branch or branch == "HEAD":
+        return None
+    return branch
 
-    this_directory = Path(__file__).parent
-    long_description = (this_directory / "README.md").read_text(encoding="utf8")
-    sys.argv = [sys.argv[0]] + unknown
 
-    extra_requires = {
-        "atari": ["gymnasium[atari]"],
-        "dm_control": ["dm_control"],
-        "replay_buffer": ["torch>=2.7.0"],
-        "gym_continuous": ["gymnasium<1.0", "mujoco"],
-        "rendering": ["moviepy<2.0.0"],
-        "tests": [
-            "pytest",
-            "pyyaml",
-            "pytest-instafail",
-            "scipy",
-            "pytest-mock",
-            "pytest-cov",
-            "pytest-asyncio",
-            "pytest-benchmark",
-            "pytest-rerunfailures",
-            "pytest-error-for-skips",
-            "",
-        ],
-        "utils": [
-            "tensorboard",
-            "wandb",
-            "tqdm",
-            "hydra-core>=1.1",
-            "hydra-submitit-launcher",
-            "git",
-        ],
-        "checkpointing": [
-            "torchsnapshot",
-        ],
-        "offline-data": [
-            "huggingface_hub",  # for roboset
-            "minari",
-            "requests",
-            "tqdm",
-            "torchvision",
-            "scikit-learn",
-            "pandas",
-            "h5py",
-            "pillow",
-        ],
-        "marl": ["vmas>=1.2.10", "pettingzoo>=1.24.1", "dm-meltingpot"],
-        "open_spiel": ["open_spiel>=1.5"],
-        "llm": [
-            "transformers",  # For tokenizer and model support
-            "vllm",  # For efficient inference
-            "playwright",  # For browser automation
-            "datasets",  # For data loading
-            "langdetect",  # For language detection in IFEval
-            "nltk",  # For text processing in IFEval
-            "immutabledict",  # For IFEval
-            "accelerate",  # For model loading and inference
-            "sentencepiece",  # For tokenization
-            "protobuf",  # Required by some models
-            "einops",  # For tensor operations
-            "safetensors",  # For model loading
-        ],
-    }
-    extra_requires["all"] = set()
-    for key in list(extra_requires.keys()):
-        extra_requires["all"] = extra_requires["all"].union(extra_requires[key])
-    extra_requires["all"] = sorted(extra_requires["all"])
-    setup(
-        # Metadata
-        name=name,
-        version=version,
-        author="torchrl contributors",
-        author_email="vmoens@fb.com",
-        url="https://github.com/pytorch/rl",
-        long_description=long_description,
-        long_description_content_type="text/markdown",
-        license="MIT",
-        # Package info
-        packages=find_packages(
-            exclude=(
-                "test",
-                "tutorials",
-                "docs",
-                "examples",
-                "knowledge_base",
-                "packaging",
-            )
-        ),
-        ext_modules=get_extensions(),
-        cmdclass={
-            "build_ext": BuildExtension.with_options(),
-            "clean": clean,
-        },
-        install_requires=[
-            pytorch_package_dep,
-            "numpy",
-            "packaging",
-            "cloudpickle",
-            tensordict_dep,
-        ],
-        extras_require=extra_requires,
-        zip_safe=False,
-        classifiers=[
-            "Programming Language :: Python :: 3.9",
-            "Programming Language :: Python :: 3.10",
-            "Programming Language :: Python :: 3.11",
-            "Programming Language :: Python :: 3.12",
-            "License :: OSI Approved :: MIT License",
-            "Operating System :: OS Independent",
-            "Development Status :: 4 - Beta",
-            "Intended Audience :: Developers",
-            "Intended Audience :: Science/Research",
-            "License :: OSI Approved :: BSD License",
-            "Topic :: Scientific/Engineering :: Artificial Intelligence",
-        ],
-    )
+def _short_sha() -> str | None:
+    return _git_output(["rev-parse", "--short", "HEAD"])
+
+
+def _version_with_local_sha(base_version: str) -> str:
+    # Do not append local version on the matching release branch.
+    branch = _branch_name()
+    if branch:
+        m = _RELEASE_BRANCH_RE.match(branch)
+        if m and m.group("release_id").strip() == base_version.strip():
+            return base_version
+    sha = _short_sha()
+    if not sha:
+        return base_version
+    return f"{base_version}+g{sha}"
+
+
+@contextlib.contextmanager
+def set_version():
+    # Prefer explicit build version if provided by build tooling.
+    if "SETUPTOOLS_SCM_PRETEND_VERSION" not in os.environ:
+        override = os.environ.get("TORCHRL_BUILD_VERSION")
+        if override:
+            os.environ["SETUPTOOLS_SCM_PRETEND_VERSION"] = override.strip()
+        else:
+            base_version = (ROOT_DIR / "version.txt").read_text().strip()
+            full_version = _version_with_local_sha(base_version)
+            os.environ["SETUPTOOLS_SCM_PRETEND_VERSION"] = full_version
+        yield
+        del os.environ["SETUPTOOLS_SCM_PRETEND_VERSION"]
+        return
+    yield
+
+
+def main():
+    """Main setup function for building TorchRL with C++ extensions."""
+    # Check for stale builds from different PyTorch/Python versions
+    _check_and_clean_stale_builds()
+
+    with set_version():
+        pretend_version = os.environ.get("SETUPTOOLS_SCM_PRETEND_VERSION")
+        _has_setuptools_scm = importlib.util.find_spec("setuptools_scm") is not None
+
+        setup_kwargs = {
+            "ext_modules": get_extensions(),
+            "cmdclass": {"build_ext": BuildExtension.with_options()},
+            "zip_safe": False,
+            **(
+                {"setup_requires": ["setuptools_scm"], "use_scm_version": True}
+                if _has_setuptools_scm
+                # pretend_version already includes +g<sha> (computed in set_version)
+                else {"version": pretend_version}
+            ),
+        }
+
+        setup(**setup_kwargs)
 
 
 if __name__ == "__main__":
-    _main(sys.argv[1:])
+    main()

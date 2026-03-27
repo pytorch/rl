@@ -5,18 +5,18 @@
 from __future__ import annotations
 
 import math
+import warnings
 from dataclasses import dataclass
 from functools import wraps
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import dispatch, TensorDictModule
+from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import Tensor
 
 from torchrl.data.tensor_specs import Composite
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
@@ -26,7 +26,12 @@ from torchrl.objectives.utils import (
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+from torchrl.objectives.value import (
+    TD0Estimator,
+    TD1Estimator,
+    TDLambdaEstimator,
+    ValueEstimatorBase,
+)
 
 
 def _delezify(func):
@@ -49,7 +54,7 @@ class CrossQLoss(LossModule):
     be called by the user that order.
 
     Args:
-        actor_network (ProbabilisticActor): stochastic actor
+        actor_network (ProbabilisticTensorDictSequential): stochastic actor
         qvalue_network (TensorDictModule): Q(s, a) parametric model.
             This module typically outputs a ``"state_action_value"`` entry.
             If a single instance of `qvalue_network` is provided, it will be duplicated ``num_qvalue_nets``
@@ -57,7 +62,7 @@ class CrossQLoss(LossModule):
             parameters will be stacked unless they share the same identity (in which case
             the original parameter will be expanded).
 
-            .. warning:: When a list of parameters if passed, it will __not__ be compared against the policy parameters
+            .. warning:: When a list of parameters if passed, it will **not** be compared against the policy parameters
               and all the parameters will be considered as untied.
 
     Keyword Args:
@@ -246,7 +251,7 @@ class CrossQLoss(LossModule):
     default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
 
-    actor_network: ProbabilisticActor
+    actor_network: ProbabilisticTensorDictSequential
     actor_network_params: TensorDictParams
     qvalue_network: TensorDictModule
     qvalue_network_params: TensorDictParams
@@ -255,7 +260,7 @@ class CrossQLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: ProbabilisticActor,
+        actor_network: ProbabilisticTensorDictSequential,
         qvalue_network: TensorDictModule | list[TensorDictModule],
         *,
         num_qvalue_nets: int = 2,
@@ -266,10 +271,11 @@ class CrossQLoss(LossModule):
         action_spec=None,
         fixed_alpha: bool = False,
         target_entropy: str | float = "auto",
-        priority_key: str = None,
+        priority_key: str | None = None,
         separate_losses: bool = False,
-        reduction: str = None,
+        reduction: str | None = None,
         deactivate_vmap: bool = False,
+        scalar_output_mode: str | None = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -344,6 +350,23 @@ class CrossQLoss(LossModule):
         self._action_spec = action_spec
         self._make_vmap()
         self.reduction = reduction
+
+        # Handle scalar_output_mode for reduction="none"
+        if reduction == "none" and scalar_output_mode is None:
+            warnings.warn(
+                "CrossQLoss with reduction='none' cannot include scalar values (alpha, entropy) "
+                "in the output TensorDict without changing their shape. These values will be "
+                "excluded from the output. You can access them via `loss_module._alpha` and "
+                "compute entropy from the log_prob in the actor loss metadata. "
+                "To suppress this warning, pass `scalar_output_mode='exclude'` to the constructor. "
+                "Alternatively, pass `scalar_output_mode='non_tensor'` to include them as non-tensor data. "
+                "This is a known limitation we're working on improving.",
+                category=UserWarning,
+                stacklevel=2,
+            )
+            scalar_output_mode = "exclude"
+        self.scalar_output_mode = scalar_output_mode
+
         # init target entropy
         self.maybe_init_target_entropy()
 
@@ -374,8 +397,8 @@ class CrossQLoss(LossModule):
         if "_target_entropy" in self._buffers:
             return
         target_entropy = self._target_entropy
+        device = next(self.parameters()).device
         if target_entropy == "auto":
-            device = next(self.parameters()).device
             action_spec = self.get_action_spec()
             if action_spec is None:
                 if fault_tolerant:
@@ -445,6 +468,13 @@ class CrossQLoss(LossModule):
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
+
+        # Handle ValueEstimatorBase instance or class
+        if isinstance(value_type, ValueEstimatorBase) or (
+            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
+        ):
+            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+
         self.value_type = value_type
 
         value_net = None
@@ -542,12 +572,21 @@ class CrossQLoss(LossModule):
             "loss_actor": loss_actor,
             "loss_qvalue": loss_qvalue,
             "loss_alpha": loss_alpha,
-            "alpha": self._alpha,
-            "entropy": entropy.detach().mean(),
             **metadata_actor,
             **value_metadata,
         }
-        td_out = TensorDict(out)
+
+        # Handle batch_size and scalar values (alpha, entropy) based on reduction mode
+        if self.reduction == "none":
+            batch_size = tensordict.batch_size
+            td_out = TensorDict(out, batch_size=batch_size)
+            if self.scalar_output_mode == "non_tensor":
+                td_out.set_non_tensor("alpha", self._alpha)
+                td_out.set_non_tensor("entropy", entropy.detach().mean())
+        else:
+            out["alpha"] = self._alpha
+            out["entropy"] = entropy.detach().mean()
+            td_out = TensorDict(out)
         self._clear_weakrefs(
             tensordict,
             td_out,

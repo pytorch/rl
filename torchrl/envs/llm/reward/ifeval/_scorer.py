@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import importlib.util
 import re
-from typing import Callable
+from collections.abc import Callable
 
 import torch
 from tensordict import (

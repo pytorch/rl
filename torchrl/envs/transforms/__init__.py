@@ -4,8 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 
 from .gym_transforms import EndOfLifeTransform
-from .llm import KLRewardTransform
+from .module import ModuleTransform
 from .r3m import R3MTransform
+from .ray_service import RayTransform
 from .rb_transforms import MultiStepTransform
 from .transforms import (
     ActionDiscretizer,
@@ -84,9 +85,9 @@ __all__ = [
     "CatFrames",
     "CatTensors",
     "CenterCrop",
-    "ConditionalPolicySwitch",
     "ClipTransform",
     "Compose",
+    "ConditionalPolicySwitch",
     "ConditionalSkip",
     "Crop",
     "DTypeCastTransform",
@@ -101,8 +102,8 @@ __all__ = [
     "GrayScale",
     "Hash",
     "InitTracker",
-    "KLRewardTransform",
     "LineariseRewards",
+    "ModuleTransform",
     "MultiAction",
     "MultiStepTransform",
     "NoopResetEnv",
@@ -112,6 +113,7 @@ __all__ = [
     "PinMemoryTransform",
     "R3MTransform",
     "RandomCropTensorDict",
+    "RayTransform",
     "RemoveEmptySpecs",
     "RenameTransform",
     "Resize",

@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import torch
 from tensordict import TensorDictBase, unravel_key
@@ -167,7 +167,7 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
               global function. If this returns `None` (its default value), then the
               `default_interaction_type` of the `ProbabilisticTDModule`
               instance will be used. Note that
-              :class:`~torchrl.collectors.collectors.DataCollectorBase`
+              :class:`~torchrl.collectors.BaseCollector`
               instances will use `set_interaction_type` to
               :class:`tensordict.nn.InteractionType.RANDOM` by default.
 
@@ -180,7 +180,7 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
                 the keys will be inferred from the ``distribution_map`` / ``name_map`` keyword arguments of that
                 distribution. If this distribution is used with another constructor (e.g.,  partial or lambda function)
                 then the out_keys will need to be provided explicitly.
-                Note also that actions will __not__ be prefixed with an ``"action"`` key, see the example below
+                Note also that actions will **not** be prefixed with an ``"action"`` key, see the example below
                 on how this can be  achieved with a ``ProbabilisticActor``.
 
         distribution_kwargs (dict, optional): keyword-only argument.
@@ -1452,7 +1452,7 @@ class ActorValueOperator(SafeSequential):
             value_operator,
         )
 
-    def get_policy_operator(self) -> SafeSequential:
+    def get_policy_operator(self) -> TensorDictSequential:
         """Returns a standalone policy operator that maps an observation to an action."""
         if isinstance(self.module[1], SafeProbabilisticTensorDictSequential):
             return SafeProbabilisticTensorDictSequential(
@@ -1460,15 +1460,15 @@ class ActorValueOperator(SafeSequential):
             )
         return SafeSequential(self.module[0], self.module[1])
 
-    def get_value_operator(self) -> SafeSequential:
+    def get_value_operator(self) -> TensorDictSequential:
         """Returns a standalone value network operator that maps an observation to a value estimate."""
         return SafeSequential(self.module[0], self.module[2])
 
-    def get_policy_head(self) -> SafeSequential:
+    def get_policy_head(self) -> TensorDictModule:
         """Returns the policy head."""
         return self.module[1]
 
-    def get_value_head(self) -> SafeSequential:
+    def get_value_head(self) -> TensorDictModule:
         """Returns the value head."""
         return self.module[2]
 
@@ -1625,11 +1625,11 @@ class ActorCriticOperator(ActorValueOperator):
             "network computing this value, please call td_sequence.get_critic_operator()"
         )
 
-    def get_policy_head(self) -> SafeSequential:
+    def get_policy_head(self) -> TensorDictModule:
         """Returns the policy head."""
         return self.module[1]
 
-    def get_value_head(self) -> SafeSequential:
+    def get_value_head(self) -> TensorDictModule:
         """Returns the value head."""
         return self.module[2]
 
@@ -1741,11 +1741,11 @@ class ActorCriticWrapper(SafeSequential):
             value_operator,
         )
 
-    def get_policy_operator(self) -> SafeSequential:
+    def get_policy_operator(self) -> TensorDictModule:
         """Returns a standalone policy operator that maps an observation to an action."""
         return self.module[0]
 
-    def get_value_operator(self) -> SafeSequential:
+    def get_value_operator(self) -> TensorDictModule:
         """Returns a standalone value network operator that maps an observation to a value estimate."""
         return self.module[1]
 

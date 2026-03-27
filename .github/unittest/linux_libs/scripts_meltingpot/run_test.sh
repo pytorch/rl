@@ -27,5 +27,5 @@ export MAGNUM_LOG=verbose MAGNUM_GPU_VALIDATION=ON
 python -c "import meltingpot"
 
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestMeltingpot --error-for-skips
-coverage combine
+coverage combine -q
 coverage xml -i

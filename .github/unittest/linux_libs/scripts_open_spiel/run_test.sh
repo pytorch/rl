@@ -24,5 +24,5 @@ python -c "import pyspiel"
 
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestOpenSpiel --error-for-skips --runslow
 
-coverage combine
+coverage combine -q
 coverage xml -i

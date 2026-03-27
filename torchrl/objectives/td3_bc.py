@@ -22,7 +22,12 @@ from torchrl.objectives.utils import (
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+from torchrl.objectives.value import (
+    TD0Estimator,
+    TD1Estimator,
+    TDLambdaEstimator,
+    ValueEstimatorBase,
+)
 
 
 class TD3BCLoss(LossModule):
@@ -47,7 +52,7 @@ class TD3BCLoss(LossModule):
             parameters will be stacked unless they share the same identity (in which case
             the original parameter will be expanded).
 
-            .. warning:: When a list of parameters if passed, it will __not__ be compared against the policy parameters
+            .. warning:: When a list of parameters if passed, it will **not** be compared against the policy parameters
               and all the parameters will be considered as untied.
 
     Keyword Args:
@@ -215,6 +220,7 @@ class TD3BCLoss(LossModule):
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
+        priority_weight: NestedKey = "priority_weight"
 
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
@@ -251,14 +257,16 @@ class TD3BCLoss(LossModule):
         loss_function: str = "smooth_l1",
         delay_actor: bool = True,
         delay_qvalue: bool = True,
-        priority_key: str = None,
+        priority_key: str | None = None,
         separate_losses: bool = False,
-        reduction: str = None,
+        reduction: str | None = None,
         deactivate_vmap: bool = False,
+        use_prioritized_weights: str | bool = "auto",
     ) -> None:
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self.use_prioritized_weights = use_prioritized_weights
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority=priority_key)
 
@@ -404,6 +412,7 @@ class TD3BCLoss(LossModule):
                 used in the combined actor loss as well as the detached `"state_action_value_actor"` used to calculate the lambda
                 value, and the lambda value `"lmbd"` itself.
         """
+        weights = self._maybe_get_priority_weight(tensordict)
         tensordict_actor_grad = tensordict.select(
             *self.actor_network.in_keys, strict=False
         )
@@ -436,7 +445,7 @@ class TD3BCLoss(LossModule):
             "bc_loss": bc_loss.detach(),
             "lmbd": lmbd,
         }
-        loss_actor = _reduce(loss_actor, reduction=self.reduction)
+        loss_actor = _reduce(loss_actor, reduction=self.reduction, weights=weights)
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -457,6 +466,7 @@ class TD3BCLoss(LossModule):
         Returns: a differentiable tensor with the qvalue loss along with a metadata dictionary containing
             the detached `"td_error"` to be used for prioritized sampling, the detached `"next_state_value"`, the detached `"pred_value"`, and the detached `"target_value"`.
         """
+        weights = self._maybe_get_priority_weight(tensordict)
         tensordict = tensordict.clone(False)
 
         act = tensordict.get(self.tensor_keys.action)
@@ -530,7 +540,7 @@ class TD3BCLoss(LossModule):
             "pred_value": current_qvalue.detach(),
             "target_value": target_value.detach(),
         }
-        loss_qval = _reduce(loss_qval, reduction=self.reduction)
+        loss_qval = _reduce(loss_qval, reduction=self.reduction, weights=weights)
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -580,6 +590,13 @@ class TD3BCLoss(LossModule):
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
+
+        # Handle ValueEstimatorBase instance or class
+        if isinstance(value_type, ValueEstimatorBase) or (
+            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
+        ):
+            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+
         self.value_type = value_type
         hp = dict(default_value_kwargs(value_type))
         if hasattr(self, "gamma"):
