@@ -2388,9 +2388,6 @@ class _RequestOutput_tc(TensorClass["nocast"]):
                 num_cached_tokens=_build_num_cached_tokens(requests),
             )
 
-        if len(requests) == 1:
-            return cls.from_request_output(requests[0])
-
         # Check if we can stack the outputs
         try:
             out = lazy_stack(

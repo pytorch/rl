@@ -3521,7 +3521,7 @@ class TestRequestOutputConversion:
         assert not isinstance(tc.outputs, list)
 
     def test_from_request_output(self):
-        """Test from_request_output class method with a mock RequestOutput."""
+        """Test from_request_output preserves batch semantics for request lists."""
         from vllm.outputs import CompletionOutput, RequestOutput
 
         completion = CompletionOutput(
@@ -3542,11 +3542,12 @@ class TestRequestOutputConversion:
             finished=True,
         )
         result = _RequestOutput_tc.from_request_output([request])
-        assert result.request_id == "req-3"
-        assert result.prompt == "Hello"
-        torch.testing.assert_close(result.prompt_token_ids, torch.tensor([1, 2, 3]))
+        assert result.batch_size == torch.Size([1])
+        assert result.request_id[0] == "req-3"
+        assert result.prompt[0] == "Hello"
+        torch.testing.assert_close(result.prompt_token_ids[0], torch.tensor([1, 2, 3]))
         # prompt_logprobs=None should become empty tensor
-        assert result.prompt_logprobs.numel() == 0
+        assert result.prompt_logprobs[0].numel() == 0
 
 
 if __name__ == "__main__":
