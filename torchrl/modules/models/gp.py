@@ -305,7 +305,7 @@ class GPWorldModel(nn.Module):
         """Predict the next-state distribution given the current state and action.
 
         Routes to :meth:`uncertain_forward` (moment-matching, Eqs. 10-23) when
-        the input observation covariance is non-zero, and to
+        any input covariance is non-zero, and to
         :meth:`deterministic_forward` (Eqs. 7-8) otherwise.
 
         Args:
@@ -332,11 +332,19 @@ class GPWorldModel(nn.Module):
                 "Convert per-dimension variances with torch.diag_embed() first."
             )
 
-        observation_uncertain = Sigma_x is not None and not torch.all(
-            torch.isclose(Sigma_x, torch.zeros_like(Sigma_x))
-        )
+        Sigma_u = tensordict.get(u_var_key, None)
+        Sigma_xu = tensordict.get(u_cc_key, None)
 
-        if observation_uncertain:
+        def _has_nonzero_covariance(covariance: torch.Tensor | None) -> bool:
+            return covariance is not None and not torch.all(
+                torch.isclose(covariance, torch.zeros_like(covariance))
+            )
+
+        observation_uncertain = _has_nonzero_covariance(Sigma_x)
+        action_uncertain = _has_nonzero_covariance(Sigma_u)
+        cross_uncertain = _has_nonzero_covariance(Sigma_xu)
+
+        if observation_uncertain or action_uncertain or cross_uncertain:
             return self.uncertain_forward(tensordict)
         else:
             return self.deterministic_forward(tensordict)

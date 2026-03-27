@@ -9,6 +9,7 @@ from collections.abc import Sequence
 import torch
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule
+from torchrl.data.tensor_specs import Composite, Unbounded
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based import ModelBasedEnvBase
 
@@ -96,9 +97,29 @@ class ImaginedEnv(ModelBasedEnvBase):
             **kwargs,
         )
 
-        self.observation_spec = base_env.observation_spec.expand(
+        self._base_observation_spec = base_env.observation_spec.expand(
             self.batch_size
-        ).clone()
+        ).clone()["observation"]
+        obs_dim = self._base_observation_spec.shape[-1]
+        self.observation_spec = (
+            Composite(
+                observation=Composite(
+                    mean=Unbounded(
+                        shape=(obs_dim,),
+                        device=self.device,
+                        dtype=self._base_observation_spec.dtype,
+                    ),
+                    var=Unbounded(
+                        shape=(obs_dim, obs_dim),
+                        device=self.device,
+                        dtype=self._base_observation_spec.dtype,
+                    ),
+                ),
+                device=self.device,
+            )
+            .expand(self.batch_size)
+            .clone()
+        )
         self.action_spec = base_env.action_spec.expand(self.batch_size).clone()
         self.reward_spec = base_env.reward_spec.expand(self.batch_size).clone()
         self.done_spec = base_env.done_spec.expand(self.batch_size).clone()
@@ -147,7 +168,7 @@ class ImaginedEnv(ModelBasedEnvBase):
 
         obs = tensordict.get("observation", None)
         if obs is None:
-            obs = self.observation_spec.rand(shape=self.batch_size).get("observation")
+            obs = self._base_observation_spec.rand()
         if obs.ndim == 1:
             obs = obs.expand(self.batch_size[0], -1)
 

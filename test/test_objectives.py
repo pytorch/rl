@@ -14,6 +14,7 @@ import sys
 import warnings
 from copy import deepcopy
 from dataclasses import asdict, dataclass
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
@@ -18618,6 +18619,8 @@ class TestImaginedEnv:
 
         env = ImaginedEnv(world_model_module=wm, base_env=base_env)
         assert env.batch_size == torch.Size([1])
+        assert ("observation", "mean") in env.observation_spec.keys(True)
+        assert ("observation", "var") in env.observation_spec.keys(True)
 
     def test_creation_with_batch_size(self):
         obs_dim, action_dim = 4, 1
@@ -18645,6 +18648,7 @@ class TestImaginedEnv:
         out = env.reset(reset_td)
         assert ("observation", "mean") in out.keys(True)
         assert ("observation", "var") in out.keys(True)
+        assert env.observation_spec.contains(out.select("observation"))
 
     def test_step(self):
         obs_dim, action_dim = 4, 1
@@ -18677,6 +18681,7 @@ class TestImaginedEnv:
         assert ("observation", "var") in next_td.keys(True)
         assert "done" in next_td.keys()
         assert not next_td["done"].any()
+        assert env.observation_spec.contains(next_td.select("observation"))
 
     def test_never_terminates(self):
         obs_dim, action_dim = 4, 1
@@ -18785,6 +18790,27 @@ class TestMeanActionSelector:
 
 @pytest.mark.skipif(not _has_botorch, reason="botorch/gpytorch not installed")
 class TestGPWorldModel:
+    @staticmethod
+    def _make_dispatch_only_model():
+        from torchrl.modules.models.gp import GPWorldModel
+
+        model = GPWorldModel.__new__(GPWorldModel)
+        nn.Module.__init__(model)
+        model.in_keys = [
+            ("action", "mean"),
+            ("action", "var"),
+            ("action", "cross_covariance"),
+            ("observation", "mean"),
+            ("observation", "var"),
+        ]
+        model.uncertain_forward = Mock(
+            name="uncertain_forward", return_value="uncertain"
+        )
+        model.deterministic_forward = Mock(
+            name="deterministic_forward", return_value="deterministic"
+        )
+        return model
+
     def test_creation(self):
         from torchrl.modules.models.gp import GPWorldModel
 
@@ -18888,28 +18914,9 @@ class TestGPWorldModel:
 
         torch.testing.assert_close(var, var.transpose(-2, -1), atol=1e-5, rtol=1e-4)
 
-    def test_forward_dispatch(self):
-        from torchrl.modules.models.gp import GPWorldModel
-
+    def test_forward_dispatch_observation_uncertainty(self):
         obs_dim, action_dim = 2, 1
-        model = GPWorldModel(obs_dim=obs_dim, action_dim=action_dim)
-
-        n_samples = 20
-        obs = torch.randn(n_samples, obs_dim).double()
-        action = torch.randn(n_samples, action_dim).double()
-        next_obs = obs + 0.1 * torch.randn(n_samples, obs_dim).double()
-
-        dataset = TensorDict(
-            {
-                "observation": obs,
-                "action": action,
-                ("next", "observation"): next_obs,
-            },
-            batch_size=[n_samples],
-        )
-
-        model.fit(dataset)
-        model.eval()
+        model = self._make_dispatch_only_model()
 
         batch = 2
         td = TensorDict(
@@ -18934,9 +18941,69 @@ class TestGPWorldModel:
             },
             batch_size=[batch],
         )
-        forward_td = model(td)
-        mean = forward_td[("next", "observation", "mean")]
-        assert mean.shape == (2, obs_dim)
+        assert model.forward(td) == "uncertain"
+        model.uncertain_forward.assert_called_once_with(td)
+        model.deterministic_forward.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "action_key", [("action", "var"), ("action", "cross_covariance")]
+    )
+    def test_forward_dispatch_action_uncertainty(self, action_key):
+        obs_dim, action_dim = 2, 1
+        model = self._make_dispatch_only_model()
+
+        action_value = torch.eye(action_dim, dtype=torch.float64).unsqueeze(0) * 0.01
+        if action_key == ("action", "cross_covariance"):
+            action_value = torch.full(
+                (1, obs_dim, action_dim), 0.01, dtype=torch.float64
+            )
+
+        td = TensorDict(
+            {
+                "observation": {
+                    "mean": torch.randn(1, obs_dim, dtype=torch.float64),
+                    "var": torch.zeros(1, obs_dim, obs_dim, dtype=torch.float64),
+                },
+                "action": {
+                    "mean": torch.randn(1, action_dim, dtype=torch.float64),
+                    "var": torch.zeros(1, action_dim, action_dim, dtype=torch.float64),
+                    "cross_covariance": torch.zeros(
+                        1, obs_dim, action_dim, dtype=torch.float64
+                    ),
+                },
+            },
+            batch_size=[1],
+        )
+        td.set(action_key, action_value)
+
+        assert model.forward(td) == "uncertain"
+        model.uncertain_forward.assert_called_once_with(td)
+        model.deterministic_forward.assert_not_called()
+
+    def test_forward_dispatch_deterministic_when_covariances_are_zero(self):
+        obs_dim, action_dim = 2, 1
+        model = self._make_dispatch_only_model()
+
+        td = TensorDict(
+            {
+                "observation": {
+                    "mean": torch.randn(1, obs_dim, dtype=torch.float64),
+                    "var": torch.zeros(1, obs_dim, obs_dim, dtype=torch.float64),
+                },
+                "action": {
+                    "mean": torch.randn(1, action_dim, dtype=torch.float64),
+                    "var": torch.zeros(1, action_dim, action_dim, dtype=torch.float64),
+                    "cross_covariance": torch.zeros(
+                        1, obs_dim, action_dim, dtype=torch.float64
+                    ),
+                },
+            },
+            batch_size=[1],
+        )
+
+        assert model.forward(td) == "deterministic"
+        model.deterministic_forward.assert_called_once_with(td)
+        model.uncertain_forward.assert_not_called()
 
 
 if __name__ == "__main__":
