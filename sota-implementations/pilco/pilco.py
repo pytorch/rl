@@ -20,21 +20,27 @@ from utils import make_env
 def evaluate_policy(
     env: TransformedEnv,
     policy: TensorDictModule,
+    eval_horizon: int,
     step: int,
     logger: Logger | None = None,
 ) -> TensorDict:
     test_rollout = env.rollout(
-        max_steps=100,
+        max_steps=eval_horizon,
         policy=policy,
         break_when_any_done=True,
     )
 
     reward = test_rollout["episode_reward"][-1].tolist()
     steps = test_rollout["step_count"].max().tolist()
+    angles = test_rollout["observation", "mean"][..., 1].abs()
+    max_abs_angle = angles.max().tolist()
+    mean_abs_angle = angles.mean().tolist()
 
     if logger:
         logger.log_scalar("eval/reward", reward, step=step)
         logger.log_scalar("eval/steps", steps, step=step)
+        logger.log_scalar("eval/max_abs_angle", max_abs_angle, step=step)
+        logger.log_scalar("eval/mean_abs_angle", mean_abs_angle, step=step)
 
     return test_rollout
 
@@ -86,7 +92,13 @@ def pilco_loop(
     )
 
     eval_env = TransformedEnv(env, MeanActionSelector())
-    evaluate_policy(eval_env, policy_module, step=0, logger=logger)
+    evaluate_policy(
+        eval_env,
+        policy_module,
+        eval_horizon=cfg.pilco.eval_horizon,
+        step=0,
+        logger=logger,
+    )
 
     cost_module = ExponentialQuadraticCost(reduction="none").to(env.device)
     for epoch in range(cfg.pilco.epochs):
@@ -123,8 +135,22 @@ def pilco_loop(
                     "train/trajectory_cost", loss.item(), step=logger_step
                 )
 
+            if logger_step % cfg.pilco.eval_interval == 0:
+                evaluate_policy(
+                    eval_env,
+                    policy_module,
+                    eval_horizon=cfg.pilco.eval_horizon,
+                    step=logger_step,
+                    logger=logger,
+                )
+
+        should_log_final_eval = logger_step % cfg.pilco.eval_interval != 0
         test_rollout = evaluate_policy(
-            eval_env, policy_module, step=logger_step, logger=logger
+            eval_env,
+            policy_module,
+            eval_horizon=cfg.pilco.eval_horizon,
+            step=logger_step,
+            logger=logger if should_log_final_eval else None,
         )
 
         test_rollout.set("observation", test_rollout.get(("observation", "mean")))

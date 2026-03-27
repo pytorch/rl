@@ -11,6 +11,8 @@ optim:
   policy_lr: 5e-3
 pilco:
   horizon: 40
+  eval_horizon: 100
+  eval_interval: 10
   initial_rollout_length: 200
   max_rollout_length: 350
   epochs: 3
