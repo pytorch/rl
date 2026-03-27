@@ -17,6 +17,28 @@ from torchrl.record.loggers import generate_exp_name, get_logger, Logger
 from utils import make_env
 
 
+def evaluate_policy(
+    env: TransformedEnv,
+    policy: TensorDictModule,
+    step: int,
+    logger: Logger | None = None,
+) -> TensorDict:
+    test_rollout = env.rollout(
+        max_steps=100,
+        policy=policy,
+        break_when_any_done=True,
+    )
+
+    reward = test_rollout["episode_reward"][-1].tolist()
+    steps = test_rollout["step_count"].max().tolist()
+
+    if logger:
+        logger.log_scalar("eval/reward", reward, step=step)
+        logger.log_scalar("eval/steps", steps, step=step)
+
+    return test_rollout
+
+
 def pilco_loop(
     cfg: DictConfig, env: EnvBase, logger: Logger | None = None
 ) -> TensorDictModule:
@@ -64,6 +86,7 @@ def pilco_loop(
     )
 
     eval_env = TransformedEnv(env, MeanActionSelector())
+    evaluate_policy(eval_env, policy_module, step=0, logger=logger)
 
     cost_module = ExponentialQuadraticCost(reduction="none").to(env.device)
     for epoch in range(cfg.pilco.epochs):
@@ -80,7 +103,7 @@ def pilco_loop(
         reset_td = initial_observation.expand(*imagined_env.batch_size)
 
         for step in range(cfg.pilco.policy_training_steps):
-            logger_step = (epoch * cfg.pilco.policy_training_steps) + step
+            logger_step = (epoch * cfg.pilco.policy_training_steps) + step + 1
             optimizer.zero_grad()
 
             imagined_data = imagined_env.rollout(
@@ -100,18 +123,9 @@ def pilco_loop(
                     "train/trajectory_cost", loss.item(), step=logger_step
                 )
 
-        test_rollout = eval_env.rollout(
-            max_steps=100,
-            policy=policy_module,
-            break_when_any_done=True,
+        test_rollout = evaluate_policy(
+            eval_env, policy_module, step=logger_step, logger=logger
         )
-
-        reward = test_rollout["episode_reward"][-1].tolist()
-        steps = test_rollout["step_count"].max().tolist()
-
-        if logger:
-            logger.log_scalar("eval/reward", reward, step=logger_step)
-            logger.log_scalar("eval/steps", steps, step=logger_step)
 
         test_rollout.set("observation", test_rollout.get(("observation", "mean")))
         test_rollout.set("action", test_rollout.get(("action", "mean")))
