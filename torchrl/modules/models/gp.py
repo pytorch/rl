@@ -374,7 +374,9 @@ class GPWorldModel(nn.Module):
         Sigma_x = tensordict.get(x_var_key)  # Σ_x,  shape (B×)D×D
         mu_u = tensordict.get(u_mean_key)  # μ_u,  shape (B×)F
         Sigma_u = tensordict.get(u_var_key)  # Σ_u,  shape (B×)F×F
-        C_xu = tensordict.get(u_cc_key)  # cov[x_{t-1}, u_{t-1}],  (B×)D×F  (Eq. 12)
+        C_xu = tensordict.get(
+            u_cc_key
+        )  # ∂μ_u/∂μ_x (policy Jacobian),  (B×)D×F  (Eq. 12)
 
         # Support unbatched inputs by temporarily adding a leading batch dimension.
         unbatched = mu_x.dim() == 1
@@ -397,8 +399,9 @@ class GPWorldModel(nn.Module):
         # μ̃_{t-1} = [μ_x; μ_u] ∈ R^{B×(D+F)}
         mu_tilde = torch.cat([mu_x, mu_u], dim=-1)
 
-        # Σ̃_{t-1} = [[Σ_x,        Σ_x C_xu    ],
-        #             [C_xu^T Σ_x^T, Σ_u        ]]  ∈ R^{B×(D+F)×(D+F)}
+        # Σ̃_{t-1} = [[Σ_x,           Σ_x ∂π/∂μ_x   ],
+        #             [(∂π/∂μ_x)^T Σ_x, Σ_u          ]]  ∈ R^{B×(D+F)×(D+F)}
+        # C_xu is the policy Jacobian ∂μ_u/∂μ_x, so cov(x,u) = Σ_x @ C_xu  (Eq. 12)
         Sigma_x_C_xu = Sigma_x @ C_xu  # upper-right block [B, D, F]
         Sigma_tilde = torch.cat(
             [

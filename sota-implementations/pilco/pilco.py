@@ -105,7 +105,7 @@ def pilco_loop(
         base_world_model = GPWorldModel(obs_dim=obs_dim, action_dim=action_dim).to(
             env.device
         )
-        base_world_model.fit(rollout)
+        base_world_model.fit(rollout.to(dtype))
         base_world_model.eval()
 
         imagined_env = ImaginedEnv(

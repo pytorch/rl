@@ -170,26 +170,30 @@ class ImaginedEnv(ModelBasedEnvBase):
         if obs is None:
             obs = self._base_observation_spec.rand()
         if obs.ndim == 1:
-            obs = obs.expand(self.batch_size[0], -1)
+            obs = obs.expand(*self.batch_size, -1)
 
         obs = obs.to(self.device)
-        B, D = obs.shape
+        batch_shape = obs.shape[:-1]
+        D = obs.shape[-1]
 
         out = TensorDict(
             {
                 ("observation", "mean"): obs,
                 ("observation", "var"): torch.zeros(
-                    B, D, D, dtype=obs.dtype, device=self.device
+                    *batch_shape, D, D, dtype=obs.dtype, device=self.device
                 ),
             },
             batch_size=self.batch_size,
             device=self.device,
         )
 
-        out.set("done", torch.zeros(B, 1, dtype=torch.bool, device=self.device))
+        out.set(
+            "done",
+            torch.zeros(*batch_shape, 1, dtype=torch.bool, device=self.device),
+        )
         out.set(
             "terminated",
-            torch.zeros(B, 1, dtype=torch.bool, device=self.device),
+            torch.zeros(*batch_shape, 1, dtype=torch.bool, device=self.device),
         )
 
         return out
