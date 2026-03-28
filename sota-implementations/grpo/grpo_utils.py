@@ -25,7 +25,7 @@ from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
 
 
-def check_grpo_dependencies() -> None:
+def check_grpo_dependencies(backend: str = "vllm") -> None:
     """Check for required GRPO dependencies and provide helpful error messages.
 
     This function checks for critical dependencies needed for GRPO training and
@@ -39,12 +39,15 @@ def check_grpo_dependencies() -> None:
         "datasets": "pip install datasets",
         "peft": "pip install peft",
         "wandb": "pip install wandb",
-        "vllm": "pip install vllm",
         "transformers": "pip install transformers",
         "accelerate": "pip install accelerate",
         "ray": "pip install ray",
         "tqdm": "pip install tqdm",
     }
+    if backend == "sglang":
+        required_packages["sglang"] = "pip install sglang[all]"
+    else:
+        required_packages["vllm"] = "pip install vllm"
 
     # Optional but recommended packages
     optional_packages = {
@@ -354,11 +357,11 @@ def _get_sglang_inference_model(
     from torchrl.modules.llm.backends.sglang import AsyncSGLang
 
     num_devices = cfg.inference_model.num_devices
+    sglang_devices = devices  # Always use allocated devices when provided
     if num_devices is None:
-        sglang_devices = devices if devices is not None else [1]
+        if sglang_devices is None:
+            sglang_devices = [1]
         num_devices = len(sglang_devices)
-    else:
-        sglang_devices = None
     torchrl_logger.info(
         f"Creating AsyncSGLang inference model with num_devices={num_devices}, devices={sglang_devices}"
     )
@@ -379,9 +382,9 @@ def _get_sglang_inference_model(
         dtype_str = cfg.inference_model.torch_dtype
         if dtype_str is not None:
             if isinstance(dtype_str, str):
-                inference_params["dtype"] = getattr(torch, dtype_str)
-            else:
                 inference_params["dtype"] = dtype_str
+            else:
+                inference_params["dtype"] = str(dtype_str).removeprefix("torch.")
 
     # Add optional SGLang parameters
     optional_sglang_params = [
@@ -394,6 +397,10 @@ def _get_sglang_inference_model(
             value = getattr(cfg.inference_model, param)
             if value is not None:
                 inference_params[param] = value
+
+    # Pin SGLang server to allocated GPUs via CUDA_VISIBLE_DEVICES
+    if sglang_devices is not None:
+        inference_params["cuda_devices"] = sglang_devices
 
     inference_server = AsyncSGLang.from_pretrained(**inference_params)
     assert inference_server is not None
@@ -656,6 +663,7 @@ def get_hf_model(
 def make_weight_sync_scheme(
     engine,
     cfg: DictConfig,
+    device: torch.device | str | int | None = None,
 ) -> VLLMWeightSyncScheme | SGLangWeightSyncScheme:
     """Creates a weight synchronization scheme using NCCL collectives.
 
@@ -667,6 +675,7 @@ def make_weight_sync_scheme(
             interface. This is typically obtained from the inference policy's model
             attribute.
         cfg: The hydra configuration object. Used to determine the backend type.
+        device: The device index for the trainer side of the NCCL group.
 
     Returns:
         VLLMWeightSyncScheme | SGLangWeightSyncScheme: A weight sync scheme
@@ -675,7 +684,7 @@ def make_weight_sync_scheme(
     backend = getattr(cfg.inference_model, "backend", "vllm")
 
     if backend == "sglang":
-        return _make_sglang_weight_sync_scheme(engine)
+        return _make_sglang_weight_sync_scheme(engine, device=device)
     else:
         return _make_vllm_weight_sync_scheme(engine)
 
@@ -702,22 +711,31 @@ def _make_vllm_weight_sync_scheme(vllm_engine) -> VLLMWeightSyncScheme:
     )
 
 
-def _make_sglang_weight_sync_scheme(sglang_engine) -> SGLangWeightSyncScheme:
+def _make_sglang_weight_sync_scheme(
+    sglang_engine, device: torch.device | str | int | None = None
+) -> SGLangWeightSyncScheme:
     """Creates an SGLang weight synchronization scheme."""
     server_url = sglang_engine.server_url
     tp_size = sglang_engine.get_tp_size()
-    dp_size = getattr(sglang_engine, "dp_size", 1)
+    dp_size = sglang_engine.get_dp_size()
     num_gpus = tp_size * dp_size
+    master_address = sglang_engine.get_master_address()
+    master_port = sglang_engine.get_master_port()
 
     torchrl_logger.info(
         f"Creating SGLangWeightSyncScheme with server_url={server_url}, "
-        f"tp_size={tp_size}, dp_size={dp_size}, num_gpus={num_gpus}"
+        f"tp_size={tp_size}, dp_size={dp_size}, num_gpus={num_gpus}, "
+        f"master_address={master_address}, master_port={master_port}, "
+        f"device={device}"
     )
 
     return SGLangWeightSyncScheme(
         server_url=server_url,
+        master_address=master_address,
+        master_port=master_port,
         num_gpus=num_gpus,
-        strategy_name="state_dict",
+        strategy="state_dict",
+        device=device if device is not None else 0,
     )
 
 
@@ -739,8 +757,8 @@ def compute_device_allocation(cfg):
 
     train_start = 0
     train_end = train_devices
-    inference_start = 0
-    inference_end = inf_devices
+    inference_start = train_end
+    inference_end = inference_start + inf_devices
 
     ref_devices = cfg.ref_model.num_devices if cfg.train.use_kl_to_ref else 0
     ray_num_gpus = train_devices + inf_devices + ref_devices
@@ -750,7 +768,7 @@ def compute_device_allocation(cfg):
 
     all_devices = sorted(set(train_model_devices + inference_model_devices))
     if cfg.train.use_kl_to_ref:
-        ref_device_start = max(all_devices) + 1 if all_devices else 0
+        ref_device_start = inference_end
         ref_devices_list = list(range(ref_device_start, ref_device_start + ref_devices))
         all_devices.extend(ref_devices_list)
     cuda_visible_devices = ",".join(map(str, all_devices))

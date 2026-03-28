@@ -12,6 +12,7 @@ from functools import partial
 from pathlib import Path
 
 import hydra
+from omegaconf import OmegaConf
 
 from torchrl import merge_ray_runtime_env, torchrl_logger
 from torchrl.data.llm.history import History
@@ -112,7 +113,9 @@ def train(
     inference_engine = inference_policy.model
 
     # Create weight sync scheme for the collectors
-    weight_sync_scheme = make_weight_sync_scheme(engine=inference_engine, cfg=cfg)
+    weight_sync_scheme = make_weight_sync_scheme(
+        engine=inference_engine, cfg=cfg, device=train_device
+    )
 
     # Set up weight sync scheme for collectors
     # Note: We need to get the sender after the collectors are created
@@ -129,7 +132,10 @@ def train(
     # Initialize collective group
     torchrl_logger.info("Initializing collective group...")
     metadata = get_model_metadata(policy_training.model)
-    sender.init_all_workers_group(metadata, vllm_engine=inference_engine)
+    if getattr(cfg.inference_model, "backend", "vllm") == "sglang":
+        sender.init_all_workers_group(metadata)
+    else:
+        sender.init_all_workers_group(metadata, vllm_engine=inference_engine)
 
     # First weight update
     with timeit("update_policy_weights"):
@@ -144,8 +150,9 @@ def train(
 
     # Register collectors with the sender so increment_version() is
     # called automatically after each update_weights().
-    for collector in collectors:
-        sender.register_collector(collector)
+    if hasattr(sender, "register_collector"):
+        for collector in collectors:
+            sender.register_collector(collector)
 
     while not replay_buffer.write_count:
         torchrl_logger.info("Waiting for replay buffer...")
@@ -174,7 +181,9 @@ def train(
     experiment_name.append(cfg.env.dataset)
     experiment_name.append(cfg.model.name)
     wandb_logger = WandbLogger(
-        project="grpo-async", exp_name="-".join(["grpo-async"] + experiment_name)
+        project="grpo-async",
+        exp_name="-".join(["grpo-async"] + experiment_name),
+        config=OmegaConf.to_container(cfg, resolve=True),
     )
 
     # Training loop
@@ -306,7 +315,7 @@ def train(
 @hydra.main(version_base=None, config_path="config", config_name="grpo_gsm8k")
 def main(cfg):
     # Check for required GRPO dependencies
-    check_grpo_dependencies()
+    check_grpo_dependencies(getattr(cfg.inference_model, "backend", "vllm"))
 
     # Force async mode
     if cfg.train.sync:
