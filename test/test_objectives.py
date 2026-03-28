@@ -198,6 +198,9 @@ pytestmark = [
     ),
     pytest.mark.filterwarnings("ignore:unclosed event loop:ResourceWarning"),
     pytest.mark.filterwarnings("ignore:unclosed.*socket:ResourceWarning"),
+    pytest.mark.filterwarnings(
+        "ignore:`torch.jit.script` is deprecated:DeprecationWarning"
+    ),
 ]
 
 
