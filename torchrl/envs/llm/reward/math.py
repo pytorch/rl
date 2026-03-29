@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import importlib.util
 import re
 from typing import Literal
 
@@ -14,34 +15,38 @@ from torchrl.data import Composite, Unbounded
 from torchrl.envs import Transform
 from torchrl.envs.common import EnvBase
 
+_has_math_verify = importlib.util.find_spec("math_verify") is not None
 
-class GSM8KRewardParser(Transform):
-    """Reward parser for GSM8KEnv or make_gsm8k_env.
 
-    This parser automatically detects the input_mode from the parent environment and handles
-    responses accordingly:
-    - "history" mode: response is in ("history", "response") and is a History object
-    - "text" mode: response is in ("text", "response") and is text
-    - "tokens" mode: response is in ("tokens", "response") and is tokens
+class MATHRewardParser(Transform):
+    r"""Reward parser for the MATH (competition mathematics) dataset.
+
+    Extracts the predicted answer from ``<answer>`` tags in the model response,
+    extracts the ground-truth from the ``\boxed{}`` notation in the solution,
+    and compares them.
+
+    When ``math-verify`` is installed, answers are compared using symbolic
+    mathematical equivalence (handling LaTeX normalisation).  Otherwise a
+    simple string comparison after whitespace stripping is used.
 
     The reward follows the standard GRPO convention:
 
-    - ``1.0`` if the extracted answer matches the ground truth (after normalization).
-    - ``format_reward`` (default ``0.1``) if the response has a valid ``<answer>`` tag but
-      the answer is wrong.
-    - ``0.0`` otherwise (no parseable answer).
+    - ``correct_reward`` (default ``1.0``) when the answer is correct.
+    - ``format_reward`` (default ``0.1``) when the response has a valid
+      ``<answer>`` tag but the answer is wrong.
+    - ``0.0`` otherwise.
 
     Args:
-        tokenizer (AutoTokenizer from transformers): the tokenizer associated with the model.
-        in_keys (list of NestedKey): the input keys. If None, will be automatically determined based on parent's input_mode.
-        out_keys (list of NestedKey): the output keys. Defaults to
-            ``["reward_answer", "reward_think", "reward_right", "reward", "success"]``.
-        eos_token (str): the end of sentence token. Defaults to ``tokenizer.eos_token`` if not provided.
-        set_done_if_answer (bool): whether to set the done flag to ``True`` when an answer is present. Defaults to ``True``.
-        input_mode (Literal["history", "text", "tokens"]): the input mode of the parent environment.
-            Defaults to ``None`` (will be automatically determined based on parent's input_mode).
-        format_reward (float): reward for correct format but wrong answer. Defaults to ``0.1``.
-        correct_reward (float): reward for correct answer. Defaults to ``1.0``.
+        tokenizer: the tokenizer associated with the model (optional).
+        in_keys (list of NestedKey): the input keys.  If ``None``, will be
+            automatically determined based on the parent's ``input_mode``.
+        out_keys (list of NestedKey): the output keys.
+        eos_token (str): the end-of-sentence token.
+        set_done_if_answer (bool): whether to set the done flag when an answer
+            is present.  Defaults to ``True``.
+        input_mode: the input mode of the parent environment.
+        format_reward (float): reward for correct format but wrong answer.
+        correct_reward (float): reward for a correct answer.
     """
 
     def __init__(
@@ -55,7 +60,6 @@ class GSM8KRewardParser(Transform):
         format_reward: float = 0.1,
         correct_reward: float = 1.0,
     ):
-        super().__init__()
         self.tokenizer = tokenizer
         self.eos_token = (
             eos_token
@@ -82,17 +86,22 @@ class GSM8KRewardParser(Transform):
             self.in_keys = in_keys
         self.out_keys = out_keys
 
+    # ------------------------------------------------------------------
+    # input_mode / in_keys discovery (mirrors GSM8KRewardParser)
+    # ------------------------------------------------------------------
+
     def _maybe_get_in_keys(self):
         if not self.in_keys:
             parent = getattr(self, "parent", None)
             if parent is not None:
-                if getattr(parent, "base_env", None) is not None:
-                    if getattr(parent.base_env, "input_mode", None) == "history":
-                        self.in_keys = [("history", "full"), "answer"]
-                    elif getattr(parent.base_env, "input_mode", None) == "text":
-                        self.in_keys = [("text", "full"), "answer"]
-                    elif getattr(parent.base_env, "input_mode", None) == "tokens":
-                        self.in_keys = [("tokens", "full"), "answer"]
+                base_env = getattr(parent, "base_env", None)
+                mode = getattr(base_env, "input_mode", None) if base_env else None
+                if mode == "history":
+                    self.in_keys = [("history", "full"), "answer"]
+                elif mode == "text":
+                    self.in_keys = [("text", "full"), "answer"]
+                elif mode == "tokens":
+                    self.in_keys = [("tokens", "full"), "answer"]
             else:
                 raise ValueError(
                     f"No base env found for {self} with container {self.container}"
@@ -102,8 +111,6 @@ class GSM8KRewardParser(Transform):
         result = super().set_container(container)
         self._maybe_get_in_keys()
         return result
-
-    _input_mode = None
 
     @property
     def input_mode(self):
@@ -115,6 +122,10 @@ class GSM8KRewardParser(Transform):
             )
             self._input_mode = input_mode
         return self._input_mode
+
+    # ------------------------------------------------------------------
+    # step
+    # ------------------------------------------------------------------
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
@@ -157,8 +168,6 @@ class GSM8KRewardParser(Transform):
                 text_completion = responses
         elif input_mode == "tokens":
             if isinstance(responses, torch.Tensor):
-                if responses.ndim == 3:
-                    batch_size, grpo_size, _ = responses.shape
                 text_completion = self.tokenizer.decode(
                     responses.flatten(0, 1).tolist()
                 )
@@ -187,8 +196,10 @@ class GSM8KRewardParser(Transform):
             if compl.endswith("<|im_end|>"):
                 compl = compl.removesuffix("<|im_end|>")
             cot, potential_answer = self.extract_tags(compl)
-            _unused, answer = answer.split("#### ")
-            tds.append(self._single_correctness_reward(answer, potential_answer, cot))
+            true_answer = self.extract_boxed(answer)
+            tds.append(
+                self._single_correctness_reward(true_answer, potential_answer, cot)
+            )
         tds = torch.stack(tds)
         if isinstance(responses, torch.Tensor) and responses.ndim == 3:
             batch_size, grpo_size, _ = responses.shape
@@ -227,14 +238,16 @@ class GSM8KRewardParser(Transform):
         )
         return reward_spec
 
+    # ------------------------------------------------------------------
+    # reward logic
+    # ------------------------------------------------------------------
+
     def _single_correctness_reward(
         self, true_answer: str, potential_answer: str, cot: str
     ) -> TensorDict:
         has_answer = bool(potential_answer)
         has_think = bool(cot)
-
-        norm_true = self.normalize_answer(true_answer)
-        correct = has_answer and self.normalize_answer(potential_answer) == norm_true
+        correct = has_answer and self.answers_match(potential_answer, true_answer)
 
         reward_answer = float(has_answer)
         reward_think = float(has_think)
@@ -246,44 +259,77 @@ class GSM8KRewardParser(Transform):
         else:
             reward_right = 0.0
 
-        reward = reward_right
-
         return TensorDict(
             reward_answer=reward_answer,
             reward_think=reward_think,
             reward_right=reward_right,
-            reward=reward,
+            reward=reward_right,
             success=correct,
         )
 
-    @staticmethod
-    def normalize_answer(answer: str) -> str:
-        """Normalize a numerical answer string for comparison.
+    # ------------------------------------------------------------------
+    # answer comparison
+    # ------------------------------------------------------------------
 
-        Strips whitespace, removes commas/dollar signs/percent signs, and
-        normalizes trailing decimal zeros (e.g. ``"120.0"`` becomes ``"120"``).
+    @staticmethod
+    def answers_match(predicted: str, reference: str) -> bool:
+        """Compare two mathematical answers.
+
+        Uses ``math-verify`` for symbolic equivalence when available,
+        otherwise falls back to normalised string comparison.
         """
-        answer = answer.strip()
-        answer = answer.replace(",", "").replace("$", "").replace("%", "")
-        answer = answer.rstrip(".")
-        if "." in answer:
-            answer = answer.rstrip("0").rstrip(".")
-        return answer
+        if _has_math_verify:
+            from math_verify import parse, verify
+
+            try:
+                parsed_pred = parse(predicted)
+                parsed_ref = parse(reference)
+                return bool(verify(parsed_pred, parsed_ref))
+            except Exception:
+                pass
+        return _normalize_math(predicted) == _normalize_math(reference)
+
+    # ------------------------------------------------------------------
+    # tag / boxed extraction
+    # ------------------------------------------------------------------
 
     @staticmethod
     def extract_tags(text: str) -> tuple[str, str]:
-        """Extract think and answer content from a response using regex.
-
-        More robust than XML parsing since LLM outputs frequently contain
-        malformed markup.
-
-        Returns:
-            A ``(think_content, answer_content)`` tuple.  Empty strings are
-            returned when the corresponding tag is absent.
-        """
+        """Extract think and answer content from a response using regex."""
         think_match = re.search(r"<think>(.*?)</think>", text, re.DOTALL)
         answer_match = re.search(r"<answer>(.*?)</answer>", text, re.DOTALL)
         return (
             think_match.group(1).strip() if think_match else "",
             answer_match.group(1).strip() if answer_match else "",
         )
+
+    @staticmethod
+    def extract_boxed(text: str) -> str:
+        r"""Extract the content of the last ``\boxed{...}`` in *text*.
+
+        Handles nested braces correctly.
+        """
+        idx = text.rfind("\\boxed{")
+        if idx == -1:
+            return text.strip()
+        idx += len("\\boxed{")
+        depth = 1
+        end = idx
+        while end < len(text) and depth > 0:
+            if text[end] == "{":
+                depth += 1
+            elif text[end] == "}":
+                depth -= 1
+            end += 1
+        return text[idx : end - 1].strip()
+
+
+def _normalize_math(s: str) -> str:
+    """Basic normalisation for mathematical answer strings."""
+    s = s.strip()
+    s = s.replace(" ", "")
+    s = s.replace(",", "")
+    s = s.replace("$", "")
+    s = s.replace("\\left", "").replace("\\right", "")
+    s = s.replace("\\!", "").replace("\\,", "").replace("\\;", "").replace("\\:", "")
+    return s

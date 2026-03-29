@@ -126,7 +126,9 @@ def train(
     # Set up weight sender
     torchrl_logger.info("Setting up weight synchronization scheme...")
     sender = weight_sync_scheme.create_sender()
-    sender.register_model(policy_training)
+    # Register the HuggingFace model directly (not the TransformersWrapper)
+    # so state_dict() keys match vLLM's expected format (e.g., model.layers.0.*)
+    sender.register_model(policy_training.model)
 
     # Get vLLM engine reference from collector's policy
     vllm_engine = collector.policy.model if hasattr(collector, "policy") else None
@@ -135,7 +137,7 @@ def train(
 
     # Initialize collective group
     torchrl_logger.info("Initializing collective group...")
-    metadata = get_model_metadata(policy_training)
+    metadata = get_model_metadata(policy_training.model)
     sender.init_all_workers_group(metadata, vllm_engine=vllm_engine)
 
     # First weight update
