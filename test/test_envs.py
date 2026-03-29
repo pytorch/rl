@@ -297,6 +297,55 @@ class TestEnvBase:
         with pytest.raises(TypeError):
             check_env_specs(env)
 
+    def test_check_env_specs_state_spec_keys(self):
+        """Regression test for https://github.com/pytorch/rl/issues/3260.
+
+        check_env_specs() should succeed when state_spec contains keys that are
+        not present in observation_spec (e.g. RNG seeds, auxiliary state).
+        Such keys may be returned by _step and appear in the real rollout's
+        "next", but are intentionally excluded from the key comparison in
+        check_env_specs() since their presence is optional.
+        """
+
+        class EnvWithExtraState(EnvBase):
+            def __init__(self):
+                super().__init__()
+                self.observation_spec = Composite(
+                    observation=Unbounded(shape=(3,), dtype=torch.float32)
+                )
+                self.action_spec = Unbounded(shape=(1,), dtype=torch.float32)
+                self.reward_spec = Unbounded(shape=(1,), dtype=torch.float32)
+                # state_spec has a key ("hidden_state") absent from observation_spec
+                self.state_spec = Composite(
+                    hidden_state=Unbounded(shape=(4,), dtype=torch.float32)
+                )
+
+            def _reset(self, tensordict):
+                return TensorDict(
+                    {
+                        "observation": torch.zeros(3),
+                        "hidden_state": torch.zeros(4),
+                    }
+                )
+
+            def _step(self, tensordict):
+                return TensorDict(
+                    {
+                        "observation": torch.zeros(3),
+                        "hidden_state": torch.zeros(4),
+                        "reward": torch.zeros(1),
+                        "done": torch.zeros(1, dtype=torch.bool),
+                        "terminated": torch.zeros(1, dtype=torch.bool),
+                    }
+                )
+
+            def _set_seed(self, seed):
+                pass
+
+        # check_env_specs() must not raise even though _step returns
+        # "hidden_state" (a state_spec key) in "next"
+        check_env_specs(EnvWithExtraState())
+
     class MyEnv(EnvBase):
         def __init__(self):
             super().__init__()
