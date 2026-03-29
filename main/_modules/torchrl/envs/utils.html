@@ -1018,12 +1018,27 @@
         <span class="n">fake_tensordict</span> <span class="o">=</span> <span class="n">LazyStackedTensorDict</span><span class="o">.</span><span class="n">lazy_stack</span><span class="p">(</span>
             <span class="p">[</span><span class="n">fake_tensordict</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)],</span> <span class="o">-</span><span class="mi">1</span>
         <span class="p">)</span>
-    <span class="c1"># eliminate empty containers</span>
+    <span class="c1"># state_spec keys may optionally appear in &quot;next&quot; if _step returns them,</span>
+    <span class="c1"># so exclude them from all comparisons to avoid false positives in either</span>
+    <span class="c1"># direction (real has them but fake doesn&#39;t, or vice versa).</span>
+    <span class="n">state_spec_next_keys</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="o">*</span><span class="n">k</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="k">else</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">state_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="p">}</span>
+    <span class="c1"># eliminate empty containers, excluding state_spec keys from &quot;next&quot;</span>
     <span class="n">fake_tensordict_select</span> <span class="o">=</span> <span class="n">fake_tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
-        <span class="o">*</span><span class="n">fake_tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">is_leaf</span><span class="o">=</span><span class="n">_default_is_leaf</span><span class="p">)</span>
+        <span class="o">*</span><span class="p">[</span>
+            <span class="n">k</span>
+            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">fake_tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">is_leaf</span><span class="o">=</span><span class="n">_default_is_leaf</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">state_spec_next_keys</span>
+        <span class="p">]</span>
     <span class="p">)</span>
     <span class="n">real_tensordict_select</span> <span class="o">=</span> <span class="n">real_tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
-        <span class="o">*</span><span class="n">real_tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">is_leaf</span><span class="o">=</span><span class="n">_default_is_leaf</span><span class="p">)</span>
+        <span class="o">*</span><span class="p">[</span>
+            <span class="n">k</span>
+            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">real_tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">is_leaf</span><span class="o">=</span><span class="n">_default_is_leaf</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">state_spec_next_keys</span>
+        <span class="p">]</span>
     <span class="p">)</span>
     <span class="c1"># check keys</span>
     <span class="n">fake_tensordict_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span>
@@ -1032,6 +1047,8 @@
     <span class="n">real_tensordict_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span>
         <span class="n">real_tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">is_leaf</span><span class="o">=</span><span class="n">_is_leaf_nontensor</span><span class="p">)</span>
     <span class="p">)</span>
+    <span class="n">fake_tensordict_keys</span> <span class="o">-=</span> <span class="n">state_spec_next_keys</span>
+    <span class="n">real_tensordict_keys</span> <span class="o">-=</span> <span class="n">state_spec_next_keys</span>
     <span class="k">if</span> <span class="n">fake_tensordict_keys</span> <span class="o">!=</span> <span class="n">real_tensordict_keys</span><span class="p">:</span>
         <span class="n">keys_in_real_not_in_fake</span> <span class="o">=</span> <span class="n">real_tensordict_keys</span> <span class="o">-</span> <span class="n">fake_tensordict_keys</span>
         <span class="n">keys_in_fake_not_in_real</span> <span class="o">=</span> <span class="n">fake_tensordict_keys</span> <span class="o">-</span> <span class="n">real_tensordict_keys</span>
