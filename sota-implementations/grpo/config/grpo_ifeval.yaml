@@ -83,7 +83,7 @@ train_model:
     dropout: 0.1  # Dropout probability for LoRA layers
   quantization:
     enabled: false  # Enable 4-bit quantization for base model
-  attn_implementation: sdpa  # Using flash attention for memory efficiency
+  attn_implementation: flash_attention_2
   torch_dtype: bfloat16
 
 # Inference model configuration
@@ -92,7 +92,7 @@ inference_model:
   num_devices: 2  # Number of devices to use
   quantization:
     enabled: false  # Enable 4-bit quantization for base model
-  attn_implementation: sdpa  # Using flash attention for memory efficiency
+  attn_implementation: flash_attention_2
   torch_dtype: bfloat16
   gpu_memory_utilization: 0.9  # Limit GPU memory usage
   temperature: 1.0
@@ -114,7 +114,7 @@ ref_model:
     dropout: 0.1  # Dropout probability for LoRA layers
   quantization:
     enabled: false  # Enable 4-bit quantization for base model
-  attn_implementation: sdpa  # Using flash attention for memory efficiency
+  attn_implementation: flash_attention_2
   torch_dtype: bfloat16
 
 # Optimizer configuration

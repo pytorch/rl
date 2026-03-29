@@ -43,14 +43,14 @@ train_model:
     dropout: 0.1
   quantization:
     enabled: false
-  attn_implementation: sdpa
+  attn_implementation: flash_attention_2
   torch_dtype: bfloat16
 
 inference_model:
   num_devices: 1
   quantization:
     enabled: false
-  attn_implementation: sdpa
+  attn_implementation: flash_attention_2
   torch_dtype: bfloat16
   gpu_memory_utilization: 0.9
   temperature: 1.0
@@ -69,7 +69,7 @@ ref_model:
     dropout: 0.1
   quantization:
     enabled: false
-  attn_implementation: sdpa
+  attn_implementation: flash_attention_2
   torch_dtype: bfloat16
 
 optimizer:

@@ -13,49 +13,51 @@ env:
   max_steps: 2
 
 model:
-  name: Qwen/Qwen2.5-3B
+  name: Qwen/Qwen2.5-7B
   compile: false
 
 train:
   exp_name: "grpo-math"
   mixed_precision: true
-  total_dialog_turns: 100_000
+  total_dialog_turns: 200_000
   packing: false
   dialog_turns_per_batch: 32
-  gradient_accumulation_steps: 8
+  gradient_accumulation_steps: 16
   checkpoint_frequency: 100
-  optim_batch_size: 32
+  optim_batch_size: 64
+  buffer_size: 4096
+  weight_update_frequency: 1
   kl_coef_in_loss: true
   use_kl_to_ref: false
   kl_to_ref_coeff: 0.0
   kl_to_inference_coeff: 1e-2
   entropy_coeff: 1e-4
   logging_frequency: 10
-  empty_replay_buffer: true
+  empty_replay_buffer: false
 
 train_model:
   gradient_checkpointing: true
-  num_devices: 1
+  num_devices: 2
   lora:
-    enabled: true
-    r: 8
-    alpha: 16
-    dropout: 0.1
+    enabled: false
+    r: 0
+    alpha: 0
+    dropout: 0.0
   quantization:
     enabled: false
-  attn_implementation: sdpa
+  attn_implementation: flash_attention_2
   torch_dtype: bfloat16
 
 inference_model:
-  num_devices: 1
+  num_devices: 6
   quantization:
     enabled: false
-  attn_implementation: sdpa
+  attn_implementation: flash_attention_2
   torch_dtype: bfloat16
   gpu_memory_utilization: 0.9
   temperature: 1.0
   top_p: 0.95
-  max_tokens: 1024
+  max_tokens: 2048
   include_stop_str_in_output: true
   enforce_eager: false
 
@@ -63,20 +65,20 @@ ref_model:
   gradient_checkpointing: false
   num_devices: 1
   lora:
-    enabled: true
-    r: 8
-    alpha: 16
-    dropout: 0.1
+    enabled: false
+    r: 0
+    alpha: 0
+    dropout: 0.0
   quantization:
     enabled: false
-  attn_implementation: sdpa
+  attn_implementation: flash_attention_2
   torch_dtype: bfloat16
 
 optimizer:
   name: AdamW
-  lr: 1e-5
+  lr: 5e-6
   clip_grad_norm: 1.0
-  weight_decay: 0.0
+  weight_decay: 0.01
 
 ray:
   init_config:

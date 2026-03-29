@@ -254,30 +254,6 @@ def _get_vllm_inference_model(
         "compile": compile_model,
     }
 
-    # CRITICAL FIX: Configure attention implementation to prevent Flash Attention errors
-    # vLLM doesn't accept attn_implementation directly through AsyncEngineArgs
-    # Instead, we set the VLLM_ATTENTION_BACKEND environment variable
-    if hasattr(cfg.inference_model, "attn_implementation"):
-        import os
-
-        attn_impl = cfg.inference_model.attn_implementation
-
-        # Map common attention implementations to vLLM backend names
-        attn_backend_map = {
-            "flash_attention_2": "FLASH_ATTN",
-            "flash_attn": "FLASH_ATTN",
-            "sdpa": "TORCH_SDPA",
-            "torch_sdpa": "TORCH_SDPA",
-            "xformers": "XFORMERS",
-        }
-
-        vllm_backend = attn_backend_map.get(attn_impl, attn_impl.upper())
-        os.environ["VLLM_ATTENTION_BACKEND"] = vllm_backend
-
-        torchrl_logger.info(
-            f"Setting VLLM_ATTENTION_BACKEND={vllm_backend} (from config: {attn_impl})"
-        )
-
     # Handle FP32 output configuration
     if hasattr(cfg.inference_model, "enable_fp32_output"):
         import os
