@@ -55,7 +55,7 @@ inference_model:
   torch_dtype: bfloat16
   gpu_memory_utilization: 0.9
   temperature: 1.0
-  top_p: 0.95
+  top_p: 1.0
   max_tokens: 2048
   include_stop_str_in_output: true
   enforce_eager: false
