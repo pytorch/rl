@@ -509,7 +509,6 @@
 <span class="sd">                            is_shared=False),</span>
 <span class="sd">                        reward: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="sd">                        reward_answer: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="sd">                        reward_contained: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="sd">                        reward_right: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="sd">                        reward_think: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="sd">                        step_count: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
@@ -543,7 +542,7 @@
 <span class="sd">            device=None,</span>
 <span class="sd">            is_shared=False,</span>
 <span class="sd">            stack_dim=0)</span>
-<span class="sd">        &gt;&gt;&gt; assert s[&quot;next&quot;, &quot;reward&quot;] &gt;= 10</span>
+<span class="sd">        &gt;&gt;&gt; assert s[&quot;next&quot;, &quot;reward&quot;] &gt; 0</span>
 <span class="sd">        &gt;&gt;&gt; assert s[&quot;next&quot;, &quot;done&quot;].all()</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>

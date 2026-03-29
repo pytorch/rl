@@ -442,7 +442,8 @@
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_actor_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">RemoteDataLoadingPrimer</span> <span class="o">=</span> <span class="n">RemoteDataLoadingPrimer</span><span class="o">.</span><span class="n">options</span><span class="p">(</span>
-                <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor_name</span>
+                <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor_name</span><span class="p">,</span>
+                <span class="n">lifetime</span><span class="o">=</span><span class="s2">&quot;detached&quot;</span><span class="p">,</span>
             <span class="p">)</span>
 
         <span class="c1"># Create the shared actor, passing factory or dataloader as appropriate</span>

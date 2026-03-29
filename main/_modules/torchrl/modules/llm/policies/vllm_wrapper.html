@@ -244,7 +244,6 @@
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">collections</span>
-
 <span class="kn">import</span> <span class="nn">importlib.util</span>
 <span class="kn">import</span> <span class="nn">threading</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
@@ -1873,10 +1872,12 @@
 
     <span class="k">def</span> <span class="nf">_cat_tensors</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">tokens</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
-        <span class="n">response_tokens</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="n">tokens</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">response_tokens</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Concatenate tokens and response tokens.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">tokens</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">response_tokens</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tokens</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">response_tokens</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
             <span class="k">return</span> <span class="p">[</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_cat_tensors</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">t_</span><span class="p">)</span>
@@ -2053,27 +2054,83 @@
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_check_padded</span><span class="p">(</span><span class="n">log_probs_padded</span><span class="p">)</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_check_padded</span><span class="p">(</span><span class="n">prompt_logprobs_padded</span><span class="p">)</span>
-                    <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">prompt</span> <span class="o">=</span> <span class="n">prompt_logprobs_padded</span>
+                    <span class="c1"># Only set prompt log-probs if they actually contain</span>
+                    <span class="c1"># data (vLLM V1 may produce all-zero padded tensors</span>
+                    <span class="c1"># from empty per-request prompt_logprobs).</span>
+                    <span class="k">if</span> <span class="p">(</span>
+                        <span class="n">prompt_logprobs_padded</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                        <span class="ow">and</span> <span class="n">prompt_logprobs_padded</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
+                    <span class="p">):</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_check_padded</span><span class="p">(</span><span class="n">prompt_logprobs_padded</span><span class="p">)</span>
+                        <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">prompt</span> <span class="o">=</span> <span class="n">prompt_logprobs_padded</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_check_not_padded</span><span class="p">(</span><span class="n">log_probs_list</span><span class="p">)</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_check_not_padded</span><span class="p">(</span><span class="n">prompt_logprobs_list</span><span class="p">)</span>
-                    <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">prompt</span> <span class="o">=</span> <span class="n">prompt_logprobs_list</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">prompt_logprobs_list</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="c1"># Check that prompt_logprobs actually contain data.</span>
+                    <span class="c1"># vLLM V1 may return prompt_logprobs=None per request,</span>
+                    <span class="c1"># which from_request_output converts to empty tensors.</span>
+                    <span class="c1"># A list of empty tensors is not useful as prompt</span>
+                    <span class="c1"># log-probs and must be treated as absent so the</span>
+                    <span class="c1"># zero-fill path below creates proper placeholders.</span>
+                    <span class="n">_has_prompt_lp</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span>
+                        <span class="n">t</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">0</span>
+                        <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="p">(</span>
+                            <span class="n">prompt_logprobs_list</span>
+                            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">prompt_logprobs_list</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
+                            <span class="k">else</span> <span class="p">[</span><span class="n">prompt_logprobs_list</span><span class="p">]</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">_has_prompt_lp</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_check_not_padded</span><span class="p">(</span><span class="n">prompt_logprobs_list</span><span class="p">)</span>
+                        <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">prompt</span> <span class="o">=</span> <span class="n">prompt_logprobs_list</span>
             <span class="k">with</span> <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">as</span> <span class="n">log_probs_obj_flat</span><span class="p">:</span>
                 <span class="n">log_probs_obj_flat</span><span class="o">.</span><span class="n">response</span> <span class="o">=</span> <span class="p">(</span>
                     <span class="n">log_probs_padded</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span> <span class="k">else</span> <span class="n">log_probs_list</span>
                 <span class="p">)</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
+                    <span class="n">prompt_lp</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="n">log_probs_obj_flat</span><span class="o">.</span><span class="n">prompt</span>
+                        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span>
+                        <span class="k">else</span> <span class="n">log_probs_obj_flat</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;prompt&quot;</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="n">response_lp</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="n">log_probs_padded</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span> <span class="k">else</span> <span class="n">log_probs_list</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">prompt_lp</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">response_lp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="c1"># Prompt logprobs not available (vLLM V1 may not</span>
+                        <span class="c1"># return them). Create zero-filled placeholders</span>
+                        <span class="c1"># matching prompt token shapes so that &quot;full&quot; can</span>
+                        <span class="c1"># be constructed. The loss function masks prompt</span>
+                        <span class="c1"># positions anyway.</span>
+                        <span class="n">tokens_prompt</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                            <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tokens_key</span><span class="p">,</span> <span class="s2">&quot;prompt&quot;</span><span class="p">),</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span>
+                        <span class="p">)</span>
+                        <span class="k">if</span> <span class="n">tokens_prompt</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                            <span class="n">tokens_prompt</span> <span class="o">=</span> <span class="p">(</span>
+                                <span class="n">tokens_prompt_padded</span>
+                                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span>
+                                <span class="k">else</span> <span class="n">tokens_prompt_unpadded</span>
+                            <span class="p">)</span>
+                        <span class="k">if</span> <span class="n">tokens_prompt</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tokens_prompt</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                                <span class="n">prompt_lp</span> <span class="o">=</span> <span class="p">[</span>
+                                    <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">response_lp</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+                                    <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tokens_prompt</span>
+                                <span class="p">]</span>
+                            <span class="k">else</span><span class="p">:</span>
+                                <span class="n">prompt_lp</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                                    <span class="n">tokens_prompt</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                                    <span class="n">dtype</span><span class="o">=</span><span class="n">response_lp</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                                    <span class="n">device</span><span class="o">=</span><span class="n">response_lp</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                                <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">prompt_lp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">response_lp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                         <span class="n">log_probs_obj_flat</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cat_tensors</span><span class="p">(</span>
-                            <span class="n">log_probs_obj_flat</span><span class="o">.</span><span class="n">prompt</span><span class="p">,</span> <span class="n">log_probs_padded</span>
+                            <span class="n">prompt_lp</span><span class="p">,</span> <span class="n">response_lp</span>
                         <span class="p">)</span>
                     <span class="k">else</span><span class="p">:</span>
-                        <span class="n">log_probs_obj_flat</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cat_tensors</span><span class="p">(</span>
-                            <span class="n">log_probs_obj_flat</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;prompt&quot;</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
-                            <span class="n">log_probs_list</span><span class="p">,</span>
-                        <span class="p">)</span>
+                        <span class="c1"># Last resort: use response as full to avoid</span>
+                        <span class="c1"># missing key downstream</span>
+                        <span class="n">log_probs_obj_flat</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="n">response_lp</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">log_probs_obj_flat</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">padded</span> <span class="o">=</span> <span class="n">MetaData</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">)</span>
@@ -2438,6 +2495,70 @@
 
 
 
+<span class="k">def</span> <span class="nf">_extract_logprob</span><span class="p">(</span><span class="n">entry</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract logprob value from a vLLM logprob entry (dict or Logprob dataclass).&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="n">lp</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;logprob&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">lp</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="s2">&quot;logprob&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">lp</span> <span class="k">if</span> <span class="n">lp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">0.0</span>
+
+
+<span class="k">def</span> <span class="nf">_build_prompt_logprobs</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build prompt logprobs tensor from a vLLM RequestOutput.</span>
+
+<span class="sd">    Handles prefix caching: when vLLM caches prompt tokens, it returns</span>
+<span class="sd">    fewer prompt_logprobs than prompt_token_ids.  We zero-pad the prefix</span>
+<span class="sd">    so the returned tensor always matches len(prompt_token_ids).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">prompt_logprobs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([])</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">_extract_logprob</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">tid</span><span class="p">)])</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">0.0</span>
+        <span class="k">for</span> <span class="n">v</span><span class="p">,</span> <span class="n">tid</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">prompt_logprobs</span><span class="p">,</span> <span class="n">request</span><span class="o">.</span><span class="n">prompt_token_ids</span><span class="p">)</span>
+    <span class="p">]</span>
+    <span class="n">num_missing</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">prompt_token_ids</span><span class="p">)</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">num_missing</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">]</span> <span class="o">*</span> <span class="n">num_missing</span> <span class="o">+</span> <span class="n">values</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_build_num_cached_tokens</span><span class="p">(</span><span class="n">request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build a tensor for ``num_cached_tokens`` with a stable default.&quot;&quot;&quot;</span>
+    <span class="n">num_cached_tokens</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s2">&quot;num_cached_tokens&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">num_cached_tokens</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">num_cached_tokens</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_completion_output_to_tc</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="n">CompletionOutput_tc</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert a vLLM CompletionOutput dataclass to CompletionOutput_tc.</span>
+
+<span class="sd">    This avoids ``from_dataclass`` / ``dataclasses.asdict`` which recursively</span>
+<span class="sd">    converts all fields to plain Python types and chokes on edge-cases such as</span>
+<span class="sd">    empty lists that tensordict cannot stack.</span>
+
+<span class="sd">    Dynamically forwards all fields from the dataclass to handle new fields</span>
+<span class="sd">    added in newer vLLM versions (e.g. ``routed_experts``).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">import</span> <span class="nn">dataclasses</span> <span class="k">as</span> <span class="nn">_dc</span>
+
+    <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">_dc</span><span class="o">.</span><span class="n">fields</span><span class="p">(</span><span class="n">output</span><span class="p">):</span>
+        <span class="n">val</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="n">f</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="c1"># Special handling: falsy logprobs → None so tensordict can stack</span>
+        <span class="k">if</span> <span class="n">f</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;logprobs&quot;</span><span class="p">:</span>
+            <span class="n">val</span> <span class="o">=</span> <span class="n">val</span> <span class="k">if</span> <span class="n">val</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="k">elif</span> <span class="n">f</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;token_ids&quot;</span><span class="p">:</span>
+            <span class="n">val</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">val</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">val</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="n">f</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span>
+    <span class="k">return</span> <span class="n">CompletionOutput_tc</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
 <span class="k">class</span> <span class="nc">_RequestOutput_tc</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">]):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;TensorClass wrapper for vLLM RequestOutput.&quot;&quot;&quot;</span>
 
@@ -2463,21 +2584,31 @@
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">token_ids</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
                     <span class="n">token_ids</span> <span class="o">=</span> <span class="n">token_ids</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
                 <span class="k">for</span> <span class="n">v</span><span class="p">,</span> <span class="n">tid</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">logprobs</span><span class="p">,</span> <span class="n">token_ids</span><span class="p">):</span>
-                    <span class="n">t</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                        <span class="n">v</span><span class="p">[</span><span class="n">tid</span><span class="p">][</span><span class="s2">&quot;logprob&quot;</span><span class="p">]</span> <span class="k">if</span> <span class="n">v</span><span class="p">[</span><span class="n">tid</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;logprob&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">0.0</span>
-                    <span class="p">)</span>
+                    <span class="n">t</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_extract_logprob</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">tid</span><span class="p">]))</span>
                 <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
 
-            <span class="k">if</span> <span class="n">output</span><span class="o">.</span><span class="n">logprobs</span><span class="p">:</span>
+            <span class="n">logprobs</span> <span class="o">=</span> <span class="n">output</span><span class="o">.</span><span class="n">logprobs</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">logprobs</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                <span class="n">has_logprobs</span> <span class="o">=</span> <span class="n">logprobs</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">0</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">logprobs</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                <span class="n">has_logprobs</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">logprobs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">has_logprobs</span> <span class="o">=</span> <span class="n">logprobs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">has_logprobs</span><span class="p">:</span>
                 <span class="n">output</span><span class="o">.</span><span class="n">logprobs</span> <span class="o">=</span> <span class="n">get_logprob</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
-            <span class="n">output</span><span class="o">.</span><span class="n">token_ids</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">token_ids</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">output</span><span class="o">.</span><span class="n">logprobs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">)</span>
+            <span class="n">output</span><span class="o">.</span><span class="n">token_ids</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">token_ids</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">output</span><span class="o">.</span><span class="n">token_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+            <span class="p">)</span>
             <span class="k">return</span> <span class="n">output</span>
 
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">outputs</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
-            <span class="n">outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">outputs</span>
             <span class="n">outputs</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="n">postproc</span><span class="p">(</span><span class="n">from_dataclass</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="n">dest_cls</span><span class="o">=</span><span class="n">CompletionOutput_tc</span><span class="p">))</span>
-                <span class="k">for</span> <span class="n">output</span> <span class="ow">in</span> <span class="n">outputs</span>
+                <span class="n">postproc</span><span class="p">(</span><span class="n">_completion_output_to_tc</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="n">CompletionOutput_tc</span><span class="p">))</span>
+                <span class="k">for</span> <span class="n">output</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">outputs</span>
             <span class="p">]</span>
             <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">outputs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">outputs</span> <span class="o">=</span> <span class="n">outputs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
@@ -2499,6 +2630,21 @@
             <span class="n">requests</span><span class="p">,</span> <span class="p">(</span><span class="n">RequestOutput</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
         <span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;requests must be RequestOutput or list, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">requests</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
 
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">requests</span><span class="p">,</span> <span class="n">RequestOutput</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+                <span class="n">request_id</span><span class="o">=</span><span class="n">requests</span><span class="o">.</span><span class="n">request_id</span><span class="p">,</span>
+                <span class="n">prompt</span><span class="o">=</span><span class="n">requests</span><span class="o">.</span><span class="n">prompt</span><span class="p">,</span>
+                <span class="n">prompt_token_ids</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">requests</span><span class="o">.</span><span class="n">prompt_token_ids</span><span class="p">),</span>
+                <span class="n">prompt_logprobs</span><span class="o">=</span><span class="n">_build_prompt_logprobs</span><span class="p">(</span><span class="n">requests</span><span class="p">),</span>
+                <span class="n">outputs</span><span class="o">=</span><span class="n">requests</span><span class="o">.</span><span class="n">outputs</span><span class="p">,</span>
+                <span class="n">finished</span><span class="o">=</span><span class="n">requests</span><span class="o">.</span><span class="n">finished</span><span class="p">,</span>
+                <span class="n">metrics</span><span class="o">=</span><span class="n">requests</span><span class="o">.</span><span class="n">metrics</span><span class="p">,</span>
+                <span class="n">lora_request</span><span class="o">=</span><span class="n">requests</span><span class="o">.</span><span class="n">lora_request</span><span class="p">,</span>
+                <span class="n">encoder_prompt</span><span class="o">=</span><span class="n">requests</span><span class="o">.</span><span class="n">encoder_prompt</span><span class="p">,</span>
+                <span class="n">encoder_prompt_token_ids</span><span class="o">=</span><span class="n">requests</span><span class="o">.</span><span class="n">encoder_prompt_token_ids</span><span class="p">,</span>
+                <span class="n">num_cached_tokens</span><span class="o">=</span><span class="n">_build_num_cached_tokens</span><span class="p">(</span><span class="n">requests</span><span class="p">),</span>
+            <span class="p">)</span>
+
         <span class="c1"># Check if we can stack the outputs</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">out</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span>
@@ -2507,23 +2653,14 @@
                         <span class="n">request_id</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">request_id</span><span class="p">,</span>
                         <span class="n">prompt</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">prompt</span><span class="p">,</span>
                         <span class="n">prompt_token_ids</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">prompt_token_ids</span><span class="p">),</span>
-                        <span class="n">prompt_logprobs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
-                            <span class="p">[</span>
-                                <span class="n">v</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">tid</span><span class="p">)]</span><span class="o">.</span><span class="n">logprob</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">0.0</span>
-                                <span class="k">for</span> <span class="n">v</span><span class="p">,</span> <span class="n">tid</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span>
-                                    <span class="n">request</span><span class="o">.</span><span class="n">prompt_logprobs</span><span class="p">,</span> <span class="n">request</span><span class="o">.</span><span class="n">prompt_token_ids</span>
-                                <span class="p">)</span>
-                            <span class="p">]</span>
-                        <span class="p">)</span>
-                        <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">prompt_logprobs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-                        <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([]),</span>
+                        <span class="n">prompt_logprobs</span><span class="o">=</span><span class="n">_build_prompt_logprobs</span><span class="p">(</span><span class="n">request</span><span class="p">),</span>
                         <span class="n">outputs</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">outputs</span><span class="p">,</span>
                         <span class="n">finished</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">finished</span><span class="p">,</span>
                         <span class="n">metrics</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">metrics</span><span class="p">,</span>
                         <span class="n">lora_request</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">lora_request</span><span class="p">,</span>
                         <span class="n">encoder_prompt</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">encoder_prompt</span><span class="p">,</span>
                         <span class="n">encoder_prompt_token_ids</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">encoder_prompt_token_ids</span><span class="p">,</span>
-                        <span class="n">num_cached_tokens</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">num_cached_tokens</span><span class="p">),</span>
+                        <span class="n">num_cached_tokens</span><span class="o">=</span><span class="n">_build_num_cached_tokens</span><span class="p">(</span><span class="n">request</span><span class="p">),</span>
                     <span class="p">)</span>
                     <span class="k">for</span> <span class="n">request</span> <span class="ow">in</span> <span class="n">requests</span>
                 <span class="p">]</span>
@@ -2536,23 +2673,14 @@
                     <span class="n">request_id</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">request_id</span><span class="p">,</span>
                     <span class="n">prompt</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">prompt</span><span class="p">,</span>
                     <span class="n">prompt_token_ids</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">prompt_token_ids</span><span class="p">),</span>
-                    <span class="n">prompt_logprobs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
-                        <span class="p">[</span>
-                            <span class="n">v</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">tid</span><span class="p">)]</span><span class="o">.</span><span class="n">logprob</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">0.0</span>
-                            <span class="k">for</span> <span class="n">v</span><span class="p">,</span> <span class="n">tid</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span>
-                                <span class="n">request</span><span class="o">.</span><span class="n">prompt_logprobs</span><span class="p">,</span> <span class="n">request</span><span class="o">.</span><span class="n">prompt_token_ids</span>
-                            <span class="p">)</span>
-                        <span class="p">]</span>
-                    <span class="p">)</span>
-                    <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">prompt_logprobs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-                    <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([]),</span>
+                    <span class="n">prompt_logprobs</span><span class="o">=</span><span class="n">_build_prompt_logprobs</span><span class="p">(</span><span class="n">request</span><span class="p">),</span>
                     <span class="n">outputs</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">outputs</span><span class="p">,</span>
                     <span class="n">finished</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">finished</span><span class="p">,</span>
                     <span class="n">metrics</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">metrics</span><span class="p">,</span>
                     <span class="n">lora_request</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">lora_request</span><span class="p">,</span>
                     <span class="n">encoder_prompt</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">encoder_prompt</span><span class="p">,</span>
                     <span class="n">encoder_prompt_token_ids</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">encoder_prompt_token_ids</span><span class="p">,</span>
-                    <span class="n">num_cached_tokens</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">num_cached_tokens</span><span class="p">),</span>
+                    <span class="n">num_cached_tokens</span><span class="o">=</span><span class="n">_build_num_cached_tokens</span><span class="p">(</span><span class="n">request</span><span class="p">),</span>
                 <span class="p">)</span>
                 <span class="k">for</span> <span class="n">request</span> <span class="ow">in</span> <span class="n">requests</span>
             <span class="p">]</span>

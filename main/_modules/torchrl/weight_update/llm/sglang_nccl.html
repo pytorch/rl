@@ -300,14 +300,81 @@
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
+
+<span class="kn">from</span> <span class="nn">concurrent.futures</span> <span class="kn">import</span> <span class="n">ThreadPoolExecutor</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span>
 
 <span class="kn">import</span> <span class="nn">requests</span>
 <span class="kn">import</span> <span class="nn">torch</span>
 
 <span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
-<span class="kn">from</span> <span class="nn">torchrl.modules.llm.backends.sglang.sglang_utils</span> <span class="kn">import</span> <span class="n">dtype_to_str</span><span class="p">,</span> <span class="n">get_open_port</span>
+<span class="kn">from</span> <span class="nn">torchrl.modules.llm.backends.sglang.sglang_utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">dtype_to_str</span><span class="p">,</span>
+    <span class="n">get_local_ip_address</span><span class="p">,</span>
+    <span class="n">get_open_port</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">torchrl.weight_update.weight_sync_schemes</span> <span class="kn">import</span> <span class="n">WeightStrategy</span><span class="p">,</span> <span class="n">WeightSyncScheme</span>
+
+
+<span class="k">def</span> <span class="nf">_init_custom_process_group</span><span class="p">(</span>
+    <span class="n">backend</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;nccl&quot;</span><span class="p">,</span>
+    <span class="n">init_method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">world_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">group_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+    <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">ProcessGroup</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a torch.distributed process group without requiring a default group.</span>
+
+<span class="sd">    This mirrors SGLang&#39;s ``init_custom_process_group`` so that the trainer</span>
+<span class="sd">    creates a process group compatible with what the SGLang server creates</span>
+<span class="sd">    internally. Both sides use TCP rendezvous + ``_new_process_group_helper``</span>
+<span class="sd">    to form the same NCCL collective.</span>
+
+<span class="sd">    Adapted from SGLang (sglang.srt.distributed) and OpenRLHF.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span> <span class="nn">torch.distributed.distributed_c10d</span> <span class="kn">import</span> <span class="p">(</span>
+        <span class="n">_new_process_group_helper</span><span class="p">,</span>
+        <span class="n">_world</span><span class="p">,</span>
+        <span class="n">Backend</span><span class="p">,</span>
+        <span class="n">default_pg_timeout</span><span class="p">,</span>
+        <span class="n">PrefixStore</span><span class="p">,</span>
+        <span class="n">rendezvous</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">init_method</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">init_method</span> <span class="o">=</span> <span class="s2">&quot;env://&quot;</span>
+
+    <span class="n">backend</span> <span class="o">=</span> <span class="n">Backend</span><span class="p">(</span><span class="n">backend</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">timeout</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">timeout</span> <span class="o">=</span> <span class="n">default_pg_timeout</span>
+
+    <span class="n">rendezvous_iterator</span> <span class="o">=</span> <span class="n">rendezvous</span><span class="p">(</span><span class="n">init_method</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+    <span class="n">store</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">rendezvous_iterator</span><span class="p">)</span>
+    <span class="n">store</span><span class="o">.</span><span class="n">set_timeout</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span>
+
+    <span class="n">store</span> <span class="o">=</span> <span class="n">PrefixStore</span><span class="p">(</span><span class="n">group_name</span><span class="p">,</span> <span class="n">store</span><span class="p">)</span>
+
+    <span class="c1"># PyTorch &gt;= 2.6 renamed pg_options to backend_options</span>
+    <span class="n">pg_options_key</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">&quot;backend_options&quot;</span> <span class="k">if</span> <span class="nb">str</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">__version__</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="s2">&quot;2.6&quot;</span> <span class="k">else</span> <span class="s2">&quot;pg_options&quot;</span>
+    <span class="p">)</span>
+    <span class="n">pg</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_new_process_group_helper</span><span class="p">(</span>
+        <span class="n">world_size</span><span class="p">,</span>
+        <span class="n">rank</span><span class="p">,</span>
+        <span class="p">[],</span>
+        <span class="n">backend</span><span class="p">,</span>
+        <span class="n">store</span><span class="p">,</span>
+        <span class="n">group_name</span><span class="o">=</span><span class="n">group_name</span><span class="p">,</span>
+        <span class="o">**</span><span class="p">{</span><span class="n">pg_options_key</span><span class="p">:</span> <span class="kc">None</span><span class="p">},</span>
+        <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">_world</span><span class="o">.</span><span class="n">pg_group_ranks</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">i</span><span class="p">:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">world_size</span><span class="p">)}</span>
+
+    <span class="k">return</span> <span class="n">pg</span>
 
 
 <span class="k">def</span> <span class="nf">get_model_metadata</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]]:</span>
@@ -364,7 +431,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span> <span class="o">=</span> <span class="n">world_size</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">timeout</span> <span class="o">=</span> <span class="n">timeout</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_group_name</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_model_metadata</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_http_executor</span> <span class="o">=</span> <span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 
         <span class="c1"># Handle device specification</span>
         <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -384,8 +453,14 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the NCCL communication group.</span>
 
 <span class="sd">        For the trainer (rank 0), this:</span>
-<span class="sd">        1. Signals the SGLang server via HTTP to join the NCCL group</span>
-<span class="sd">        2. Initializes the trainer&#39;s NCCL communicator</span>
+<span class="sd">        1. Creates a torch.distributed process group via TCP rendezvous (rank 0 is master)</span>
+<span class="sd">        2. Signals the SGLang server via HTTP to create a matching process group</span>
+<span class="sd">        3. Both sides rendezvous via the TCP store and form an NCCL group</span>
+
+<span class="sd">        The SGLang server uses ``init_custom_process_group`` internally which</span>
+<span class="sd">        creates a ``torch.distributed`` process group (not SGLang&#39;s standalone</span>
+<span class="sd">        ``StatelessProcessGroup`` + ``PyNcclCommunicator``). The trainer must</span>
+<span class="sd">        use the same mechanism so both sides join the same NCCL collective.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            model_metadata: Dict mapping param names to (dtype, shape) tuples.</span>
@@ -397,7 +472,60 @@
                 <span class="s2">&quot;Only rank 0 (trainer) should call init_all_workers_group&quot;</span>
             <span class="p">)</span>
 
-        <span class="c1"># Step 1: Tell SGLang server to initialize its side of the NCCL group</span>
+        <span class="c1"># Disable NCCL P2P/IPC transport. Ray may restrict CUDA_VISIBLE_DEVICES</span>
+        <span class="c1"># for the train worker (e.g., only GPU 0 visible), while the SGLang</span>
+        <span class="c1"># server sees all GPUs. This topology mismatch causes &quot;Cuda failure 1</span>
+        <span class="c1"># &#39;invalid argument&#39;&quot; during NCCL P2P/IPC channel setup. Disabling P2P</span>
+        <span class="c1"># forces NCCL to use SHM/network transport which works with any device</span>
+        <span class="c1"># visibility configuration.</span>
+        <span class="kn">import</span> <span class="nn">os</span>
+
+        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;NCCL_P2P_DISABLE&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;1&quot;</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;NCCL_SHM_DISABLE&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;1&quot;</span>
+
+        <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">set_device</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="c1"># Use a unique group name per attempt to avoid &quot;group already exists&quot;</span>
+        <span class="c1"># errors on SGLang server retries</span>
+        <span class="n">group_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;weight_update_group_</span><span class="si">{</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">[:</span><span class="mi">8</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Creating torch.distributed process group via TCP rendezvous on &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">master_address</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">master_port</span><span class="si">}</span><span class="s2"> (group=</span><span class="si">{</span><span class="n">group_name</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Run the trainer-side process group init in a background thread so it</span>
+        <span class="c1"># can proceed concurrently with the SGLang server joining via HTTP.</span>
+        <span class="c1"># Both sides must rendezvous at the TCP store simultaneously.</span>
+        <span class="n">pg_error</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span>
+        <span class="n">pg_result</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span>
+
+        <span class="k">def</span> <span class="nf">_trainer_pg_init</span><span class="p">():</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">pg</span> <span class="o">=</span> <span class="n">_init_custom_process_group</span><span class="p">(</span>
+                    <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;nccl&quot;</span><span class="p">,</span>
+                    <span class="n">init_method</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;tcp://</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">master_address</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">master_port</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                    <span class="n">world_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">,</span>
+                    <span class="n">rank</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                    <span class="n">group_name</span><span class="o">=</span><span class="n">group_name</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                    <span class="s2">&quot;Trainer-side torch.distributed process group created successfully&quot;</span>
+                <span class="p">)</span>
+                <span class="n">pg_result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">pg</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">pg_error</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">e</span>
+
+        <span class="kn">import</span> <span class="nn">threading</span>
+
+        <span class="n">pg_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">_trainer_pg_init</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">pg_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+        <span class="c1"># Give the TCP store server a moment to start listening</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.3</span><span class="p">)</span>
+
+        <span class="c1"># NOW tell the SGLang server to connect to our TCP store</span>
+        <span class="c1"># and join the same process group</span>
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Requesting SGLang server to join NCCL group: &quot;</span>
             <span class="sa">f</span><span class="s2">&quot;address=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">master_address</span><span class="si">}</span><span class="s2">, port=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">master_port</span><span class="si">}</span><span class="s2">&quot;</span>
@@ -408,13 +536,32 @@
             <span class="s2">&quot;master_port&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">master_port</span><span class="p">,</span>
             <span class="s2">&quot;rank_offset&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>  <span class="c1"># Server workers start from rank 1</span>
             <span class="s2">&quot;world_size&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">,</span>
+            <span class="s2">&quot;group_name&quot;</span><span class="p">:</span> <span class="n">group_name</span><span class="p">,</span>
         <span class="p">}</span>
 
-        <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+        <span class="n">init_future</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_http_executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span>
+            <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">,</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">server_url</span><span class="si">}</span><span class="s2">/init_weights_update_group&quot;</span><span class="p">,</span>
             <span class="n">json</span><span class="o">=</span><span class="n">init_data</span><span class="p">,</span>
             <span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">timeout</span><span class="p">,</span>
         <span class="p">)</span>
+
+        <span class="c1"># Wait for both sides to complete</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Waiting for NCCL group initialization...&quot;</span><span class="p">)</span>
+        <span class="n">pg_thread</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">timeout</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">pg_error</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Trainer process group init failed: </span><span class="si">{</span><span class="n">pg_error</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span> <span class="kn">from</span> <span class="nn">pg_error</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">pg_result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Trainer process group init timed out&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span> <span class="o">=</span> <span class="n">pg_result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_group_name</span> <span class="o">=</span> <span class="n">group_name</span>
+
+        <span class="n">response</span> <span class="o">=</span> <span class="n">init_future</span><span class="o">.</span><span class="n">result</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">timeout</span> <span class="o">+</span> <span class="mf">5.0</span><span class="p">)</span>
         <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
         <span class="n">result</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
@@ -423,32 +570,6 @@
                 <span class="sa">f</span><span class="s2">&quot;SGLang server failed to initialize weight update group: &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;message&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Unknown error&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
-
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-            <span class="s2">&quot;SGLang server is joining NCCL group, initializing trainer side...&quot;</span>
-        <span class="p">)</span>
-
-        <span class="c1"># Small delay to ensure server has started NCCL init</span>
-        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.2</span><span class="p">)</span>
-
-        <span class="c1"># Step 2: Initialize trainer&#39;s NCCL communicator</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">set_device</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
-
-        <span class="c1"># Use SGLang&#39;s native NCCL utilities (no vLLM dependency)</span>
-        <span class="kn">from</span> <span class="nn">sglang.srt.distributed.device_communicators.pynccl</span> <span class="kn">import</span> <span class="p">(</span>
-            <span class="n">PyNcclCommunicator</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="kn">from</span> <span class="nn">sglang.srt.distributed.utils</span> <span class="kn">import</span> <span class="n">StatelessProcessGroup</span>
-
-        <span class="n">pg</span> <span class="o">=</span> <span class="n">StatelessProcessGroup</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
-            <span class="n">host</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">master_address</span><span class="p">,</span>
-            <span class="n">port</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">master_port</span><span class="p">,</span>
-            <span class="n">rank</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-            <span class="n">world_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span> <span class="o">=</span> <span class="n">PyNcclCommunicator</span><span class="p">(</span>
-            <span class="n">pg</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;cuda:</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="p">)</span>
 
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;NCCL group initialized successfully&quot;</span><span class="p">)</span></div>
 
@@ -461,6 +582,12 @@
         <span class="n">weights</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Broadcast weights to SGLang server via NCCL.</span>
+
+<span class="sd">        SGLang&#39;s ``/update_weights_from_distributed`` endpoint expects a single</span>
+<span class="sd">        request with lists of all parameter names, dtypes, and shapes. The</span>
+<span class="sd">        server then enters a broadcast-receive loop for each parameter in</span>
+<span class="sd">        order. The trainer must broadcast each tensor in the same order,</span>
+<span class="sd">        concurrently with the server receiving.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            model_id: Identifier for the model (for logging).</span>
@@ -479,48 +606,57 @@
 
         <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">set_device</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
 
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Broadcasting </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span><span class="si">}</span><span class="s2"> weights for model &#39;</span><span class="si">{</span><span class="n">model_id</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
-        <span class="p">)</span>
-
+        <span class="c1"># Build lists matching SGLang&#39;s UpdateWeightsFromDistributedReqInput</span>
+        <span class="n">names</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">dtypes</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">shapes</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="n">dtype</span><span class="p">,</span> <span class="n">shape</span><span class="p">)</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_metadata</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">weights</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;Weight &#39;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; not found in weights. &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;Available keys: </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">weights</span><span class="o">.</span><span class="n">keys</span><span class="p">())[:</span><span class="mi">10</span><span class="p">]</span><span class="si">}</span><span class="s2">...&quot;</span>
                 <span class="p">)</span>
+            <span class="n">names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+            <span class="n">dtypes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dtype_to_str</span><span class="p">(</span><span class="n">dtype</span><span class="p">))</span>
+            <span class="n">shapes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">shape</span><span class="p">))</span>
 
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Broadcasting </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">names</span><span class="p">)</span><span class="si">}</span><span class="s2"> weights for model &#39;</span><span class="si">{</span><span class="n">model_id</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Step 1: Send a single HTTP request with all weight metadata.</span>
+        <span class="c1"># The server will enter a broadcast-receive loop for each parameter.</span>
+        <span class="n">update_data</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;names&quot;</span><span class="p">:</span> <span class="n">names</span><span class="p">,</span>
+            <span class="s2">&quot;dtypes&quot;</span><span class="p">:</span> <span class="n">dtypes</span><span class="p">,</span>
+            <span class="s2">&quot;shapes&quot;</span><span class="p">:</span> <span class="n">shapes</span><span class="p">,</span>
+            <span class="s2">&quot;group_name&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_group_name</span><span class="p">,</span>
+            <span class="s2">&quot;flush_cache&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="n">update_future</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_http_executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span>
+            <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">server_url</span><span class="si">}</span><span class="s2">/update_weights_from_distributed&quot;</span><span class="p">,</span>
+            <span class="n">json</span><span class="o">=</span><span class="n">update_data</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">timeout</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Step 2: Broadcast each weight tensor via NCCL in the same order.</span>
+        <span class="c1"># The server is concurrently receiving via broadcast on its side.</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span><span class="p">:</span>
             <span class="n">tensor</span> <span class="o">=</span> <span class="n">weights</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;cuda:</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-            <span class="c1"># Step 1: Signal server to prepare for this weight</span>
-            <span class="n">update_data</span> <span class="o">=</span> <span class="p">{</span>
-                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">name</span><span class="p">,</span>
-                <span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="n">dtype_to_str</span><span class="p">(</span><span class="n">dtype</span><span class="p">),</span>
-                <span class="s2">&quot;shape&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">shape</span><span class="p">),</span>
-            <span class="p">}</span>
-            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">server_url</span><span class="si">}</span><span class="s2">/update_weights_from_distributed&quot;</span><span class="p">,</span>
-                <span class="n">json</span><span class="o">=</span><span class="n">update_data</span><span class="p">,</span>
-                <span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">timeout</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
-
-            <span class="c1"># Step 2: Broadcast the weight via NCCL</span>
-            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span><span class="p">,</span> <span class="s2">&quot;broadcast&quot;</span><span class="p">):</span>
-                <span class="c1"># PyNcclCommunicator interface</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span>
-                    <span class="n">tensor</span><span class="p">,</span>
-                    <span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-                    <span class="n">stream</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(),</span>
-                <span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="c1"># torch.distributed interface</span>
-                <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span><span class="p">)</span>
-
+            <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span><span class="p">)</span>
             <span class="k">del</span> <span class="n">tensor</span>
 
         <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Broadcast complete for model &#39;</span><span class="si">{</span><span class="n">model_id</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span></div>
+
+        <span class="c1"># Step 3: Wait for the HTTP response confirming server received all weights</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="n">update_future</span><span class="o">.</span><span class="n">result</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">timeout</span> <span class="o">+</span> <span class="mf">5.0</span><span class="p">)</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;success&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;SGLang weight update failed: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;message&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Unknown error&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Broadcast complete for model &#39;</span><span class="si">{</span><span class="n">model_id</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="SGLangCollectiveTransport.check_connection">
@@ -570,7 +706,7 @@
         <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">server_url</span> <span class="o">=</span> <span class="n">server_url</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">master_address</span> <span class="o">=</span> <span class="n">master_address</span> <span class="ow">or</span> <span class="s2">&quot;localhost&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">master_address</span> <span class="o">=</span> <span class="n">master_address</span> <span class="ow">or</span> <span class="n">get_local_ip_address</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">master_port</span> <span class="o">=</span> <span class="n">master_port</span> <span class="ow">or</span> <span class="n">get_open_port</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_gpus</span> <span class="o">=</span> <span class="n">num_gpus</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">strategy_name</span> <span class="o">=</span> <span class="n">strategy</span>
@@ -634,6 +770,30 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_model_metadata</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span> <span class="o">=</span> <span class="n">WeightStrategy</span><span class="p">(</span><span class="n">extract_as</span><span class="o">=</span><span class="n">scheme</span><span class="o">.</span><span class="n">strategy_name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_collectors</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_post_hooks</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="p">[]</span>
+
+<div class="viewcode-block" id="SGLangWeightSender.register_collector">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.SGLangWeightSender.html#torchrl.weight_update.llm.SGLangWeightSender.register_collector">[docs]</a>
+    <span class="k">def</span> <span class="nf">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">collector</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Register a collector for automatic policy version increment.</span>
+
+<span class="sd">        After each :meth:`update_weights` call, ``collector.increment_version()``</span>
+<span class="sd">        is called automatically.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_collectors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">collector</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_post_hooks</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_post_hooks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_increment_all_collector_versions</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_increment_all_collector_versions</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">collector</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collectors</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">collector</span><span class="o">.</span><span class="n">increment_version</span><span class="p">()</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Failed to increment version for collector: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
 
 <div class="viewcode-block" id="SGLangWeightSender.register_model">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.SGLangWeightSender.html#torchrl.weight_update.llm.SGLangWeightSender.register_model">[docs]</a>
@@ -695,7 +855,11 @@
         <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="s2">&quot;to_dict&quot;</span><span class="p">):</span>
             <span class="n">weights</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">send_weights</span><span class="p">(</span><span class="s2">&quot;sglang_model&quot;</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">send_weights</span><span class="p">(</span><span class="s2">&quot;sglang_model&quot;</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
+
+        <span class="c1"># Run post-hooks (e.g., increment collector versions)</span>
+        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_post_hooks</span><span class="p">:</span>
+            <span class="n">hook</span><span class="p">()</span></div>
 
 
 <div class="viewcode-block" id="SGLangWeightSender.flush_cache">

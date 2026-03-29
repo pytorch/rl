@@ -276,7 +276,7 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.llm.VLLMWeightSender.init_all_workers_group">
 <span class="sig-name descname"><span class="pre">init_all_workers_group</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.11)"><span class="pre">dtype</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.11)"><span class="pre">Size</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vllm_engine</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/weight_update/llm/vllm_nccl.html#VLLMWeightSender.init_all_workers_group"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.llm.VLLMWeightSender.init_all_workers_group" title="Link to this definition">¶</a></dt>
-<dd><p>Initialize the collective communication group.</p>
+<dd><p>Initialize the collective communication group using vLLM’s native API.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -288,6 +288,14 @@
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.weight_update.llm.VLLMWeightSender.register_collector">
+<span class="sig-name descname"><span class="pre">register_collector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">collector</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/llm/vllm_nccl.html#VLLMWeightSender.register_collector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.llm.VLLMWeightSender.register_collector" title="Link to this definition">¶</a></dt>
+<dd><p>Register a collector for automatic policy version increment.</p>
+<p>After each <a class="reference internal" href="#torchrl.weight_update.llm.VLLMWeightSender.update_weights" title="torchrl.weight_update.llm.VLLMWeightSender.update_weights"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update_weights()</span></code></a> call, <code class="docutils literal notranslate"><span class="pre">collector.increment_version()</span></code>
+is called automatically.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.llm.VLLMWeightSender.register_model">
 <span class="sig-name descname"><span class="pre">register_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/llm/vllm_nccl.html#VLLMWeightSender.register_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.llm.VLLMWeightSender.register_model" title="Link to this definition">¶</a></dt>
 <dd><p>Register the model to extract weights from.</p>
@@ -296,7 +304,7 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.llm.VLLMWeightSender.update_weights">
 <span class="sig-name descname"><span class="pre">update_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/llm/vllm_nccl.html#VLLMWeightSender.update_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.llm.VLLMWeightSender.update_weights" title="Link to this definition">¶</a></dt>
-<dd><p>Extract and broadcast weights to vLLM workers.</p>
+<dd><p>Extract and send weights to vLLM workers using native weight transfer API.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>weights</strong> – Optional weights to send. If None, extracts from registered model.</p>
@@ -348,6 +356,7 @@
 <li><a class="reference internal" href="#">VLLMWeightSender</a><ul>
 <li><a class="reference internal" href="#torchrl.weight_update.llm.VLLMWeightSender"><code class="docutils literal notranslate"><span class="pre">VLLMWeightSender</span></code></a><ul>
 <li><a class="reference internal" href="#torchrl.weight_update.llm.VLLMWeightSender.init_all_workers_group"><code class="docutils literal notranslate"><span class="pre">VLLMWeightSender.init_all_workers_group()</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.weight_update.llm.VLLMWeightSender.register_collector"><code class="docutils literal notranslate"><span class="pre">VLLMWeightSender.register_collector()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.weight_update.llm.VLLMWeightSender.register_model"><code class="docutils literal notranslate"><span class="pre">VLLMWeightSender.register_model()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.weight_update.llm.VLLMWeightSender.update_weights"><code class="docutils literal notranslate"><span class="pre">VLLMWeightSender.update_weights()</span></code></a></li>
 </ul>

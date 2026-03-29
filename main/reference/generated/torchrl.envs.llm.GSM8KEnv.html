@@ -373,7 +373,6 @@ Defaults to <cite>“gsm8k_dataloader”</cite>.</p></li>
 <span class="go">                    is_shared=False),</span>
 <span class="go">                reward: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">                reward_answer: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">                reward_contained: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">                reward_right: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">                reward_think: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">                step_count: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
@@ -407,7 +406,7 @@ Defaults to <cite>“gsm8k_dataloader”</cite>.</p></li>
 <span class="go">    device=None,</span>
 <span class="go">    is_shared=False,</span>
 <span class="go">    stack_dim=0)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">s</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">10</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">s</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">s</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 </pre></div>
 </div>

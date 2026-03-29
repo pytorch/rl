@@ -247,6 +247,12 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.ChatEnv.html#torchrl.envs.llm.ChatEnv" title="torchrl.envs.llm.ChatEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChatEnv</span></code></a>(*args[, with_tokenizer])</p></td>
 <td><p>A chat-based environment for LLMs, designed as a blank canvas for conversation and RL.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.CountdownEnv.html#torchrl.envs.llm.CountdownEnv" title="torchrl.envs.llm.CountdownEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CountdownEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Countdown numbers-game environment for LLM post-training.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.CountdownRewardParser.html#torchrl.envs.llm.CountdownRewardParser" title="torchrl.envs.llm.CountdownRewardParser"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CountdownRewardParser</span></code></a>([tokenizer, in_keys, ...])</p></td>
+<td><p>Reward parser for the Countdown numbers game.</p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.DatasetChatEnv.html#torchrl.envs.llm.DatasetChatEnv" title="torchrl.envs.llm.DatasetChatEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DatasetChatEnv</span></code></a>(*args, **kwargs)</p></td>
 <td><p>Base class for chat environment with queries pulled from a dataset.</p></td>
 </tr>
@@ -259,7 +265,7 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.GSM8KPrepareQuestion.html#torchrl.envs.llm.GSM8KPrepareQuestion" title="torchrl.envs.llm.GSM8KPrepareQuestion"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GSM8KPrepareQuestion</span></code></a>([in_keys, out_keys])</p></td>
 <td><p>A transform to prepare the prompt when using GSM8k within an LLMEnv.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.GSM8KRewardParser.html#torchrl.envs.llm.GSM8KRewardParser" title="torchrl.envs.llm.GSM8KRewardParser"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GSM8KRewardParser</span></code></a>(tokenizer[, in_keys, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.GSM8KRewardParser.html#torchrl.envs.llm.GSM8KRewardParser" title="torchrl.envs.llm.GSM8KRewardParser"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GSM8KRewardParser</span></code></a>([tokenizer, in_keys, ...])</p></td>
 <td><p>Reward parser for GSM8KEnv or make_gsm8k_env.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.IFEvalEnv.html#torchrl.envs.llm.IFEvalEnv" title="torchrl.envs.llm.IFEvalEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IFEvalEnv</span></code></a>(*args, **kwargs)</p></td>
@@ -270,6 +276,12 @@
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData" title="torchrl.envs.llm.IFEvalScoreData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IFEvalScoreData</span></code></a>(prompt_level_strict_acc, ...)</p></td>
 <td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.MATHEnv.html#torchrl.envs.llm.MATHEnv" title="torchrl.envs.llm.MATHEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MATHEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>MATH (competition mathematics) dataset environment.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.MATHRewardParser.html#torchrl.envs.llm.MATHRewardParser" title="torchrl.envs.llm.MATHRewardParser"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MATHRewardParser</span></code></a>([tokenizer, in_keys, ...])</p></td>
+<td><p>Reward parser for the MATH (competition mathematics) dataset.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.LLMEnv.html#torchrl.envs.llm.LLMEnv" title="torchrl.envs.llm.LLMEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMEnv</span></code></a>(*args, **kwargs)</p></td>
 <td><p>A text generation environment for language models.</p></td>

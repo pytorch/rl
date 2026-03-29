@@ -2016,9 +2016,12 @@
         <span class="n">prompt_histories</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">full_histories</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
     <span class="p">):</span>
         <span class="k">if</span> <span class="n">h_full</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">h_prompt</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Full history is shorter than prompt history: </span><span class="si">{</span><span class="n">h_full</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> &lt;= </span><span class="si">{</span><span class="n">h_prompt</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="c1"># Empty response: model generated 0 tokens. Create a minimal</span>
+            <span class="c1"># response history with an empty assistant message.</span>
+            <span class="n">response_histories</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">History</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;assistant&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
             <span class="p">)</span>
+            <span class="k">continue</span>
         <span class="c1"># Note: there can be more than one response, so the response has the same number of dims as prompt</span>
         <span class="n">response_histories</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">h_full</span><span class="p">[</span><span class="n">h_prompt</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="p">:])</span>
 

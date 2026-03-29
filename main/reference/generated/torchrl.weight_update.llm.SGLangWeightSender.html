@@ -282,6 +282,14 @@
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.weight_update.llm.SGLangWeightSender.register_collector">
+<span class="sig-name descname"><span class="pre">register_collector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">collector</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/llm/sglang_nccl.html#SGLangWeightSender.register_collector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.llm.SGLangWeightSender.register_collector" title="Link to this definition">¶</a></dt>
+<dd><p>Register a collector for automatic policy version increment.</p>
+<p>After each <a class="reference internal" href="#torchrl.weight_update.llm.SGLangWeightSender.update_weights" title="torchrl.weight_update.llm.SGLangWeightSender.update_weights"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update_weights()</span></code></a> call, <code class="docutils literal notranslate"><span class="pre">collector.increment_version()</span></code>
+is called automatically.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.llm.SGLangWeightSender.register_model">
 <span class="sig-name descname"><span class="pre">register_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/llm/sglang_nccl.html#SGLangWeightSender.register_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.llm.SGLangWeightSender.register_model" title="Link to this definition">¶</a></dt>
 <dd><p>Register the model for weight extraction.</p>
@@ -348,6 +356,7 @@
 <li><a class="reference internal" href="#torchrl.weight_update.llm.SGLangWeightSender"><code class="docutils literal notranslate"><span class="pre">SGLangWeightSender</span></code></a><ul>
 <li><a class="reference internal" href="#torchrl.weight_update.llm.SGLangWeightSender.flush_cache"><code class="docutils literal notranslate"><span class="pre">SGLangWeightSender.flush_cache()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.weight_update.llm.SGLangWeightSender.init_all_workers_group"><code class="docutils literal notranslate"><span class="pre">SGLangWeightSender.init_all_workers_group()</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.weight_update.llm.SGLangWeightSender.register_collector"><code class="docutils literal notranslate"><span class="pre">SGLangWeightSender.register_collector()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.weight_update.llm.SGLangWeightSender.register_model"><code class="docutils literal notranslate"><span class="pre">SGLangWeightSender.register_model()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.weight_update.llm.SGLangWeightSender.update_weights"><code class="docutils literal notranslate"><span class="pre">SGLangWeightSender.update_weights()</span></code></a></li>
 </ul>

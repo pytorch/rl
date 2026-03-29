@@ -250,14 +250,9 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.weight_update.llm.VLLMCollectiveTransport">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.weight_update.llm.</span></span><span class="sig-name descname"><span class="pre">VLLMCollectiveTransport</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">master_address</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rank</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">world_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.11)"><span class="pre">device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vllm_engine</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/weight_update/llm/vllm_nccl.html#VLLMCollectiveTransport"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.llm.VLLMCollectiveTransport" title="Link to this definition">¶</a></dt>
-<dd><p>Transport for vLLM using collective communication (NCCL).</p>
-<p><strong>COLLECTIVE LAYER ONLY</strong> - This class handles the data transfer layer.
-RPC coordination is handled separately by the caller (sender/receiver).</p>
-<p>This transport uses PyTorch distributed collectives to broadcast weights
-from a trainer (rank 0) to vLLM workers (ranks 1+).</p>
-<p><strong>Separation of Concerns:</strong>
-- This class: NCCL collective operations (GPU-GPU data transfer)
-- Caller (sender/receiver): RPC coordination (when to start collective)</p>
+<dd><p>Transport for vLLM using vLLM’s native WeightTransferConfig API (vLLM 0.17+).</p>
+<p>This transport uses vLLM’s built-in NCCL weight transfer engine to broadcast
+weights from a trainer (rank 0) to vLLM workers (ranks 1+).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -270,11 +265,6 @@ from a trainer (rank 0) to vLLM workers (ranks 1+).</p>
 </ul>
 </dd>
 </dl>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>The RPC layer (e.g., Ray remote calls) must ensure all ranks call
-init_all_workers_group() simultaneously before any collective operations.</p>
-</div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.llm.VLLMCollectiveTransport.check_connection">
 <span class="sig-name descname"><span class="pre">check_connection</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/llm/vllm_nccl.html#VLLMCollectiveTransport.check_connection"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.llm.VLLMCollectiveTransport.check_connection" title="Link to this definition">¶</a></dt>
@@ -283,11 +273,14 @@ init_all_workers_group() simultaneously before any collective operations.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.llm.VLLMCollectiveTransport.init_all_workers_group">
-<span class="sig-name descname"><span class="pre">init_all_workers_group</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.11)"><span class="pre">dtype</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.11)"><span class="pre">Size</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/weight_update/llm/vllm_nccl.html#VLLMCollectiveTransport.init_all_workers_group"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.llm.VLLMCollectiveTransport.init_all_workers_group" title="Link to this definition">¶</a></dt>
-<dd><p>Initialize the collective communication group.</p>
+<span class="sig-name descname"><span class="pre">init_all_workers_group</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.11)"><span class="pre">dtype</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.11)"><span class="pre">Size</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gpus_per_replica</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/weight_update/llm/vllm_nccl.html#VLLMCollectiveTransport.init_all_workers_group"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.llm.VLLMCollectiveTransport.init_all_workers_group" title="Link to this definition">¶</a></dt>
+<dd><p>Initialize the collective communication group using vLLM’s native API.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>model_metadata</strong> – Dict mapping param names to (dtype, shape) tuples.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model_metadata</strong> – Dict mapping param names to (dtype, shape) tuples.</p></li>
+<li><p><strong>gpus_per_replica</strong> – GPUs per replica (for rank_offset calculation). Inferred if not provided.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
@@ -296,19 +289,9 @@ init_all_workers_group() simultaneously before any collective operations.</p>
 <dt class="sig sig-object py" id="torchrl.weight_update.llm.VLLMCollectiveTransport.receive_weights">
 <span class="sig-name descname"><span class="pre">receive_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strategy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/llm/vllm_nccl.html#VLLMCollectiveTransport.receive_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.llm.VLLMCollectiveTransport.receive_weights" title="Link to this definition">¶</a></dt>
 <dd><p>Receive weights from broadcaster.</p>
-<p>This should only be called from worker ranks (rank &gt; 0).
-This method is called by vLLM engine internally through collective operations.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>timeout</strong> – Ignored (vLLM handles synchronization internally).</p></li>
-<li><p><strong>weights</strong> – Ignored.</p></li>
-<li><p><strong>model</strong> – Ignored.</p></li>
-<li><p><strong>strategy</strong> – Ignored.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>None - vLLM handles weight application internally via collectives.</p>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None - vLLM handles weight application internally via native API.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -316,10 +299,7 @@ This method is called by vLLM engine internally through collective operations.</
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.llm.VLLMCollectiveTransport.send_weights">
 <span class="sig-name descname"><span class="pre">send_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/llm/vllm_nccl.html#VLLMCollectiveTransport.send_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.llm.VLLMCollectiveTransport.send_weights" title="Link to this definition">¶</a></dt>
-<dd><p>Broadcast weights to all workers using NCCL.</p>
-<p>This method follows AsyncVLLM’s periodic-mono pattern:
-For each weight: RPC → NCCL broadcast → Wait for RPC completion</p>
-<p>This should only be called from rank 0 (trainer).</p>
+<dd><p>Send weights to all workers using vLLM’s native weight transfer API.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">

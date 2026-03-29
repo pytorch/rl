@@ -416,6 +416,10 @@
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">extract_as</span> <span class="o">==</span> <span class="s2">&quot;state_dict&quot;</span><span class="p">:</span>  <span class="c1"># state_dict</span>
             <span class="c1"># Extract as state_dict</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="s2">&quot;merge_and_unload&quot;</span><span class="p">):</span>
+                    <span class="c1"># LoRA model: merge weights to get clean parameter names</span>
+                    <span class="c1"># that match vLLM&#39;s expected format</span>
+                    <span class="k">return</span> <span class="n">source</span><span class="o">.</span><span class="n">merge_and_unload</span><span class="p">()</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
                 <span class="k">return</span> <span class="n">source</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
             <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
                 <span class="k">return</span> <span class="n">source</span>

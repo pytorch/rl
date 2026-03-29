@@ -269,6 +269,7 @@
     <span class="n">check_server_health</span><span class="p">,</span>
     <span class="n">convert_sampling_params</span><span class="p">,</span>
     <span class="n">dtype_to_str</span><span class="p">,</span>
+    <span class="n">get_local_ip_address</span><span class="p">,</span>
     <span class="n">get_model_info</span><span class="p">,</span>
     <span class="n">get_open_port</span><span class="p">,</span>
     <span class="n">get_server_info</span><span class="p">,</span>
@@ -345,7 +346,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_model_info</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="c1"># Weight sync state</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_master_address</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;localhost&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_master_address</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">get_local_ip_address</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_master_port</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_weight_update_initialized</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 
@@ -384,6 +385,18 @@
         <span class="n">port</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;port&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="n">get_open_port</span><span class="p">()</span>
         <span class="n">host</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;host&quot;</span><span class="p">,</span> <span class="s2">&quot;127.0.0.1&quot;</span><span class="p">)</span>
 
+        <span class="c1"># Extract cuda_devices for GPU pinning via --base-gpu-id.</span>
+        <span class="c1"># We use base_gpu_id instead of CUDA_VISIBLE_DEVICES so that all</span>
+        <span class="c1"># processes see the full set of GPUs — required for NCCL device ID</span>
+        <span class="c1"># consistency when doing cross-process weight broadcasts.</span>
+        <span class="n">cuda_devices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;cuda_devices&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">base_gpu_id</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="n">cuda_devices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">cuda_devices</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">base_gpu_id</span> <span class="o">=</span> <span class="n">cuda_devices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Pinning SGLang server to GPU </span><span class="si">{</span><span class="n">base_gpu_id</span><span class="si">}</span><span class="s2"> via --base-gpu-id&quot;</span>
+            <span class="p">)</span>
+
         <span class="c1"># Build command line arguments</span>
         <span class="n">cmd</span> <span class="o">=</span> <span class="p">[</span>
             <span class="s2">&quot;python3&quot;</span><span class="p">,</span>
@@ -399,6 +412,8 @@
             <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_tp_size</span><span class="p">),</span>
             <span class="s2">&quot;--dp-size&quot;</span><span class="p">,</span>
             <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dp_size</span><span class="p">),</span>
+            <span class="s2">&quot;--base-gpu-id&quot;</span><span class="p">,</span>
+            <span class="nb">str</span><span class="p">(</span><span class="n">base_gpu_id</span><span class="p">),</span>
         <span class="p">]</span>
 
         <span class="c1"># Add additional kwargs</span>
@@ -421,11 +436,20 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_log_file_path</span> <span class="o">=</span> <span class="n">log_file</span><span class="o">.</span><span class="n">name</span>
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SGLang server output logging to: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_log_file_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
+        <span class="c1"># Set up environment for the server subprocess.</span>
+        <span class="c1"># Disable NCCL P2P/IPC: Ray may restrict CUDA_VISIBLE_DEVICES for the</span>
+        <span class="c1"># trainer worker while this server sees all GPUs. The topology mismatch</span>
+        <span class="c1"># causes NCCL P2P/IPC channel setup to fail with &quot;invalid argument&quot;.</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">env</span><span class="p">[</span><span class="s2">&quot;NCCL_P2P_DISABLE&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;1&quot;</span>
+        <span class="n">env</span><span class="p">[</span><span class="s2">&quot;NCCL_SHM_DISABLE&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;1&quot;</span>
+
         <span class="c1"># Launch subprocess with output going to the log file</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_managed_process</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span><span class="p">(</span>
             <span class="n">cmd</span><span class="p">,</span>
             <span class="n">stdout</span><span class="o">=</span><span class="n">log_file</span><span class="p">,</span>
             <span class="n">stderr</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">STDOUT</span><span class="p">,</span>
+            <span class="n">env</span><span class="o">=</span><span class="n">env</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
@@ -616,6 +640,13 @@
         <span class="k">if</span> <span class="n">return_logprobs</span><span class="p">:</span>
             <span class="n">sglang_params</span><span class="p">[</span><span class="s2">&quot;return_logprob&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
 
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_logged_sglang_params&quot;</span><span class="p">):</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;SGLang generate: merged_params=</span><span class="si">{</span><span class="n">merged_params</span><span class="si">}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;sglang_params=</span><span class="si">{</span><span class="n">sglang_params</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logged_sglang_params</span> <span class="o">=</span> <span class="kc">True</span>
+
         <span class="n">timeout</span> <span class="o">=</span> <span class="n">timeout</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span>
 
         <span class="c1"># Determine if using text or token mode</span>
@@ -636,17 +667,33 @@
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">inputs</span> <span class="o">=</span> <span class="n">prompts</span>
 
+        <span class="c1"># SGLang&#39;s /generate endpoint expects sampling parameters nested</span>
+        <span class="c1"># under a &quot;sampling_params&quot; key, not as flat top-level fields.</span>
+        <span class="c1"># Extract top-level GenerateReqInput fields from sglang_params.</span>
+        <span class="n">top_level_keys</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;return_logprob&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;stream&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;return_text_in_logprobs&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;logprob_start_len&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;top_logprobs_num&quot;</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="n">top_level_params</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">k</span><span class="p">:</span> <span class="n">sglang_params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">k</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">top_level_keys</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">sglang_params</span>
+        <span class="p">}</span>
+
         <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">inp</span> <span class="ow">in</span> <span class="n">inputs</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">use_tokens</span><span class="p">:</span>
                 <span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
                     <span class="s2">&quot;input_ids&quot;</span><span class="p">:</span> <span class="n">inp</span><span class="p">,</span>
-                    <span class="o">**</span><span class="n">sglang_params</span><span class="p">,</span>
+                    <span class="s2">&quot;sampling_params&quot;</span><span class="p">:</span> <span class="n">sglang_params</span><span class="p">,</span>
+                    <span class="o">**</span><span class="n">top_level_params</span><span class="p">,</span>
                 <span class="p">}</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
                     <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">inp</span><span class="p">,</span>
-                    <span class="o">**</span><span class="n">sglang_params</span><span class="p">,</span>
+                    <span class="s2">&quot;sampling_params&quot;</span><span class="p">:</span> <span class="n">sglang_params</span><span class="p">,</span>
+                    <span class="o">**</span><span class="n">top_level_params</span><span class="p">,</span>
                 <span class="p">}</span>
 
             <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
@@ -922,6 +969,25 @@
                 <span class="k">pass</span>  <span class="c1"># Ignore cleanup errors</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_log_file_path</span> <span class="o">=</span> <span class="kc">None</span></div>
 
+
+    <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Serialize the client state without transferring subprocess ownership.&quot;&quot;&quot;</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="c1"># Remote workers should reconnect to the existing server instead of</span>
+        <span class="c1"># inheriting the managed subprocess handle from the parent process.</span>
+        <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_managed_process&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_log_file_path&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_nccl_group&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">state</span>
+
+    <span class="k">def</span> <span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Restore the client state and reconnect to the server when needed.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_managed_process</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_log_file_path</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nccl_group</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_url</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_validate_and_connect</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Cleanup on deletion.&quot;&quot;&quot;</span>

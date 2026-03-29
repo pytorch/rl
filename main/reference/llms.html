@@ -340,7 +340,7 @@ transform, or a boolean to the collector constructor.</p>
 <td><p>Receives weights in a vLLM worker using collective communication.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.weight_update.llm.VLLMCollectiveTransport.html#torchrl.weight_update.llm.VLLMCollectiveTransport" title="torchrl.weight_update.llm.VLLMCollectiveTransport"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VLLMCollectiveTransport</span></code></a>(master_address, ...)</p></td>
-<td><p>Transport for vLLM using collective communication (NCCL).</p></td>
+<td><p>Transport for vLLM using vLLM's native WeightTransferConfig API (vLLM 0.17+).</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme.html#torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme" title="torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VLLMDoubleBufferSyncScheme</span></code></a>(remote_addr[, ...])</p></td>
 <td><p>Weight synchronization scheme for vLLM using double-buffered storage.</p></td>
@@ -543,7 +543,7 @@ re-tokenizing from history.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.MLGymWrapper.html#torchrl.envs.llm.MLGymWrapper" title="torchrl.envs.llm.MLGymWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MLGymWrapper</span></code></a>(*args, **kwargs)</p></td>
 <td><p>A thin wrapper for MLGym environments.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.GSM8KRewardParser.html#torchrl.envs.llm.GSM8KRewardParser" title="torchrl.envs.llm.GSM8KRewardParser"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GSM8KRewardParser</span></code></a>(tokenizer[, in_keys, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.GSM8KRewardParser.html#torchrl.envs.llm.GSM8KRewardParser" title="torchrl.envs.llm.GSM8KRewardParser"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GSM8KRewardParser</span></code></a>([tokenizer, in_keys, ...])</p></td>
 <td><p>Reward parser for GSM8KEnv or make_gsm8k_env.</p></td>
 </tr>
 </tbody>

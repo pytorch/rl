@@ -258,7 +258,6 @@
 <span class="kn">from</span> <span class="nn">torchrl.modules.llm.utils</span> <span class="kn">import</span> <span class="n">_cuda_visible_devices</span>
 
 <span class="kn">from</span> <span class="nn">.base</span> <span class="kn">import</span> <span class="n">RLvLLMEngine</span>
-<span class="kn">from</span> <span class="nn">.vllm_utils</span> <span class="kn">import</span> <span class="n">stateless_init_process_group</span>
 
 <span class="k">try</span><span class="p">:</span>
     <span class="kn">from</span> <span class="nn">vllm</span> <span class="kn">import</span> <span class="n">LLM</span>
@@ -308,49 +307,6 @@
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;device count </span><span class="si">{</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device_count</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">init_weight_update_group</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">master_address</span><span class="p">,</span> <span class="n">master_port</span><span class="p">,</span> <span class="n">rank_offset</span><span class="p">,</span> <span class="n">world_size</span>
-    <span class="p">):</span>
-        <span class="kn">from</span> <span class="nn">vllm.distributed.parallel_state</span> <span class="kn">import</span> <span class="n">get_world_group</span>
-
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;=&gt; in </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.init_weight_update_group&quot;</span><span class="p">)</span>
-
-        <span class="c1"># Get the local rank within the tensor parallel group</span>
-        <span class="n">tp_group</span> <span class="o">=</span> <span class="n">get_world_group</span><span class="p">()</span>
-        <span class="n">local_rank</span> <span class="o">=</span> <span class="n">tp_group</span><span class="o">.</span><span class="n">rank</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Local rank in tensor parallel group: </span><span class="si">{</span><span class="n">local_rank</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-        <span class="c1"># Calculate the global rank for weight update group</span>
-        <span class="c1"># rank_offset is 1, so ranks will be [1, 2] for tp_size=2</span>
-        <span class="n">rank</span> <span class="o">=</span> <span class="n">local_rank</span> <span class="o">+</span> <span class="n">rank_offset</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Initializing </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> weight update group with &quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">master_address</span><span class="si">=}</span><span class="s2">, </span><span class="si">{</span><span class="n">master_port</span><span class="si">=}</span><span class="s2">, </span><span class="si">{</span><span class="n">rank</span><span class="si">=}</span><span class="s2">, </span><span class="si">{</span><span class="n">world_size</span><span class="si">=}</span><span class="s2">, device=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">model_update_group</span> <span class="o">=</span> <span class="n">stateless_init_process_group</span><span class="p">(</span>
-            <span class="n">master_address</span><span class="p">,</span>
-            <span class="n">master_port</span><span class="p">,</span>
-            <span class="n">rank</span><span class="p">,</span>
-            <span class="n">world_size</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
-        <span class="p">)</span>
-
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.init_weight_update_group success&quot;</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">update_weight_broadcast</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">shape</span><span class="p">):</span>
-        <span class="n">weight</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">model_update_group</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span>
-            <span class="n">weight</span><span class="p">,</span> <span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">()</span>
-        <span class="p">)</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">model_runner</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">load_weights</span><span class="p">(</span><span class="n">weights</span><span class="o">=</span><span class="p">[(</span><span class="n">name</span><span class="p">,</span> <span class="n">weight</span><span class="p">)])</span>
-        <span class="k">del</span> <span class="n">weight</span>
-
-    <span class="k">def</span> <span class="nf">update_weight</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">weight</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">model_runner</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">load_weights</span><span class="p">(</span><span class="n">weights</span><span class="o">=</span><span class="p">[(</span><span class="n">name</span><span class="p">,</span> <span class="n">weight</span><span class="p">)])</span>
-        <span class="k">del</span> <span class="n">weight</span>
-
     <span class="k">def</span> <span class="nf">check_weights_changed</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if the weights are updated to 0.&quot;&quot;&quot;</span>
         <span class="c1"># TODO: This is a test and should be treated as such</span>
@@ -389,6 +345,24 @@
         <span class="c1"># Let vLLM handle device placement</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="k">def</span> <span class="nf">init_weight_transfer_engine</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">init_request</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the native weight transfer engine on the underlying LLM engine.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">llm_engine</span><span class="o">.</span><span class="n">init_weight_transfer_engine</span><span class="p">(</span><span class="n">init_request</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">update_weights_native</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">update_request</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update weights using the native weight transfer engine.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">llm_engine</span><span class="o">.</span><span class="n">update_weights</span><span class="p">(</span><span class="n">update_request</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">sleep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">level</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Put the vLLM engine to sleep to prepare for weight updates.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">llm_engine</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">level</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">wake_up</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tags</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Wake up the vLLM engine after weight updates.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">tags</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">tags</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;scheduling&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">llm_engine</span><span class="o">.</span><span class="n">wake_up</span><span class="p">(</span><span class="n">tags</span><span class="o">=</span><span class="n">tags</span><span class="p">)</span>
 
 
 <span class="k">class</span> <span class="nc">RayLLMWorker</span><span class="p">(</span><span class="n">RLvLLMEngine</span><span class="p">):</span>
@@ -434,24 +408,61 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_master_port</span>
 
     <span class="k">def</span> <span class="nf">init_weight_update_group</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the weight update communication group.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the weight update communication group using vLLM&#39;s native API.&quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">asdict</span>
+
+        <span class="kn">from</span> <span class="nn">vllm.distributed.weight_transfer.base</span> <span class="kn">import</span> <span class="n">WeightTransferInitRequest</span>
+        <span class="kn">from</span> <span class="nn">vllm.distributed.weight_transfer.nccl_engine</span> <span class="kn">import</span> <span class="p">(</span>
+            <span class="n">NCCLWeightTransferEngine</span><span class="p">,</span>
+            <span class="n">NCCLWeightTransferInitInfo</span><span class="p">,</span>
+        <span class="p">)</span>
+
         <span class="n">weight_sync_world_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tensor_parallel_size</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="n">master_address</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_master_address</span><span class="p">()</span>
+        <span class="n">master_port</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_master_port</span><span class="p">()</span>
 
         <span class="k">try</span><span class="p">:</span>
+            <span class="kn">import</span> <span class="nn">threading</span>
+
             <span class="kn">import</span> <span class="nn">ray</span>
 
-            <span class="c1"># Initialize weight update group on the Ray worker</span>
-            <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">ray_actor</span><span class="o">.</span><span class="n">collective_rpc</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
-                    <span class="s2">&quot;init_weight_update_group&quot;</span><span class="p">,</span>
-                    <span class="n">args</span><span class="o">=</span><span class="p">(</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">get_master_address</span><span class="p">(),</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">get_master_port</span><span class="p">(),</span>
-                        <span class="mi">1</span><span class="p">,</span>
-                        <span class="n">weight_sync_world_size</span><span class="p">,</span>
-                    <span class="p">),</span>
-                <span class="p">)</span>
+            <span class="c1"># Start trainer NCCL group in background thread — it blocks waiting</span>
+            <span class="c1"># for workers to connect via TCPStore.</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">set_device</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">trainer_result</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span>
+            <span class="n">trainer_error</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span>
+
+            <span class="k">def</span> <span class="nf">_init_trainer</span><span class="p">():</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">trainer_result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">NCCLWeightTransferEngine</span><span class="o">.</span><span class="n">trainer_init</span><span class="p">(</span>
+                        <span class="p">{</span>
+                            <span class="s2">&quot;master_address&quot;</span><span class="p">:</span> <span class="n">master_address</span><span class="p">,</span>
+                            <span class="s2">&quot;master_port&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">master_port</span><span class="p">),</span>
+                            <span class="s2">&quot;world_size&quot;</span><span class="p">:</span> <span class="n">weight_sync_world_size</span><span class="p">,</span>
+                        <span class="p">}</span>
+                    <span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">trainer_error</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">e</span>
+
+            <span class="n">trainer_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">_init_trainer</span><span class="p">)</span>
+            <span class="n">trainer_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+            <span class="c1"># Initialize weight transfer engine on the Ray worker</span>
+            <span class="n">init_info</span> <span class="o">=</span> <span class="n">NCCLWeightTransferInitInfo</span><span class="p">(</span>
+                <span class="n">master_address</span><span class="o">=</span><span class="n">master_address</span><span class="p">,</span>
+                <span class="n">master_port</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">master_port</span><span class="p">),</span>
+                <span class="n">rank_offset</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">world_size</span><span class="o">=</span><span class="n">weight_sync_world_size</span><span class="p">,</span>
             <span class="p">)</span>
+            <span class="n">init_request</span> <span class="o">=</span> <span class="n">WeightTransferInitRequest</span><span class="p">(</span><span class="n">init_info</span><span class="o">=</span><span class="n">asdict</span><span class="p">(</span><span class="n">init_info</span><span class="p">))</span>
+            <span class="n">ref</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ray_actor</span><span class="o">.</span><span class="n">init_weight_transfer_engine</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">init_request</span><span class="p">)</span>
+
+            <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">ref</span><span class="p">)</span>
+            <span class="n">trainer_thread</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">trainer_error</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">trainer_error</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_trainer_nccl_group</span> <span class="o">=</span> <span class="n">trainer_result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
             <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Ray worker weight update group initialized&quot;</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
@@ -459,17 +470,24 @@
             <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">update_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update model weights via the Ray worker.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update model weights via the Ray worker using vLLM&#39;s native API.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            weights: Iterator yielding (parameter_name, tensor) tuples</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">asdict</span>
+
+        <span class="kn">from</span> <span class="nn">vllm.distributed.weight_transfer.base</span> <span class="kn">import</span> <span class="n">WeightTransferUpdateRequest</span>
+        <span class="kn">from</span> <span class="nn">vllm.distributed.weight_transfer.nccl_engine</span> <span class="kn">import</span> <span class="p">(</span>
+            <span class="n">NCCLTrainerSendWeightsArgs</span><span class="p">,</span>
+            <span class="n">NCCLWeightTransferEngine</span><span class="p">,</span>
+            <span class="n">NCCLWeightTransferUpdateInfo</span><span class="p">,</span>
+        <span class="p">)</span>
+
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">import</span> <span class="nn">ray</span>
 
-            <span class="c1"># Convert iterator to list for Ray serialization</span>
             <span class="n">weights_list</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
-
             <span class="k">if</span> <span class="ow">not</span> <span class="n">weights_list</span><span class="p">:</span>
                 <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;No weights provided for update&quot;</span><span class="p">)</span>
                 <span class="k">return</span>
@@ -478,16 +496,43 @@
                 <span class="sa">f</span><span class="s2">&quot;Updating </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">weights_list</span><span class="p">)</span><span class="si">}</span><span class="s2"> parameters on Ray worker&quot;</span>
             <span class="p">)</span>
 
-            <span class="c1"># Send weights to the Ray worker</span>
-            <span class="n">remotes</span> <span class="o">=</span> <span class="p">[]</span>
-            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">weight</span> <span class="ow">in</span> <span class="n">weights_list</span><span class="p">:</span>
-                <span class="n">remotes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">ray_actor</span><span class="o">.</span><span class="n">collective_rpc</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
-                        <span class="s2">&quot;update_weight&quot;</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">weight</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">))</span>
-                    <span class="p">)</span>
-                <span class="p">)</span>
+            <span class="c1"># Put vLLM engine to sleep before weight transfer</span>
+            <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ray_actor</span><span class="o">.</span><span class="n">sleep</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
 
-            <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">remotes</span><span class="p">)</span>
+            <span class="c1"># Build metadata</span>
+            <span class="n">weight_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">weights_list</span><span class="p">]</span>
+            <span class="n">dtype_names</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">weights_list</span><span class="p">]</span>
+            <span class="n">shapes</span> <span class="o">=</span> <span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">weights_list</span><span class="p">]</span>
+
+            <span class="n">update_info</span> <span class="o">=</span> <span class="n">NCCLWeightTransferUpdateInfo</span><span class="p">(</span>
+                <span class="n">names</span><span class="o">=</span><span class="n">weight_names</span><span class="p">,</span>
+                <span class="n">dtype_names</span><span class="o">=</span><span class="n">dtype_names</span><span class="p">,</span>
+                <span class="n">shapes</span><span class="o">=</span><span class="n">shapes</span><span class="p">,</span>
+                <span class="n">packed</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">update_request</span> <span class="o">=</span> <span class="n">WeightTransferUpdateRequest</span><span class="p">(</span>
+                <span class="n">update_info</span><span class="o">=</span><span class="n">asdict</span><span class="p">(</span><span class="n">update_info</span><span class="p">)</span>
+            <span class="p">)</span>
+
+            <span class="c1"># Tell worker to start receiving</span>
+            <span class="n">ref</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ray_actor</span><span class="o">.</span><span class="n">update_weights_native</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">update_request</span><span class="p">)</span>
+
+            <span class="c1"># Send from trainer side</span>
+            <span class="n">gpu_weights_iter</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">t</span><span class="o">.</span><span class="n">is_cuda</span> <span class="k">else</span> <span class="n">t</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">weights_list</span>
+            <span class="p">)</span>
+            <span class="n">NCCLWeightTransferEngine</span><span class="o">.</span><span class="n">trainer_send_weights</span><span class="p">(</span>
+                <span class="n">iterator</span><span class="o">=</span><span class="n">gpu_weights_iter</span><span class="p">,</span>
+                <span class="n">trainer_args</span><span class="o">=</span><span class="n">NCCLTrainerSendWeightsArgs</span><span class="p">(</span>
+                    <span class="n">group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_trainer_nccl_group</span><span class="p">,</span> <span class="n">packed</span><span class="o">=</span><span class="kc">True</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+
+            <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">ref</span><span class="p">)</span>
+
+            <span class="c1"># Wake up vLLM engine after weight transfer</span>
+            <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ray_actor</span><span class="o">.</span><span class="n">wake_up</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;scheduling&quot;</span><span class="p">]))</span>
             <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Ray worker weight update completed&quot;</span><span class="p">)</span>
 
         <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>

@@ -268,7 +268,7 @@ can be a bool or a function.</p>
 it must take as input an <a class="reference internal" href="torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData" title="torchrl.envs.llm.IFEvalScoreData"><code class="xref py py-class docutils literal notranslate"><span class="pre">IFEvalScoreData</span></code></a> instance, and optionally <cite>think_blocks</cite>, <cite>answer_blocks</cite> and <cite>complete</cite> keyword arguments
 containing the list of think and answer blocks, respectively.
 It must return a tensor with shape identical to the env batch-size with an additional trailing singleton dimension.
-Defaults to <cite>True</cite>. The default aggregator is a simple sum over the fields of <a class="reference internal" href="torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData" title="torchrl.envs.llm.IFEvalScoreData"><code class="xref py py-class docutils literal notranslate"><span class="pre">IFEvalScoreData</span></code></a>.</p></li>
+Defaults to <cite>True</cite>. The default aggregator computes a weighted average of the IFEval metrics plus a small format bonus (reward range ~[0, 1.15]).</p></li>
 <li><p><strong>format_weights</strong> (<em>list</em><em>[</em><em>float</em><em>]</em><em>, </em><em>optional</em>) – The weights for the format fields (<cite>prompt_level_strict_acc</cite>, <cite>inst_level_strict_acc</cite>,
 <cite>prompt_level_loose_acc</cite>, <cite>inst_level_loose_acc</cite>, in that order). Defaults to <cite>[0.4, 0.3, 0.2, 0.1]</cite>.
 This is only used if <cite>aggregate_reward</cite> is <cite>True</cite> and the default aggregator is used.</p></li>
@@ -477,35 +477,24 @@ copied to that device</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.llm.IfEvalScorer.default_reward_aggregator">
 <span class="sig-name descname"><span class="pre">default_reward_aggregator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">score</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData" title="torchrl.envs.llm.reward.ifeval._scorer.IFEvalScoreData"><span class="pre">IFEvalScoreData</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">think_blocks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">answer_blocks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">complete</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.11)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.11)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/llm/reward/ifeval/_scorer.html#IfEvalScorer.default_reward_aggregator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.IfEvalScorer.default_reward_aggregator" title="Link to this definition">¶</a></dt>
-<dd><p>Improved reward aggregation function with tiered multiplicative scoring.</p>
+<dd><p>Reward aggregation based on weighted IFEval metrics plus a small format bonus.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>score</strong> (<a class="reference internal" href="torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData" title="torchrl.envs.llm.IFEvalScoreData"><em>IFEvalScoreData</em></a>) – The score data.</p></li>
 <li><p><strong>think_blocks</strong> (<em>list</em><em>[</em><em>str</em><em>]</em><em>, </em><em>optional</em>) – The list of think blocks.</p></li>
 <li><p><strong>answer_blocks</strong> (<em>list</em><em>[</em><em>str</em><em>]</em><em>, </em><em>optional</em>) – The list of answer blocks.</p></li>
-<li><p><strong>complete</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether the response is complete (ends with a eos token).</p></li>
+<li><p><strong>complete</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether the response is complete (ends with an eos token).</p></li>
 </ul>
 </dd>
 </dl>
-<p>The reward uses a tiered multiplicative system:</p>
-<ol class="arabic simple">
-<li><p>Critical failure check: No answer blocks = 0 reward</p></li>
-<li><p>Base format score (0-1): Weighted average of format metrics</p></li>
-<li><p>Structure multiplier (0.1-1.0): Penalties for missing/multiple blocks</p></li>
-<li><p>Quality bonus (0-0.5): Rewards for high quality and completion</p></li>
-<li><p>Task complexity scaling: More requirements = higher potential rewards</p></li>
-</ol>
-<dl class="simple">
-<dt>The final formula is:</dt><dd><p>reward = (format_score + quality_bonus) * structure_multiplier * complexity_scale</p>
-</dd>
-</dl>
-<p>This provides better learning signals by:
-- Requiring critical elements (answer tags) for meaningful rewards
-- Using multiplicative scaling to reward doing everything well
-- Scaling rewards based on task complexity
-- Providing clear failure modes and success incentives</p>
-<p>Reward range: 0.0 to ~1.5-2.7 depending on task complexity (more instructions = higher max reward).</p>
+<p>The reward is computed as:</p>
+<blockquote>
+<div><p>reward = weighted_avg(strict/loose metrics) + format_bonus</p>
+</div></blockquote>
+<p>where <code class="docutils literal notranslate"><span class="pre">format_bonus</span></code> gives a small additive reward (up to 0.15) for
+well-structured responses with proper <code class="docutils literal notranslate"><span class="pre">&lt;think&gt;</span></code> / <code class="docutils literal notranslate"><span class="pre">&lt;answer&gt;</span></code> tags.</p>
+<p>Reward range: approximately [0.0, 1.15].</p>
 </dd></dl>
 
 <dl class="py method">

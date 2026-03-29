@@ -241,6 +241,7 @@
 <span class="c1">#</span>
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="c1">#</span>
 
 <span class="sd">&quot;&quot;&quot;vLLM weight synchronization for the v2 API.</span>
 
@@ -338,8 +339,6 @@
 
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span> <span class="nn">time</span>
-
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
@@ -347,7 +346,6 @@
 <span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDictBase</span>
 
 <span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
-<span class="kn">from</span> <span class="nn">torchrl.modules.llm.backends</span> <span class="kn">import</span> <span class="n">stateless_init_process_group</span>
 <span class="kn">from</span> <span class="nn">torchrl.weight_update.weight_sync_schemes</span> <span class="kn">import</span> <span class="n">WeightStrategy</span><span class="p">,</span> <span class="n">WeightSyncScheme</span>
 
 <span class="c1"># ============================================================================</span>
@@ -358,17 +356,10 @@
 <div class="viewcode-block" id="VLLMCollectiveTransport">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMCollectiveTransport.html#torchrl.weight_update.llm.VLLMCollectiveTransport">[docs]</a>
 <span class="k">class</span> <span class="nc">VLLMCollectiveTransport</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Transport for vLLM using collective communication (NCCL).</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Transport for vLLM using vLLM&#39;s native WeightTransferConfig API (vLLM 0.17+).</span>
 
-<span class="sd">    **COLLECTIVE LAYER ONLY** - This class handles the data transfer layer.</span>
-<span class="sd">    RPC coordination is handled separately by the caller (sender/receiver).</span>
-
-<span class="sd">    This transport uses PyTorch distributed collectives to broadcast weights</span>
-<span class="sd">    from a trainer (rank 0) to vLLM workers (ranks 1+).</span>
-
-<span class="sd">    **Separation of Concerns:**</span>
-<span class="sd">    - This class: NCCL collective operations (GPU-GPU data transfer)</span>
-<span class="sd">    - Caller (sender/receiver): RPC coordination (when to start collective)</span>
+<span class="sd">    This transport uses vLLM&#39;s built-in NCCL weight transfer engine to broadcast</span>
+<span class="sd">    weights from a trainer (rank 0) to vLLM workers (ranks 1+).</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        master_address: Address of the master node for distributed init.</span>
@@ -377,10 +368,6 @@
 <span class="sd">        world_size: Total number of processes (1 + num_replicas * gpus_per_replica).</span>
 <span class="sd">        device: Device to use for communication (typically cuda:0).</span>
 <span class="sd">        vllm_engine: Optional vLLM engine reference (for receiver side).</span>
-
-<span class="sd">    Note:</span>
-<span class="sd">        The RPC layer (e.g., Ray remote calls) must ensure all ranks call</span>
-<span class="sd">        init_all_workers_group() simultaneously before any collective operations.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
@@ -397,18 +384,16 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">rank</span> <span class="o">=</span> <span class="n">rank</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span> <span class="o">=</span> <span class="n">world_size</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span> <span class="o">=</span> <span class="n">vllm_engine</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_trainer_nccl_group</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_model_metadata</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span> <span class="o">=</span> <span class="kc">False</span>
 
         <span class="c1"># Ray sets CUDA_VISIBLE_DEVICES, so each actor sees only device 0</span>
-        <span class="c1"># PyNcclCommunicator expects an integer device index</span>
         <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># Default to device 0 (Ray convention)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-            <span class="c1"># Extract device index from &quot;cuda:X&quot;</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">device</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;:&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="k">if</span> <span class="s2">&quot;:&quot;</span> <span class="ow">in</span> <span class="n">device</span> <span class="k">else</span> <span class="mi">0</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">):</span>
-            <span class="c1"># Extract index from torch.device</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span><span class="o">.</span><span class="n">index</span> <span class="k">if</span> <span class="n">device</span><span class="o">.</span><span class="n">index</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">0</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span>
@@ -416,92 +401,141 @@
 <div class="viewcode-block" id="VLLMCollectiveTransport.init_all_workers_group">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMCollectiveTransport.html#torchrl.weight_update.llm.VLLMCollectiveTransport.init_all_workers_group">[docs]</a>
     <span class="k">def</span> <span class="nf">init_all_workers_group</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">model_metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]]</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">model_metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]],</span>
+        <span class="n">gpus_per_replica</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the collective communication group.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the collective communication group using vLLM&#39;s native API.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            model_metadata: Dict mapping param names to (dtype, shape) tuples.</span>
+<span class="sd">            gpus_per_replica: GPUs per replica (for rank_offset calculation). Inferred if not provided.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">asdict</span>
+
+        <span class="kn">from</span> <span class="nn">vllm.distributed.weight_transfer.base</span> <span class="kn">import</span> <span class="n">WeightTransferInitRequest</span>
+        <span class="kn">from</span> <span class="nn">vllm.distributed.weight_transfer.nccl_engine</span> <span class="kn">import</span> <span class="p">(</span>
+            <span class="n">NCCLWeightTransferEngine</span><span class="p">,</span>
+            <span class="n">NCCLWeightTransferInitInfo</span><span class="p">,</span>
+        <span class="p">)</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">_model_metadata</span> <span class="o">=</span> <span class="n">model_metadata</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="c1"># Trainer side - initialize process group</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Initializing trainer collective group: rank=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="si">}</span><span class="s2">, world_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="si">}</span><span class="s2">, device=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="p">)</span>
-            <span class="c1"># Ray sets CUDA_VISIBLE_DEVICES, so we always use device 0</span>
-            <span class="c1"># Set CUDA device before initializing NCCL to avoid segfaults</span>
-            <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">set_device</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Set CUDA device to </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">gpus_per_replica</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">num_replicas</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span><span class="p">,</span> <span class="s2">&quot;num_replicas&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">gpus_per_replica</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="n">num_replicas</span><span class="p">)</span>
 
-            <span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span> <span class="o">=</span> <span class="n">stateless_init_process_group</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">master_address</span><span class="p">,</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">master_port</span><span class="p">,</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="p">,</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">,</span>
-                <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># Trainer side: start trainer NCCL group in background thread (it blocks</span>
+            <span class="c1"># waiting for workers to connect), then dispatch init to vLLM actors.</span>
+            <span class="kn">import</span> <span class="nn">threading</span>
+
+            <span class="kn">import</span> <span class="nn">ray</span>
+
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Initializing trainer NCCL group: rank=0, world_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="si">}</span><span class="s2">, device=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Trainer collective group initialized successfully&quot;</span><span class="p">)</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">set_device</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+            <span class="c1"># Start trainer_init in a thread so it can wait for workers to connect</span>
+            <span class="c1"># while we dispatch the worker init calls concurrently.</span>
+            <span class="n">trainer_result</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span>
+            <span class="n">trainer_error</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span>
+
+            <span class="k">def</span> <span class="nf">_init_trainer</span><span class="p">():</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">trainer_result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">NCCLWeightTransferEngine</span><span class="o">.</span><span class="n">trainer_init</span><span class="p">(</span>
+                        <span class="p">{</span>
+                            <span class="s2">&quot;master_address&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">master_address</span><span class="p">,</span>
+                            <span class="s2">&quot;master_port&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">master_port</span><span class="p">),</span>
+                            <span class="s2">&quot;world_size&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">,</span>
+                        <span class="p">}</span>
+                    <span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">trainer_error</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">e</span>
+
+            <span class="n">trainer_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">_init_trainer</span><span class="p">)</span>
+            <span class="n">trainer_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+            <span class="c1"># Now dispatch init to each vLLM actor — workers will connect to</span>
+            <span class="c1"># the TCPStore that trainer_init is already listening on.</span>
+            <span class="n">refs</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Dispatching vLLM worker weight transfer init...&quot;</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">actor</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span><span class="o">.</span><span class="n">actors</span><span class="p">):</span>
+                    <span class="n">rank_offset</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">i</span> <span class="o">*</span> <span class="n">gpus_per_replica</span>
+                    <span class="n">init_info</span> <span class="o">=</span> <span class="n">NCCLWeightTransferInitInfo</span><span class="p">(</span>
+                        <span class="n">master_address</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">master_address</span><span class="p">,</span>
+                        <span class="n">master_port</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">master_port</span><span class="p">),</span>
+                        <span class="n">rank_offset</span><span class="o">=</span><span class="n">rank_offset</span><span class="p">,</span>
+                        <span class="n">world_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">,</span>
+                    <span class="p">)</span>
+                    <span class="n">init_request</span> <span class="o">=</span> <span class="n">WeightTransferInitRequest</span><span class="p">(</span>
+                        <span class="n">init_info</span><span class="o">=</span><span class="n">asdict</span><span class="p">(</span><span class="n">init_info</span><span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="n">refs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">actor</span><span class="o">.</span><span class="n">init_weight_transfer_engine</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">init_request</span><span class="p">))</span>
+
+            <span class="c1"># Wait for both sides to complete</span>
+            <span class="k">if</span> <span class="n">refs</span><span class="p">:</span>
+                <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">refs</span><span class="p">)</span>
+            <span class="n">trainer_thread</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+
+            <span class="k">if</span> <span class="n">trainer_error</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">trainer_error</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_trainer_nccl_group</span> <span class="o">=</span> <span class="n">trainer_result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Trainer NCCL group initialized successfully&quot;</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># vLLM worker side - initialize through engine</span>
+            <span class="c1"># vLLM worker side - dispatch init_weight_transfer_engine to engine actors</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;vllm_engine must be provided for worker ranks&quot;</span><span class="p">)</span>
 
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="s2">&quot;Initializing vLLM worker collective group through engine&quot;</span>
-            <span class="p">)</span>
-            <span class="c1"># Call vLLM engine&#39;s init method - it returns futures for all workers</span>
-            <span class="c1"># Workers will start NCCL init in background threads and return immediately</span>
-            <span class="n">refs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span><span class="o">.</span><span class="n">init_weight_update_group</span><span class="p">(</span>
-                <span class="n">master_address</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">master_address</span><span class="p">,</span>
-                <span class="n">master_port</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">master_port</span><span class="p">,</span>
-            <span class="p">)</span>
-
-            <span class="c1"># Wait for RPCs to complete - ensures workers have dispatched their NCCL init threads</span>
             <span class="kn">import</span> <span class="nn">ray</span>
 
-            <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">refs</span><span class="p">)</span>
             <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;All </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">refs</span><span class="p">)</span><span class="si">}</span><span class="s2"> vLLM workers have dispatched NCCL init RPCs&quot;</span>
+                <span class="s2">&quot;Initializing vLLM worker weight transfer through engine&quot;</span>
             <span class="p">)</span>
-
-            <span class="c1"># Small delay to ensure worker background threads have entered the NCCL collective</span>
-            <span class="c1"># This prevents a race where the trainer starts NCCL before workers are ready</span>
-
-            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.2</span><span class="p">)</span>
-
-            <span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># Mark as initialized</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="s2">&quot;vLLM workers should now be blocked in NCCL collective, ready for trainer&quot;</span>
-            <span class="p">)</span></div>
+            <span class="n">refs</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">actor</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span><span class="o">.</span><span class="n">actors</span><span class="p">):</span>
+                <span class="n">rank_offset</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">i</span> <span class="o">*</span> <span class="n">gpus_per_replica</span>
+                <span class="n">init_info</span> <span class="o">=</span> <span class="n">NCCLWeightTransferInitInfo</span><span class="p">(</span>
+                    <span class="n">master_address</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">master_address</span><span class="p">,</span>
+                    <span class="n">master_port</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">master_port</span><span class="p">),</span>
+                    <span class="n">rank_offset</span><span class="o">=</span><span class="n">rank_offset</span><span class="p">,</span>
+                    <span class="n">world_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">init_request</span> <span class="o">=</span> <span class="n">WeightTransferInitRequest</span><span class="p">(</span><span class="n">init_info</span><span class="o">=</span><span class="n">asdict</span><span class="p">(</span><span class="n">init_info</span><span class="p">))</span>
+                <span class="n">refs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">actor</span><span class="o">.</span><span class="n">init_weight_transfer_engine</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">init_request</span><span class="p">))</span>
+            <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">refs</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;vLLM worker weight transfer initialized&quot;</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="VLLMCollectiveTransport.send_weights">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMCollectiveTransport.html#torchrl.weight_update.llm.VLLMCollectiveTransport.send_weights">[docs]</a>
     <span class="k">def</span> <span class="nf">send_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Broadcast weights to all workers using NCCL.</span>
-
-<span class="sd">        This method follows AsyncVLLM&#39;s periodic-mono pattern:</span>
-<span class="sd">        For each weight: RPC → NCCL broadcast → Wait for RPC completion</span>
-
-<span class="sd">        This should only be called from rank 0 (trainer).</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Send weights to all workers using vLLM&#39;s native weight transfer API.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            model_id: ID of the model (used for logging).</span>
 <span class="sd">            weights: TensorDict or dict of weights to broadcast.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># This code is a duplicate from AsyncVLLM</span>
-        <span class="c1"># We are waiting for vLLM server to accept tokens endpoints, at which point we will be</span>
-        <span class="c1"># able to remove all dependencies on Ray for vllm distributed features.</span>
-        <span class="c1"># This will allow a more natural integration with the sender/receiver API.</span>
+        <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">asdict</span>
 
         <span class="kn">import</span> <span class="nn">ray</span>
+
+        <span class="kn">from</span> <span class="nn">vllm.distributed.weight_transfer.base</span> <span class="kn">import</span> <span class="n">WeightTransferUpdateRequest</span>
+        <span class="kn">from</span> <span class="nn">vllm.distributed.weight_transfer.nccl_engine</span> <span class="kn">import</span> <span class="p">(</span>
+            <span class="n">NCCLTrainerSendWeightsArgs</span><span class="p">,</span>
+            <span class="n">NCCLWeightTransferEngine</span><span class="p">,</span>
+            <span class="n">NCCLWeightTransferUpdateInfo</span><span class="p">,</span>
+        <span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;send_weights should only be called from rank 0&quot;</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="s2">&quot;Communication group not initialized. Call init_all_workers_group first.&quot;</span>
             <span class="p">)</span>
@@ -514,7 +548,6 @@
                 <span class="s2">&quot;vllm_engine must be provided to sender for RPC coordination&quot;</span>
             <span class="p">)</span>
 
-        <span class="c1"># Set CUDA device for this operation</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">set_device</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
 
         <span class="c1"># Convert to dict if needed</span>
@@ -524,37 +557,58 @@
             <span class="n">weights_dict</span> <span class="o">=</span> <span class="n">weights</span>
 
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Broadcasting </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">weights_dict</span><span class="p">)</span><span class="si">}</span><span class="s2"> weights for model &#39;</span><span class="si">{</span><span class="n">model_id</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;Sending </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">weights_dict</span><span class="p">)</span><span class="si">}</span><span class="s2"> weights for model &#39;</span><span class="si">{</span><span class="n">model_id</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
         <span class="p">)</span>
 
-        <span class="c1"># Broadcast each weight using periodic-mono pattern (like AsyncVLLM)</span>
-        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="n">dtype</span><span class="p">,</span> <span class="n">shape</span><span class="p">)</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_metadata</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">weights_dict</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Weight &#39;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; not found in weights. Weights keys: </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">weights_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">())[:</span><span class="mi">10</span><span class="p">]</span><span class="si">}</span><span class="s2">...&quot;</span>
-                <span class="p">)</span>
+        <span class="c1"># Build weight metadata</span>
+        <span class="n">weight_names</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_model_metadata</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="n">dtype_names</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="nb">str</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">_shape</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_metadata</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+        <span class="p">]</span>
+        <span class="n">shapes</span> <span class="o">=</span> <span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span> <span class="k">for</span> <span class="n">_dtype</span><span class="p">,</span> <span class="n">shape</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_metadata</span><span class="o">.</span><span class="n">values</span><span class="p">()]</span>
 
-            <span class="n">tensor</span> <span class="o">=</span> <span class="n">weights_dict</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;cuda:</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="n">dtype_name</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>  <span class="c1"># &quot;torch.float16&quot; -&gt; &quot;float16&quot;</span>
+        <span class="n">update_info</span> <span class="o">=</span> <span class="n">NCCLWeightTransferUpdateInfo</span><span class="p">(</span>
+            <span class="n">names</span><span class="o">=</span><span class="n">weight_names</span><span class="p">,</span>
+            <span class="n">dtype_names</span><span class="o">=</span><span class="n">dtype_names</span><span class="p">,</span>
+            <span class="n">shapes</span><span class="o">=</span><span class="n">shapes</span><span class="p">,</span>
+            <span class="n">packed</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">update_request</span> <span class="o">=</span> <span class="n">WeightTransferUpdateRequest</span><span class="p">(</span><span class="n">update_info</span><span class="o">=</span><span class="n">asdict</span><span class="p">(</span><span class="n">update_info</span><span class="p">))</span>
 
-            <span class="c1"># Step 1: Send RPC to workers for this weight</span>
-            <span class="n">futures</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span><span class="o">.</span><span class="n">collective_rpc</span><span class="p">(</span>
-                <span class="s2">&quot;update_weight&quot;</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">dtype_name</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">shape</span><span class="p">))</span>
-            <span class="p">)</span>
+        <span class="c1"># Put vLLM engine to sleep before weight transfer</span>
+        <span class="n">sleep_refs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">actor</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span><span class="o">.</span><span class="n">actors</span><span class="p">:</span>
+            <span class="n">sleep_refs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">actor</span><span class="o">.</span><span class="n">sleep</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+        <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">sleep_refs</span><span class="p">)</span>
 
-            <span class="c1"># Step 2: Immediately broadcast this weight</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span>
-                <span class="n">tensor</span><span class="p">,</span>
-                <span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-                <span class="n">stream</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(),</span>
-            <span class="p">)</span>
+        <span class="c1"># Tell vLLM workers to start receiving</span>
+        <span class="n">refs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">actor</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span><span class="o">.</span><span class="n">actors</span><span class="p">:</span>
+            <span class="n">refs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">actor</span><span class="o">.</span><span class="n">update_weights_native</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">update_request</span><span class="p">))</span>
 
-            <span class="c1"># Step 3: Wait for workers to complete this weight</span>
-            <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">futures</span><span class="p">)</span>
-            <span class="k">del</span> <span class="n">tensor</span>
+        <span class="c1"># Send weights from trainer side</span>
+        <span class="k">def</span> <span class="nf">_weight_iter</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">weight_names</span><span class="p">:</span>
+                <span class="n">tensor</span> <span class="o">=</span> <span class="n">weights_dict</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;cuda:</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">yield</span> <span class="n">name</span><span class="p">,</span> <span class="n">tensor</span>
 
+        <span class="n">NCCLWeightTransferEngine</span><span class="o">.</span><span class="n">trainer_send_weights</span><span class="p">(</span>
+            <span class="n">iterator</span><span class="o">=</span><span class="n">_weight_iter</span><span class="p">(),</span>
+            <span class="n">trainer_args</span><span class="o">=</span><span class="n">NCCLTrainerSendWeightsArgs</span><span class="p">(</span>
+                <span class="n">group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_trainer_nccl_group</span><span class="p">,</span> <span class="n">packed</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+
+        <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">refs</span><span class="p">)</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Broadcast complete for model &#39;</span><span class="si">{</span><span class="n">model_id</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span></div>
+
+        <span class="c1"># Wake up vLLM engine after weight transfer</span>
+        <span class="n">wake_refs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">actor</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span><span class="o">.</span><span class="n">actors</span><span class="p">:</span>
+            <span class="n">wake_refs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">actor</span><span class="o">.</span><span class="n">wake_up</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;scheduling&quot;</span><span class="p">]))</span>
+        <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">wake_refs</span><span class="p">)</span>
+
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Weight transfer complete for model &#39;</span><span class="si">{</span><span class="n">model_id</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="VLLMCollectiveTransport.receive_weights">
@@ -569,20 +623,9 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Receive weights from broadcaster.</span>
 
-<span class="sd">        This should only be called from worker ranks (rank &gt; 0).</span>
-<span class="sd">        This method is called by vLLM engine internally through collective operations.</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            timeout: Ignored (vLLM handles synchronization internally).</span>
-<span class="sd">            weights: Ignored.</span>
-<span class="sd">            model: Ignored.</span>
-<span class="sd">            strategy: Ignored.</span>
-
 <span class="sd">        Returns:</span>
-<span class="sd">            None - vLLM handles weight application internally via collectives.</span>
+<span class="sd">            None - vLLM handles weight application internally via native API.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># vLLM handles this through its own collective operations</span>
-        <span class="c1"># The weights are received and applied by the engine during broadcast</span>
         <span class="k">return</span> <span class="kc">None</span></div>
 
 
@@ -590,7 +633,7 @@
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMCollectiveTransport.html#torchrl.weight_update.llm.VLLMCollectiveTransport.check_connection">[docs]</a>
     <span class="k">def</span> <span class="nf">check_connection</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if the communication group is initialized.&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span></div>
 </div>
 
 
@@ -790,6 +833,31 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_model_ref</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_model_metadata</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_trainer_nccl_group</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_collectors</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_post_hooks</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="p">[]</span>
+
+<div class="viewcode-block" id="VLLMWeightSender.register_collector">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightSender.html#torchrl.weight_update.llm.VLLMWeightSender.register_collector">[docs]</a>
+    <span class="k">def</span> <span class="nf">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">collector</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Register a collector for automatic policy version increment.</span>
+
+<span class="sd">        After each :meth:`update_weights` call, ``collector.increment_version()``</span>
+<span class="sd">        is called automatically.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_collectors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">collector</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_post_hooks</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_post_hooks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_increment_all_collector_versions</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_increment_all_collector_versions</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">collector</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collectors</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">collector</span><span class="o">.</span><span class="n">increment_version</span><span class="p">()</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Failed to increment version for collector: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
 
 <div class="viewcode-block" id="VLLMWeightSender.register_model">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightSender.html#torchrl.weight_update.llm.VLLMWeightSender.register_model">[docs]</a>
@@ -807,7 +875,7 @@
         <span class="n">model_metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]],</span>
         <span class="n">vllm_engine</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the collective communication group.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the collective communication group using vLLM&#39;s native API.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            model_metadata: Dict mapping param names to (dtype, shape) tuples.</span>
@@ -829,13 +897,15 @@
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Initializing transport from sender with world_size=</span><span class="si">{</span><span class="n">world_size</span><span class="si">}</span><span class="s2">&quot;</span>
         <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">init_all_workers_group</span><span class="p">(</span><span class="n">model_metadata</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">init_all_workers_group</span><span class="p">(</span>
+            <span class="n">model_metadata</span><span class="p">,</span> <span class="n">gpus_per_replica</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">gpus_per_replica</span>
+        <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="VLLMWeightSender.update_weights">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightSender.html#torchrl.weight_update.llm.VLLMWeightSender.update_weights">[docs]</a>
     <span class="k">def</span> <span class="nf">update_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract and broadcast weights to vLLM workers.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract and send weights to vLLM workers using native weight transfer API.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            weights: Optional weights to send. If None, extracts from registered model.</span>
@@ -858,7 +928,11 @@
                 <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="o">.</span><span class="n">extract_weights</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
 
         <span class="c1"># Send via transport</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">send_weights</span><span class="p">(</span><span class="s2">&quot;vllm_model&quot;</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">send_weights</span><span class="p">(</span><span class="s2">&quot;vllm_model&quot;</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
+
+        <span class="c1"># Run post-hooks (e.g. increment policy version on collectors)</span>
+        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_post_hooks</span><span class="p">:</span>
+            <span class="n">hook</span><span class="p">()</span></div>
 </div>
 
 
@@ -915,13 +989,12 @@
     <span class="k">def</span> <span class="nf">init_all_workers_group</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">model_metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]]</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the collective communication group.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the collective communication group using vLLM&#39;s native API.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            model_metadata: Dict mapping param names to (dtype, shape) tuples.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># For vLLM receiver, we use rank=1 as a placeholder</span>
-        <span class="c1"># The engine handles actual rank assignment internally for all workers</span>
+        <span class="c1"># For vLLM receiver, the engine handles init via init_weight_update_group()</span>
         <span class="n">world_size</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">num_replicas</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">gpus_per_replica</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span> <span class="o">=</span> <span class="n">VLLMCollectiveTransport</span><span class="p">(</span>
             <span class="n">master_address</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">master_address</span><span class="p">,</span>
@@ -934,7 +1007,9 @@
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Initializing transport from receiver with world_size=</span><span class="si">{</span><span class="n">world_size</span><span class="si">}</span><span class="s2">.&quot;</span>
         <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">init_all_workers_group</span><span class="p">(</span><span class="n">model_metadata</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">init_all_workers_group</span><span class="p">(</span>
+            <span class="n">model_metadata</span><span class="p">,</span> <span class="n">gpus_per_replica</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">gpus_per_replica</span>
+        <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="VLLMWeightReceiver.apply_weights">

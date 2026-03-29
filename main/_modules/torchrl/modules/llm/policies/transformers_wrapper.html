@@ -2243,7 +2243,7 @@
         <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">,</span> <span class="n">tokens</span><span class="o">=</span><span class="n">tokens</span><span class="p">)</span><span class="o">.</span><span class="n">auto_batch_size_</span><span class="p">()</span>
         <span class="k">with</span> <span class="n">td</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span> <span class="k">as</span> <span class="n">tdflat</span><span class="p">:</span>
             <span class="n">tdflat</span><span class="p">[</span><span class="s2">&quot;log_probs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">(</span>
-                <span class="n">tdflat</span><span class="p">[</span><span class="s2">&quot;logits&quot;</span><span class="p">],</span> <span class="n">tdflat</span><span class="p">[</span><span class="s2">&quot;tokens&quot;</span><span class="p">],</span> <span class="n">reduce</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="n">pad_val</span>
+                <span class="n">tdflat</span><span class="p">[</span><span class="s2">&quot;logits&quot;</span><span class="p">],</span> <span class="n">tdflat</span><span class="p">[</span><span class="s2">&quot;tokens&quot;</span><span class="p">],</span> <span class="n">reduce</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=-</span><span class="mi">100</span>
             <span class="p">)</span>
         <span class="n">td</span><span class="p">[</span><span class="s2">&quot;log_probs&quot;</span><span class="p">][:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="n">log_probs</span> <span class="o">=</span> <span class="n">td</span><span class="p">[</span><span class="s2">&quot;log_probs&quot;</span><span class="p">]</span>
@@ -2296,7 +2296,7 @@
                 <span class="n">tdflat</span><span class="p">[</span><span class="s2">&quot;logits&quot;</span><span class="p">],</span>
                 <span class="n">tdflat</span><span class="p">[</span><span class="s2">&quot;tokens&quot;</span><span class="p">],</span>
                 <span class="n">reduce</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                <span class="n">ignore_index</span><span class="o">=</span><span class="n">pad_val</span><span class="p">,</span>
+                <span class="n">ignore_index</span><span class="o">=-</span><span class="mi">100</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="c1"># For consistency with vllm, we set the log-probs of the first token to 0</span>
         <span class="c1">#  However, the first element may not be the first - we want the first of the attention mask,</span>
