@@ -55,7 +55,7 @@ from torchrl.collectors import (
 from torchrl.collectors._constants import _Interruptor
 from torchrl.collectors._multi_base import MultiCollector
 
-from torchrl.collectors.utils import _make_policy_factory, split_trajectories
+from torchrl.collectors.utils import _make_policy_factory, split_trajectories, TrajectoryBatcher
 from torchrl.data import (
     Composite,
     LazyMemmapStorage,
@@ -5322,8 +5322,6 @@ class TestTrajectoryBatcher:
 
     def test_single_batch_complete_trajectories(self):
         """All trajectories complete within one collector batch."""
-        from torchrl.collectors.utils import TrajectoryBatcher
-
         # traj 0: 3 steps, traj 1: 2 steps, traj 2: 1 step – all done
         batch = self._make_batch(
             traj_ids=[0, 0, 0, 1, 1, 2],
@@ -5349,8 +5347,6 @@ class TestTrajectoryBatcher:
 
     def test_trajectories_span_batches(self):
         """A trajectory split across two collector batches is reassembled."""
-        from torchrl.collectors.utils import TrajectoryBatcher
-
         # Traj 0 continues into batch1
         batch0 = self._make_batch(
             traj_ids=[0, 0, 0],
@@ -5376,8 +5372,6 @@ class TestTrajectoryBatcher:
 
     def test_partial_trajectory_not_emitted(self):
         """An incomplete (partial) trajectory at the end is not yielded."""
-        from torchrl.collectors.utils import TrajectoryBatcher
-
         # Traj 0 complete, traj 1 partial (no done at end)
         batch = self._make_batch(
             traj_ids=[0, 0, 1, 1],
@@ -5393,8 +5387,6 @@ class TestTrajectoryBatcher:
 
     def test_mask_field_shape_and_values(self):
         """Mask shape matches batch shape and values reflect valid steps."""
-        from torchrl.collectors.utils import TrajectoryBatcher
-
         # Two trajs: lengths 4 and 2 → padded to 4
         batch = self._make_batch(
             traj_ids=[0, 0, 0, 0, 1, 1],
@@ -5415,15 +5407,10 @@ class TestTrajectoryBatcher:
 
     def test_multiple_emitted_batches(self):
         """More than num_trajectories complete trajectories → multiple emitted batches."""
-        from torchrl.collectors.utils import TrajectoryBatcher
-
         # 4 short trajectories, num_trajectories=2 → 2 emitted batches
         batches_in = [
             self._make_batch([i, i], [False, True], obs_start=i * 2) for i in range(4)
         ]
-        # Concatenate into one big batch
-        import torch
-
         combined = torch.cat(batches_in, dim=0)
 
         batcher = TrajectoryBatcher([combined], num_trajectories=2)
@@ -5439,8 +5426,6 @@ class TestTrajectoryBatcher:
 
     def test_strict_on_policy_discards_partials(self):
         """Calling update_policy_weights_ with strict_on_policy=True drops partials."""
-        from torchrl.collectors.utils import TrajectoryBatcher
-
         calls = []
 
         class _MockCollector:
@@ -5475,8 +5460,6 @@ class TestTrajectoryBatcher:
 
     def test_strict_on_policy_false_keeps_partials(self):
         """With strict_on_policy=False, partials survive a policy update."""
-        from torchrl.collectors.utils import TrajectoryBatcher
-
         class _MockCollector:
             def update_policy_weights_(self):
                 pass
@@ -5498,8 +5481,6 @@ class TestTrajectoryBatcher:
 
     def test_terminated_key_treated_as_done(self):
         """Trajectories ending via 'terminated' (not 'done') are still completed."""
-        from torchrl.collectors.utils import TrajectoryBatcher
-
         n = 3
         batch = TensorDict(
             {
@@ -5523,8 +5504,6 @@ class TestTrajectoryBatcher:
 
     def test_missing_traj_ids_raises(self):
         """Missing traj_ids field raises a descriptive KeyError."""
-        from torchrl.collectors.utils import TrajectoryBatcher
-
         bad_batch = TensorDict(
             {"obs": torch.arange(3, dtype=torch.float)}, batch_size=[3]
         )
@@ -5538,13 +5517,130 @@ class TestTrajectoryBatcher:
     # ------------------------------------------------------------------
 
     def test_repr(self):
-        from torchrl.collectors.utils import TrajectoryBatcher
-
         batcher = TrajectoryBatcher([], num_trajectories=8, strict_on_policy=True)
         r = repr(batcher)
         assert "TrajectoryBatcher" in r
         assert "num_trajectories=8" in r
         assert "strict_on_policy=True" in r
+
+    # ------------------------------------------------------------------
+    # Integration tests with real collectors
+    # ------------------------------------------------------------------
+
+    def test_with_collector(self):
+        """TrajectoryBatcher works with a real Collector on CountingEnv."""
+        max_steps = 4
+        env = TransformedEnv(CountingEnv(max_steps=max_steps), StepCounter(max_steps))
+        try:
+            collector = Collector(
+                env,
+                RandomPolicy(env.action_spec),
+                frames_per_batch=max_steps * 3,
+                total_frames=max_steps * 9,
+            )
+            try:
+                batcher = TrajectoryBatcher(collector, num_trajectories=2)
+                batches = list(batcher)
+                assert len(batches) > 0
+                for b in batches:
+                    # shape: (num_trajectories, T)
+                    assert b.shape[0] == 2
+                    mask = b[("collector", "mask")]
+                    assert mask.shape == b.shape
+                    # at least one valid step per trajectory
+                    assert mask.any(dim=-1).all()
+            finally:
+                collector.shutdown()
+        finally:
+            env.close()
+
+    @pytest.mark.parametrize(
+        "collector_cls",
+        [
+            functools.partial(MultiSyncCollector, cat_results="stack"),
+            MultiAsyncCollector,
+        ],
+    )
+    def test_with_multi_collector(self, collector_cls):
+        """TrajectoryBatcher works with MultiSyncCollector and MultiAsyncCollector."""
+        max_steps = 4
+        env_fn = lambda: TransformedEnv(  # noqa: E731
+            CountingEnv(max_steps=max_steps), StepCounter(max_steps)
+        )
+        probe_env = env_fn()
+        try:
+            policy = RandomPolicy(probe_env.action_spec)
+        finally:
+            probe_env.close()
+        collector = collector_cls(
+            [env_fn, env_fn],
+            policy,
+            frames_per_batch=max_steps * 4,
+            total_frames=max_steps * 16,
+        )
+        try:
+            batcher = TrajectoryBatcher(collector, num_trajectories=2)
+            batches = list(batcher)
+            assert len(batches) > 0
+            for b in batches:
+                assert b.shape[0] == 2
+                mask = b[("collector", "mask")]
+                assert mask.shape == b.shape
+                assert mask.any(dim=-1).all()
+        finally:
+            collector.shutdown()
+
+    def test_with_collector_num_trajectories_one(self):
+        """TrajectoryBatcher with num_trajectories=1 yields one trajectory at a time."""
+        max_steps = 3
+        env = TransformedEnv(CountingEnv(max_steps=max_steps), StepCounter(max_steps))
+        try:
+            collector = Collector(
+                env,
+                RandomPolicy(env.action_spec),
+                frames_per_batch=max_steps * 2,
+                total_frames=max_steps * 6,
+            )
+            try:
+                batcher = TrajectoryBatcher(collector, num_trajectories=1)
+                for b in batcher:
+                    assert b.shape[0] == 1
+                    mask = b[("collector", "mask")]
+                    # first step always valid
+                    assert mask[:, 0].all()
+            finally:
+                collector.shutdown()
+        finally:
+            env.close()
+
+    def test_with_collector_traj_ids_contiguous_across_batches(self):
+        """Trajectories split across collector batches are correctly reassembled."""
+        max_steps = 10
+        # frames_per_batch smaller than max_steps forces splits across batches
+        env = TransformedEnv(CountingEnv(max_steps=max_steps), StepCounter(max_steps))
+        try:
+            collector = Collector(
+                env,
+                RandomPolicy(env.action_spec),
+                frames_per_batch=4,
+                total_frames=max_steps * 3,
+            )
+            try:
+                batcher = TrajectoryBatcher(collector, num_trajectories=1)
+                batches = list(batcher)
+                assert len(batches) > 0
+                for b in batches:
+                    mask = b[("collector", "mask")]
+                    # all valid steps must come before padding (no gaps in mask)
+                    for row in mask:
+                        # valid steps are a contiguous prefix
+                        n_valid = row.sum().item()
+                        assert row[:n_valid].all()
+                        assert not row[n_valid:].any()
+            finally:
+                collector.shutdown()
+        finally:
+            env.close()
 
 
 if __name__ == "__main__":

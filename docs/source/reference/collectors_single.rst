@@ -20,6 +20,15 @@ Single node data collectors
     MultiSyncCollector
     MultiAsyncCollector
 
+Collector utilities
+-------------------
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    TrajectoryBatcher
+
 .. note::
     The following legacy names are also available for backward compatibility:
 
