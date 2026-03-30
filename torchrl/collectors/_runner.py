@@ -258,8 +258,19 @@ def _main_async_collector(
             # used by the collector, otherwise weight updates go to the wrong (unused) object.
             for model_id, scheme in weight_sync_schemes.items():
                 actual_model = _resolve_model(inner_collector, model_id)
-                if actual_model is not None and scheme.model is not actual_model:
+                _scheme_model = scheme.model
+                if actual_model is not None and _scheme_model is not actual_model:
+                    torchrl_logger.info(
+                        f"mp worker {idx}: scheme '{model_id}' model reference is STALE "
+                        f"(scheme.model id={id(_scheme_model)}, "
+                        f"collector.{model_id} id={id(actual_model)}). Updating."
+                    )
                     scheme.model = actual_model
+                else:
+                    torchrl_logger.debug(
+                        f"mp worker {idx}: scheme '{model_id}' model reference is OK "
+                        f"(id={id(actual_model)})"
+                    )
 
         use_buffers = inner_collector._use_buffers
         if verbose:
@@ -423,9 +434,25 @@ def _main_async_collector(
             )
             with profile_ctx:
                 with timeit(f"worker/{idx}/rollout") as rollout_timer:
-                    torchrl_logger.debug(
-                        f"mp worker {idx}: Starting rollout (j={j})..."
-                    )
+                    # Log policy param fingerprint at rollout start
+                    if torchrl_logger.isEnabledFor(10):
+                        try:
+                            _pol = inner_collector.policy
+                            if _pol is not None and isinstance(_pol, torch.nn.Module):
+                                _p_sum = sum(p.sum().item() for p in _pol.parameters())
+                                torchrl_logger.debug(
+                                    f"mp worker {idx}: Starting rollout (j={j}), "
+                                    f"policy param_sum={_p_sum:.6f}, "
+                                    f"policy id={id(_pol)}"
+                                )
+                            else:
+                                torchrl_logger.debug(
+                                    f"mp worker {idx}: Starting rollout (j={j})..."
+                                )
+                        except Exception:
+                            torchrl_logger.debug(
+                                f"mp worker {idx}: Starting rollout (j={j})..."
+                            )
                     next_data = next(dc_iter)
                     torchrl_logger.debug(
                         f"mp worker {idx}: Rollout completed in {rollout_timer.elapsed():.3f}s, "
