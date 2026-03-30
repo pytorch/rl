@@ -578,67 +578,40 @@ class AsyncVLLM(RLvLLMEngine):
         self._service_id = uuid.uuid4().hex[
             :8
         ]  # Unique suffix to avoid name collisions
-        self._placement_group = None
         self._load_balancer = None
 
     def _launch(self):
-        """Launch all actor replicas."""
+        """Launch all actor replicas.
+
+        Each replica is a Ray actor that claims its GPUs directly via
+        ``num_gpus``.  Ray assigns distinct physical GPUs and sets
+        ``CUDA_VISIBLE_DEVICES`` so vLLM's subprocess-based engine core
+        inherits the correct device visibility automatically.
+        """
         if self._launched:
             torchrl_logger.warning("AsyncVLLMEngineService already launched")
             return
 
-        # Local imports to avoid global Ray dependency
         ray = _get_ray()
-        from ray.util.placement_group import placement_group
-        from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
+        num_gpus = _gpus_per_replica(self.engine_args)
         torchrl_logger.info(
-            f"Launching {self.num_replicas} async vLLM engine actors..."
+            f"Launching {self.num_replicas} async vLLM engine actors "
+            f"({num_gpus} GPU(s) each)..."
         )
 
-        # Create placement groups - one per replica to avoid conflicts
-        self._placement_groups = []
-
-        # Create actor replicas sequentially to avoid race conditions
         for i in range(self.num_replicas):
             torchrl_logger.info(
                 f"Creating async actor replica {i + 1}/{self.num_replicas} ..."
             )
 
-            # Create individual placement group for this replica
-            num_gpus = _gpus_per_replica(self.engine_args)
-            bundles = [{"GPU": 1.0, "CPU": 1.0} for _ in range(num_gpus)]
-            torchrl_logger.info(
-                f"Creating placement group for replica {i + 1} with {len(bundles)} bundles"
-            )
-
-            placement_group_name = f"vllm-replica-{self._service_id}-{i}"
-            pg = placement_group(bundles, strategy="PACK", name=placement_group_name)
-            self._placement_groups.append(pg)
-            torchrl_logger.info(f"Placement group {placement_group_name} created: {pg}")
-
-            # Wait for placement group to be ready
-            ray.get(pg.ready(), timeout=180)
-            torchrl_logger.info(f"Placement group {placement_group_name} ready")
-
-            # Calculate bundle indices for tensor parallelism
-            bundle_indices = None
-            if num_gpus > 1:
-                bundle_indices = list(range(num_gpus))
-            bundle_index = 0  # Always use first bundle since each replica has its own placement group
-
-            scheduling_strategy = PlacementGroupSchedulingStrategy(
-                placement_group=pg,
-                placement_group_capture_child_tasks=True,
-                placement_group_bundle_index=bundle_index,
-            )
+            bundle_indices = list(range(num_gpus)) if num_gpus > 1 else None
 
             actor = self.actor_class.options(
                 name=f"async-vllm-replica-{self._service_id}-{i}",
                 namespace="torchrl_vllm",
-                scheduling_strategy=scheduling_strategy,
-                num_gpus=0,
-                num_cpus=0,
+                num_gpus=num_gpus,
+                num_cpus=1,
             ).remote(
                 engine_args=self.engine_args,
                 bundle_indices=bundle_indices,
@@ -647,23 +620,17 @@ class AsyncVLLM(RLvLLMEngine):
             self.actors.append(actor)
 
         torchrl_logger.info("Waiting for actors to be ready")
-        # Wait for this actor to be ready before creating the next one
         ready_futures = [actor.ready.remote() for actor in self.actors]
         try:
-            ray.get(
-                ready_futures, timeout=TIMEOUT_SECONDS
-            )  # 5 minute timeout for engine initialization
-            torchrl_logger.info("✅ Actors are ready")
+            ray.get(ready_futures, timeout=TIMEOUT_SECONDS)
+            torchrl_logger.info("All actors are ready")
         except Exception as e:
             torchrl_logger.error(
-                f"❌ Failed to initialize actors within {TIMEOUT_SECONDS} seconds: {e}. You can increase the timeout by setting the TORCHRL_VLLM_TIMEOUT_SECONDS environment variable."
+                f"Failed to initialize actors within {TIMEOUT_SECONDS} seconds: {e}. "
+                "You can increase the timeout by setting the "
+                "TORCHRL_VLLM_TIMEOUT_SECONDS environment variable."
             )
             raise
-
-        # Store the first placement group for backward compatibility
-        self._placement_group = (
-            self._placement_groups[0] if self._placement_groups else None
-        )
 
         self._launched = True
         torchrl_logger.info(
@@ -1057,9 +1024,7 @@ class AsyncVLLM(RLvLLMEngine):
         )
 
         ray = _get_ray()
-        from ray.util.placement_group import remove_placement_group
 
-        # Kill all actors
         for i, actor in enumerate(self.actors):
             try:
                 ray.kill(actor)
@@ -1067,27 +1032,7 @@ class AsyncVLLM(RLvLLMEngine):
             except Exception as e:
                 torchrl_logger.warning(f"Error shutting down async actor {i + 1}: {e}")
 
-        # Clear the actors list
         self.actors.clear()
-
-        # Remove placement groups if any
-        if hasattr(self, "_placement_groups") and self._placement_groups:
-            for i, pg in enumerate(self._placement_groups):
-                try:
-                    remove_placement_group(pg)
-                    torchrl_logger.info(
-                        f"Removed placement group {i + 1}/{len(self._placement_groups)}"
-                    )
-                except Exception as e:
-                    torchrl_logger.warning(
-                        f"Error removing placement group {i + 1}: {e}"
-                    )
-            self._placement_groups = []
-
-        # Remove legacy single placement group if any
-        if self._placement_group is not None:
-            remove_placement_group(self._placement_group)
-        self._placement_group = None
         self._launched = False
         torchrl_logger.info("AsyncVLLMEngineService shutdown complete")
 
@@ -2024,7 +1969,6 @@ def make_async_vllm_engine(
         pipeline_parallel_size = 1
 
     # Create engine args
-    kwargs.setdefault("distributed_executor_backend", "ray")
     # Don't explicitly set enable_prefix_caching to avoid conflicts
     kwargs.setdefault("enable_prefix_caching", True)
 
