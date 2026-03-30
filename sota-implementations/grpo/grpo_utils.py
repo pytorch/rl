@@ -913,15 +913,35 @@ def log_training_metrics(
         buffer_staleness_mean = float(buffer_staleness.mean())
         buffer_staleness_max = float(buffer_staleness.max())
 
+        elapsed = time.time() - start_time
+        optim_steps = global_step // gradient_accumulation_steps
+
         metrics = {
-            "steps_collected": int(replay_buffer.write_count),
-            "staleness_mean (buffer)": buffer_staleness_mean,
-            "staleness_max (buffer)": buffer_staleness_max,
-            "step_count from buffer": float(step_count),
-            "reward from buffer": float(
+            # --- training/ : loss components and optimizer state ---
+            "training/loss_objective": float(loss.loss_objective),
+            "training/clip_fraction": float(loss.clip_fraction),
+            "training/ESS": float(loss.ESS),
+            "training/entropy_loss": float(loss.loss_entropy.mean()),
+            "training/kl_approx_to_inference": float(loss.kl_approx),
+            "training/kl_to_inference": float(loss.kl_to_inference.mean()),
+            "training/loss_kl_to_inference": float(loss.loss_kl_to_inference.mean()),
+            "training/grad_norm": float(grad_norm)
+            if global_step % gradient_accumulation_steps == 0
+            else 0.0,
+            "training/gradient_steps": global_step,
+            "training/optim_steps": optim_steps,
+            # --- inference/ : collection and policy version state ---
+            "inference/policy_version": collector.policy_version,
+            "inference/batch_policy_version": batch_policy_version,
+            "inference/batch_policy_age": batch_policy_age,
+            "inference/staleness_mean": buffer_staleness_mean,
+            "inference/staleness_max": buffer_staleness_max,
+            # --- buffer/ : replay buffer statistics ---
+            "buffer/write_count": int(replay_buffer.write_count),
+            "buffer/reward_mean": float(
                 torch.cat(rb_content.get(("next", "reward"), as_list=True)).mean()
             ),
-            "seq_length from buffer": float(
+            "buffer/seq_length_mean": float(
                 torch.tensor(
                     [
                         t.numel()
@@ -930,44 +950,24 @@ def log_training_metrics(
                     dtype=torch.float,
                 ).mean()
             ),
-            "ESS, from loss": float(loss.ESS),
-            "loss_objective, from loss": float(loss.loss_objective),
-            "clip_fraction, from loss": float(loss.clip_fraction),
-            "kl_approx (train to inference), from loss": float(loss.kl_approx),
-            "kl_to_inference (train to inference - differentiable), from loss": float(
-                loss.kl_to_inference.mean()
-            ),
-            "loss_kl_to_inference, from loss": float(loss.loss_kl_to_inference.mean()),
-            "entropy loss, from loss": float(loss.loss_entropy.mean()),
-            "grad_norm": float(grad_norm)
-            if global_step % gradient_accumulation_steps == 0
-            else 0.0,
-            "write_count, from buffer": int(replay_buffer.write_count),
-            # how many gradient steps per write
-            "gradient_step_throughput (gradient step per write)": float(
+            "buffer/step_count_mean": float(step_count),
+            "buffer/data_read_count": data_read_count,
+            # --- throughput/ : training speed metrics ---
+            "throughput/gradient_steps_per_second": float(global_step / elapsed),
+            "throughput/optim_steps_per_second": float(optim_steps / elapsed),
+            "throughput/gradient_steps_per_write": float(
                 global_step / replay_buffer.write_count
             ),
-            # how many optim steps per write
-            "optim_step_throughput (optim step per write)": float(
-                (global_step // gradient_accumulation_steps) / replay_buffer.write_count
-            ),
-            "data_read_count (total)": data_read_count,
-            "current_policy_version (collector)": collector.policy_version,
-            # FIXME: Assume batch is a single trajectory
-            # FIXME: The addition of the transform after the env instantiation + _shuttle creation
-            #  is messed up - we need the next data
-            "batch_policy_version (sampled batch)": batch_policy_version,
-            "batch_policy_age (sampled batch)": batch_policy_age,
-            "throughput (steps per second)": float(
-                global_step / (time.time() - start_time)
+            "throughput/optim_steps_per_write": float(
+                optim_steps / replay_buffer.write_count
             ),
         }
         if use_kl_to_ref:
-            metrics["kl_penalty (inference to ref) from buffer"] = float(
+            metrics["training/kl_to_ref"] = float(loss.kl_to_ref.mean())
+            metrics["training/loss_kl_to_ref"] = float(loss.loss_kl_to_ref.mean())
+            metrics["buffer/kl_penalty_to_ref_mean"] = float(
                 torch.cat(rb_content.get(("next", "kl_penalty"), as_list=True)).mean()
             )
-            metrics["kl_to_ref, from loss"] = float(loss.kl_to_ref.mean())
-            metrics["loss_kl_to_ref, from loss"] = float(loss.loss_kl_to_ref.mean())
 
         wandb_logger.log_metrics(metrics, step=global_step)
 
