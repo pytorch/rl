@@ -276,6 +276,25 @@ def _main_async_collector(
         if verbose:
             torchrl_logger.debug("Sync data collector created")
 
+        # Log worker startup summary
+        _pol = inner_collector.policy
+        _wpol = getattr(inner_collector, "_wrapped_policy_uncompiled", None)
+        torchrl_logger.info(
+            f"mp worker {idx}: STARTUP "
+            f"policy id={id(_pol)}, "
+            f"wrapped_policy id={id(_wpol)}, "
+            f"same={_pol is _wpol}, "
+            f"policy type={type(_pol).__name__}"
+        )
+        if weight_sync_schemes:
+            for model_id, scheme in weight_sync_schemes.items():
+                _sm = scheme.model
+                torchrl_logger.info(
+                    f"mp worker {idx}: scheme '{model_id}' model id={id(_sm)}, "
+                    f"matches policy={_sm is _pol}, "
+                    f"matches wrapped={_sm is _wpol}"
+                )
+
         # Set up profiler for this worker if configured
         worker_profiler = None
         if profile_config is not None:
@@ -454,10 +473,27 @@ def _main_async_collector(
                                 f"mp worker {idx}: Starting rollout (j={j})..."
                             )
                     next_data = next(dc_iter)
-                    torchrl_logger.debug(
-                        f"mp worker {idx}: Rollout completed in {rollout_timer.elapsed():.3f}s, "
-                        f"frames={next_data.numel() if hasattr(next_data, 'numel') else 'N/A'}"
-                    )
+                    # Log rollout completion with param fingerprint
+                    if torchrl_logger.isEnabledFor(10):
+                        _pol2 = inner_collector.policy
+                        try:
+                            _p_sum2 = (
+                                sum(p.sum().item() for p in _pol2.parameters())
+                                if isinstance(_pol2, torch.nn.Module)
+                                else "N/A"
+                            )
+                        except Exception:
+                            _p_sum2 = "err"
+                        torchrl_logger.debug(
+                            f"mp worker {idx}: Rollout completed in {rollout_timer.elapsed():.3f}s, "
+                            f"frames={next_data.numel() if hasattr(next_data, 'numel') else 'N/A'}, "
+                            f"policy param_sum={_p_sum2} (end of rollout)"
+                        )
+                    else:
+                        torchrl_logger.debug(
+                            f"mp worker {idx}: Rollout completed in {rollout_timer.elapsed():.3f}s, "
+                            f"frames={next_data.numel() if hasattr(next_data, 'numel') else 'N/A'}"
+                        )
 
             # Step the profiler after each rollout
             if worker_profiler is not None and worker_profiler.is_active:
