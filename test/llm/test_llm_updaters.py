@@ -411,11 +411,6 @@ class TestVLLMUpdaterV2WithLocalLLM(BaseVLLMUpdaterTest):
         logger.info("✓ Local LLM-specific tests passed")
 
 
-@pytest.mark.xfail(
-    reason="AsyncVLLM tests fail due to Ray placement group timeout. "
-    "See LLM_TEST_ISSUES.md for details.",
-    strict=False,
-)
 @pytest.mark.gpu
 @pytest.mark.skipif(not _has_ray, reason="missing ray dependencies")
 @pytest.mark.skipif(not _has_vllm, reason="missing vllm dependencies")

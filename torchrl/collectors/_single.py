@@ -1859,6 +1859,11 @@ class Collector(BaseCollector):
         """
         try:
             if not self.closed:
+                # Stop the background thread if one is running (from .start())
+                # before tearing down the env it may still be using.
+                self._stop = True
+                if hasattr(self, "_thread") and self._thread.is_alive():
+                    self._thread.join(timeout=timeout)
                 self.closed = True
                 del self._carrier
                 if self._use_buffers:
