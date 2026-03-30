@@ -32,6 +32,7 @@ from torchrl.data import ReplayBuffer
 from torchrl.envs import EnvBase, EnvCreator
 from torchrl.envs.utils import ExplorationType
 from torchrl.weight_update import WeightSyncScheme
+from torchrl.weight_update.utils import _resolve_model
 
 
 class _WorkerProfiler:
@@ -251,6 +252,14 @@ def _main_async_collector(
         # This properly initializes the schemes on the receiver side and stores them in _receiver_schemes.
         if weight_sync_schemes:
             inner_collector.register_scheme_receiver(weight_sync_schemes)
+            # Fix stale model reference: init_on_receiver was called in _make_policy_factory
+            # with the original policy object, but _get_policy_and_device may have deepcopied
+            # the policy to a new device. Update the scheme's model ref to the actual policy
+            # used by the collector, otherwise weight updates go to the wrong (unused) object.
+            for model_id, scheme in weight_sync_schemes.items():
+                actual_model = _resolve_model(inner_collector, model_id)
+                if actual_model is not None and scheme.model is not actual_model:
+                    scheme.model = actual_model
 
         use_buffers = inner_collector._use_buffers
         if verbose:

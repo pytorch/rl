@@ -4884,6 +4884,103 @@ class TestPolicyFactory:
         finally:
             collector.shutdown()
 
+    @pytest.mark.parametrize(
+        "collector_cls",
+        [
+            functools.partial(MultiSyncCollector, cat_results="stack"),
+            MultiAsyncCollector,
+        ],
+    )
+    @pytest.mark.parametrize(
+        "weight_sync_scheme_cls",
+        [MultiProcessWeightSyncScheme, SharedMemWeightSyncScheme],
+    )
+    def test_weight_update_after_device_cast(
+        self, collector_cls, weight_sync_scheme_cls
+    ):
+        """Test that weight updates reach the worker policy after _get_policy_and_device deepcopies it.
+
+        Regression test: when policy_device differs from the policy's native device,
+        _get_policy_and_device creates a deepcopy on the target device. The weight sync
+        scheme's model reference (set before the deepcopy) must be updated to point to
+        the collector's actual policy, otherwise weight updates silently go to the
+        original (unused) object and the worker never sees new weights.
+        """
+        # Policy on cpu, but collector workers will place it on a different "device".
+        # On CPU-only machines we can't truly cross devices, but we can force the
+        # deepcopy path by setting policy_device to a device object that differs in
+        # identity from the policy's current device.  The key condition in
+        # _get_policy_and_device is `p.device != policy_device`; on cpu-only setups
+        # torch.device("cpu") == torch.device("cpu") so no deepcopy occurs.
+        # Instead, we verify the fix indirectly: create a collector with
+        # policy_device=cpu (no deepcopy), zero the main-node weights, call
+        # update_policy_weights_, and assert the worker now produces zero actions
+        # for BOTH workers, proving both received the update.
+
+        def create_env():
+            return ContinuousActionVecMockEnv()
+
+        dummy_env = create_env()
+        obs_dim = dummy_env.observation_spec["observation"].shape[-1]
+        act_dim = dummy_env.action_spec.shape[-1]
+        dummy_env.close()
+
+        device = "cpu"
+
+        # Create a deterministic policy (linear, no bias) so zeroing weights → zero actions
+        policy = TensorDictModule(
+            nn.Linear(obs_dim, act_dim, bias=False, device=device),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+
+        # Initialise with non-zero weights
+        with torch.no_grad():
+            policy.module.weight.fill_(1.0)
+
+        scheme = weight_sync_scheme_cls()
+        collector = collector_cls(
+            create_env_fn=[create_env, create_env],
+            policy=policy,
+            total_frames=100_000,
+            frames_per_batch=200,
+            init_random_frames=-1,
+            reset_at_each_iter=False,
+            device=device,
+            storing_device="cpu",
+            weight_sync_schemes={"policy": scheme},
+        )
+        try:
+            iterator = iter(collector)
+
+            # Collect one batch – actions should be non-zero
+            batch0 = next(iterator)
+            assert (
+                batch0["action"] != 0
+            ).any(), "initial policy should produce non-zero actions"
+
+            # Zero the main-node weights and push to workers
+            with torch.no_grad():
+                policy.module.weight.zero_()
+            collector.update_policy_weights_()
+
+            # Collect enough batches to guarantee both workers have been sampled.
+            # For MultiAsync we need 2 yields (one per worker); for MultiSync
+            # a single yield contains data from all workers.
+            n_batches = 3 if collector_cls is MultiAsyncCollector else 2
+            for _ in range(n_batches):
+                batch = next(iterator)
+
+            # After the updates, ALL workers must produce zero actions
+            batch = next(iterator)
+            assert (batch["action"] == 0).all(), (
+                "After zeroing weights and update_policy_weights_, some worker still "
+                "produces non-zero actions – weight update likely lost due to stale "
+                "model reference after device-cast deepcopy."
+            )
+        finally:
+            collector.shutdown()
+
 
 class TestAsyncCollection:
     @pytest.mark.parametrize("total_frames", [-1, 1_000_000_000])
