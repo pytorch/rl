@@ -13,6 +13,7 @@ approach used in the legacy vLLM backend.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import os
 import random
 import time
@@ -304,7 +305,10 @@ class _AsyncLLMEngine:
 
     async def get_tokenizer(self):
         """Get the tokenizer from the engine."""
-        return await self.engine.get_tokenizer()
+        result = self.engine.get_tokenizer()
+        if inspect.isawaitable(result):
+            return await result
+        return result
 
     async def collective_rpc_v1(
         self,
