@@ -5296,6 +5296,257 @@ class TestCollectorProfiling:
         assert expected_trace.exists(), f"Trace file not found at {expected_trace}"
 
 
+class TestTrajectoryBatcher:
+    """Tests for :class:`~torchrl.collectors.utils.TrajectoryBatcher`."""
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _make_batch(traj_ids, done_flags, obs_start=0):
+        """Build a minimal TensorDict batch suitable for TrajectoryBatcher."""
+        n = len(traj_ids)
+        return TensorDict(
+            {
+                "obs": torch.arange(obs_start, obs_start + n, dtype=torch.float),
+                ("collector", "traj_ids"): torch.tensor(traj_ids, dtype=torch.int64),
+                ("next", "done"): torch.tensor(done_flags, dtype=torch.bool),
+            },
+            batch_size=[n],
+        )
+
+    # ------------------------------------------------------------------
+    # Basic functionality
+    # ------------------------------------------------------------------
+
+    def test_single_batch_complete_trajectories(self):
+        """All trajectories complete within one collector batch."""
+        from torchrl.collectors.utils import TrajectoryBatcher
+
+        # traj 0: 3 steps, traj 1: 2 steps, traj 2: 1 step – all done
+        batch = self._make_batch(
+            traj_ids=[0, 0, 0, 1, 1, 2],
+            done_flags=[False, False, True, False, True, True],
+        )
+
+        batcher = TrajectoryBatcher([batch], num_trajectories=2)
+        batches = list(batcher)
+
+        # 3 trajectories total, num_trajectories=2 → one yielded batch of 2,
+        # remainder (1 traj) not emitted (collector exhausted)
+        assert len(batches) == 1
+        result = batches[0]
+        assert result.shape[0] == 2
+        # max_len is 3 (traj 0)
+        assert result.shape[1] == 3
+
+        mask = result[("collector", "mask")]
+        # traj 0: all 3 valid; traj 1: 2 valid, 1 padded
+        assert mask[0].all()
+        assert mask[1, :2].all()
+        assert not mask[1, 2]
+
+    def test_trajectories_span_batches(self):
+        """A trajectory split across two collector batches is reassembled."""
+        from torchrl.collectors.utils import TrajectoryBatcher
+
+        # Traj 0 continues into batch1
+        batch0 = self._make_batch(
+            traj_ids=[0, 0, 0],
+            done_flags=[False, False, False],
+            obs_start=0,
+        )
+        batch1 = self._make_batch(
+            traj_ids=[0, 0, 1, 1],
+            done_flags=[False, True, False, True],
+            obs_start=3,
+        )
+
+        batcher = TrajectoryBatcher([batch0, batch1], num_trajectories=1)
+        batches = list(batcher)
+
+        assert len(batches) == 2
+        # Traj 0: 5 steps, traj 1: 2 steps
+        assert batches[0].shape == torch.Size([1, 5])
+        assert batches[1].shape == torch.Size([1, 2])
+
+        # Observations for traj 0 should be 0..4 (5 steps, no padding)
+        assert (batches[0]["obs"][0] == torch.arange(5, dtype=torch.float)).all()
+
+    def test_partial_trajectory_not_emitted(self):
+        """An incomplete (partial) trajectory at the end is not yielded."""
+        from torchrl.collectors.utils import TrajectoryBatcher
+
+        # Traj 0 complete, traj 1 partial (no done at end)
+        batch = self._make_batch(
+            traj_ids=[0, 0, 1, 1],
+            done_flags=[False, True, False, False],
+        )
+
+        batcher = TrajectoryBatcher([batch], num_trajectories=1)
+        batches = list(batcher)
+
+        # Only traj 0 is complete
+        assert len(batches) == 1
+        assert batches[0].shape == torch.Size([1, 2])
+
+    def test_mask_field_shape_and_values(self):
+        """Mask shape matches batch shape and values reflect valid steps."""
+        from torchrl.collectors.utils import TrajectoryBatcher
+
+        # Two trajs: lengths 4 and 2 → padded to 4
+        batch = self._make_batch(
+            traj_ids=[0, 0, 0, 0, 1, 1],
+            done_flags=[False, False, False, True, False, True],
+        )
+
+        batcher = TrajectoryBatcher([batch], num_trajectories=2)
+        batches = list(batcher)
+
+        result = batches[0]
+        assert result.shape == torch.Size([2, 4])
+        mask = result[("collector", "mask")]
+        assert mask.shape == torch.Size([2, 4])
+        assert mask[0].all()  # traj 0: 4 valid steps
+        assert mask[1, :2].all()
+        assert not mask[1, 2]
+        assert not mask[1, 3]
+
+    def test_multiple_emitted_batches(self):
+        """More than num_trajectories complete trajectories → multiple emitted batches."""
+        from torchrl.collectors.utils import TrajectoryBatcher
+
+        # 4 short trajectories, num_trajectories=2 → 2 emitted batches
+        batches_in = [
+            self._make_batch([i, i], [False, True], obs_start=i * 2) for i in range(4)
+        ]
+        # Concatenate into one big batch
+        import torch
+
+        combined = torch.cat(batches_in, dim=0)
+
+        batcher = TrajectoryBatcher([combined], num_trajectories=2)
+        out = list(batcher)
+
+        assert len(out) == 2
+        for b in out:
+            assert b.shape[0] == 2
+
+    # ------------------------------------------------------------------
+    # strict_on_policy mode
+    # ------------------------------------------------------------------
+
+    def test_strict_on_policy_discards_partials(self):
+        """Calling update_policy_weights_ with strict_on_policy=True drops partials."""
+        from torchrl.collectors.utils import TrajectoryBatcher
+
+        calls = []
+
+        class _MockCollector:
+            def __iter__(self):
+                # yield a batch with one partial trajectory
+                yield TestTrajectoryBatcher._make_batch(
+                    [0, 0], [False, False]
+                )
+                # after policy update, yield a complete trajectory
+                yield TestTrajectoryBatcher._make_batch(
+                    [1, 1], [False, True]
+                )
+
+            def update_policy_weights_(self):
+                calls.append("updated")
+
+        batcher = TrajectoryBatcher(
+            _MockCollector(), num_trajectories=1, strict_on_policy=True
+        )
+
+        it = iter(batcher)
+        # Manually drive: ingest first batch (partial traj 0 buffered, nothing emitted)
+        # Then call update_policy_weights_ → partial should be discarded
+        batcher._ingest(
+            TestTrajectoryBatcher._make_batch([0, 0], [False, False])
+        )
+        assert len(batcher._partial_trajs) == 1
+        batcher.update_policy_weights_()
+        # Partial trajectories should be cleared
+        assert len(batcher._partial_trajs) == 0
+        assert "updated" in calls
+
+    def test_strict_on_policy_false_keeps_partials(self):
+        """With strict_on_policy=False, partials survive a policy update."""
+        from torchrl.collectors.utils import TrajectoryBatcher
+
+        class _MockCollector:
+            def update_policy_weights_(self):
+                pass
+
+        batcher = TrajectoryBatcher(
+            _MockCollector(), num_trajectories=1, strict_on_policy=False
+        )
+        batcher._ingest(
+            TestTrajectoryBatcher._make_batch([0, 0], [False, False])
+        )
+        assert len(batcher._partial_trajs) == 1
+        batcher.update_policy_weights_()
+        # Partial trajectories should still be present
+        assert len(batcher._partial_trajs) == 1
+
+    # ------------------------------------------------------------------
+    # terminated key support
+    # ------------------------------------------------------------------
+
+    def test_terminated_key_treated_as_done(self):
+        """Trajectories ending via 'terminated' (not 'done') are still completed."""
+        from torchrl.collectors.utils import TrajectoryBatcher
+
+        n = 3
+        batch = TensorDict(
+            {
+                "obs": torch.arange(n, dtype=torch.float),
+                ("collector", "traj_ids"): torch.tensor([0, 0, 0], dtype=torch.int64),
+                ("next", "terminated"): torch.tensor([False, False, True]),
+                # no ("next", "done") key
+            },
+            batch_size=[n],
+        )
+
+        batcher = TrajectoryBatcher([batch], num_trajectories=1)
+        batches = list(batcher)
+
+        assert len(batches) == 1
+        assert batches[0].shape == torch.Size([1, 3])
+
+    # ------------------------------------------------------------------
+    # Error handling
+    # ------------------------------------------------------------------
+
+    def test_missing_traj_ids_raises(self):
+        """Missing traj_ids field raises a descriptive KeyError."""
+        from torchrl.collectors.utils import TrajectoryBatcher
+
+        bad_batch = TensorDict(
+            {"obs": torch.arange(3, dtype=torch.float)}, batch_size=[3]
+        )
+
+        batcher = TrajectoryBatcher([bad_batch], num_trajectories=1)
+        with pytest.raises(KeyError, match="traj_ids"):
+            list(batcher)
+
+    # ------------------------------------------------------------------
+    # repr
+    # ------------------------------------------------------------------
+
+    def test_repr(self):
+        from torchrl.collectors.utils import TrajectoryBatcher
+
+        batcher = TrajectoryBatcher([], num_trajectories=8, strict_on_policy=True)
+        r = repr(batcher)
+        assert "TrajectoryBatcher" in r
+        assert "num_trajectories=8" in r
+        assert "strict_on_policy=True" in r
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main(
