@@ -15,7 +15,6 @@ from ._multi_base import MultiCollector, MultiCollector as _MultiDataCollector
 from ._multi_sync import MultiSyncCollector, MultiSyncDataCollector
 from ._single import Collector, SyncDataCollector
 from ._single_async import AsyncCollector, aSyncDataCollector
-from .utils import TrajectoryBatcher
 from .weight_update import (
     MultiProcessedWeightUpdater,
     RayWeightUpdater,
@@ -34,7 +33,6 @@ __all__ = [
     "AsyncBatchedCollector",
     "MultiAsyncCollector",
     "ProfileConfig",
-    "TrajectoryBatcher",
     # Legacy names (backward-compatible aliases)
     "DataCollectorBase",
     "SyncDataCollector",

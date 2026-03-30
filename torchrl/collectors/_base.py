@@ -153,6 +153,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
     _weight_sync_schemes: dict[str, WeightSyncScheme] | None = None
     verbose: bool = False
     _profile_config: ProfileConfig | None = None
+    num_trajectories_per_batch: int | None = None
 
     def enable_profile(
         self,
@@ -949,10 +950,24 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         # Mark that iteration has started (used by enable_profile check)
         self._iteration_started = True
         try:
-            yield from self.iterator()
+            if self.num_trajectories_per_batch is None:
+                yield from self.iterator()
+            else:
+                yield from self._iter_by_trajectories()
         except Exception:
             self.shutdown()
             raise
+
+    def _iter_by_trajectories(self) -> Iterator[TensorDictBase]:
+        """Yield padded batches of exactly ``num_trajectories_per_batch`` complete trajectories."""
+        from .utils import _traj_ingest, _traj_emit
+
+        partial_trajs: dict[int, list] = {}
+        complete_trajs: list = []
+        for batch in self.iterator():
+            _traj_ingest(batch, partial_trajs, complete_trajs)
+            while len(complete_trajs) >= self.num_trajectories_per_batch:
+                yield _traj_emit(complete_trajs, self.num_trajectories_per_batch)
 
     def next(self):
         try:

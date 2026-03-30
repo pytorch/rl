@@ -406,185 +406,65 @@ def _map_weight(
     return weight
 
 
-class TrajectoryBatcher:
-    """Wraps a TorchRL collector and yields batches of exactly N complete trajectories.
+def _traj_chunk_ends_done(chunk: TensorDictBase) -> bool:
+    """Return ``True`` if the last step of *chunk* carries a done/terminated signal."""
+    for key in (("next", "done"), ("next", "terminated")):
+        signal = chunk.get(key, None)
+        if signal is not None and signal[-1].any().item():
+            return True
+    return False
 
-    Trajectories that span multiple collector iterations are reconstructed using
-    ``("collector", "traj_ids")``. The yielded batches are zero-padded to the length
-    of the longest trajectory in the batch and include a ``("collector", "mask")``
-    boolean field marking valid time steps.
 
-    Args:
-        collector: Any TorchRL collector (or iterable yielding
-            :class:`~tensordict.TensorDictBase` objects with
-            ``("collector", "traj_ids")`` and ``("next", "done")`` fields).
-        num_trajectories (int): Number of complete trajectories per yielded batch.
-        strict_on_policy (bool, optional): If ``True``, any in-progress partial
-            trajectories are discarded when :meth:`update_policy_weights_` is
-            called.  This guarantees that every yielded batch contains data
-            collected entirely under the current policy version.
-            Defaults to ``False``.
+def _traj_ingest(
+    batch: TensorDictBase,
+    partial_trajs: dict,
+    complete_trajs: list,
+) -> None:
+    """Route steps from *batch* into per-trajectory buffers.
 
-    .. note::
-        The collector should be created with ``split_trajs=False`` (the default)
-        so that trajectory IDs are preserved in the raw output.
-
-    Example:
-        >>> import torch
-        >>> from tensordict import TensorDict
-        >>> from torchrl.collectors.utils import TrajectoryBatcher
-        >>> # Build a tiny mock collector that yields two batches
-        >>> batch0 = TensorDict(
-        ...     {
-        ...         "obs": torch.arange(3, dtype=torch.float),
-        ...         ("collector", "traj_ids"): torch.tensor([0, 0, 0]),
-        ...         ("next", "done"): torch.tensor([False, False, False]),
-        ...     },
-        ...     batch_size=[3],
-        ... )
-        >>> batch1 = TensorDict(
-        ...     {
-        ...         "obs": torch.arange(3, 7, dtype=torch.float),
-        ...         ("collector", "traj_ids"): torch.tensor([0, 0, 1, 1]),
-        ...         ("next", "done"): torch.tensor([False, True, False, True]),
-        ...     },
-        ...     batch_size=[4],
-        ... )
-        >>> batcher = TrajectoryBatcher([batch0, batch1], num_trajectories=1)
-        >>> batches = list(batcher)
-        >>> len(batches)
-        2
-        >>> batches[0].shape  # traj 0 spans both batches (5 steps)
-        torch.Size([1, 5])
-        >>> batches[1].shape  # traj 1 has 2 steps
-        torch.Size([1, 2])
+    Completed trajectories are moved from *partial_trajs* into *complete_trajs*.
     """
-
-    def __init__(
-        self,
-        collector,
-        num_trajectories: int,
-        *,
-        strict_on_policy: bool = False,
-    ) -> None:
-        self.collector = collector
-        self.num_trajectories = num_trajectories
-        self.strict_on_policy = strict_on_policy
-        # Maps traj_id (int) -> list of TensorDictBase chunks collected so far
-        self._partial_trajs: dict[int, list] = {}
-        # Queue of fully-completed trajectories awaiting emission
-        self._complete_trajs: list = []
-
-    # ------------------------------------------------------------------
-    # Public iteration interface
-    # ------------------------------------------------------------------
-
-    def __iter__(self):
-        """Iterate over the collector and yield padded trajectory batches."""
-        for batch in self.collector:
-            self._ingest(batch)
-            while len(self._complete_trajs) >= self.num_trajectories:
-                yield self._emit()
-
-    # ------------------------------------------------------------------
-    # Delegation helpers – forward common collector methods
-    # ------------------------------------------------------------------
-
-    def update_policy_weights_(self, *args, **kwargs):
-        """Update policy weights and optionally discard partial trajectories.
-
-        Forwards all arguments to the underlying collector's
-        ``update_policy_weights_`` method.  When ``strict_on_policy=True``,
-        all in-progress (incomplete) trajectories are discarded after the
-        weight update so that the next yielded batch contains only data
-        collected with the updated policy.
-        """
-        result = self.collector.update_policy_weights_(*args, **kwargs)
-        if self.strict_on_policy:
-            self._partial_trajs.clear()
-        return result
-
-    def shutdown(self, *args, **kwargs):
-        """Shut down the underlying collector."""
-        return self.collector.shutdown(*args, **kwargs)
-
-    def set_seed(self, seed: int, static_seed: bool = False):
-        """Forward :meth:`set_seed` to the underlying collector."""
-        return self.collector.set_seed(seed, static_seed=static_seed)
-
-    def state_dict(self) -> dict:
-        """Return the state dict of the underlying collector."""
-        return self.collector.state_dict()
-
-    def load_state_dict(self, state_dict: dict) -> None:
-        """Load a state dict into the underlying collector."""
-        return self.collector.load_state_dict(state_dict)
-
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}("
-            f"collector={self.collector!r}, "
-            f"num_trajectories={self.num_trajectories}, "
-            f"strict_on_policy={self.strict_on_policy})"
+    flat = batch.reshape(-1)
+    traj_ids = flat.get(("collector", "traj_ids"), None)
+    if traj_ids is None:
+        raise KeyError(
+            "num_trajectories_per_batch requires ('collector', 'traj_ids') in every "
+            "collector batch.  Make sure the collector is initialized with "
+            "split_trajs=False (the default)."
         )
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
+    unique_ids = traj_ids.unique()
+    for tid_tensor in unique_ids:
+        tid = tid_tensor.item()
+        chunk = flat[traj_ids == tid_tensor]
 
-    def _ingest(self, batch: TensorDictBase) -> None:
-        """Process one collector batch, routing steps into trajectory buffers."""
-        flat = batch.reshape(-1)
-        traj_ids = flat.get(("collector", "traj_ids"), None)
-        if traj_ids is None:
-            raise KeyError(
-                "TrajectoryBatcher requires ('collector', 'traj_ids') in every "
-                "collector batch.  Make sure the collector is initialized with "
-                "split_trajs=False (the default)."
-            )
+        if tid in partial_trajs:
+            partial_trajs[tid].append(chunk)
+        else:
+            partial_trajs[tid] = [chunk]
 
-        # Process each unique traj_id in the order it first appears
-        unique_ids = traj_ids.unique()
-        for tid_tensor in unique_ids:
-            tid = tid_tensor.item()
-            chunk = flat[traj_ids == tid_tensor]
+        if _traj_chunk_ends_done(chunk):
+            chunks = partial_trajs.pop(tid)
+            complete = torch.cat(chunks, dim=0) if len(chunks) > 1 else chunks[0]
+            complete_trajs.append(complete)
 
-            if tid in self._partial_trajs:
-                self._partial_trajs[tid].append(chunk)
-            else:
-                self._partial_trajs[tid] = [chunk]
 
-            # Promote to completed list if the trajectory ended here
-            if self._chunk_ends_done(chunk):
-                chunks = self._partial_trajs.pop(tid)
-                complete = torch.cat(chunks, dim=0) if len(chunks) > 1 else chunks[0]
-                self._complete_trajs.append(complete)
+def _traj_emit(complete_trajs: list, num_trajectories: int) -> TensorDictBase:
+    """Dequeue *num_trajectories* complete trajectories as a zero-padded batch."""
+    trajs = complete_trajs[:num_trajectories]
+    del complete_trajs[:num_trajectories]
 
-    @staticmethod
-    def _chunk_ends_done(chunk: TensorDictBase) -> bool:
-        """Return ``True`` if the last step of *chunk* carries a done signal."""
-        for key in (("next", "done"), ("next", "terminated")):
-            signal = chunk.get(key, None)
-            if signal is not None and signal[-1].any().item():
-                return True
-        return False
+    max_len = max(t.shape[0] for t in trajs)
+    padded = []
+    for traj in trajs:
+        traj = traj.copy()
+        traj.set(
+            ("collector", "mask"),
+            torch.ones(traj.shape[0], dtype=torch.bool, device=traj.device),
+        )
+        padded.append(pad(traj, [0, max_len - traj.shape[0]]))
 
-    def _emit(self) -> TensorDictBase:
-        """Dequeue ``num_trajectories`` complete trajectories as a padded batch."""
-        trajs = self._complete_trajs[: self.num_trajectories]
-        self._complete_trajs = self._complete_trajs[self.num_trajectories :]
-
-        max_len = max(t.shape[0] for t in trajs)
-        padded = []
-        for traj in trajs:
-            traj = traj.copy()
-            traj.set(
-                ("collector", "mask"),
-                torch.ones(traj.shape[0], dtype=torch.bool, device=traj.device),
-            )
-            padded.append(pad(traj, [0, max_len - traj.shape[0]]))
-
-        return torch.stack(padded, 0)
+    return torch.stack(padded, 0)
 
 
 def _make_policy_factory(

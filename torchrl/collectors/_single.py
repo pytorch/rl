@@ -450,10 +450,12 @@ class Collector(BaseCollector):
         weight_recv_schemes: dict[str, WeightSyncScheme] | None = None,
         track_policy_version: bool = False,
         worker_idx: int | None = None,
+        num_trajectories_per_batch: int | None = None,
         **kwargs,
     ):
         self.closed = True
         self.worker_idx = worker_idx
+        self.num_trajectories_per_batch = num_trajectories_per_batch
 
         # Note: weight_sync_schemes can be used to send weights to components
         # within the environment (e.g., RayModuleTransform), not just sub-collectors
