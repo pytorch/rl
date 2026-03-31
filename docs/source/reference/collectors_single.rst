@@ -38,7 +38,7 @@ marking valid time steps.
     collector = Collector(
         GymEnv("CartPole-v1"),
         policy=my_policy,
-        frames_per_batch=200,
+        frames_per_batch=200, # ignored by collector
         total_frames=10000,
         num_trajectories_per_batch=4,
     )
