@@ -334,9 +334,8 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
     def __init__(
         self,
         create_env_fn: Sequence[Callable[[], EnvBase]],
-        policy: None | (
-            TensorDictModule | Callable[[TensorDictBase], TensorDictBase]
-        ) = None,
+        policy: None
+        | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
         *,
         num_workers: int | None = None,
         policy_factory: (

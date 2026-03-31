@@ -2343,7 +2343,8 @@ class TestCollectorDevices:
                     device=None,
                 )
 
-        def _set_seed(self, seed: int | None = None) -> None: ...
+        def _set_seed(self, seed: int | None = None) -> None:
+            ...
 
     class EnvWithDevice(EnvBase):
         def __init__(self, default_device):
@@ -2399,7 +2400,8 @@ class TestCollectorDevices:
                     device=self.default_device,
                 )
 
-        def _set_seed(self, seed: int | None = None) -> None: ...
+        def _set_seed(self, seed: int | None = None) -> None:
+            ...
 
     class DeviceLessPolicy(TensorDictModuleBase):
         in_keys = ["observation"]
@@ -2574,7 +2576,8 @@ class TestCollectorDevices:
         def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
             return self.full_done_specs.zeros().update(self.observation_spec.zeros())
 
-        def _set_seed(self, seed: int | None) -> None: ...
+        def _set_seed(self, seed: int | None) -> None:
+            ...
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
@@ -3451,7 +3454,8 @@ class TestUpdateParams:
                 {"state": self.state.clone()}, self.batch_size, device=self.device
             )
 
-        def _set_seed(self, seed: int | None) -> None: ...
+        def _set_seed(self, seed: int | None) -> None:
+            ...
 
     class Policy(TensorDictModuleBase):
         def __init__(self):
@@ -4151,9 +4155,9 @@ class TestDynamicEnvs:
 class TestCollectorsNonTensor:
     class AddNontTensorData(Transform):
         def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
-            next_tensordict["nt"] = (
-                f"a string! - {next_tensordict.get('step_count').item()}"
-            )
+            next_tensordict[
+                "nt"
+            ] = f"a string! - {next_tensordict.get('step_count').item()}"
             return next_tensordict
 
         def _reset(

@@ -414,9 +414,8 @@ class Collector(BaseCollector):
         create_env_fn: (
             EnvBase | EnvCreator | Sequence[Callable[[], EnvBase]]  # noqa: F821
         ),  # noqa: F821
-        policy: None | (
-            TensorDictModule | Callable[[TensorDictBase], TensorDictBase]
-        ) = None,
+        policy: None
+        | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
         *,
         policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
@@ -847,13 +846,13 @@ class Collector(BaseCollector):
         """Returns the compiled policy, compiling it lazily if needed."""
         if (policy := self._wrapped_policy_maybe_compiled) is None:
             if self.compiled_policy or self.cudagraphed_policy:
-                policy = self._wrapped_policy_maybe_compiled = (
-                    self._compile_wrapped_policy(self._wrapped_policy_uncompiled)
-                )
+                policy = (
+                    self._wrapped_policy_maybe_compiled
+                ) = self._compile_wrapped_policy(self._wrapped_policy_uncompiled)
             else:
-                policy = self._wrapped_policy_maybe_compiled = (
-                    self._wrapped_policy_uncompiled
-                )
+                policy = (
+                    self._wrapped_policy_maybe_compiled
+                ) = self._wrapped_policy_uncompiled
         return policy
 
     @property
