@@ -23,12 +23,16 @@ Single node data collectors
 Trajectory batching
 -------------------
 
-Pass ``num_trajectories_per_batch=N`` to any collector to receive batches of
-exactly *N* complete, zero-padded trajectories instead of fixed-frame batches.
+Pass ``trajs_per_batch=N`` to any collector to receive batches of exactly *N*
+complete, zero-padded trajectories instead of fixed-frame batches.
 Trajectories that span multiple internal collection steps are automatically
 reassembled. Each yielded :class:`~tensordict.TensorDict` has shape
 ``(N, max_traj_len)`` and includes a ``("collector", "mask")`` boolean tensor
 marking valid time steps.
+
+``frames_per_batch`` still controls how frequently the environment is polled
+internally; it does **not** determine the output batch size when
+``trajs_per_batch`` is set.
 
 .. code-block:: python
 
@@ -38,9 +42,9 @@ marking valid time steps.
     collector = Collector(
         GymEnv("CartPole-v1"),
         policy=my_policy,
-        frames_per_batch=200, # ignored by collector
+        frames_per_batch=200,  # controls internal polling frequency
         total_frames=10000,
-        num_trajectories_per_batch=4,
+        trajs_per_batch=4,
     )
 
     for batch in collector:

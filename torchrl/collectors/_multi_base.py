@@ -377,11 +377,11 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         weight_recv_schemes: dict[str, WeightSyncScheme] | None = None,
         track_policy_version: bool = False,
         worker_idx: int | None = None,
-        num_trajectories_per_batch: int | None = None,
+        trajs_per_batch: int | None = None,
     ):
         self.closed = True
         self.worker_idx = worker_idx
-        self.num_trajectories_per_batch = num_trajectories_per_batch
+        self.trajs_per_batch = trajs_per_batch
 
         # Set up workers and environment functions
         create_env_fn, total_frames_per_batch = self._setup_workers_and_env_fns(

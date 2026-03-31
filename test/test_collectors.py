@@ -5302,8 +5302,8 @@ class TestCollectorProfiling:
         assert expected_trace.exists(), f"Trace file not found at {expected_trace}"
 
 
-class TestNumTrajectoriesPerBatch:
-    """Tests for the ``num_trajectories_per_batch`` kwarg on collectors."""
+class TestTrajsPerBatch:
+    """Tests for the ``trajs_per_batch`` kwarg on collectors."""
 
     # ------------------------------------------------------------------
     # Helpers
@@ -5406,40 +5406,16 @@ class TestNumTrajectoriesPerBatch:
     # Integration tests with real collectors
     # ------------------------------------------------------------------
 
-    def test_with_collector(self):
-        """Collector with num_trajectories_per_batch yields (N, T) batches."""
-        max_steps = 4
-        env = TransformedEnv(CountingEnv(max_steps=max_steps), StepCounter(max_steps))
-        try:
-            collector = Collector(
-                env,
-                RandomPolicy(env.action_spec),
-                frames_per_batch=max_steps * 3,
-                total_frames=max_steps * 9,
-                num_trajectories_per_batch=2,
-            )
-            try:
-                batches = list(collector)
-                assert len(batches) > 0
-                for b in batches:
-                    assert b.shape[0] == 2
-                    mask = b[("collector", "mask")]
-                    assert mask.shape == b.shape
-                    assert mask.any(dim=-1).all()
-            finally:
-                collector.shutdown()
-        finally:
-            env.close()
-
     @pytest.mark.parametrize(
-        "collector_cls",
+        "collector_cls,multi",
         [
-            functools.partial(MultiSyncCollector, cat_results="stack"),
-            MultiAsyncCollector,
+            (Collector, False),
+            (functools.partial(MultiSyncCollector, cat_results="stack"), True),
+            (MultiAsyncCollector, True),
         ],
     )
-    def test_with_multi_collector(self, collector_cls):
-        """MultiSyncCollector and MultiAsyncCollector honour num_trajectories_per_batch."""
+    def test_trajs_per_batch_integration(self, collector_cls, multi):
+        """trajs_per_batch yields (N, T) batches with valid done states for all collectors."""
         max_steps = 4
         env_fn = lambda: TransformedEnv(  # noqa: E731
             CountingEnv(max_steps=max_steps), StepCounter(max_steps)
@@ -5448,14 +5424,26 @@ class TestNumTrajectoriesPerBatch:
         try:
             policy = RandomPolicy(probe_env.action_spec)
         finally:
-            probe_env.close()
-        collector = collector_cls(
-            [env_fn, env_fn],
-            policy,
-            frames_per_batch=max_steps * 4,
-            total_frames=max_steps * 16,
-            num_trajectories_per_batch=2,
-        )
+            probe_env.close(raise_if_closed=False)
+
+        if multi:
+            collector = collector_cls(
+                [env_fn, env_fn],
+                policy,
+                frames_per_batch=max_steps * 4,
+                total_frames=max_steps * 16,
+                trajs_per_batch=2,
+            )
+        else:
+            env = env_fn()
+            collector = collector_cls(
+                env,
+                policy,
+                frames_per_batch=max_steps * 3,
+                total_frames=max_steps * 9,
+                trajs_per_batch=2,
+            )
+
         try:
             batches = list(collector)
             assert len(batches) > 0
@@ -5463,57 +5451,17 @@ class TestNumTrajectoriesPerBatch:
                 assert b.shape[0] == 2
                 mask = b[("collector", "mask")]
                 assert mask.shape == b.shape
+                # each trajectory must have at least one valid step
                 assert mask.any(dim=-1).all()
+                # the last valid step of each trajectory must be done
+                for i in range(b.shape[0]):
+                    last_valid = mask[i].sum().item() - 1
+                    done = b[i, last_valid][("next", "done")]
+                    assert done.any(), f"traj {i} last valid step is not done"
         finally:
             collector.shutdown()
-
-    def test_with_collector_num_trajectories_one(self):
-        """num_trajectories_per_batch=1 yields one trajectory at a time."""
-        max_steps = 3
-        env = TransformedEnv(CountingEnv(max_steps=max_steps), StepCounter(max_steps))
-        try:
-            collector = Collector(
-                env,
-                RandomPolicy(env.action_spec),
-                frames_per_batch=max_steps * 2,
-                total_frames=max_steps * 6,
-                num_trajectories_per_batch=1,
-            )
-            try:
-                for b in collector:
-                    assert b.shape[0] == 1
-                    mask = b[("collector", "mask")]
-                    assert mask[:, 0].all()
-            finally:
-                collector.shutdown()
-        finally:
-            env.close()
-
-    def test_trajectories_span_collector_batches(self):
-        """Trajectories split across collector batches are correctly reassembled."""
-        max_steps = 10
-        env = TransformedEnv(CountingEnv(max_steps=max_steps), StepCounter(max_steps))
-        try:
-            collector = Collector(
-                env,
-                RandomPolicy(env.action_spec),
-                frames_per_batch=4,
-                total_frames=max_steps * 3,
-                num_trajectories_per_batch=1,
-            )
-            try:
-                batches = list(collector)
-                assert len(batches) > 0
-                for b in batches:
-                    mask = b[("collector", "mask")]
-                    for row in mask:
-                        n_valid = row.sum().item()
-                        assert row[:n_valid].all()
-                        assert not row[n_valid:].any()
-            finally:
-                collector.shutdown()
-        finally:
-            env.close()
+            if not multi:
+                env.close(raise_if_closed=False)
 
 
 if __name__ == "__main__":

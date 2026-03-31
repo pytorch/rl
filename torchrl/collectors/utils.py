@@ -428,7 +428,7 @@ def _traj_ingest(
     traj_ids = flat.get(("collector", "traj_ids"), None)
     if traj_ids is None:
         raise KeyError(
-            "num_trajectories_per_batch requires ('collector', 'traj_ids') in every "
+            "trajs_per_batch requires ('collector', 'traj_ids') in every "
             "collector batch.  Make sure the collector is initialized with "
             "split_trajs=False (the default)."
         )
