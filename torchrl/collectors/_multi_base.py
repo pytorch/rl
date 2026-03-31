@@ -334,13 +334,14 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
     def __init__(
         self,
         create_env_fn: Sequence[Callable[[], EnvBase]],
-        policy: None
-        | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
+        policy: None | (
+            TensorDictModule | Callable[[TensorDictBase], TensorDictBase]
+        ) = None,
         *,
         num_workers: int | None = None,
-        policy_factory: Callable[[], Callable]
-        | list[Callable[[], Callable]]
-        | None = None,
+        policy_factory: (
+            Callable[[], Callable] | list[Callable[[], Callable]] | None
+        ) = None,
         frames_per_batch: int | Sequence[int],
         total_frames: int | None = -1,
         device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
@@ -370,9 +371,9 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
         no_cuda_sync: bool = False,
-        weight_updater: WeightUpdaterBase
-        | Callable[[], WeightUpdaterBase]
-        | None = None,
+        weight_updater: (
+            WeightUpdaterBase | Callable[[], WeightUpdaterBase] | None
+        ) = None,
         weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
         weight_recv_schemes: dict[str, WeightSyncScheme] | None = None,
         track_policy_version: bool = False,
@@ -1145,17 +1146,19 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "extend_buffer": self.extend_buffer,
                     "traj_pool": self._traj_pool,
                     "trust_policy": self.trust_policy,
-                    "compile_policy": self.compiled_policy_kwargs
-                    if self.compiled_policy
-                    else False,
-                    "cudagraph_policy": self.cudagraphed_policy_kwargs
-                    if self.cudagraphed_policy
-                    else False,
+                    "compile_policy": (
+                        self.compiled_policy_kwargs if self.compiled_policy else False
+                    ),
+                    "cudagraph_policy": (
+                        self.cudagraphed_policy_kwargs
+                        if self.cudagraphed_policy
+                        else False
+                    ),
                     "no_cuda_sync": self.no_cuda_sync,
                     "collector_class": self.collector_class,
-                    "postproc": self.postprocs
-                    if self.replay_buffer is not None
-                    else None,
+                    "postproc": (
+                        self.postprocs if self.replay_buffer is not None else None
+                    ),
                     "weight_sync_schemes": self._weight_sync_schemes,
                     "worker_idx": i,  # Worker index for queue-based weight distribution
                     "init_random_frames": self.init_random_frames,

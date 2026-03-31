@@ -515,8 +515,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         self,
         policy_or_weights: TensorDictBase | TensorDictModuleBase | nn.Module | dict,
         /,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @overload
     def update_policy_weights_(
@@ -526,8 +525,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         *,
         worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
         model_id: str | None = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @overload
     def update_policy_weights_(
@@ -536,8 +534,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         weights: TensorDictBase | dict,
         model_id: str | None = None,
         worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @overload
     def update_policy_weights_(
@@ -546,8 +543,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         policy: TensorDictModuleBase | nn.Module,
         model_id: str | None = None,
         worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @overload
     def update_policy_weights_(
@@ -557,16 +553,13 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             str, TensorDictBase | TensorDictModuleBase | nn.Module | dict
         ],
         worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def update_policy_weights_(
         self,
-        policy_or_weights: TensorDictBase
-        | TensorDictModuleBase
-        | nn.Module
-        | dict
-        | None = None,
+        policy_or_weights: (
+            TensorDictBase | TensorDictModuleBase | nn.Module | dict | None
+        ) = None,
         *,
         weights: TensorDictBase | dict | None = None,
         policy: TensorDictModuleBase | nn.Module | None = None,
@@ -784,40 +777,34 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
 
     # Overloads for receive_weights to support multiple calling conventions
     @overload
-    def receive_weights(self) -> None:
-        ...
+    def receive_weights(self) -> None: ...
 
     @overload
     def receive_weights(
         self,
         policy_or_weights: TensorDictBase | TensorDictModuleBase | nn.Module | dict,
         /,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @overload
     def receive_weights(
         self,
         *,
         weights: TensorDictBase | dict,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @overload
     def receive_weights(
         self,
         *,
         policy: TensorDictModuleBase | nn.Module,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def receive_weights(
         self,
-        policy_or_weights: TensorDictBase
-        | TensorDictModuleBase
-        | nn.Module
-        | dict
-        | None = None,
+        policy_or_weights: (
+            TensorDictBase | TensorDictModuleBase | nn.Module | dict | None
+        ) = None,
         *,
         weights: TensorDictBase | dict | None = None,
         policy: TensorDictModuleBase | nn.Module | None = None,

@@ -270,6 +270,7 @@ class TestMakePolicyFactory:
 
     def test_make_policy_factory_with_sequence_uses_worker_idx(self):
         """Regression test: _make_policy_factory should use worker_idx to index into a Sequence."""
+
         # Create factories that return policies with different bias values
         def make_factory(bias_value):
             def factory():
@@ -1796,9 +1797,11 @@ if __name__ == "__main__":
             # check they don't match
             for worker in range(3):
                 for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
-                    with pytest.raises(
-                        AssertionError
-                    ) if torch.cuda.is_available() else nullcontext():
+                    with (
+                        pytest.raises(AssertionError)
+                        if torch.cuda.is_available()
+                        else nullcontext()
+                    ):
                         torch.testing.assert_close(
                             state_dict[f"worker{worker}"]["policy_state_dict"][k].cpu(),
                             policy_state_dict[k].cpu(),
@@ -2340,8 +2343,7 @@ class TestCollectorDevices:
                     device=None,
                 )
 
-        def _set_seed(self, seed: int | None = None) -> None:
-            ...
+        def _set_seed(self, seed: int | None = None) -> None: ...
 
     class EnvWithDevice(EnvBase):
         def __init__(self, default_device):
@@ -2397,8 +2399,7 @@ class TestCollectorDevices:
                     device=self.default_device,
                 )
 
-        def _set_seed(self, seed: int | None = None) -> None:
-            ...
+        def _set_seed(self, seed: int | None = None) -> None: ...
 
     class DeviceLessPolicy(TensorDictModuleBase):
         in_keys = ["observation"]
@@ -2573,8 +2574,7 @@ class TestCollectorDevices:
         def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
             return self.full_done_specs.zeros().update(self.observation_spec.zeros())
 
-        def _set_seed(self, seed: int | None) -> None:
-            ...
+        def _set_seed(self, seed: int | None) -> None: ...
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
@@ -2587,9 +2587,17 @@ class TestCollectorDevices:
         should_raise = should_raise & (
             (env_device == "cpu") or (storing_device == "cpu")
         )
-        with patch("torch.cuda.synchronize") as mock_synchronize, pytest.raises(
-            AssertionError, match="Expected 'synchronize' to not have been called."
-        ) if should_raise else contextlib.nullcontext():
+        with (
+            patch("torch.cuda.synchronize") as mock_synchronize,
+            (
+                pytest.raises(
+                    AssertionError,
+                    match="Expected 'synchronize' to not have been called.",
+                )
+                if should_raise
+                else contextlib.nullcontext()
+            ),
+        ):
             collector = Collector(
                 create_env_fn=functools.partial(
                     self.GoesThroughEnv, n_obs=1000, device=None
@@ -3443,8 +3451,7 @@ class TestUpdateParams:
                 {"state": self.state.clone()}, self.batch_size, device=self.device
             )
 
-        def _set_seed(self, seed: int | None) -> None:
-            ...
+        def _set_seed(self, seed: int | None) -> None: ...
 
     class Policy(TensorDictModuleBase):
         def __init__(self):
@@ -4144,9 +4151,9 @@ class TestDynamicEnvs:
 class TestCollectorsNonTensor:
     class AddNontTensorData(Transform):
         def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
-            next_tensordict[
-                "nt"
-            ] = f"a string! - {next_tensordict.get('step_count').item()}"
+            next_tensordict["nt"] = (
+                f"a string! - {next_tensordict.get('step_count').item()}"
+            )
             return next_tensordict
 
         def _reset(

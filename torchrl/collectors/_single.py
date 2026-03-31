@@ -414,8 +414,9 @@ class Collector(BaseCollector):
         create_env_fn: (
             EnvBase | EnvCreator | Sequence[Callable[[], EnvBase]]  # noqa: F821
         ),  # noqa: F821
-        policy: None
-        | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
+        policy: None | (
+            TensorDictModule | Callable[[TensorDictBase], TensorDictBase]
+        ) = None,
         *,
         policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
@@ -443,9 +444,9 @@ class Collector(BaseCollector):
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
         no_cuda_sync: bool = False,
-        weight_updater: WeightUpdaterBase
-        | Callable[[], WeightUpdaterBase]
-        | None = None,
+        weight_updater: (
+            WeightUpdaterBase | Callable[[], WeightUpdaterBase] | None
+        ) = None,
         weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
         weight_recv_schemes: dict[str, WeightSyncScheme] | None = None,
         track_policy_version: bool = False,
@@ -846,13 +847,13 @@ class Collector(BaseCollector):
         """Returns the compiled policy, compiling it lazily if needed."""
         if (policy := self._wrapped_policy_maybe_compiled) is None:
             if self.compiled_policy or self.cudagraphed_policy:
-                policy = (
-                    self._wrapped_policy_maybe_compiled
-                ) = self._compile_wrapped_policy(self._wrapped_policy_uncompiled)
+                policy = self._wrapped_policy_maybe_compiled = (
+                    self._compile_wrapped_policy(self._wrapped_policy_uncompiled)
+                )
             else:
-                policy = (
-                    self._wrapped_policy_maybe_compiled
-                ) = self._wrapped_policy_uncompiled
+                policy = self._wrapped_policy_maybe_compiled = (
+                    self._wrapped_policy_uncompiled
+                )
         return policy
 
     @property
@@ -1100,9 +1101,11 @@ class Collector(BaseCollector):
         elif (
             not make_rollout
             and hasattr(
-                self._wrapped_policy_uncompiled
-                if has_meta_params
-                else self._wrapped_policy,
+                (
+                    self._wrapped_policy_uncompiled
+                    if has_meta_params
+                    else self._wrapped_policy
+                ),
                 "out_keys",
             )
             and (
@@ -1631,11 +1634,11 @@ class Collector(BaseCollector):
                     ):
                         # TODO: This may break with exclusive / ragged lazy stacks
                         self._carrier.apply(
-                            lambda name, val: val.to(
-                                device=self.policy_device, non_blocking=True
-                            )
-                            if name in self._policy_output_keys
-                            else val,
+                            lambda name, val: (
+                                val.to(device=self.policy_device, non_blocking=True)
+                                if name in self._policy_output_keys
+                                else val
+                            ),
                             out=self._carrier,
                             named=True,
                             nested_keys=True,
