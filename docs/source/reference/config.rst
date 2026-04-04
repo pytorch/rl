@@ -325,6 +325,7 @@ Environment Library Configurations
     MeltingpotEnvConfig
     MOGymEnvConfig
     MultiThreadedEnvConfig
+    OpenEnvEnvConfig
     OpenMLEnvConfig
     OpenSpielEnvConfig
     PettingZooEnvConfig
