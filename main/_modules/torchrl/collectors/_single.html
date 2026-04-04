@@ -684,17 +684,19 @@
         <span class="n">compile_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">cudagraph_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">no_cuda_sync</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="n">weight_updater</span><span class="p">:</span> <span class="n">WeightUpdaterBase</span>
-        <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">WeightUpdaterBase</span><span class="p">]</span>
-        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weight_updater</span><span class="p">:</span> <span class="p">(</span>
+            <span class="n">WeightUpdaterBase</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">WeightUpdaterBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+        <span class="p">)</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">weight_sync_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightSyncScheme</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">weight_recv_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightSyncScheme</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">track_policy_version</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">trajs_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">worker_idx</span> <span class="o">=</span> <span class="n">worker_idx</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">trajs_per_batch</span> <span class="o">=</span> <span class="n">trajs_per_batch</span>
 
         <span class="c1"># Note: weight_sync_schemes can be used to send weights to components</span>
         <span class="c1"># within the environment (e.g., RayModuleTransform), not just sub-collectors</span>
@@ -1339,9 +1341,11 @@
         <span class="k">elif</span> <span class="p">(</span>
             <span class="ow">not</span> <span class="n">make_rollout</span>
             <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy_uncompiled</span>
-                <span class="k">if</span> <span class="n">has_meta_params</span>
-                <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="p">,</span>
+                <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy_uncompiled</span>
+                    <span class="k">if</span> <span class="n">has_meta_params</span>
+                    <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span>
+                <span class="p">),</span>
                 <span class="s2">&quot;out_keys&quot;</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="ow">and</span> <span class="p">(</span>
@@ -1887,11 +1891,11 @@
                     <span class="p">):</span>
                         <span class="c1"># TODO: This may break with exclusive / ragged lazy stacks</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
-                            <span class="k">lambda</span> <span class="n">name</span><span class="p">,</span> <span class="n">val</span><span class="p">:</span> <span class="n">val</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
-                                <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span>
-                            <span class="p">)</span>
-                            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_policy_output_keys</span>
-                            <span class="k">else</span> <span class="n">val</span><span class="p">,</span>
+                            <span class="k">lambda</span> <span class="n">name</span><span class="p">,</span> <span class="n">val</span><span class="p">:</span> <span class="p">(</span>
+                                <span class="n">val</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                                <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_policy_output_keys</span>
+                                <span class="k">else</span> <span class="n">val</span>
+                            <span class="p">),</span>
                             <span class="n">out</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="p">,</span>
                             <span class="n">named</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
                             <span class="n">nested_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
@@ -2123,6 +2127,11 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">closed</span><span class="p">:</span>
+                <span class="c1"># Stop the background thread if one is running (from .start())</span>
+                <span class="c1"># before tearing down the env it may still be using.</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_stop</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_thread&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">True</span>
                 <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span><span class="p">:</span>

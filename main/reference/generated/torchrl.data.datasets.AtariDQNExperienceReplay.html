@@ -1006,6 +1006,41 @@ A tuple containing this tensordict and info if return_info flag is set to True.<
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.datasets.AtariDQNExperienceReplay.set_">
+<span class="sig-name descname"><span class="pre">set_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.datasets.AtariDQNExperienceReplay.set_" title="Link to this definition">¶</a></dt>
+<dd><p>Sets the value of a key across the entire replay buffer in-place.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>key</strong> (<em>NestedKey</em>) – the key to set.</p></li>
+<li><p><strong>value</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.11)"><em>torch.Tensor</em></a>) – the value to write.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>self</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.datasets.AtariDQNExperienceReplay.set_at_">
+<span class="sig-name descname"><span class="pre">set_at_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.datasets.AtariDQNExperienceReplay.set_at_" title="Link to this definition">¶</a></dt>
+<dd><p>Sets the value of a key at specified indices in the replay buffer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>key</strong> (<em>NestedKey</em>) – the key to set.</p></li>
+<li><p><strong>value</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.11)"><em>torch.Tensor</em></a>) – the value to write.</p></li>
+<li><p><strong>index</strong> – the indices where to write the value.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>self</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.datasets.AtariDQNExperienceReplay.set_sampler">
 <span class="sig-name descname"><span class="pre">set_sampler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sampler</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.replay_buffers.Sampler.html#torchrl.data.replay_buffers.Sampler" title="torchrl.data.replay_buffers.samplers.Sampler"><span class="pre">Sampler</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.datasets.AtariDQNExperienceReplay.set_sampler" title="Link to this definition">¶</a></dt>
 <dd><p>Sets a new sampler in the replay buffer and returns the previous sampler.</p>
@@ -1044,6 +1079,26 @@ value. Otherwise it is reset to a default value.</p></li>
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">transform</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.transforms.Transform"><span class="pre">Transform</span></a></em><a class="headerlink" href="#torchrl.data.datasets.AtariDQNExperienceReplay.transform" title="Link to this definition">¶</a></dt>
 <dd><p>The transform of the replay buffer.</p>
 <p>The transform must be an instance of <a class="reference internal" href="torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.Transform"><code class="xref py py-class docutils literal notranslate"><span class="pre">Transform</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.datasets.AtariDQNExperienceReplay.update_">
+<span class="sig-name descname"><span class="pre">update_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_dict_or_td</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clone</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keys_to_update</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.datasets.AtariDQNExperienceReplay.update_" title="Link to this definition">¶</a></dt>
+<dd><p>Updates the replay buffer in-place with the given dict or TensorDict.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_dict_or_td</strong> (<em>dict</em><em> or </em><em>TensorDictBase</em>) – the data to update with.</p></li>
+<li><p><strong>clone</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to clone the values before writing.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>keys_to_update</strong> (<em>sequence</em><em> of </em><em>NestedKey</em><em>, </em><em>optional</em>) – if provided, only
+these keys will be updated.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>self</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py property">
@@ -1124,11 +1179,14 @@ value. Otherwise it is reset to a default value.</p></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.sample"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.sample()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.sampler"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.sampler</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.save"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.save()</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.set_"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.set_()</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.set_at_"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.set_at_()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.set_sampler"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.set_sampler()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.set_storage"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.set_storage()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.set_writer"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.set_writer()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.storage"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.storage</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.transform"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.transform</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.update_"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.update_()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.write_count"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.write_count</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.writer"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.writer</span></code></a></li>
 </ul>

@@ -579,9 +579,9 @@
         <span class="o">|</span> <span class="p">(</span><span class="n">TensorDictModule</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">])</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">num_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Callable</span><span class="p">]</span>
-        <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[],</span> <span class="n">Callable</span><span class="p">]]</span>
-        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">policy_factory</span><span class="p">:</span> <span class="p">(</span>
+            <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Callable</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[],</span> <span class="n">Callable</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span>
+        <span class="p">)</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
         <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">DEVICE_TYPING</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -611,16 +611,18 @@
         <span class="n">compile_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">cudagraph_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">no_cuda_sync</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="n">weight_updater</span><span class="p">:</span> <span class="n">WeightUpdaterBase</span>
-        <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">WeightUpdaterBase</span><span class="p">]</span>
-        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weight_updater</span><span class="p">:</span> <span class="p">(</span>
+            <span class="n">WeightUpdaterBase</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">WeightUpdaterBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+        <span class="p">)</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">weight_sync_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightSyncScheme</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">weight_recv_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightSyncScheme</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">track_policy_version</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">trajs_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">worker_idx</span> <span class="o">=</span> <span class="n">worker_idx</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">trajs_per_batch</span> <span class="o">=</span> <span class="n">trajs_per_batch</span>
 
         <span class="c1"># Set up workers and environment functions</span>
         <span class="n">create_env_fn</span><span class="p">,</span> <span class="n">total_frames_per_batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_setup_workers_and_env_fns</span><span class="p">(</span>
@@ -1384,17 +1386,19 @@
                     <span class="s2">&quot;extend_buffer&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">extend_buffer</span><span class="p">,</span>
                     <span class="s2">&quot;traj_pool&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_traj_pool</span><span class="p">,</span>
                     <span class="s2">&quot;trust_policy&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">trust_policy</span><span class="p">,</span>
-                    <span class="s2">&quot;compile_policy&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">compiled_policy_kwargs</span>
-                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">compiled_policy</span>
-                    <span class="k">else</span> <span class="kc">False</span><span class="p">,</span>
-                    <span class="s2">&quot;cudagraph_policy&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">cudagraphed_policy_kwargs</span>
-                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cudagraphed_policy</span>
-                    <span class="k">else</span> <span class="kc">False</span><span class="p">,</span>
+                    <span class="s2">&quot;compile_policy&quot;</span><span class="p">:</span> <span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">compiled_policy_kwargs</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">compiled_policy</span> <span class="k">else</span> <span class="kc">False</span>
+                    <span class="p">),</span>
+                    <span class="s2">&quot;cudagraph_policy&quot;</span><span class="p">:</span> <span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">cudagraphed_policy_kwargs</span>
+                        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cudagraphed_policy</span>
+                        <span class="k">else</span> <span class="kc">False</span>
+                    <span class="p">),</span>
                     <span class="s2">&quot;no_cuda_sync&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">no_cuda_sync</span><span class="p">,</span>
                     <span class="s2">&quot;collector_class&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector_class</span><span class="p">,</span>
-                    <span class="s2">&quot;postproc&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span>
-                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-                    <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+                    <span class="s2">&quot;postproc&quot;</span><span class="p">:</span> <span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+                    <span class="p">),</span>
                     <span class="s2">&quot;weight_sync_schemes&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="p">,</span>
                     <span class="s2">&quot;worker_idx&quot;</span><span class="p">:</span> <span class="n">i</span><span class="p">,</span>  <span class="c1"># Worker index for queue-based weight distribution</span>
                     <span class="s2">&quot;init_random_frames&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span><span class="p">,</span>

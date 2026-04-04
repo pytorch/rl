@@ -4240,6 +4240,18 @@
         <span class="k">return</span> <span class="bp">self</span></div>
 
 
+<div class="viewcode-block" id="MultiOneHot.to_numpy">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.data.MultiOneHot.html#torchrl.data.MultiOneHot.to_numpy">[docs]</a>
+    <span class="k">def</span> <span class="nf">to_numpy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">safe</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">safe</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">safe</span> <span class="o">=</span> <span class="n">_CHECK_SPEC_ENCODE</span>
+        <span class="k">if</span> <span class="n">safe</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">assert_is_in</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_categorical</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">safe</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span></div>
+
+
 <div class="viewcode-block" id="MultiOneHot.expand">
 <a class="viewcode-back" href="../../../reference/generated/torchrl.data.MultiOneHot.html#torchrl.data.MultiOneHot.expand">[docs]</a>
     <span class="k">def</span> <span class="nf">expand</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">shape</span><span class="p">):</span>

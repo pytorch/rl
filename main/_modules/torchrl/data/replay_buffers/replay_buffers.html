@@ -945,6 +945,72 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
         <span class="k">return</span>
 
+<div class="viewcode-block" id="ReplayBuffer.set_at_">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.set_at_">[docs]</a>
+    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span> <span class="nf">set_at_</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sets the value of a key at specified indices in the replay buffer.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            key (NestedKey): the key to set.</span>
+<span class="sd">            value (torch.Tensor): the value to write.</span>
+<span class="sd">            index: the indices where to write the value.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            self</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="n">_to_numpy</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_replay_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[:]</span><span class="o">.</span><span class="n">set_at_</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+
+<div class="viewcode-block" id="ReplayBuffer.set_">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.set_">[docs]</a>
+    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span> <span class="nf">set_</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sets the value of a key across the entire replay buffer in-place.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            key (NestedKey): the key to set.</span>
+<span class="sd">            value (torch.Tensor): the value to write.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            self</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_replay_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[:]</span><span class="o">.</span><span class="n">set_</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+
+<div class="viewcode-block" id="ReplayBuffer.update_">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.update_">[docs]</a>
+    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span> <span class="nf">update_</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_dict_or_td</span><span class="p">,</span> <span class="n">clone</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">keys_to_update</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Updates the replay buffer in-place with the given dict or TensorDict.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            input_dict_or_td (dict or TensorDictBase): the data to update with.</span>
+<span class="sd">            clone (bool, optional): whether to clone the values before writing.</span>
+<span class="sd">                Defaults to ``False``.</span>
+<span class="sd">            keys_to_update (sequence of NestedKey, optional): if provided, only</span>
+<span class="sd">                these keys will be updated.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            self</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_replay_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[:]</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span>
+                <span class="n">input_dict_or_td</span><span class="p">,</span>
+                <span class="n">clone</span><span class="o">=</span><span class="n">clone</span><span class="p">,</span>
+                <span class="n">keys_to_update</span><span class="o">=</span><span class="n">keys_to_update</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+
     <span class="nd">@_maybe_delay_init</span>
     <span class="k">def</span> <span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
         <span class="k">return</span> <span class="p">{</span>

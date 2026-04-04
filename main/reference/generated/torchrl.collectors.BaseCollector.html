@@ -253,6 +253,20 @@
 <dt class="sig sig-object py" id="torchrl.collectors.BaseCollector">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.collectors.</span></span><span class="sig-name descname"><span class="pre">BaseCollector</span></span><a class="reference internal" href="../../_modules/torchrl/collectors/_base.html#BaseCollector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.BaseCollector" title="Link to this definition">¶</a></dt>
 <dd><p>Base class for data collectors.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>trajs_per_batch</strong> (<em>int</em><em>, </em><em>optional</em>) – When set, the collector yields batches
+of exactly this many complete, zero-padded trajectories instead of
+fixed-frame batches. Each yielded <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>
+has shape <code class="docutils literal notranslate"><span class="pre">(trajs_per_batch,</span> <span class="pre">max_traj_len)</span></code> and includes a
+<code class="docutils literal notranslate"><span class="pre">(&quot;collector&quot;,</span> <span class="pre">&quot;mask&quot;)</span></code> boolean field marking valid time steps.
+Trajectories that span multiple internal collection steps are
+reassembled automatically. <code class="docutils literal notranslate"><span class="pre">frames_per_batch</span></code> still controls
+how often the environment is polled internally, but the output
+batch size is determined by <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code>.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (fixed-frame batches).</p>
+</dd>
+</dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.BaseCollector.async_shutdown">
 <span class="sig-name descname"><span class="pre">async_shutdown</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">close_env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/_base.html#BaseCollector.async_shutdown"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.BaseCollector.async_shutdown" title="Link to this definition">¶</a></dt>

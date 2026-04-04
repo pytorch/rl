@@ -252,6 +252,7 @@
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">random</span>
 <span class="kn">import</span> <span class="nn">time</span>
@@ -543,7 +544,10 @@
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">get_tokenizer</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the tokenizer from the engine.&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">get_tokenizer</span><span class="p">()</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">get_tokenizer</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isawaitable</span><span class="p">(</span><span class="n">result</span><span class="p">):</span>
+            <span class="k">return</span> <span class="k">await</span> <span class="n">result</span>
+        <span class="k">return</span> <span class="n">result</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">collective_rpc_v1</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -819,67 +823,40 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_service_id</span> <span class="o">=</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">[</span>
             <span class="p">:</span><span class="mi">8</span>
         <span class="p">]</span>  <span class="c1"># Unique suffix to avoid name collisions</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_placement_group</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_load_balancer</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="k">def</span> <span class="nf">_launch</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Launch all actor replicas.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Launch all actor replicas.</span>
+
+<span class="sd">        Each replica is a Ray actor that claims its GPUs directly via</span>
+<span class="sd">        ``num_gpus``.  Ray assigns distinct physical GPUs and sets</span>
+<span class="sd">        ``CUDA_VISIBLE_DEVICES`` so vLLM&#39;s subprocess-based engine core</span>
+<span class="sd">        inherits the correct device visibility automatically.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_launched</span><span class="p">:</span>
             <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;AsyncVLLMEngineService already launched&quot;</span><span class="p">)</span>
             <span class="k">return</span>
 
-        <span class="c1"># Local imports to avoid global Ray dependency</span>
         <span class="n">ray</span> <span class="o">=</span> <span class="n">_get_ray</span><span class="p">()</span>
-        <span class="kn">from</span> <span class="nn">ray.util.placement_group</span> <span class="kn">import</span> <span class="n">placement_group</span>
-        <span class="kn">from</span> <span class="nn">ray.util.scheduling_strategies</span> <span class="kn">import</span> <span class="n">PlacementGroupSchedulingStrategy</span>
 
+        <span class="n">num_gpus</span> <span class="o">=</span> <span class="n">_gpus_per_replica</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">engine_args</span><span class="p">)</span>
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Launching </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">num_replicas</span><span class="si">}</span><span class="s2"> async vLLM engine actors...&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;Launching </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">num_replicas</span><span class="si">}</span><span class="s2"> async vLLM engine actors &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">num_gpus</span><span class="si">}</span><span class="s2"> GPU(s) each)...&quot;</span>
         <span class="p">)</span>
 
-        <span class="c1"># Create placement groups - one per replica to avoid conflicts</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_placement_groups</span> <span class="o">=</span> <span class="p">[]</span>
-
-        <span class="c1"># Create actor replicas sequentially to avoid race conditions</span>
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_replicas</span><span class="p">):</span>
             <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Creating async actor replica </span><span class="si">{</span><span class="n">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">num_replicas</span><span class="si">}</span><span class="s2"> ...&quot;</span>
             <span class="p">)</span>
 
-            <span class="c1"># Create individual placement group for this replica</span>
-            <span class="n">num_gpus</span> <span class="o">=</span> <span class="n">_gpus_per_replica</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">engine_args</span><span class="p">)</span>
-            <span class="n">bundles</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;GPU&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">,</span> <span class="s2">&quot;CPU&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">}</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_gpus</span><span class="p">)]</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Creating placement group for replica </span><span class="si">{</span><span class="n">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> with </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">bundles</span><span class="p">)</span><span class="si">}</span><span class="s2"> bundles&quot;</span>
-            <span class="p">)</span>
-
-            <span class="n">placement_group_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;vllm-replica-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_service_id</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="n">pg</span> <span class="o">=</span> <span class="n">placement_group</span><span class="p">(</span><span class="n">bundles</span><span class="p">,</span> <span class="n">strategy</span><span class="o">=</span><span class="s2">&quot;PACK&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">placement_group_name</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_placement_groups</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pg</span><span class="p">)</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Placement group </span><span class="si">{</span><span class="n">placement_group_name</span><span class="si">}</span><span class="s2"> created: </span><span class="si">{</span><span class="n">pg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-            <span class="c1"># Wait for placement group to be ready</span>
-            <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">pg</span><span class="o">.</span><span class="n">ready</span><span class="p">(),</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">180</span><span class="p">)</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Placement group </span><span class="si">{</span><span class="n">placement_group_name</span><span class="si">}</span><span class="s2"> ready&quot;</span><span class="p">)</span>
-
-            <span class="c1"># Calculate bundle indices for tensor parallelism</span>
-            <span class="n">bundle_indices</span> <span class="o">=</span> <span class="kc">None</span>
-            <span class="k">if</span> <span class="n">num_gpus</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-                <span class="n">bundle_indices</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">num_gpus</span><span class="p">))</span>
-            <span class="n">bundle_index</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># Always use first bundle since each replica has its own placement group</span>
-
-            <span class="n">scheduling_strategy</span> <span class="o">=</span> <span class="n">PlacementGroupSchedulingStrategy</span><span class="p">(</span>
-                <span class="n">placement_group</span><span class="o">=</span><span class="n">pg</span><span class="p">,</span>
-                <span class="n">placement_group_capture_child_tasks</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                <span class="n">placement_group_bundle_index</span><span class="o">=</span><span class="n">bundle_index</span><span class="p">,</span>
-            <span class="p">)</span>
+            <span class="n">bundle_indices</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">num_gpus</span><span class="p">))</span> <span class="k">if</span> <span class="n">num_gpus</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="kc">None</span>
 
             <span class="n">actor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_class</span><span class="o">.</span><span class="n">options</span><span class="p">(</span>
                 <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;async-vllm-replica-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_service_id</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
                 <span class="n">namespace</span><span class="o">=</span><span class="s2">&quot;torchrl_vllm&quot;</span><span class="p">,</span>
-                <span class="n">scheduling_strategy</span><span class="o">=</span><span class="n">scheduling_strategy</span><span class="p">,</span>
-                <span class="n">num_gpus</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-                <span class="n">num_cpus</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="n">num_gpus</span><span class="o">=</span><span class="n">num_gpus</span><span class="p">,</span>
+                <span class="n">num_cpus</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
             <span class="p">)</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
                 <span class="n">engine_args</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">engine_args</span><span class="p">,</span>
                 <span class="n">bundle_indices</span><span class="o">=</span><span class="n">bundle_indices</span><span class="p">,</span>
@@ -888,23 +865,17 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">actors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">actor</span><span class="p">)</span>
 
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Waiting for actors to be ready&quot;</span><span class="p">)</span>
-        <span class="c1"># Wait for this actor to be ready before creating the next one</span>
         <span class="n">ready_futures</span> <span class="o">=</span> <span class="p">[</span><span class="n">actor</span><span class="o">.</span><span class="n">ready</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span> <span class="k">for</span> <span class="n">actor</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">actors</span><span class="p">]</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="n">ready_futures</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">TIMEOUT_SECONDS</span>
-            <span class="p">)</span>  <span class="c1"># 5 minute timeout for engine initialization</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;✅ Actors are ready&quot;</span><span class="p">)</span>
+            <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">ready_futures</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">TIMEOUT_SECONDS</span><span class="p">)</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;All actors are ready&quot;</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
             <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;❌ Failed to initialize actors within </span><span class="si">{</span><span class="n">TIMEOUT_SECONDS</span><span class="si">}</span><span class="s2"> seconds: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">. You can increase the timeout by setting the TORCHRL_VLLM_TIMEOUT_SECONDS environment variable.&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Failed to initialize actors within </span><span class="si">{</span><span class="n">TIMEOUT_SECONDS</span><span class="si">}</span><span class="s2"> seconds: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="s2">&quot;You can increase the timeout by setting the &quot;</span>
+                <span class="s2">&quot;TORCHRL_VLLM_TIMEOUT_SECONDS environment variable.&quot;</span>
             <span class="p">)</span>
             <span class="k">raise</span>
-
-        <span class="c1"># Store the first placement group for backward compatibility</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_placement_group</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_placement_groups</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_placement_groups</span> <span class="k">else</span> <span class="kc">None</span>
-        <span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_launched</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
@@ -1315,9 +1286,7 @@
         <span class="p">)</span>
 
         <span class="n">ray</span> <span class="o">=</span> <span class="n">_get_ray</span><span class="p">()</span>
-        <span class="kn">from</span> <span class="nn">ray.util.placement_group</span> <span class="kn">import</span> <span class="n">remove_placement_group</span>
 
-        <span class="c1"># Kill all actors</span>
         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">actor</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actors</span><span class="p">):</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">ray</span><span class="o">.</span><span class="n">kill</span><span class="p">(</span><span class="n">actor</span><span class="p">)</span>
@@ -1325,27 +1294,7 @@
             <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
                 <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error shutting down async actor </span><span class="si">{</span><span class="n">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-        <span class="c1"># Clear the actors list</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">actors</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
-
-        <span class="c1"># Remove placement groups if any</span>
-        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_placement_groups&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_placement_groups</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">pg</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_placement_groups</span><span class="p">):</span>
-                <span class="k">try</span><span class="p">:</span>
-                    <span class="n">remove_placement_group</span><span class="p">(</span><span class="n">pg</span><span class="p">)</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Removed placement group </span><span class="si">{</span><span class="n">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_placement_groups</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
-                    <span class="p">)</span>
-                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Error removing placement group </span><span class="si">{</span><span class="n">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
-                    <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_placement_groups</span> <span class="o">=</span> <span class="p">[]</span>
-
-        <span class="c1"># Remove legacy single placement group if any</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_placement_group</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">remove_placement_group</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_placement_group</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_placement_group</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_launched</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;AsyncVLLMEngineService shutdown complete&quot;</span><span class="p">)</span></div>
 
@@ -2313,7 +2262,6 @@
         <span class="n">pipeline_parallel_size</span> <span class="o">=</span> <span class="mi">1</span>
 
     <span class="c1"># Create engine args</span>
-    <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;distributed_executor_backend&quot;</span><span class="p">,</span> <span class="s2">&quot;ray&quot;</span><span class="p">)</span>
     <span class="c1"># Don&#39;t explicitly set enable_prefix_caching to avoid conflicts</span>
     <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;enable_prefix_caching&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
 
