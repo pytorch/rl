@@ -150,6 +150,37 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             reassembled automatically. ``frames_per_batch`` still controls
             how often the environment is polled internally, but the output
             batch size is determined by ``trajs_per_batch``.
+
+            When combined with a ``replay_buffer`` on a single-process
+            :class:`~torchrl.collectors.Collector`, trajectory batches are
+            written to the replay buffer instead of raw frames. This integrates
+            naturally with :class:`~torchrl.data.SliceSampler` — pass
+            ``end_key=("next", "done")`` to sample contiguous sub-sequences
+            that respect episode boundaries. Async collection via
+            :meth:`~torchrl.collectors.Collector.start` is supported:
+
+            .. code-block:: python
+
+                rb = ReplayBuffer(
+                    storage=LazyTensorStorage(10_000),
+                    sampler=SliceSampler(slice_len=16, end_key=("next", "done")),
+                    shared=True,
+                )
+                collector = Collector(
+                    env, policy,
+                    replay_buffer=rb,
+                    frames_per_batch=200,
+                    total_frames=-1,
+                    trajs_per_batch=32,
+                )
+                collector.start()   # fills rb with [32, max_len] trajectory batches
+
+            .. note::
+                ``trajs_per_batch`` combined with ``replay_buffer`` is only
+                supported for single-process collectors. Multi-process collectors
+                write frames directly to a shared buffer at the worker level and
+                cannot reassemble trajectories in the main process.
+
             Defaults to ``None`` (fixed-frame batches).
     """
 
@@ -968,13 +999,54 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             raise
 
     def _iter_by_trajectories(self) -> Iterator[TensorDictBase]:
-        """Yield padded batches of exactly ``trajs_per_batch`` complete trajectories."""
+        """Yield padded batches of exactly ``trajs_per_batch`` complete trajectories.
+
+        When a replay buffer is configured on a single-process collector, each
+        complete trajectory is stored as a **flat sequence of valid timesteps**
+        (padding stripped via ``("collector", "mask")``), and this method yields
+        ``None`` each time — matching the behaviour of :meth:`iterator` in
+        replay-buffer mode.  Flat storage makes the buffer directly compatible
+        with :class:`~torchrl.data.SliceSampler` using
+        ``end_key=("next", "done")``.
+
+        .. note::
+            Replay buffer integration with ``trajs_per_batch`` is only supported
+            for single-process collectors (:class:`~torchrl.collectors.Collector`).
+            Multi-process collectors write frames directly to a shared replay
+            buffer at the worker level and cannot reassemble trajectories in the
+            main process.
+        """
         partial_trajs: dict[int, list] = {}
         complete_trajs: list = []
-        for batch in self.iterator():
-            _traj_ingest(batch, partial_trajs, complete_trajs)
-            while len(complete_trajs) >= self.trajs_per_batch:
-                yield _traj_emit(complete_trajs, self.trajs_per_batch)
+        rb = getattr(self, "replay_buffer", None)
+        # _ignore_rb is a single-collector concept; multi-collectors don't have it.
+        # Default True so that missing attr → has_rb=False (safe for multi-collectors).
+        has_rb = rb is not None and not getattr(self, "_ignore_rb", True)
+        if has_rb:
+            _prev_ignore_rb = self._ignore_rb
+            # Prevent iterator() from writing raw frames to the replay buffer;
+            # we will write assembled trajectory sequences instead.
+            self._ignore_rb = True
+        try:
+            for batch in self.iterator():
+                if batch is None:
+                    continue
+                _traj_ingest(batch, partial_trajs, complete_trajs)
+                while len(complete_trajs) >= self.trajs_per_batch:
+                    traj_batch = _traj_emit(complete_trajs, self.trajs_per_batch)
+                    if has_rb:
+                        # Store each trajectory as a flat (unpadded) sequence so
+                        # that slice-oriented samplers work with 1-D storage.
+                        mask = traj_batch.get(("collector", "mask"))
+                        for i in range(traj_batch.shape[0]):
+                            valid_len = int(mask[i].sum().item())
+                            rb.extend(traj_batch[i, :valid_len])
+                        yield
+                    else:
+                        yield traj_batch
+        finally:
+            if has_rb:
+                self._ignore_rb = _prev_ignore_rb
 
     def next(self):
         try:

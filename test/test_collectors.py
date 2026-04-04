@@ -68,6 +68,7 @@ from torchrl.data import (
     LazyTensorStorage,
     NonTensor,
     ReplayBuffer,
+    SliceSampler,
     TensorSpec,
     Unbounded,
 )
@@ -5473,6 +5474,131 @@ class TestTrajsPerBatch:
             collector.shutdown()
             if not multi:
                 env.close(raise_if_closed=False)
+
+
+class TestTrajsPerBatchReplayBuffer:
+    """Tests for trajs_per_batch + ReplayBuffer integration."""
+
+    @staticmethod
+    def _make_env_and_policy(max_steps=4):
+        env_fn = lambda: TransformedEnv(  # noqa: E731
+            CountingEnv(max_steps=max_steps), StepCounter(max_steps)
+        )
+        probe = env_fn()
+        try:
+            policy = RandomPolicy(probe.action_spec)
+        finally:
+            probe.close(raise_if_closed=False)
+        return env_fn, policy
+
+    def test_trajs_per_batch_replay_buffer_sync(self):
+        """Replay buffer receives trajectory-shaped batches, not raw frames."""
+        max_steps = 4
+        num_trajs = 2
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(200))
+        env = env_fn()
+        collector = Collector(
+            env,
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 3,
+            total_frames=max_steps * 12,
+            trajs_per_batch=num_trajs,
+        )
+        try:
+            list(collector)  # exhaust the collector
+        finally:
+            collector.shutdown()
+            env.close(raise_if_closed=False)
+
+        assert len(rb) > 0, "replay buffer must be non-empty"
+        # Trajectories are stored as flat timestep sequences (1-D storage);
+        # each sampled entry is a single timestep.
+        sample = rb.sample(num_trajs)
+        assert sample.ndim == 1, "sampled entries should be individual timesteps (1-D)"
+        # Every stored step must carry a traj_id
+        assert ("collector", "traj_ids") in sample.keys(True)
+
+    def test_trajs_per_batch_replay_buffer_start_async(self):
+        """collector.start() fills the replay buffer with trajectory batches."""
+        max_steps = 4
+        num_trajs = 2
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(200), shared=True)
+        env = env_fn()
+        collector = Collector(
+            env,
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 3,
+            total_frames=max_steps * 12,
+            trajs_per_batch=num_trajs,
+        )
+        try:
+            collector.start()
+            deadline = time.time() + 30
+            while len(rb) < num_trajs and time.time() < deadline:
+                time.sleep(0.05)
+            collector.async_shutdown()
+        finally:
+            env.close(raise_if_closed=False)
+
+        assert len(rb) >= num_trajs, "replay buffer must have at least num_trajs entries"
+        sample = rb.sample(num_trajs)
+        assert sample.ndim == 1
+        assert ("collector", "traj_ids") in sample.keys(True)
+
+    def test_trajs_per_batch_slice_sampler(self):
+        """SliceSampler samples contiguous slices from trajectory-shaped entries."""
+        max_steps = 8
+        num_trajs = 4
+        slice_len = 2
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(400),
+            sampler=SliceSampler(
+                slice_len=slice_len,
+                end_key=("next", "done"),
+                strict_length=False,
+            ),
+        )
+        env = env_fn()
+        collector = Collector(
+            env,
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 3,
+            total_frames=max_steps * 16,
+            trajs_per_batch=num_trajs,
+        )
+        try:
+            list(collector)
+        finally:
+            collector.shutdown()
+            env.close(raise_if_closed=False)
+
+        assert len(rb) > 0
+        sample = rb.sample(slice_len * num_trajs)
+        # SliceSampler returns flat slices of length slice_len
+        assert sample.shape[0] == slice_len * num_trajs
+
+    def test_trajs_per_batch_multi_collector_rb_raises(self):
+        """Multi-process collectors raise NotImplementedError when both
+        trajs_per_batch and replay_buffer are provided."""
+        max_steps = 4
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(200), shared=True)
+        with pytest.raises(NotImplementedError, match="trajs_per_batch"):
+            MultiSyncCollector(
+                [env_fn, env_fn],
+                policy,
+                replay_buffer=rb,
+                frames_per_batch=max_steps * 4,
+                total_frames=max_steps * 16,
+                trajs_per_batch=2,
+                cat_results="stack",
+            )
 
 
 if __name__ == "__main__":
