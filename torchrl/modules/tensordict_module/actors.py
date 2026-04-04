@@ -538,10 +538,12 @@ class QValueModule(TensorDictModuleBase):
         var_nums: int | None = None,
         spec: TensorSpec | None = None,
         safe: bool = False,
+        strict_shape: bool | str | None = None,
     ):
         if isinstance(action_space, TensorSpec):
             raise TypeError("Using specs in action_space is deprecated")
         action_space, spec = _process_action_space_spec(action_space, spec)
+        self.strict_shape = strict_shape
         self.action_space = action_space
         self.var_nums = var_nums
         self.action_func_mapping = {
@@ -618,6 +620,44 @@ class QValueModule(TensorDictModuleBase):
             self.action_space, self._default_action_value
         )
         chosen_action_value = action_value_func(action_values, action)
+
+        # Enforce action shape to match spec (after chosen_action_value computation)
+        action_key = self.out_keys[0]
+        action_spec = self.spec.get(action_key, None) if isinstance(self.spec, Composite) else None
+        if action_spec is not None and self.strict_shape is not False:
+            composite_batch_ndim = len(self.spec.shape)
+            per_sample_shape = action_spec.shape[composite_batch_ndim:]
+            batch_shape = action_values.shape[:-1]
+            target_shape = torch.Size(list(batch_shape) + list(per_sample_shape))
+
+            if action.shape != target_shape:
+                if self.strict_shape is True:
+                    raise RuntimeError(
+                        f"Action shape {action.shape} does not match expected shape {target_shape} "
+                        f"(per-sample spec shape: {per_sample_shape}). "
+                        f"Set strict_shape='auto' to attempt automatic reshaping."
+                    )
+                elif self.strict_shape == "auto":
+                    try:
+                        action = action.reshape(target_shape)
+                    except RuntimeError:
+                        raise RuntimeError(
+                            f"Cannot reshape action from {action.shape} to {target_shape}."
+                        )
+                elif self.strict_shape is None:
+                    import warnings
+
+                    warnings.warn(
+                        f"Action shape {action.shape} does not match expected shape {target_shape} "
+                        f"(per-sample spec shape: {per_sample_shape}). "
+                        f"In a future version, this will raise an error. "
+                        f"Set strict_shape='auto' to automatically reshape, "
+                        f"strict_shape=True to raise immediately, "
+                        f"or strict_shape=False to silence this warning.",
+                        FutureWarning,
+                        stacklevel=2,
+                    )
+
         tensordict.update(
             dict(zip(self.out_keys, (action, action_values, chosen_action_value)))
         )
@@ -1127,6 +1167,7 @@ class QValueActor(SafeSequential):
         action_space: str | None = None,
         action_value_key=None,
         action_mask_key: NestedKey | None = None,
+        strict_shape: bool | str | None = None,
     ):
         if isinstance(action_space, TensorSpec):
             raise RuntimeError(
@@ -1172,6 +1213,7 @@ class QValueActor(SafeSequential):
             safe=safe,
             action_space=action_space,
             action_mask_key=action_mask_key,
+            strict_shape=strict_shape,
         )
 
         super().__init__(module, qvalue)
