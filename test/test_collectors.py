@@ -5544,7 +5544,9 @@ class TestTrajsPerBatchReplayBuffer:
         finally:
             env.close(raise_if_closed=False)
 
-        assert len(rb) >= num_trajs, "replay buffer must have at least num_trajs entries"
+        assert (
+            len(rb) >= num_trajs
+        ), "replay buffer must have at least num_trajs entries"
         sample = rb.sample(num_trajs)
         assert sample.ndim == 1
         assert ("collector", "traj_ids") in sample.keys(True)
