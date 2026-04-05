@@ -8,7 +8,6 @@ from tensordict import TensorDictBase
 from torch import multiprocessing as mp, nn
 from torchrl.weight_update._shared import SharedMemWeightSyncScheme
 from torchrl.weight_update.utils import _resolve_model
-
 from torchrl.weight_update.weight_sync_schemes import TransportBackend
 
 
@@ -177,9 +176,9 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
             "params_map": params_map,
             "devices": devices,
             "device_map_fn": device_map_fn,
-            "num_workers": num_workers
-            if num_workers is not None
-            else len(params_map_result),
+            "num_workers": (
+                num_workers if num_workers is not None else len(params_map_result)
+            ),
         }
 
         # Create per-worker queues for weight distribution
@@ -316,22 +315,6 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
 
         transports = list(self._iterate_transports(worker_ids))
 
-        from torchrl._utils import logger as torchrl_logger
-
-        if torchrl_logger.isEnabledFor(10):
-            _w_hash = None
-            if prepared_weights is not None:
-                try:
-                    _w_hash = sum(
-                        v.sum().item() for v in prepared_weights.values(True, True)
-                    )
-                except Exception:
-                    pass
-            torchrl_logger.debug(
-                f"MPWeightSync.send: sending to {len(transports)} transports "
-                f"(worker_ids={worker_ids}), weight_sum={_w_hash}"
-            )
-
         # Send weights to all workers first via queue (non-blocking)
         for transport in transports:
             if hasattr(transport, "send_weights_async"):
@@ -347,9 +330,6 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
         # Wait for all acknowledgments if in synchronous mode
         if self.sync:
             self._wait_for_ack(worker_ids=worker_ids)
-            torchrl_logger.debug(
-                f"MPWeightSync.send: all acks received (worker_ids={worker_ids})"
-            )
 
     def _setup_connection_and_weights_on_sender_impl(
         self,
@@ -476,8 +456,6 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
         """
         from torchrl._utils import logger as torchrl_logger
 
-        _worker_idx = getattr(self, "_worker_idx", "?")
-
         while not self._stop_event.is_set():
             try:
                 instruction = self._wait_for_instruction()
@@ -485,58 +463,12 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
                     # Stop event was set or timeout
                     continue
                 if instruction == "receive":
-                    _model = self.model
-                    torchrl_logger.debug(
-                        f"MPWeightSync worker={_worker_idx}: "
-                        f"received 'receive' instruction, model={type(_model).__name__ if _model is not None else None}, "
-                        f"model id={id(_model)}"
-                    )
-
-                    # Log model param fingerprint BEFORE applying weights
-                    if _model is not None and torchrl_logger.isEnabledFor(10):
-                        try:
-                            from tensordict import TensorDict as _TD
-
-                            _pre = _TD.from_module(_model)
-                            _pre_hash = sum(
-                                v.sum().item() for v in _pre.values(True, True)
-                            )
-                            torchrl_logger.debug(
-                                f"MPWeightSync worker={_worker_idx}: "
-                                f"BEFORE apply param_sum={_pre_hash:.6f}"
-                            )
-                        except Exception:
-                            pass
-
                     # Receive weights from transport (blocking)
                     if self._receiver_transport is not None:
                         weights = self._receiver_transport.receive_weights(
-                            model=_model,
+                            model=self.model,
                             strategy=self._strategy,
                         )
-
-                        # Log model param fingerprint AFTER applying weights
-                        if _model is not None and torchrl_logger.isEnabledFor(10):
-                            try:
-                                _post = _TD.from_module(_model)
-                                _post_hash = sum(
-                                    v.sum().item() for v in _post.values(True, True)
-                                )
-                                _w_hash = (
-                                    sum(
-                                        v.sum().item()
-                                        for v in weights.values(True, True)
-                                    )
-                                    if weights is not None
-                                    else None
-                                )
-                                torchrl_logger.debug(
-                                    f"MPWeightSync worker={_worker_idx}: "
-                                    f"AFTER apply param_sum={_post_hash:.6f}, "
-                                    f"received_weights_sum={_w_hash}"
-                                )
-                            except Exception:
-                                pass
 
                         if weights is not None:
                             # Cascade weight update to sub-collectors if context supports it
@@ -547,15 +479,9 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
                                 self.context.update_policy_weights_(
                                     model_id=model_id, policy_or_weights=weights
                                 )
-                    else:
-                        torchrl_logger.debug(
-                            f"MPWeightSync worker={_worker_idx}: "
-                            f"no receiver transport! weights NOT applied"
-                        )
 
                     # Send acknowledgment
                     self._send_ack("updated")
-                    torchrl_logger.debug(f"MPWeightSync worker={_worker_idx}: ack sent")
 
                 elif instruction == "stop":
                     break

@@ -8,7 +8,6 @@ from copy import deepcopy
 from queue import Empty
 
 import torch
-
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from torchrl._utils import (
@@ -185,25 +184,8 @@ class MultiAsyncCollector(MultiCollector):
             )
             policy_or_weights = kwargs.pop("policy_weights")
 
-        # Log weight fingerprint before sending
-        if torchrl_logger.isEnabledFor(10):  # DEBUG level
-            _src = policy_or_weights
-            if _src is None and hasattr(self, "policy") and self.policy is not None:
-                from tensordict import TensorDict as _TD
-
-                _src = _TD.from_module(self.policy)
-            if isinstance(_src, TensorDictBase):
-                _hash = sum(v.sum().item() for v in _src.values(True, True))
-                torchrl_logger.debug(
-                    f"MultiAsyncCollector.update_policy_weights_: "
-                    f"sending weights (param_sum={_hash:.6f}, worker_ids={worker_ids})"
-                )
-
         super().update_policy_weights_(
             policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
-        )
-        torchrl_logger.debug(
-            "MultiAsyncCollector.update_policy_weights_: done (all workers acked)"
         )
 
     def frames_per_batch_worker(self, *, worker_idx: int | None = None) -> int:
@@ -288,11 +270,6 @@ class MultiAsyncCollector(MultiCollector):
             workers_frames[idx] = workers_frames[idx] + worker_frames
             if out is not None and self.postprocs:
                 out = self.postprocs[out.device](out)
-
-            torchrl_logger.debug(
-                f"MultiAsyncCollector.iterator: received batch from worker {idx} "
-                f"(iter={self._iter}, frames={self._frames})"
-            )
 
             # the function blocks here until the next item is asked, hence we send the message to the
             # worker to keep on working in the meantime before the yield statement

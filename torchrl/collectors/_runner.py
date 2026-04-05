@@ -10,7 +10,6 @@ from typing import Any
 import numpy as np
 import torch
 from tensordict import TensorDict, TensorDictBase
-
 from torchrl import logger as torchrl_logger
 from torchrl._utils import timeit, VERBOSE
 from torchrl.collectors._base import BaseCollector, ProfileConfig
@@ -21,7 +20,6 @@ from torchrl.collectors._constants import (
     DEFAULT_EXPLORATION_TYPE,
 )
 from torchrl.collectors._single import Collector
-
 from torchrl.collectors.utils import (
     _cast,
     _make_policy_factory,
@@ -201,9 +199,9 @@ def _main_async_collector(
         _make_policy_factory,
         policy=policy,
         policy_factory=policy_factory,
-        weight_sync_scheme=weight_sync_schemes.get("policy")
-        if weight_sync_schemes
-        else None,
+        weight_sync_scheme=(
+            weight_sync_schemes.get("policy") if weight_sync_schemes else None
+        ),
         worker_idx=worker_idx,
         pipe=pipe_child,
     )
@@ -260,40 +258,11 @@ def _main_async_collector(
                 actual_model = _resolve_model(inner_collector, model_id)
                 _scheme_model = scheme.model
                 if actual_model is not None and _scheme_model is not actual_model:
-                    torchrl_logger.info(
-                        f"mp worker {idx}: scheme '{model_id}' model reference is STALE "
-                        f"(scheme.model id={id(_scheme_model)}, "
-                        f"collector.{model_id} id={id(actual_model)}). Updating."
-                    )
                     scheme.model = actual_model
-                else:
-                    torchrl_logger.debug(
-                        f"mp worker {idx}: scheme '{model_id}' model reference is OK "
-                        f"(id={id(actual_model)})"
-                    )
 
         use_buffers = inner_collector._use_buffers
         if verbose:
             torchrl_logger.debug("Sync data collector created")
-
-        # Log worker startup summary
-        _pol = inner_collector.policy
-        _wpol = getattr(inner_collector, "_wrapped_policy_uncompiled", None)
-        torchrl_logger.info(
-            f"mp worker {idx}: STARTUP "
-            f"policy id={id(_pol)}, "
-            f"wrapped_policy id={id(_wpol)}, "
-            f"same={_pol is _wpol}, "
-            f"policy type={type(_pol).__name__}"
-        )
-        if weight_sync_schemes:
-            for model_id, scheme in weight_sync_schemes.items():
-                _sm = scheme.model
-                torchrl_logger.info(
-                    f"mp worker {idx}: scheme '{model_id}' model id={id(_sm)}, "
-                    f"matches policy={_sm is _pol}, "
-                    f"matches wrapped={_sm is _wpol}"
-                )
 
         # Set up profiler for this worker if configured
         worker_profiler = None
@@ -453,47 +422,14 @@ def _main_async_collector(
             )
             with profile_ctx:
                 with timeit(f"worker/{idx}/rollout") as rollout_timer:
-                    # Log policy param fingerprint at rollout start
-                    if torchrl_logger.isEnabledFor(10):
-                        try:
-                            _pol = inner_collector.policy
-                            if _pol is not None and isinstance(_pol, torch.nn.Module):
-                                _p_sum = sum(p.sum().item() for p in _pol.parameters())
-                                torchrl_logger.debug(
-                                    f"mp worker {idx}: Starting rollout (j={j}), "
-                                    f"policy param_sum={_p_sum:.6f}, "
-                                    f"policy id={id(_pol)}"
-                                )
-                            else:
-                                torchrl_logger.debug(
-                                    f"mp worker {idx}: Starting rollout (j={j})..."
-                                )
-                        except Exception:
-                            torchrl_logger.debug(
-                                f"mp worker {idx}: Starting rollout (j={j})..."
-                            )
+                    torchrl_logger.debug(
+                        f"mp worker {idx}: Starting rollout (j={j})..."
+                    )
                     next_data = next(dc_iter)
-                    # Log rollout completion with param fingerprint
-                    if torchrl_logger.isEnabledFor(10):
-                        _pol2 = inner_collector.policy
-                        try:
-                            _p_sum2 = (
-                                sum(p.sum().item() for p in _pol2.parameters())
-                                if isinstance(_pol2, torch.nn.Module)
-                                else "N/A"
-                            )
-                        except Exception:
-                            _p_sum2 = "err"
-                        torchrl_logger.debug(
-                            f"mp worker {idx}: Rollout completed in {rollout_timer.elapsed():.3f}s, "
-                            f"frames={next_data.numel() if hasattr(next_data, 'numel') else 'N/A'}, "
-                            f"policy param_sum={_p_sum2} (end of rollout)"
-                        )
-                    else:
-                        torchrl_logger.debug(
-                            f"mp worker {idx}: Rollout completed in {rollout_timer.elapsed():.3f}s, "
-                            f"frames={next_data.numel() if hasattr(next_data, 'numel') else 'N/A'}"
-                        )
+                    torchrl_logger.debug(
+                        f"mp worker {idx}: Rollout completed in {rollout_timer.elapsed():.3f}s, "
+                        f"frames={next_data.numel() if hasattr(next_data, 'numel') else 'N/A'}"
+                    )
 
             # Step the profiler after each rollout
             if worker_profiler is not None and worker_profiler.is_active:

@@ -18,7 +18,6 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 import torch
-
 import torchrl.collectors._multi_base
 import torchrl.collectors._runner
 from packaging import version
@@ -54,7 +53,6 @@ from torchrl.collectors import (
 )
 from torchrl.collectors._constants import _Interruptor
 from torchrl.collectors._multi_base import MultiCollector
-
 from torchrl.collectors.utils import _make_policy_factory, split_trajectories
 from torchrl.data import (
     Composite,
@@ -88,7 +86,6 @@ from torchrl.modules import (
     RandomPolicy,
     SafeModule,
 )
-
 from torchrl.testing import (
     CARTPOLE_VERSIONED,
     check_rollout_consistency_multikey_env,
@@ -264,6 +261,7 @@ class TestMakePolicyFactory:
 
     def test_make_policy_factory_with_sequence_uses_worker_idx(self):
         """Regression test: _make_policy_factory should use worker_idx to index into a Sequence."""
+
         # Create factories that return policies with different bias values
         def make_factory(bias_value):
             def factory():
@@ -1790,9 +1788,11 @@ if __name__ == "__main__":
             # check they don't match
             for worker in range(3):
                 for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
-                    with pytest.raises(
-                        AssertionError
-                    ) if torch.cuda.is_available() else nullcontext():
+                    with (
+                        pytest.raises(AssertionError)
+                        if torch.cuda.is_available()
+                        else nullcontext()
+                    ):
                         torch.testing.assert_close(
                             state_dict[f"worker{worker}"]["policy_state_dict"][k].cpu(),
                             policy_state_dict[k].cpu(),
@@ -2581,9 +2581,17 @@ class TestCollectorDevices:
         should_raise = should_raise & (
             (env_device == "cpu") or (storing_device == "cpu")
         )
-        with patch("torch.cuda.synchronize") as mock_synchronize, pytest.raises(
-            AssertionError, match="Expected 'synchronize' to not have been called."
-        ) if should_raise else contextlib.nullcontext():
+        with (
+            patch("torch.cuda.synchronize") as mock_synchronize,
+            (
+                pytest.raises(
+                    AssertionError,
+                    match="Expected 'synchronize' to not have been called.",
+                )
+                if should_raise
+                else contextlib.nullcontext()
+            ),
+        ):
             collector = Collector(
                 create_env_fn=functools.partial(
                     self.GoesThroughEnv, n_obs=1000, device=None
