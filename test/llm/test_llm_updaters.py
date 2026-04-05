@@ -228,11 +228,6 @@ class BaseVLLMUpdaterTest(ABC):
         logger.info("✓ Error handling tests passed")
 
 
-@pytest.mark.xfail(
-    reason="AsyncVLLM tests fail due to Ray placement group timeout. "
-    "ray.get(pg.ready(), timeout=180) times out. See LLM_TEST_ISSUES.md for details.",
-    strict=False,
-)
 @pytest.mark.skipif(not _has_ray, reason="missing ray dependencies")
 class TestVLLMUpdaterV2WithAsyncVLLM(BaseVLLMUpdaterTest):
     """Test vLLMUpdaterV2 with AsyncVLLM engines.
@@ -609,11 +604,6 @@ class TestWeightSyncVLLMNCCL:
 
 
 @pytest.mark.gpu
-@pytest.mark.xfail(
-    reason="AsyncVLLM tests fail due to Ray placement group timeout. "
-    "See LLM_TEST_ISSUES.md for details.",
-    strict=False,
-)
 @pytest.mark.skipif(not _has_ray, reason="missing ray dependencies")
 @pytest.mark.skipif(not _has_vllm, reason="missing vllm dependencies")
 @pytest.mark.skipif(not _has_transformers, reason="missing transformers dependencies")

@@ -53,7 +53,14 @@ from torchrl.collectors import (
 )
 from torchrl.collectors._constants import _Interruptor
 from torchrl.collectors._multi_base import MultiCollector
-from torchrl.collectors.utils import _make_policy_factory, split_trajectories
+
+from torchrl.collectors.utils import (
+    _make_policy_factory,
+    _traj_chunk_ends_done,
+    _traj_emit,
+    _traj_ingest,
+    split_trajectories,
+)
 from torchrl.data import (
     Composite,
     LazyMemmapStorage,
@@ -5399,6 +5406,168 @@ class TestCollectorProfiling:
         # Check that the trace file was created for worker 0
         expected_trace = tmp_path / "trace_0.json"
         assert expected_trace.exists(), f"Trace file not found at {expected_trace}"
+
+
+class TestTrajsPerBatch:
+    """Tests for the ``trajs_per_batch`` kwarg on collectors."""
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _make_batch(traj_ids, done_flags, obs_start=0):
+        n = len(traj_ids)
+        return TensorDict(
+            {
+                "obs": torch.arange(obs_start, obs_start + n, dtype=torch.float),
+                ("collector", "traj_ids"): torch.tensor(traj_ids, dtype=torch.int64),
+                ("next", "done"): torch.tensor(done_flags, dtype=torch.bool),
+            },
+            batch_size=[n],
+        )
+
+    # ------------------------------------------------------------------
+    # Unit tests for the private helpers
+    # ------------------------------------------------------------------
+
+    def test_ingest_single_batch_complete(self):
+        """_traj_ingest routes completed trajectories into complete_trajs."""
+        batch = self._make_batch(
+            traj_ids=[0, 0, 0, 1, 1, 2],
+            done_flags=[False, False, True, False, True, True],
+        )
+        partial, complete = {}, []
+        _traj_ingest(batch, partial, complete)
+        assert len(complete) == 3
+        assert len(partial) == 0
+
+    def test_ingest_span_batches(self):
+        """_traj_ingest accumulates steps across multiple batches."""
+        batch0 = self._make_batch([0, 0, 0], [False, False, False], obs_start=0)
+        batch1 = self._make_batch([0, 0, 1, 1], [False, True, False, True], obs_start=3)
+        partial, complete = {}, []
+        _traj_ingest(batch0, partial, complete)
+        assert len(complete) == 0
+        assert 0 in partial
+        _traj_ingest(batch1, partial, complete)
+        assert len(complete) == 2
+        assert complete[0].shape[0] == 5  # traj 0: 5 steps
+
+    def test_ingest_partial_not_promoted(self):
+        """Incomplete trajectories stay in partial_trajs."""
+        batch = self._make_batch([0, 0, 1, 1], [False, True, False, False])
+        partial, complete = {}, []
+        _traj_ingest(batch, partial, complete)
+        assert len(complete) == 1
+        assert 1 in partial
+
+    def test_emit_shape_and_mask(self):
+        """_traj_emit produces (N, T) padded batch with correct mask."""
+        batch = self._make_batch(
+            traj_ids=[0, 0, 0, 0, 1, 1],
+            done_flags=[False, False, False, True, False, True],
+        )
+        partial, complete = {}, []
+        _traj_ingest(batch, partial, complete)
+        result = _traj_emit(complete, 2)
+        assert result.shape == torch.Size([2, 4])
+        mask = result[("collector", "mask")]
+        assert mask[0].all()
+        assert mask[1, :2].all()
+        assert not mask[1, 2]
+
+    def test_emit_multiple_batches(self):
+        """4 complete trajectories with N=2 → emit called twice."""
+        batches_in = [
+            self._make_batch([i, i], [False, True], obs_start=i * 2) for i in range(4)
+        ]
+        combined = torch.cat(batches_in, dim=0)
+        partial, complete = {}, []
+        _traj_ingest(combined, partial, complete)
+        assert len(complete) == 4
+        b1 = _traj_emit(complete, 2)
+        assert b1.shape[0] == 2
+        b2 = _traj_emit(complete, 2)
+        assert b2.shape[0] == 2
+        assert len(complete) == 0
+
+    def test_chunk_ends_done_terminated(self):
+        """_traj_chunk_ends_done detects terminated as well as done."""
+        chunk = TensorDict(
+            {
+                ("next", "terminated"): torch.tensor([False, False, True]),
+            },
+            batch_size=[3],
+        )
+        assert _traj_chunk_ends_done(chunk)
+
+    def test_ingest_missing_traj_ids_raises(self):
+        """Missing traj_ids raises a descriptive KeyError."""
+        bad = TensorDict({"obs": torch.arange(3, dtype=torch.float)}, batch_size=[3])
+        with pytest.raises(KeyError, match="traj_ids"):
+            _traj_ingest(bad, {}, [])
+
+    # ------------------------------------------------------------------
+    # Integration tests with real collectors
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize(
+        "collector_cls,multi",
+        [
+            (Collector, False),
+            (functools.partial(MultiSyncCollector, cat_results="stack"), True),
+            (MultiAsyncCollector, True),
+        ],
+    )
+    def test_trajs_per_batch_integration(self, collector_cls, multi):
+        """trajs_per_batch yields (N, T) batches with valid done states for all collectors."""
+        max_steps = 4
+        env_fn = lambda: TransformedEnv(  # noqa: E731
+            CountingEnv(max_steps=max_steps), StepCounter(max_steps)
+        )
+        probe_env = env_fn()
+        try:
+            policy = RandomPolicy(probe_env.action_spec)
+        finally:
+            probe_env.close(raise_if_closed=False)
+
+        if multi:
+            collector = collector_cls(
+                [env_fn, env_fn],
+                policy,
+                frames_per_batch=max_steps * 4,
+                total_frames=max_steps * 16,
+                trajs_per_batch=2,
+            )
+        else:
+            env = env_fn()
+            collector = collector_cls(
+                env,
+                policy,
+                frames_per_batch=max_steps * 3,
+                total_frames=max_steps * 9,
+                trajs_per_batch=2,
+            )
+
+        try:
+            batches = list(collector)
+            assert len(batches) > 0
+            for b in batches:
+                assert b.shape[0] == 2
+                mask = b[("collector", "mask")]
+                assert mask.shape == b.shape
+                # each trajectory must have at least one valid step
+                assert mask.any(dim=-1).all()
+                # the last valid step of each trajectory must be done
+                for i in range(b.shape[0]):
+                    last_valid = mask[i].sum().item() - 1
+                    done = b[i, last_valid][("next", "done")]
+                    assert done.any(), f"traj {i} last valid step is not done"
+        finally:
+            collector.shutdown()
+            if not multi:
+                env.close(raise_if_closed=False)
 
 
 if __name__ == "__main__":

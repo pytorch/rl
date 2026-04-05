@@ -18,7 +18,7 @@ from tensordict.base import NO_DEFAULT
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from torch import nn as nn
 from torch.utils.data import IterableDataset
-from torchrl.collectors.utils import _map_weight
+from torchrl.collectors.utils import _map_weight, _traj_emit, _traj_ingest
 
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.weight_update.utils import _resolve_attr
@@ -138,7 +138,20 @@ class ProfileConfig:
 
 
 class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
-    """Base class for data collectors."""
+    """Base class for data collectors.
+
+    Keyword Args:
+        trajs_per_batch (int, optional): When set, the collector yields batches
+            of exactly this many complete, zero-padded trajectories instead of
+            fixed-frame batches. Each yielded :class:`~tensordict.TensorDict`
+            has shape ``(trajs_per_batch, max_traj_len)`` and includes a
+            ``("collector", "mask")`` boolean field marking valid time steps.
+            Trajectories that span multiple internal collection steps are
+            reassembled automatically. ``frames_per_batch`` still controls
+            how often the environment is polled internally, but the output
+            batch size is determined by ``trajs_per_batch``.
+            Defaults to ``None`` (fixed-frame batches).
+    """
 
     _task = None
     _iterator = None
@@ -153,6 +166,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
     _weight_sync_schemes: dict[str, WeightSyncScheme] | None = None
     verbose: bool = False
     _profile_config: ProfileConfig | None = None
+    trajs_per_batch: int | None = None
 
     def enable_profile(
         self,
@@ -548,11 +562,9 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
 
     def update_policy_weights_(
         self,
-        policy_or_weights: TensorDictBase
-        | TensorDictModuleBase
-        | nn.Module
-        | dict
-        | None = None,
+        policy_or_weights: (
+            TensorDictBase | TensorDictModuleBase | nn.Module | dict | None
+        ) = None,
         *,
         weights: TensorDictBase | dict | None = None,
         policy: TensorDictModuleBase | nn.Module | None = None,
@@ -799,11 +811,9 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
 
     def receive_weights(
         self,
-        policy_or_weights: TensorDictBase
-        | TensorDictModuleBase
-        | nn.Module
-        | dict
-        | None = None,
+        policy_or_weights: (
+            TensorDictBase | TensorDictModuleBase | nn.Module | dict | None
+        ) = None,
         *,
         weights: TensorDictBase | dict | None = None,
         policy: TensorDictModuleBase | nn.Module | None = None,
@@ -949,10 +959,22 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         # Mark that iteration has started (used by enable_profile check)
         self._iteration_started = True
         try:
-            yield from self.iterator()
+            if self.trajs_per_batch is None:
+                yield from self.iterator()
+            else:
+                yield from self._iter_by_trajectories()
         except Exception:
             self.shutdown()
             raise
+
+    def _iter_by_trajectories(self) -> Iterator[TensorDictBase]:
+        """Yield padded batches of exactly ``trajs_per_batch`` complete trajectories."""
+        partial_trajs: dict[int, list] = {}
+        complete_trajs: list = []
+        for batch in self.iterator():
+            _traj_ingest(batch, partial_trajs, complete_trajs)
+            while len(complete_trajs) >= self.trajs_per_batch:
+                yield _traj_emit(complete_trajs, self.trajs_per_batch)
 
     def next(self):
         try:

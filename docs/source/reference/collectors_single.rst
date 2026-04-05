@@ -20,6 +20,39 @@ Single node data collectors
     MultiSyncCollector
     MultiAsyncCollector
 
+Trajectory batching
+-------------------
+
+Pass ``trajs_per_batch=N`` to any collector to receive batches of exactly *N*
+complete, zero-padded trajectories instead of fixed-frame batches.
+Trajectories that span multiple internal collection steps are automatically
+reassembled. Each yielded :class:`~tensordict.TensorDict` has shape
+``(N, max_traj_len)`` and includes a ``("collector", "mask")`` boolean tensor
+marking valid time steps.
+
+``frames_per_batch`` still controls how frequently the environment is polled
+internally; it does **not** determine the output batch size when
+``trajs_per_batch`` is set.
+
+.. code-block:: python
+
+    from torchrl.collectors import Collector
+    from torchrl.envs import GymEnv
+
+    collector = Collector(
+        GymEnv("CartPole-v1"),
+        policy=my_policy,
+        frames_per_batch=200,  # controls internal polling frequency
+        total_frames=10000,
+        trajs_per_batch=4,
+    )
+
+    for batch in collector:
+        # batch.shape == (4, max_traj_len)
+        valid = batch[("collector", "mask")]  # (4, max_traj_len) bool
+        loss = compute_loss(batch, valid)
+        collector.update_policy_weights_()
+
 .. note::
     The following legacy names are also available for backward compatibility:
 
