@@ -2455,3 +2455,172 @@ class MultiStepActorWrapper(TensorDictModuleBase):
     @property
     def counter_key(self):
         return _replace_last(self.init_key, "counter")
+
+
+class _DDPMModule(nn.Module):
+    """Internal DDPM denoising module used by :class:`DiffusionActor`.
+
+    Implements a fixed linear-beta DDPM scheduler and runs the full reverse
+    diffusion chain (``num_steps`` denoising steps) at inference time.
+
+    Args:
+        score_network (nn.Module): Network that predicts noise given
+            ``(noisy_action, observation, timestep)``.  Its input size must
+            be ``obs_dim + action_dim + 1`` and output size ``action_dim``.
+        action_dim (int): Dimensionality of the action.
+        num_steps (int): Number of DDPM denoising steps.  Defaults to 100.
+        beta_start (float): Starting beta for the linear schedule.
+            Defaults to 1e-4.
+        beta_end (float): Ending beta for the linear schedule.
+            Defaults to 0.02.
+    """
+
+    def __init__(
+        self,
+        score_network: nn.Module,
+        action_dim: int,
+        num_steps: int = 100,
+        beta_start: float = 1e-4,
+        beta_end: float = 0.02,
+    ) -> None:
+        super().__init__()
+        self.score_network = score_network
+        self.action_dim = action_dim
+        self.num_steps = num_steps
+
+        # Linear beta schedule — fixed, not learnable
+        betas = torch.linspace(beta_start, beta_end, num_steps)
+        alphas = 1.0 - betas
+        alphas_cumprod = torch.cumprod(alphas, dim=0)
+
+        self.register_buffer("betas", betas)
+        self.register_buffer("alphas", alphas)
+        self.register_buffer("alphas_cumprod", alphas_cumprod)
+
+    def forward(self, observation: torch.Tensor) -> torch.Tensor:
+        """Run the full DDPM reverse chain conditioned on *observation*.
+
+        Args:
+            observation: ``(..., obs_dim)`` tensor.
+
+        Returns:
+            Denoised action of shape ``(..., action_dim)``.
+        """
+        batch_shape = observation.shape[:-1]
+        device = observation.device
+
+        # Start from pure Gaussian noise
+        x = torch.randn(*batch_shape, self.action_dim, device=device)
+
+        for t in reversed(range(self.num_steps)):
+            t_tensor = torch.full(
+                (*batch_shape, 1), t, dtype=torch.float32, device=device
+            )
+            model_input = torch.cat([x, observation, t_tensor], dim=-1)
+            predicted_noise = self.score_network(model_input)
+
+            beta_t = self.betas[t]
+            alpha_t = self.alphas[t]
+            alpha_bar_t = self.alphas_cumprod[t]
+
+            # DDPM reverse step
+            x = (1.0 / alpha_t.sqrt()) * (
+                x - (beta_t / (1.0 - alpha_bar_t).sqrt()) * predicted_noise
+            )
+            if t > 0:
+                noise = torch.randn_like(x)
+                x = x + beta_t.sqrt() * noise
+
+        return x
+
+
+class DiffusionActor(SafeModule):
+    """Diffusion-based actor for RL.
+
+    Implements a score-based policy that denoises latent actions conditioned on
+    observations using a fixed DDPM scheduler.  A small MLP is used as the
+    score network by default; pass a custom ``score_network`` to override.
+
+    The strict TensorDict contract is ``in_keys=["observation"]`` →
+    ``out_keys=["action"]``.
+
+    Args:
+        action_dim (int): Dimensionality of the action space.
+        obs_dim (int): Dimensionality of the observation space.
+        score_network (nn.Module, optional): Network that predicts noise given
+            ``(noisy_action, observation, timestep)`` concatenated along the
+            last dimension.  If ``None``, a two-hidden-layer MLP of width 256
+            is constructed automatically.
+        num_steps (int): Number of DDPM denoising steps.  Defaults to 100.
+        beta_start (float): Starting beta for the linear schedule.
+            Defaults to 1e-4.
+        beta_end (float): Ending beta for the linear schedule.
+            Defaults to 0.02.
+        in_keys (list of NestedKey, optional): Keys read from the input
+            TensorDict.  Defaults to ``["observation"]``.
+        out_keys (list of NestedKey, optional): Keys written to the output
+            TensorDict.  Defaults to ``["action"]``.
+        spec (TensorSpec, optional): Spec for the action output.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.modules import DiffusionActor
+        >>> actor = DiffusionActor(action_dim=2, obs_dim=3, num_steps=10)
+        >>> td = TensorDict({"observation": torch.randn(4, 3)}, batch_size=[4])
+        >>> td = actor(td)
+        >>> td["action"].shape
+        torch.Size([4, 2])
+    """
+
+    def __init__(
+        self,
+        action_dim: int,
+        obs_dim: int,
+        score_network: nn.Module | None = None,
+        num_steps: int = 100,
+        beta_start: float = 1e-4,
+        beta_end: float = 0.02,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
+        *,
+        spec: TensorSpec | None = None,
+        **kwargs,
+    ) -> None:
+        if in_keys is None:
+            in_keys = ["observation"]
+        if out_keys is None:
+            out_keys = ["action"]
+        if (
+            "action" in out_keys
+            and spec is not None
+            and not isinstance(spec, Composite)
+        ):
+            spec = Composite(action=spec)
+
+        if score_network is None:
+            # Default: small MLP that takes (noisy_action || observation || t)
+            score_network = nn.Sequential(
+                nn.Linear(action_dim + obs_dim + 1, 256),
+                nn.SiLU(),
+                nn.Linear(256, 256),
+                nn.SiLU(),
+                nn.Linear(256, action_dim),
+            )
+
+        module = _DDPMModule(
+            score_network=score_network,
+            action_dim=action_dim,
+            num_steps=num_steps,
+            beta_start=beta_start,
+            beta_end=beta_end,
+        )
+
+        super().__init__(
+            module,
+            in_keys=in_keys,
+            out_keys=out_keys,
+            spec=spec,
+            **kwargs,
+        )
+

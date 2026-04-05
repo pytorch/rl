@@ -18,6 +18,7 @@ from torch import nn
 from torchrl.data.tensor_specs import Bounded, Composite
 from torchrl.modules import (
     CEMPlanner,
+    DiffusionActor,
     DTActor,
     GRU,
     GRUCell,
@@ -1694,6 +1695,56 @@ def test_convnetblock_uses_both_resnets():
     resnet2_grad = sum(p.grad.abs().sum() for p in block.resnet2.parameters())
     assert resnet1_grad > 0, "resnet1 parameters received no gradients"
     assert resnet2_grad > 0, "resnet2 parameters received no gradients"
+
+
+class TestDiffusionActor:
+    def test_output_shape(self):
+        actor = DiffusionActor(action_dim=2, obs_dim=3, num_steps=5)
+        td = TensorDict({"observation": torch.randn(4, 3)}, batch_size=[4])
+        td = actor(td)
+        assert td["action"].shape == torch.Size([4, 2])
+
+    def test_unbatched(self):
+        actor = DiffusionActor(action_dim=4, obs_dim=6, num_steps=3)
+        td = TensorDict({"observation": torch.randn(6)}, batch_size=[])
+        td = actor(td)
+        assert td["action"].shape == torch.Size([4])
+
+    def test_custom_in_out_keys(self):
+        actor = DiffusionActor(
+            action_dim=2, obs_dim=3, num_steps=3,
+            in_keys=["obs"], out_keys=["act"],
+        )
+        assert actor.in_keys == ["obs"]
+        assert actor.out_keys == ["act"]
+        td = TensorDict({"obs": torch.randn(4, 3)}, batch_size=[4])
+        td = actor(td)
+        assert td["act"].shape == torch.Size([4, 2])
+
+    def test_custom_score_network(self):
+        score_net = nn.Linear(2 + 3 + 1, 2)
+        actor = DiffusionActor(
+            action_dim=2, obs_dim=3, score_network=score_net, num_steps=3
+        )
+        td = TensorDict({"observation": torch.randn(4, 3)}, batch_size=[4])
+        td = actor(td)
+        assert td["action"].shape == torch.Size([4, 2])
+
+    def test_spec_wrapping(self):
+        from torchrl.data.tensor_specs import Bounded
+
+        spec = Bounded(low=-1.0, high=1.0, shape=(2,))
+        actor = DiffusionActor(action_dim=2, obs_dim=3, num_steps=3, spec=spec)
+        assert actor.spec is not None
+
+    def test_gradients_flow(self):
+        actor = DiffusionActor(action_dim=2, obs_dim=3, num_steps=3)
+        obs = torch.randn(4, 3)
+        td = TensorDict({"observation": obs}, batch_size=[4])
+        td = actor(td)
+        td["action"].sum().backward()
+        for p in actor.parameters():
+            assert p.grad is not None
 
 
 if __name__ == "__main__":
