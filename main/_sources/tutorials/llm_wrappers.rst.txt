@@ -209,7 +209,7 @@ The Transformers wrapper provides more flexibility and is great for research and
 
 
     Loading Transformers model...
-    Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]    Loading weights: 100%|██████████| 290/290 [00:00<00:00, 4174.14it/s]
+    Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]    Loading weights: 100%|██████████| 290/290 [00:00<00:00, 3829.96it/s]
     Transformers wrapper input keys: [('history', 'prompt')]
     Transformers wrapper output keys: ['text', 'masks', 'tokens', 'log_probs', 'history']
     Setting `pad_token_id` to `eos_token_id`:151643 for open-end generation.
@@ -566,7 +566,7 @@ different LLM backends without changing your RL code.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.688 seconds)
+   **Total running time of the script:** (0 minutes 7.450 seconds)
 
 
 .. _sphx_glr_download_tutorials_llm_wrappers.py:
