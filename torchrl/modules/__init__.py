@@ -58,6 +58,7 @@ from .models import (
 )
 from .tensordict_module import (
     Actor,
+    DiffusionActor,
     ActorCriticOperator,
     ActorCriticWrapper,
     ActorValueOperator,
@@ -111,6 +112,7 @@ from .mcts import (  # usort:skip
 
 __all__ = [
     "Actor",
+    "DiffusionActor",
     "ActorCriticOperator",
     "ActorCriticWrapper",
     "ActorValueOperator",
