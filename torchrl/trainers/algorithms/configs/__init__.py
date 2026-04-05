@@ -66,6 +66,7 @@ from torchrl.trainers.algorithms.configs.envs_libs import (
     MeltingpotEnvConfig,
     MOGymEnvConfig,
     MultiThreadedEnvConfig,
+    OpenEnvEnvConfig,
     OpenMLEnvConfig,
     OpenSpielEnvConfig,
     PettingZooEnvConfig,
@@ -266,6 +267,7 @@ __all__ = [
     "MeltingpotEnvConfig",
     "MOGymEnvConfig",
     "MultiThreadedEnvConfig",
+    "OpenEnvEnvConfig",
     "OpenMLEnvConfig",
     "OpenSpielEnvConfig",
     "PettingZooEnvConfig",
@@ -446,6 +448,7 @@ def _register_configs():
     cs.store(group="env", name="meltingpot", node=MeltingpotEnvConfig)
     cs.store(group="env", name="mo_gym", node=MOGymEnvConfig)
     cs.store(group="env", name="multi_threaded", node=MultiThreadedEnvConfig)
+    cs.store(group="env", name="openenv", node=OpenEnvEnvConfig)
     cs.store(group="env", name="openml", node=OpenMLEnvConfig)
     cs.store(group="env", name="openspiel", node=OpenSpielEnvConfig)
     cs.store(group="env", name="pettingzoo", node=PettingZooEnvConfig)
