@@ -83,7 +83,7 @@ from torchrl.envs import (
     Transform,
 )
 from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, set_gym_backend
-from torchrl.envs.transforms import TransformedEnv, VecNorm
+from torchrl.envs.transforms import Compose, TransformedEnv, VecNorm
 from torchrl.envs.utils import (
     _aggregate_end_of_traj,
     check_env_specs,
@@ -5601,6 +5601,176 @@ class TestTrajsPerBatchReplayBuffer:
                 trajs_per_batch=2,
                 cat_results="stack",
             )
+
+    @staticmethod
+    def _check_trajectory_completeness(rb, num_trajs):
+        """Assert every sampled trajectory starts with is_init=True and ends with done=True.
+
+        Trajectories stored by _iter_by_trajectories are flat (unpadded), so each
+        contiguous block sharing the same traj_id must begin with is_init and end
+        with done.
+        """
+        sample = rb._storage._storage  # access raw storage to inspect all stored data
+        traj_ids = sample.get(("collector", "traj_ids"), None)
+        if traj_ids is None:
+            return  # storage not yet initialised; skip
+        traj_ids = traj_ids.reshape(-1)
+        is_init = sample.get("is_init", None)
+        done = sample.get(("next", "done"), None)
+        if is_init is None or done is None:
+            return
+        is_init = is_init.reshape(-1)
+        done = done.reshape(-1)
+        for tid in traj_ids.unique():
+            mask = traj_ids == tid
+            assert is_init[mask][
+                0
+            ].item(), f"traj {tid}: first step must have is_init=True"
+            assert done[mask][-1].item(), f"traj {tid}: last step must have done=True"
+
+    def test_trajs_per_batch_batched_env_ndim2(self):
+        """ParallelEnv (batched) + trajs_per_batch + ndim=2 storage.
+
+        Two checks:
+        1. Trajectory completeness: each emitted traj_batch (yielded by the
+           collector without rb) starts with is_init=True and ends with done=True
+           at the last valid step (per the ("collector", "mask") field).
+        2. Replay buffer integration: combining trajs_per_batch with a ndim=2
+           replay buffer populates the buffer without errors.
+        """
+        max_steps = 4
+        num_envs = 2
+        num_trajs = 4
+
+        def env_fn():
+            return TransformedEnv(
+                CountingEnv(max_steps=max_steps),
+                Compose(StepCounter(max_steps), InitTracker()),
+            )
+
+        # --- Part 1: completeness via direct iteration (no replay buffer) ---
+        batched_env = ParallelEnv(num_envs, env_fn)
+        try:
+            policy = RandomPolicy(batched_env.action_spec)
+            collector = Collector(
+                batched_env,
+                policy,
+                frames_per_batch=max_steps * num_envs * 3,
+                total_frames=max_steps * num_envs * 12,
+                trajs_per_batch=num_trajs,
+            )
+            try:
+                for traj_batch in collector:
+                    # traj_batch.shape == [num_trajs, max_len]
+                    mask = traj_batch[("collector", "mask")]
+                    is_init = traj_batch["is_init"]
+                    done = traj_batch[("next", "done")]
+                    for i in range(traj_batch.shape[0]):
+                        row_mask = mask[i]
+                        assert is_init[i][row_mask][
+                            0
+                        ].any(), f"row {i}: first valid step must have is_init=True"
+                        assert done[i][row_mask][
+                            -1
+                        ].any(), f"row {i}: last valid step must have done=True"
+            finally:
+                collector.shutdown()
+        finally:
+            batched_env.close(raise_if_closed=False)
+
+        # --- Part 2: ndim=2 replay buffer integration ---
+        batched_env2 = ParallelEnv(num_envs, env_fn)
+        try:
+            policy2 = RandomPolicy(batched_env2.action_spec)
+            rb = ReplayBuffer(storage=LazyTensorStorage(400, ndim=2))
+            collector2 = Collector(
+                batched_env2,
+                policy2,
+                replay_buffer=rb,
+                frames_per_batch=max_steps * num_envs * 3,
+                total_frames=max_steps * num_envs * 12,
+                trajs_per_batch=num_trajs,
+            )
+            try:
+                list(collector2)
+            finally:
+                collector2.shutdown()
+        finally:
+            batched_env2.close(raise_if_closed=False)
+
+        assert len(rb) > 0, "ndim=2 replay buffer must be populated"
+        assert ("collector", "traj_ids") in rb.sample(1).keys(True)
+
+    def test_trajs_per_batch_multi_async_ndim2(self):
+        """MultiAsyncCollector + ndim=2 storage: verify trajectory completeness.
+
+        Multi-process collectors cannot use trajs_per_batch with a replay buffer
+        (raises NotImplementedError), so this test checks the next level of
+        complexity: multi-async collection into an ndim=2 replay buffer, then
+        reconstructs complete trajectories via traj_ids and verifies that each
+        starts with is_init=True and ends with done=True.
+        """
+        max_steps = 4
+
+        def env_fn():
+            return TransformedEnv(
+                CountingEnv(max_steps=max_steps),
+                Compose(StepCounter(max_steps), InitTracker()),
+            )
+
+        # --- completeness via direct iteration (no replay buffer) ---
+        collector = MultiAsyncCollector(
+            [env_fn, env_fn],
+            RandomPolicy(env_fn().action_spec),
+            frames_per_batch=max_steps * 4,
+            total_frames=max_steps * 16,
+            cat_results="stack",
+        )
+        try:
+            for batch in collector:
+                # batch.shape == [num_workers, frames_per_batch_per_worker]
+                # Flatten and group by traj_id to find complete trajectories
+                flat = batch.reshape(-1)
+                traj_ids = flat[("collector", "traj_ids")]
+                done = flat[("next", "done")].reshape(traj_ids.shape[0], -1)
+                is_init = flat["is_init"].reshape(traj_ids.shape[0], -1)
+                for tid in traj_ids.unique():
+                    idx = traj_ids == tid
+                    if not done[idx].any():
+                        continue  # partial trajectory
+                    assert is_init[idx][
+                        0
+                    ].any(), f"traj {tid}: first step must have is_init=True"
+                    assert done[idx][
+                        -1
+                    ].any(), f"traj {tid}: last step must have done=True"
+        finally:
+            collector.shutdown()
+
+        # --- ndim=2 replay buffer integration ---
+        # Use SerialEnv(2) per worker so fake_td is 2D at init, which is
+        # required for ndim=2 storage initialisation in multi-process collectors.
+        num_envs = 2
+        batched_env_fn = lambda: SerialEnv(num_envs, env_fn)  # noqa: E731
+        probe = batched_env_fn()
+        policy2 = RandomPolicy(probe.action_spec)
+        probe.close(raise_if_closed=False)
+        rb = ReplayBuffer(storage=LazyTensorStorage(400, ndim=2), shared=True)
+        collector2 = MultiAsyncCollector(
+            [batched_env_fn, batched_env_fn],
+            policy2,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * num_envs * 4,
+            total_frames=max_steps * num_envs * 16,
+            cat_results="stack",
+        )
+        try:
+            list(collector2)
+        finally:
+            collector2.shutdown()
+
+        assert len(rb) > 0, "ndim=2 replay buffer must be populated"
+        assert ("collector", "traj_ids") in rb.sample(1).keys(True)
 
 
 if __name__ == "__main__":

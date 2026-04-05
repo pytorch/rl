@@ -1035,12 +1035,22 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                 while len(complete_trajs) >= self.trajs_per_batch:
                     traj_batch = _traj_emit(complete_trajs, self.trajs_per_batch)
                     if has_rb:
-                        # Store each trajectory as a flat (unpadded) sequence so
-                        # that slice-oriented samplers work with 1-D storage.
-                        mask = traj_batch.get(("collector", "mask"))
-                        for i in range(traj_batch.shape[0]):
-                            valid_len = int(mask[i].sum().item())
-                            rb.extend(traj_batch[i, :valid_len])
+                        rb_ndim = getattr(getattr(rb, "_storage", None), "ndim", 1)
+                        if rb_ndim > 1:
+                            # Multi-dim storage (e.g. ndim=2 for batched envs):
+                            # store the full padded [N, max_len] batch so the
+                            # storage shape is preserved. The ("collector", "mask")
+                            # field marks valid steps within each row.
+                            rb.extend(traj_batch)
+                        else:
+                            # 1-D storage: strip padding and store each trajectory
+                            # as a flat sequence of valid timesteps so that
+                            # slice-oriented samplers (e.g. SliceSampler) work
+                            # correctly with done-signal boundaries.
+                            mask = traj_batch.get(("collector", "mask"))
+                            for i in range(traj_batch.shape[0]):
+                                valid_len = int(mask[i].sum().item())
+                                rb.extend(traj_batch[i, :valid_len])
                         yield
                     else:
                         yield traj_batch
