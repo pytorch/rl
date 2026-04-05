@@ -10,7 +10,6 @@ from typing import Any
 import numpy as np
 import torch
 from tensordict import TensorDict, TensorDictBase
-
 from torchrl import logger as torchrl_logger
 from torchrl._utils import timeit, VERBOSE
 from torchrl.collectors._base import BaseCollector, ProfileConfig
@@ -21,7 +20,6 @@ from torchrl.collectors._constants import (
     DEFAULT_EXPLORATION_TYPE,
 )
 from torchrl.collectors._single import Collector
-
 from torchrl.collectors.utils import (
     _cast,
     _make_policy_factory,
@@ -32,6 +30,7 @@ from torchrl.data import ReplayBuffer
 from torchrl.envs import EnvBase, EnvCreator
 from torchrl.envs.utils import ExplorationType
 from torchrl.weight_update import WeightSyncScheme
+from torchrl.weight_update.utils import _resolve_model
 
 
 class _WorkerProfiler:
@@ -200,9 +199,9 @@ def _main_async_collector(
         _make_policy_factory,
         policy=policy,
         policy_factory=policy_factory,
-        weight_sync_scheme=weight_sync_schemes.get("policy")
-        if weight_sync_schemes
-        else None,
+        weight_sync_scheme=(
+            weight_sync_schemes.get("policy") if weight_sync_schemes else None
+        ),
         worker_idx=worker_idx,
         pipe=pipe_child,
     )
@@ -251,6 +250,15 @@ def _main_async_collector(
         # This properly initializes the schemes on the receiver side and stores them in _receiver_schemes.
         if weight_sync_schemes:
             inner_collector.register_scheme_receiver(weight_sync_schemes)
+            # Fix stale model reference: init_on_receiver was called in _make_policy_factory
+            # with the original policy object, but _get_policy_and_device may have deepcopied
+            # the policy to a new device. Update the scheme's model ref to the actual policy
+            # used by the collector, otherwise weight updates go to the wrong (unused) object.
+            for model_id, scheme in weight_sync_schemes.items():
+                actual_model = _resolve_model(inner_collector, model_id)
+                _scheme_model = scheme.model
+                if actual_model is not None and _scheme_model is not actual_model:
+                    scheme.model = actual_model
 
         use_buffers = inner_collector._use_buffers
         if verbose:
