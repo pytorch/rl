@@ -485,6 +485,7 @@ class PrioritizedSampler(Sampler):
                 f"dtype {self.dtype} not supported by PrioritizedSampler"
             )
         self._max_priority = None
+        self._pending_updates = []
 
     def _empty(self) -> None:
         self._init()
@@ -543,7 +544,89 @@ class PrioritizedSampler(Sampler):
             mp = 1
         return (mp + self._eps) ** self._alpha
 
+    def _normalize_index(
+        self,
+        index: int | torch.Tensor | tuple[torch.Tensor, ...],
+        *,
+        storage: TensorStorage | None = None,
+    ) -> torch.Tensor:
+        if isinstance(index, tuple):
+            index = torch.stack(index, -1)
+        index = torch.as_tensor(index, dtype=torch.long, device=torch.device("cpu"))
+        if _is_int(index):
+            return index.reshape(1)
+        if index.ndim > 1:
+            if storage is None:
+                raise RuntimeError(
+                    "storage should be provided to Sampler.update_priority when the storage has more "
+                    "than one dimension."
+                )
+            try:
+                shape = storage.shape
+            except AttributeError:
+                raise AttributeError(
+                    "Could not retrieve the storage shape. If your storage is not a TensorStorage subclass "
+                    "or its shape isn't accessible via the shape attribute, submit an issue on GitHub."
+                )
+            index = torch.as_tensor(np.ravel_multi_index(index.unbind(-1), shape))
+        return index.reshape(-1)
+
+    def _flush_pending_updates(self) -> None:
+        if not self._pending_updates:
+            return
+        pending_updates = self._pending_updates
+        self._pending_updates = []
+        for index, priority in pending_updates:
+            self._update_priority_tree(index, priority)
+
+    @torch.no_grad()
+    def _update_priority_tree(
+        self,
+        index: torch.Tensor,
+        priority: torch.Tensor,
+    ) -> None:
+        """Write priorities into the sum/min trees for the given flat 1-d index.
+
+        Both ``index`` and ``priority`` must already be tensors on CPU.
+        ``index`` must be a 1-d long tensor (as returned by :meth:`_normalize_index`),
+        and negative indices must already be filtered out by the caller.
+        """
+        # we need to reshape priority if it has more than one element or if it has
+        # a different shape than index
+        if priority.numel() > 1 and priority.shape != index.shape:
+            try:
+                priority = priority.reshape(index.shape[:1])
+            except Exception as err:
+                raise RuntimeError(
+                    "priority should be a number or an iterable of the same "
+                    f"length as index. Got priority of shape {priority.shape} and index "
+                    f"{index.shape}."
+                ) from err
+        elif priority.numel() <= 1:
+            priority = priority.squeeze()
+
+        max_p, max_p_idx = priority.max(dim=0)
+        cur_max_priority, cur_max_priority_index = self._max_priority
+        if cur_max_priority is None or max_p > cur_max_priority:
+            cur_max_priority, cur_max_priority_index = self._max_priority = (
+                max_p,
+                index[max_p_idx] if index.ndim else index,
+            )
+        priority = torch.pow(priority + self._eps, self._alpha)
+        self._sum_tree[index] = priority
+        self._min_tree[index] = priority
+        if (
+            self._max_priority_within_buffer
+            and cur_max_priority_index is not None
+            and (index == cur_max_priority_index).any()
+        ):
+            maxval, maxidx = torch.tensor(
+                [self._sum_tree[i] for i in range(self._max_capacity)]
+            ).max(0)
+            self._max_priority = (maxval, maxidx)
+
     def sample(self, storage: Storage, batch_size: int) -> torch.Tensor:
+        self._flush_pending_updates()
         if len(storage) == 0:
             raise RuntimeError(_EMPTY_STORAGE_ERROR)
         p_sum = self._sum_tree.query(0, len(storage))
@@ -621,76 +704,48 @@ class PrioritizedSampler(Sampler):
                 ``index.ndim > 2``.
 
         """
+        self._flush_pending_updates()
         priority = torch.as_tensor(priority, device=torch.device("cpu")).detach()
-        index = torch.as_tensor(index, dtype=torch.long, device=torch.device("cpu"))
-        # we need to reshape priority if it has more than one element or if it has
-        # a different shape than index
-        if priority.numel() > 1 and priority.shape != index.shape:
-            try:
-                priority = priority.reshape(index.shape[:1])
-            except Exception as err:
-                raise RuntimeError(
-                    "priority should be a number or an iterable of the same "
-                    f"length as index. Got priority of shape {priority.shape} and index "
-                    f"{index.shape}."
-                ) from err
-        elif priority.numel() <= 1:
-            priority = priority.squeeze()
-
+        index = self._normalize_index(index, storage=storage)
         # MaxValueWriter will set -1 for items in the data that we don't want
         # to update. We therefore have to keep only the non-negative indices.
-        if _is_int(index):
-            if index == -1:
-                return
-        else:
-            if index.ndim > 1:
-                if storage is None:
-                    raise RuntimeError(
-                        "storage should be provided to Sampler.update_priority when the storage has more "
-                        "than one dimension."
-                    )
-                try:
-                    shape = storage.shape
-                except AttributeError:
-                    raise AttributeError(
-                        "Could not retrieve the storage shape. If your storage is not a TensorStorage subclass "
-                        "or its shape isn't accessible via the shape attribute, submit an issue on GitHub."
-                    )
-                index = torch.as_tensor(np.ravel_multi_index(index.unbind(-1), shape))
-            valid_index = index >= 0
-            if not valid_index.any():
-                return
-            if not valid_index.all():
-                index = index[valid_index]
-                if priority.ndim:
-                    priority = priority[valid_index]
-
-        max_p, max_p_idx = priority.max(dim=0)
-        cur_max_priority, cur_max_priority_index = self._max_priority
-        if cur_max_priority is None or max_p > cur_max_priority:
-            cur_max_priority, cur_max_priority_index = self._max_priority = (
-                max_p,
-                index[max_p_idx] if index.ndim else index,
-            )
-        priority = torch.pow(priority + self._eps, self._alpha)
-        self._sum_tree[index] = priority
-        self._min_tree[index] = priority
-        if (
-            self._max_priority_within_buffer
-            and cur_max_priority_index is not None
-            and (index == cur_max_priority_index).any()
-        ):
-            maxval, maxidx = torch.tensor(
-                [self._sum_tree[i] for i in range(self._max_capacity)]
-            ).max(0)
-            self._max_priority = (maxval, maxidx)
+        valid_index = index >= 0
+        if not valid_index.any():
+            return
+        if not valid_index.all():
+            index = index[valid_index]
+            if priority.ndim:
+                priority = priority[valid_index]
+        self._update_priority_tree(index, priority)
 
     def mark_update(
         self, index: int | torch.Tensor, *, storage: Storage | None = None
     ) -> None:
-        self.update_priority(index, self.default_priority, storage=storage)
+        """Marks the given indices for a default-priority update.
+
+        The update is **lazy**: the priority tree is not written to immediately.
+        Instead the (index, default_priority) pair is appended to an internal
+        pending-updates list and flushed the next time the tree is read
+        (e.g. on :meth:`sample`, :meth:`update_priority`, :meth:`state_dict`,
+        or :meth:`dumps`).
+
+        If :meth:`update_priority` is called for the same indices before the
+        flush, the pending defaults are applied first and then overwritten by
+        the explicit priorities.
+        """
+        index = self._normalize_index(index, storage=storage)
+        valid_index = index >= 0
+        if not valid_index.any():
+            return
+        if not valid_index.all():
+            index = index[valid_index]
+        priority = torch.as_tensor(
+            self.default_priority, device=torch.device("cpu")
+        ).detach()
+        self._pending_updates.append((index.clone(), priority))
 
     def state_dict(self) -> dict[str, Any]:
+        self._flush_pending_updates()
         return {
             "_alpha": self._alpha,
             "_beta": self._beta,
@@ -707,6 +762,7 @@ class PrioritizedSampler(Sampler):
         self._max_priority = state_dict["_max_priority"]
         self._sum_tree = state_dict.pop("_sum_tree")
         self._min_tree = state_dict.pop("_min_tree")
+        self._pending_updates = []
 
     @implement_for("torch", None, "2.5.0")
     def dumps(self, path):
@@ -714,6 +770,7 @@ class PrioritizedSampler(Sampler):
 
     @implement_for("torch", "2.5.0", None)
     def dumps(self, path):  # noqa: F811
+        self._flush_pending_updates()
         path = Path(path).absolute()
         path.mkdir(exist_ok=True)
         try:
@@ -797,6 +854,7 @@ class PrioritizedSampler(Sampler):
             self._sum_tree[i] = elt
         for i, elt in enumerate(mm_mt.tolist()):
             self._min_tree[i] = elt
+        self._pending_updates = []
 
 
 class SliceSampler(Sampler):
@@ -2229,6 +2287,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         return preceding_stop_idx
 
     def sample(self, storage: Storage, batch_size: int) -> tuple[torch.Tensor, dict]:
+        self._flush_pending_updates()
         # Sample `batch_size` indices representing the start of a slice.
         # The sampling is based on a weight vector.
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
