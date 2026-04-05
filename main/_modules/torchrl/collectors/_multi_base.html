@@ -1099,6 +1099,14 @@
     <span class="k">def</span> <span class="nf">_check_replay_buffer_init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;trajs_per_batch&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;trajs_per_batch is not supported together with replay_buffer on &quot;</span>
+                <span class="s2">&quot;multi-process collectors. Multi-process collectors write frames &quot;</span>
+                <span class="s2">&quot;directly to a shared replay buffer at the worker level, so &quot;</span>
+                <span class="s2">&quot;trajectory reassembly cannot be performed in the main process. &quot;</span>
+                <span class="s2">&quot;Use a single-process Collector instead.&quot;</span>
+            <span class="p">)</span>
         <span class="n">is_init</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="p">,</span> <span class="s2">&quot;_storage&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">_storage</span><span class="p">,</span> <span class="s2">&quot;initialized&quot;</span><span class="p">,</span> <span class="kc">True</span>
         <span class="p">)</span>

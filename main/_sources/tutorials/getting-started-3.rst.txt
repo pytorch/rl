@@ -112,7 +112,7 @@ we will use a dummy, random policy in this example.
 
  .. code-block:: none
 
-    /pytorch/rl/torchrl/collectors/_base.py:1067: DeprecationWarning: SyncDataCollector has been deprecated and will be removed in v0.13. Please use Collector instead.
+    /pytorch/rl/torchrl/collectors/_base.py:1149: DeprecationWarning: SyncDataCollector has been deprecated and will be removed in v0.13. Please use Collector instead.
       warnings.warn(
 
 

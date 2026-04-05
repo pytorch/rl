@@ -788,10 +788,12 @@
         <span class="n">var_nums</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">spec</span><span class="p">:</span> <span class="n">TensorSpec</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">safe</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">strict_shape</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action_space</span><span class="p">,</span> <span class="n">TensorSpec</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Using specs in action_space is deprecated&quot;</span><span class="p">)</span>
         <span class="n">action_space</span><span class="p">,</span> <span class="n">spec</span> <span class="o">=</span> <span class="n">_process_action_space_spec</span><span class="p">(</span><span class="n">action_space</span><span class="p">,</span> <span class="n">spec</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">strict_shape</span> <span class="o">=</span> <span class="n">strict_shape</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">action_space</span> <span class="o">=</span> <span class="n">action_space</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">var_nums</span> <span class="o">=</span> <span class="n">var_nums</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">action_func_mapping</span> <span class="o">=</span> <span class="p">{</span>
@@ -870,6 +872,48 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">action_space</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_action_value</span>
         <span class="p">)</span>
         <span class="n">chosen_action_value</span> <span class="o">=</span> <span class="n">action_value_func</span><span class="p">(</span><span class="n">action_values</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+
+        <span class="c1"># Enforce action shape to match spec (after chosen_action_value computation)</span>
+        <span class="n">action_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">action_spec</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">action_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">spec</span><span class="p">,</span> <span class="n">Composite</span><span class="p">)</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">action_spec</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">strict_shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">False</span><span class="p">:</span>
+            <span class="n">composite_batch_ndim</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="n">per_sample_shape</span> <span class="o">=</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">composite_batch_ndim</span><span class="p">:]</span>
+            <span class="n">batch_shape</span> <span class="o">=</span> <span class="n">action_values</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">target_shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">batch_shape</span><span class="p">)</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="n">per_sample_shape</span><span class="p">))</span>
+
+            <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">target_shape</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">strict_shape</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Action shape </span><span class="si">{</span><span class="n">action</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> does not match expected shape </span><span class="si">{</span><span class="n">target_shape</span><span class="si">}</span><span class="s2"> &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;(per-sample spec shape: </span><span class="si">{</span><span class="n">per_sample_shape</span><span class="si">}</span><span class="s2">). &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;Set strict_shape=&#39;auto&#39; to attempt automatic reshaping.&quot;</span>
+                    <span class="p">)</span>
+                <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">strict_shape</span> <span class="o">==</span> <span class="s2">&quot;auto&quot;</span><span class="p">:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">action</span> <span class="o">=</span> <span class="n">action</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">target_shape</span><span class="p">)</span>
+                    <span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;Cannot reshape action from </span><span class="si">{</span><span class="n">action</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> to </span><span class="si">{</span><span class="n">target_shape</span><span class="si">}</span><span class="s2">.&quot;</span>
+                        <span class="p">)</span>
+                <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">strict_shape</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="kn">import</span> <span class="nn">warnings</span>
+
+                    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Action shape </span><span class="si">{</span><span class="n">action</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> does not match expected shape </span><span class="si">{</span><span class="n">target_shape</span><span class="si">}</span><span class="s2"> &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;(per-sample spec shape: </span><span class="si">{</span><span class="n">per_sample_shape</span><span class="si">}</span><span class="s2">). &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;In v0.14, this will raise an error. &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;Set strict_shape=&#39;auto&#39; to automatically reshape, &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;strict_shape=True to raise immediately, &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;or strict_shape=False to silence this warning.&quot;</span><span class="p">,</span>
+                        <span class="ne">FutureWarning</span><span class="p">,</span>
+                        <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                    <span class="p">)</span>
+
         <span class="n">tensordict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
             <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">,</span> <span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">action_values</span><span class="p">,</span> <span class="n">chosen_action_value</span><span class="p">)))</span>
         <span class="p">)</span>
@@ -1389,6 +1433,7 @@
         <span class="n">action_space</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">action_value_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">action_mask_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">strict_shape</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action_space</span><span class="p">,</span> <span class="n">TensorSpec</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -1434,6 +1479,7 @@
             <span class="n">safe</span><span class="o">=</span><span class="n">safe</span><span class="p">,</span>
             <span class="n">action_space</span><span class="o">=</span><span class="n">action_space</span><span class="p">,</span>
             <span class="n">action_mask_key</span><span class="o">=</span><span class="n">action_mask_key</span><span class="p">,</span>
+            <span class="n">strict_shape</span><span class="o">=</span><span class="n">strict_shape</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">qvalue</span><span class="p">)</span></div>

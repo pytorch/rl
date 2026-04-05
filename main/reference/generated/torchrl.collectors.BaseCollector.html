@@ -255,7 +255,7 @@
 <dd><p>Base class for data collectors.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>trajs_per_batch</strong> (<em>int</em><em>, </em><em>optional</em>) – When set, the collector yields batches
+<dd class="field-odd"><p><strong>trajs_per_batch</strong> (<em>int</em><em>, </em><em>optional</em>) – <p>When set, the collector yields batches
 of exactly this many complete, zero-padded trajectories instead of
 fixed-frame batches. Each yielded <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>
 has shape <code class="docutils literal notranslate"><span class="pre">(trajs_per_batch,</span> <span class="pre">max_traj_len)</span></code> and includes a
@@ -263,8 +263,38 @@ has shape <code class="docutils literal notranslate"><span class="pre">(trajs_pe
 Trajectories that span multiple internal collection steps are
 reassembled automatically. <code class="docutils literal notranslate"><span class="pre">frames_per_batch</span></code> still controls
 how often the environment is polled internally, but the output
-batch size is determined by <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code>.
-Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (fixed-frame batches).</p>
+batch size is determined by <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code>.</p>
+<p>When combined with a <code class="docutils literal notranslate"><span class="pre">replay_buffer</span></code> on a single-process
+<a class="reference internal" href="torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector"><code class="xref py py-class docutils literal notranslate"><span class="pre">Collector</span></code></a>, trajectory batches are
+written to the replay buffer instead of raw frames. This integrates
+naturally with <code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code> — pass
+<code class="docutils literal notranslate"><span class="pre">end_key=(&quot;next&quot;,</span> <span class="pre">&quot;done&quot;)</span></code> to sample contiguous sub-sequences
+that respect episode boundaries. Async collection via
+<a class="reference internal" href="torchrl.collectors.Collector.html#torchrl.collectors.Collector.start" title="torchrl.collectors.Collector.start"><code class="xref py py-meth docutils literal notranslate"><span class="pre">start()</span></code></a> is supported:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">rb</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span>
+    <span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span><span class="mi">10_000</span><span class="p">),</span>
+    <span class="n">sampler</span><span class="o">=</span><span class="n">SliceSampler</span><span class="p">(</span><span class="n">slice_len</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">end_key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">)),</span>
+    <span class="n">shared</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">collector</span> <span class="o">=</span> <span class="n">Collector</span><span class="p">(</span>
+    <span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span>
+    <span class="n">replay_buffer</span><span class="o">=</span><span class="n">rb</span><span class="p">,</span>
+    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+    <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">trajs_per_batch</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">collector</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>   <span class="c1"># fills rb with [32, max_len] trajectory batches</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code> combined with <code class="docutils literal notranslate"><span class="pre">replay_buffer</span></code> is only
+supported for single-process collectors. Multi-process collectors
+write frames directly to a shared buffer at the worker level and
+cannot reassemble trajectories in the main process.</p>
+</div>
+<p>Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (fixed-frame batches).</p>
+</p>
 </dd>
 </dl>
 <dl class="py method">

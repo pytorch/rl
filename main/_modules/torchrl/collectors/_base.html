@@ -391,6 +391,37 @@
 <span class="sd">            reassembled automatically. ``frames_per_batch`` still controls</span>
 <span class="sd">            how often the environment is polled internally, but the output</span>
 <span class="sd">            batch size is determined by ``trajs_per_batch``.</span>
+
+<span class="sd">            When combined with a ``replay_buffer`` on a single-process</span>
+<span class="sd">            :class:`~torchrl.collectors.Collector`, trajectory batches are</span>
+<span class="sd">            written to the replay buffer instead of raw frames. This integrates</span>
+<span class="sd">            naturally with :class:`~torchrl.data.SliceSampler` — pass</span>
+<span class="sd">            ``end_key=(&quot;next&quot;, &quot;done&quot;)`` to sample contiguous sub-sequences</span>
+<span class="sd">            that respect episode boundaries. Async collection via</span>
+<span class="sd">            :meth:`~torchrl.collectors.Collector.start` is supported:</span>
+
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                rb = ReplayBuffer(</span>
+<span class="sd">                    storage=LazyTensorStorage(10_000),</span>
+<span class="sd">                    sampler=SliceSampler(slice_len=16, end_key=(&quot;next&quot;, &quot;done&quot;)),</span>
+<span class="sd">                    shared=True,</span>
+<span class="sd">                )</span>
+<span class="sd">                collector = Collector(</span>
+<span class="sd">                    env, policy,</span>
+<span class="sd">                    replay_buffer=rb,</span>
+<span class="sd">                    frames_per_batch=200,</span>
+<span class="sd">                    total_frames=-1,</span>
+<span class="sd">                    trajs_per_batch=32,</span>
+<span class="sd">                )</span>
+<span class="sd">                collector.start()   # fills rb with [32, max_len] trajectory batches</span>
+
+<span class="sd">            .. note::</span>
+<span class="sd">                ``trajs_per_batch`` combined with ``replay_buffer`` is only</span>
+<span class="sd">                supported for single-process collectors. Multi-process collectors</span>
+<span class="sd">                write frames directly to a shared buffer at the worker level and</span>
+<span class="sd">                cannot reassemble trajectories in the main process.</span>
+
 <span class="sd">            Defaults to ``None`` (fixed-frame batches).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -1233,13 +1264,64 @@
             <span class="k">raise</span>
 
     <span class="k">def</span> <span class="nf">_iter_by_trajectories</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Yield padded batches of exactly ``trajs_per_batch`` complete trajectories.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Yield padded batches of exactly ``trajs_per_batch`` complete trajectories.</span>
+
+<span class="sd">        When a replay buffer is configured on a single-process collector, each</span>
+<span class="sd">        complete trajectory is stored as a **flat sequence of valid timesteps**</span>
+<span class="sd">        (padding stripped via ``(&quot;collector&quot;, &quot;mask&quot;)``), and this method yields</span>
+<span class="sd">        ``None`` each time — matching the behaviour of :meth:`iterator` in</span>
+<span class="sd">        replay-buffer mode.  Flat storage makes the buffer directly compatible</span>
+<span class="sd">        with :class:`~torchrl.data.SliceSampler` using</span>
+<span class="sd">        ``end_key=(&quot;next&quot;, &quot;done&quot;)``.</span>
+
+<span class="sd">        .. note::</span>
+<span class="sd">            Replay buffer integration with ``trajs_per_batch`` is only supported</span>
+<span class="sd">            for single-process collectors (:class:`~torchrl.collectors.Collector`).</span>
+<span class="sd">            Multi-process collectors write frames directly to a shared replay</span>
+<span class="sd">            buffer at the worker level and cannot reassemble trajectories in the</span>
+<span class="sd">            main process.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">partial_trajs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="n">complete_trajs</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">iterator</span><span class="p">():</span>
-            <span class="n">_traj_ingest</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">partial_trajs</span><span class="p">,</span> <span class="n">complete_trajs</span><span class="p">)</span>
-            <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">complete_trajs</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajs_per_batch</span><span class="p">:</span>
-                <span class="k">yield</span> <span class="n">_traj_emit</span><span class="p">(</span><span class="n">complete_trajs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajs_per_batch</span><span class="p">)</span>
+        <span class="n">rb</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;replay_buffer&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="c1"># _ignore_rb is a single-collector concept; multi-collectors don&#39;t have it.</span>
+        <span class="c1"># Default True so that missing attr → has_rb=False (safe for multi-collectors).</span>
+        <span class="n">has_rb</span> <span class="o">=</span> <span class="n">rb</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_ignore_rb&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">has_rb</span><span class="p">:</span>
+            <span class="n">_prev_ignore_rb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignore_rb</span>
+            <span class="c1"># Prevent iterator() from writing raw frames to the replay buffer;</span>
+            <span class="c1"># we will write assembled trajectory sequences instead.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_ignore_rb</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">iterator</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">batch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="n">_traj_ingest</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">partial_trajs</span><span class="p">,</span> <span class="n">complete_trajs</span><span class="p">)</span>
+                <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">complete_trajs</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajs_per_batch</span><span class="p">:</span>
+                    <span class="n">traj_batch</span> <span class="o">=</span> <span class="n">_traj_emit</span><span class="p">(</span><span class="n">complete_trajs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajs_per_batch</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">has_rb</span><span class="p">:</span>
+                        <span class="n">rb_ndim</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">rb</span><span class="p">,</span> <span class="s2">&quot;_storage&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span> <span class="s2">&quot;ndim&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="n">rb_ndim</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                            <span class="c1"># Multi-dim storage (e.g. ndim=2 for batched envs):</span>
+                            <span class="c1"># store the full padded [N, max_len] batch so the</span>
+                            <span class="c1"># storage shape is preserved. The (&quot;collector&quot;, &quot;mask&quot;)</span>
+                            <span class="c1"># field marks valid steps within each row.</span>
+                            <span class="n">rb</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">traj_batch</span><span class="p">)</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="c1"># 1-D storage: strip padding and store each trajectory</span>
+                            <span class="c1"># as a flat sequence of valid timesteps so that</span>
+                            <span class="c1"># slice-oriented samplers (e.g. SliceSampler) work</span>
+                            <span class="c1"># correctly with done-signal boundaries.</span>
+                            <span class="n">mask</span> <span class="o">=</span> <span class="n">traj_batch</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;mask&quot;</span><span class="p">))</span>
+                            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">traj_batch</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+                                <span class="n">valid_len</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">mask</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+                                <span class="n">rb</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">traj_batch</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:</span><span class="n">valid_len</span><span class="p">])</span>
+                        <span class="k">yield</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="k">yield</span> <span class="n">traj_batch</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">has_rb</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_ignore_rb</span> <span class="o">=</span> <span class="n">_prev_ignore_rb</span>
 
     <span class="k">def</span> <span class="nf">next</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">try</span><span class="p">:</span>
