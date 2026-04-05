@@ -623,7 +623,11 @@ class QValueModule(TensorDictModuleBase):
 
         # Enforce action shape to match spec (after chosen_action_value computation)
         action_key = self.out_keys[0]
-        action_spec = self.spec.get(action_key, None) if isinstance(self.spec, Composite) else None
+        action_spec = (
+            self.spec.get(action_key, None)
+            if isinstance(self.spec, Composite)
+            else None
+        )
         if action_spec is not None and self.strict_shape is not False:
             composite_batch_ndim = len(self.spec.shape)
             per_sample_shape = action_spec.shape[composite_batch_ndim:]
@@ -650,7 +654,7 @@ class QValueModule(TensorDictModuleBase):
                     warnings.warn(
                         f"Action shape {action.shape} does not match expected shape {target_shape} "
                         f"(per-sample spec shape: {per_sample_shape}). "
-                        f"In a future version, this will raise an error. "
+                        f"In v0.14, this will raise an error. "
                         f"Set strict_shape='auto' to automatically reshape, "
                         f"strict_shape=True to raise immediately, "
                         f"or strict_shape=False to silence this warning.",

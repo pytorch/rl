@@ -651,7 +651,10 @@ class TestQValue:
             module=nn.Linear(3, 1), in_keys=("observation",), out_keys=("action_value",)
         )
         qvalue_actor = QValueActor(
-            module=module, in_keys=["observation"], spec=action_spec, strict_shape="auto"
+            module=module,
+            in_keys=["observation"],
+            spec=action_spec,
+            strict_shape="auto",
         )
         td = TensorDict({"observation": torch.randn(12, 3)})
         qvalue_actor(td)
@@ -692,7 +695,10 @@ class TestQValue:
             module=nn.Linear(3, 4), in_keys=("observation",), out_keys=("action_value",)
         )
         qvalue_actor = QValueActor(
-            module=module, in_keys=["observation"], spec=action_spec, strict_shape="auto"
+            module=module,
+            in_keys=["observation"],
+            spec=action_spec,
+            strict_shape="auto",
         )
         td = TensorDict({"observation": torch.randn(5, 3)})
         with warnings.catch_warnings(record=True) as w:
