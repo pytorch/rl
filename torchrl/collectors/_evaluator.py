@@ -82,8 +82,17 @@ class Evaluator:
       (blocking) to retrieve the result.  Results are also auto-logged if a
       *logger* is provided.
 
-    Fire-and-forget semantics: calling :meth:`trigger_eval` while a previous
-    evaluation is still running discards the in-progress result.
+    **Backpressure / overlap policy**: calling :meth:`trigger_eval` while a
+    previous evaluation is still running **drops** the in-progress result
+    (fire-and-forget).  The new evaluation starts as soon as the background
+    thread finishes the current ``env.rollout()`` call — there is no queue,
+    no coalescing, and no error.  Only the most-recently-triggered evaluation
+    will produce a result.
+
+    **Logging thread-safety**: all logger writes (scalar metrics, video
+    encoding) happen on the **caller thread** inside :meth:`poll`,
+    :meth:`wait`, or :meth:`evaluate`.  The background thread only computes
+    plain metrics and returns them; it never touches the logger.
 
     Args:
         env: An :class:`~torchrl.envs.EnvBase` instance **or** a callable
@@ -167,6 +176,7 @@ class Evaluator:
         self._callback = callback
         self._logger_lock = logger_lock or threading.Lock()
         self._step_counter = 0
+        self._dump_video = dump_video
 
         if backend == "thread":
             self._backend: _EvalBackend = _ThreadEvalBackend(
@@ -179,7 +189,6 @@ class Evaluator:
                 reward_keys=reward_keys,
                 break_when_any_done=break_when_any_done,
                 auto_cast_to_device=auto_cast_to_device,
-                dump_video=dump_video,
                 metrics_fn=metrics_fn,
             )
         elif backend == "ray":
@@ -222,11 +231,7 @@ class Evaluator:
         weights = self._prepare_weights(weights)
         step = self._next_step(step)
         raw = self._backend.run_sync(weights, step)
-        metrics = self._format_metrics(raw)
-        self._auto_log(metrics, step)
-        if self._callback is not None:
-            self._callback(metrics, step)
-        return metrics
+        return self._finalize(raw)
 
     # ------------------------------------------------------------------
     # Asynchronous API
@@ -259,12 +264,7 @@ class Evaluator:
         raw = self._backend.poll(timeout)
         if raw is None:
             return None
-        metrics = self._format_metrics(raw)
-        step = raw.get("_step")
-        self._auto_log(metrics, step)
-        if self._callback is not None:
-            self._callback(metrics, step)
-        return metrics
+        return self._finalize(raw)
 
     def wait(self, timeout: float | None = None) -> dict[str, Any] | None:
         """Block until the current evaluation finishes.
@@ -275,12 +275,7 @@ class Evaluator:
         raw = self._backend.wait(timeout)
         if raw is None:
             return None
-        metrics = self._format_metrics(raw)
-        step = raw.get("_step")
-        self._auto_log(metrics, step)
-        if self._callback is not None:
-            self._callback(metrics, step)
-        return metrics
+        return self._finalize(raw)
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -325,6 +320,24 @@ class Evaluator:
         self._step_counter += 1
         return s
 
+    def _finalize(self, raw: dict[str, Any]) -> dict[str, Any]:
+        """Format metrics, dump video, log, and invoke callback.
+
+        All heavy I/O (video dump, logger writes) happens here on the
+        **caller thread**, never inside the background eval thread.
+        """
+        step = raw.get("_step")
+        metrics = self._format_metrics(raw)
+
+        # Video dump -- on the caller thread so logger writes are safe
+        if self._dump_video:
+            self._backend.dump_video(step=step)
+
+        self._auto_log(metrics, step)
+        if self._callback is not None:
+            self._callback(metrics, step)
+        return metrics
+
     def _format_metrics(self, raw: dict[str, Any]) -> dict[str, Any]:
         prefix = self._log_prefix
         out: dict[str, Any] = {}
@@ -334,6 +347,8 @@ class Evaluator:
             out[f"{prefix}/episode_length"] = raw["episode_length"]
         if "frames" in raw and raw["frames"] is not None:
             out[f"{prefix}/video"] = raw["frames"]
+        if "_step" in raw:
+            out[f"{prefix}/step"] = raw["_step"]
         # Custom metrics (already prefixed by backend or metrics_fn)
         for k, v in raw.items():
             if k.startswith("custom/"):
@@ -344,14 +359,18 @@ class Evaluator:
         if self._logger is None:
             return
         with self._logger_lock:
-            # Separate video from scalar metrics
-            video = metrics.pop(f"{self._log_prefix}/video", None)
-            if metrics:
-                self._logger.log_metrics(metrics, step=step)
+            # Separate non-scalar entries from scalar metrics for logging
+            video = metrics.get(f"{self._log_prefix}/video")
+            step_key = f"{self._log_prefix}/step"
+            scalars = {
+                k: v
+                for k, v in metrics.items()
+                if k != f"{self._log_prefix}/video" and k != step_key
+            }
+            if scalars:
+                self._logger.log_metrics(scalars, step=step)
             if video is not None:
                 self._logger.log_video(f"{self._log_prefix}/video", video, step=step)
-                # Put it back so the caller still sees it
-                metrics[f"{self._log_prefix}/video"] = video
 
 
 # ======================================================================
@@ -387,6 +406,13 @@ class _EvalBackend(abc.ABC):
         """Clean up resources."""
         ...
 
+    def dump_video(self, step: int | None = None) -> None:
+        """Dump accumulated video frames (called on caller thread).
+
+        Default is a no-op; overridden by backends that support video.
+        """
+        return None
+
 
 # ======================================================================
 # Thread backend
@@ -407,7 +433,6 @@ class _ThreadEvalBackend(_EvalBackend):
         reward_keys: NestedKey,
         break_when_any_done: bool,
         auto_cast_to_device: bool,
-        dump_video: bool,
         metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
     ) -> None:
         # Build env
@@ -437,7 +462,6 @@ class _ThreadEvalBackend(_EvalBackend):
         self._reward_keys = reward_keys
         self._break_when_any_done = break_when_any_done
         self._auto_cast_to_device = auto_cast_to_device
-        self._dump_video = dump_video
         self._metrics_fn = metrics_fn
 
         # Threading state
@@ -567,13 +591,18 @@ class _ThreadEvalBackend(_EvalBackend):
             for k, v in custom.items():
                 metrics[f"custom/{k}"] = v
 
-        # Video dump
-        if self._dump_video and hasattr(self._env, "transform"):
-            for transform in self._env.transform:
-                if hasattr(transform, "dump"):
-                    transform.dump()
-
         return metrics
+
+    def dump_video(self, step: int | None = None) -> None:
+        """Dump accumulated video frames from VideoRecorder transforms.
+
+        Called on the caller thread so that logger writes are thread-safe.
+        """
+        if not hasattr(self._env, "transform"):
+            return
+        for transform in self._env.transform:
+            if hasattr(transform, "dump"):
+                transform.dump(step=step)
 
 
 # ======================================================================

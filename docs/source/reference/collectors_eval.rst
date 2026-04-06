@@ -91,6 +91,59 @@ For non-blocking evaluation during training:
 previous evaluation is still running discards the in-progress result and starts
 the new one.
 
+Device placement and compilation
+--------------------------------
+
+For best performance, place the eval policy on a **dedicated device** and
+optionally ``torch.compile`` both the env and policy independently of the
+training pipeline:
+
+.. code-block:: python
+
+    import torch
+
+    eval_device = torch.device("cuda:1")  # training on cuda:0
+
+    eval_policy = make_policy().to(eval_device)
+    eval_env = make_env(device=eval_device)
+
+    # Optional: compile for extra speed
+    eval_policy = torch.compile(eval_policy)
+
+    evaluator = Evaluator(
+        eval_env,
+        eval_policy,
+        max_steps=1000,
+        device=eval_device,
+        logger=logger,
+    )
+
+The ``device`` parameter controls where policy weights are moved before
+each rollout.  When passing weights from the training policy (which may
+live on a different device), the Evaluator automatically moves them to
+the eval device.
+
+Overlap policy (backpressure)
+-----------------------------
+
+Calling :meth:`~Evaluator.trigger_eval` while a previous evaluation is
+still running **drops** the in-progress result (fire-and-forget).  The new
+evaluation starts as soon as the background thread finishes the current
+``env.rollout()`` call.  There is no queue, no coalescing, and no error.
+Only the most recently triggered evaluation produces a result.
+
+This design means you can safely call ``trigger_eval`` on every training
+iteration without worrying about a backlog of pending evaluations.
+
+Thread safety of logging
+------------------------
+
+All logger writes (scalar metrics and video encoding) happen on the
+**caller thread** inside :meth:`~Evaluator.poll`, :meth:`~Evaluator.wait`,
+or :meth:`~Evaluator.evaluate`.  The background thread only computes plain
+metrics; it never touches the logger.  If you share a logger between
+training and evaluation, pass the same ``logger_lock`` to serialise writes.
+
 Backends
 --------
 

@@ -139,6 +139,16 @@ class TestEvaluatorSync:
         assert isinstance(weights, TensorDict)
         assert weights.device == torch.device("cpu")
 
+    def test_step_provenance_in_result(self):
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=50)
+        try:
+            metrics = evaluator.evaluate(step=123)
+            assert metrics["eval/step"] == 123
+        finally:
+            evaluator.shutdown()
+
 
 class TestEvaluatorAsync:
     def test_trigger_and_wait(self):
@@ -248,6 +258,72 @@ class TestEvaluatorAsync:
             assert (
                 not t.is_alive() or "eval" not in t.name.lower()
             ), f"Thread {t.name} still alive after shutdown"
+
+    def test_step_provenance_in_result(self):
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=50)
+        try:
+            evaluator.trigger_eval(step=999)
+            result = evaluator.wait(timeout=30)
+            assert result is not None
+            assert result["eval/step"] == 999
+        finally:
+            evaluator.shutdown()
+
+    def test_shutdown_with_inflight_eval(self):
+        """Shutdown while an eval is still running should not hang."""
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=5000)
+        evaluator.trigger_eval(step=0)
+        # Don't wait for completion -- shut down immediately
+        t0 = time.time()
+        evaluator.shutdown(timeout=5.0)
+        elapsed = time.time() - t0
+        assert elapsed < 10.0, f"Shutdown took {elapsed:.1f}s, expected < 10s"
+
+
+@pytest.mark.skipif(
+    not torch.cuda.is_available() or torch.cuda.device_count() < 2,
+    reason="Requires 2+ CUDA devices",
+)
+class TestEvaluatorMultiDevice:
+    def test_eval_on_dedicated_device(self):
+        """Training policy on cuda:0, eval on cuda:1."""
+        train_device = torch.device("cuda:0")
+        eval_device = torch.device("cuda:1")
+
+        env = ContinuousActionVecMockEnv(device=eval_device)
+        eval_policy = _make_policy(env).to(eval_device)
+        train_policy = _make_policy(env).to(train_device)
+
+        evaluator = Evaluator(env, eval_policy, max_steps=50, device=eval_device)
+        try:
+            # Pass training weights from cuda:0 -- should be moved to cuda:1
+            metrics = evaluator.evaluate(weights=train_policy, step=0)
+            assert "eval/reward" in metrics
+            assert isinstance(metrics["eval/reward"], float)
+        finally:
+            evaluator.shutdown()
+
+    def test_async_eval_on_dedicated_device(self):
+        """Async eval on a different device from training."""
+        train_device = torch.device("cuda:0")
+        eval_device = torch.device("cuda:1")
+
+        env = ContinuousActionVecMockEnv(device=eval_device)
+        eval_policy = _make_policy(env).to(eval_device)
+        train_policy = _make_policy(env).to(train_device)
+
+        evaluator = Evaluator(env, eval_policy, max_steps=50, device=eval_device)
+        try:
+            evaluator.trigger_eval(weights=train_policy, step=0)
+            result = evaluator.wait(timeout=30)
+            assert result is not None
+            assert "eval/reward" in result
+        finally:
+            evaluator.shutdown()
 
 
 class TestEvaluatorErrors:
