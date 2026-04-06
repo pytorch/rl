@@ -14,6 +14,7 @@ TorchRL provides several collector implementations optimized for different scena
 - :class:`Collector`: Single-process collection on the training worker
 - :class:`AsyncBatchedCollector`: Async environments + auto-batching inference server (see :class:`AsyncBatchedCollector`)
 - :class:`MultiCollector`: Parallel collection across multiple workers (see below)
+- :class:`Evaluator`: Sync or async evaluation during training (see :ref:`evaluation <collectors_eval>`)
 - **Distributed collectors**: For multi-node setups using Ray, RPC, or distributed backends (see :class:`DistributedCollector` / :class:`RPCCollector`)
 
 MultiCollector API
@@ -109,6 +110,7 @@ Documentation Sections
 
    collectors_basics
    collectors_single
+   collectors_eval
    collectors_distributed
    collectors_weightsync
    collectors_replay
