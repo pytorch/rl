@@ -112,7 +112,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.11.0) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.12.0) &#x25BC</span></a>
     </div>
     
 
@@ -316,13 +316,13 @@ collect a trajectory:</p>
 </div>
 <p>That’s it! We wrapped a Gym environment, created a Q-value actor with an
 MLP backbone, and used <a class="reference internal" href="../reference/generated/torchrl.envs.EnvBase.html#id2" title="torchrl.envs.EnvBase.rollout"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rollout()</span></code></a> to collect
-a full trajectory. The result is a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>
+a full trajectory. The result is a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>
 containing observations, actions, rewards, and more.</p>
 <p>Now let’s understand each component in detail.</p>
 </section>
 <section id="tensordict-the-data-backbone">
 <h2>TensorDict: The Data Backbone<a class="headerlink" href="#tensordict-the-data-backbone" title="Link to this heading">¶</a></h2>
-<p>At the heart of TorchRL is <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> - a dictionary-like
+<p>At the heart of TorchRL is <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> - a dictionary-like
 container that holds tensors and supports batched operations. Think of it as
 a “tensor of dictionaries” or a “dictionary of tensors” that knows about its
 batch dimensions.</p>
@@ -568,7 +568,7 @@ making it easy to process multiple environments with a single forward pass.</p>
 and write to TensorDicts. This makes it easy to build policies that
 integrate seamlessly with the environment interface.</p>
 <p><strong>TensorDictModule</strong></p>
-<p>The core building block is <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>. It wraps
+<p>The core building block is <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>. It wraps
 any <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> and specifies which TensorDict keys to read as inputs and
 which keys to write as outputs:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a>
@@ -616,7 +616,7 @@ torch.Size([4, 5184])
 <p><strong>Probabilistic Policies</strong></p>
 <p>Many RL algorithms (PPO, SAC, etc.) use stochastic policies that output
 probability distributions over actions. TorchRL provides
-<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="(in tensordict v0.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a> to sample from
+<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="(in tensordict v0.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a> to sample from
 distributions and optionally compute log-probabilities:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="p">(</span>
     <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">ProbabilisticTensorDictModule</span></a><span class="p">,</span>
@@ -683,11 +683,11 @@ synchronously - it waits for a batch to be ready before returning:</p>
 <span class="n">collector</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Collected batch: torch.Size([200]), reward: -8.34
-Collected batch: torch.Size([200]), reward: -8.41
-Collected batch: torch.Size([200]), reward: -8.77
-Collected batch: torch.Size([200]), reward: -8.67
-Collected batch: torch.Size([200]), reward: -8.43
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Collected batch: torch.Size([200]), reward: -7.82
+Collected batch: torch.Size([200]), reward: -8.37
+Collected batch: torch.Size([200]), reward: -8.24
+Collected batch: torch.Size([200]), reward: -7.93
+Collected batch: torch.Size([200]), reward: -8.10
 </pre></div>
 </div>
 <p>For async collection (useful when training takes longer than collecting),
@@ -732,7 +732,7 @@ variants), use <a class="reference internal" href="../reference/generated/torchr
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Prioritized sample indices:&quot;</span><span class="p">,</span> <span class="n">info</span><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">][:</span><span class="mi">5</span><span class="p">],</span> <span class="s2">&quot;...&quot;</span><span class="p">)</span>  <span class="c1"># First 5 indices</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Prioritized sample indices: tensor([81, 68, 58, 90, 85]) ...
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Prioritized sample indices: tensor([78,  0, 26, 24, 66]) ...
 </pre></div>
 </div>
 </section>
@@ -783,7 +783,7 @@ dummy batch to see it in action:</p>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Loss:&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">loss_td</span></a><span class="p">[</span><span class="s2">&quot;loss&quot;</span><span class="p">])</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Loss: tensor(1.1140, grad_fn=&lt;MeanBackward0&gt;)
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Loss: tensor(0.8496, grad_fn=&lt;MeanBackward0&gt;)
 </pre></div>
 </div>
 <p>The loss function handles target network updates, Bellman backup
@@ -846,10 +846,10 @@ training loop. We’ll train a simple DQN agent on CartPole:</p>
 <span class="n">env</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Step 0: loss=1.000
-Step 5: loss=0.649
-Step 10: loss=0.422
-Step 15: loss=0.290
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Step 0: loss=1.001
+Step 5: loss=0.697
+Step 10: loss=0.442
+Step 15: loss=0.246
 </pre></div>
 </div>
 <p>This is a minimal example - a production DQN would include target network
@@ -887,7 +887,7 @@ folder contains production-ready implementations of:</p>
 <li><p><a class="reference external" href="https://github.com/pytorch/rl">GitHub</a></p></li>
 <li><p><a class="reference external" href="https://github.com/pytorch/rl/blob/main/CONTRIBUTING.md">Contributing Guide</a></p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 4.245 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 4.305 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-torchrl-demo-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/36fe09d5d4546649ee1a029c7144936e/torchrl_demo.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">torchrl_demo.ipynb</span></code></a></p>
