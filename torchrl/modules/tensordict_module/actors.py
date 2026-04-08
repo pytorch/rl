@@ -2669,4 +2669,3 @@ class DiffusionActor(SafeModule):
             spec=spec,
             **kwargs,
         )
-
