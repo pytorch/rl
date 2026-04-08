@@ -2568,7 +2568,9 @@ class _DDPMModule(nn.Module):
         while alpha_bar_t.dim() < clean_action.dim():
             alpha_bar_t = alpha_bar_t.unsqueeze(-1)
         noise = torch.randn_like(clean_action)
-        noisy_action = alpha_bar_t.sqrt() * clean_action + (1.0 - alpha_bar_t).sqrt() * noise
+        noisy_action = (
+            alpha_bar_t.sqrt() * clean_action + (1.0 - alpha_bar_t).sqrt() * noise
+        )
         return noisy_action, noise
 
     def forward(self, observation: torch.Tensor) -> torch.Tensor:
