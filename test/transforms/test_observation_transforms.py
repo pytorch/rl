@@ -664,6 +664,7 @@ class TestCatFrames(TransformBase):
         assert (cat_td.get("cat_first_key") == padding_value).sum() == N - 4
 
 
+@pytest.mark.skipif(not _has_tv, reason="no torchvision")
 class TestCrop(TransformBase):
     @pytest.mark.parametrize("nchannels", [1, 3])
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
