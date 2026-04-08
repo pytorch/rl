@@ -5,11 +5,11 @@
 
 from torchrl.modules.tensordict_module.actors import (
     Actor,
-    DiffusionActor,
     ActorCriticOperator,
     ActorCriticWrapper,
     ActorValueOperator,
     DecisionTransformerInferenceWrapper,
+    DiffusionActor,
     DistributionalQValueActor,
     DistributionalQValueHook,
     DistributionalQValueModule,
@@ -51,11 +51,11 @@ from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 
 __all__ = [
     "Actor",
-    "DiffusionActor",
     "ActorCriticOperator",
     "ActorCriticWrapper",
     "ActorValueOperator",
     "DecisionTransformerInferenceWrapper",
+    "DiffusionActor",
     "DistributionalQValueActor",
     "DistributionalQValueHook",
     "DistributionalQValueModule",
