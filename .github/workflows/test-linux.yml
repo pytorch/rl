@@ -81,7 +81,7 @@ jobs:
         cuda_arch_version: ["13.0"]
         # Test sharding: split tests into 3 parallel jobs for faster execution
         # Shard 1: test_transforms.py (heaviest)
-        # Shard 2: test_envs.py + test_collectors.py (multiprocessing-heavy)
+        # Shard 2: test/envs/ + test_collectors.py (multiprocessing-heavy)
         # Shard 3: all other tests
         shard: ["1", "2", "3"]
       fail-fast: false

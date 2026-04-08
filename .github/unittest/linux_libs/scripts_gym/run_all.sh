@@ -190,8 +190,8 @@ run_tests() {
         test_failed=1
     fi
     
-    if ! python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 -k "gym and not isaac" --mp_fork; then
-        echo "ERROR: test_libs.py failed for ${version_name}"
+    if ! python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/libs --instafail -v --durations 200 -k "gym and not isaac" --mp_fork; then
+        echo "ERROR: test/libs failed for ${version_name}"
         test_failed=1
     fi
     
