@@ -858,6 +858,14 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
     def _check_replay_buffer_init(self):
         if self.replay_buffer is None:
             return
+        if getattr(self, "trajs_per_batch", None) is not None:
+            raise NotImplementedError(
+                "trajs_per_batch is not supported together with replay_buffer on "
+                "multi-process collectors. Multi-process collectors write frames "
+                "directly to a shared replay buffer at the worker level, so "
+                "trajectory reassembly cannot be performed in the main process. "
+                "Use a single-process Collector instead."
+            )
         is_init = hasattr(self.replay_buffer, "_storage") and getattr(
             self.replay_buffer._storage, "initialized", True
         )
