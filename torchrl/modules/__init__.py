@@ -58,13 +58,13 @@ from .models import (
 )
 from .tensordict_module import (
     Actor,
-    DiffusionActor,
     ActorCriticOperator,
     ActorCriticWrapper,
     ActorValueOperator,
     AdditiveGaussianModule,
     AdditiveGaussianWrapper,
     DecisionTransformerInferenceWrapper,
+    DiffusionActor,
     DistributionalQValueActor,
     DistributionalQValueHook,
     DistributionalQValueModule,

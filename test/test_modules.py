@@ -1712,8 +1712,11 @@ class TestDiffusionActor:
 
     def test_custom_in_out_keys(self):
         actor = DiffusionActor(
-            action_dim=2, obs_dim=3, num_steps=3,
-            in_keys=["obs"], out_keys=["act"],
+            action_dim=2,
+            obs_dim=3,
+            num_steps=3,
+            in_keys=["obs"],
+            out_keys=["act"],
         )
         assert actor.in_keys == ["obs"]
         assert actor.out_keys == ["act"]
