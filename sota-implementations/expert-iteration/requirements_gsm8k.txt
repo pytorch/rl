@@ -1,5 +1,5 @@
 torch==2.7.0
-transformers==4.52.4
+transformers==5.0.0rc3
 peft==0.15.2
 bitsandbytes==0.46.0
 datasets==3.6.0
