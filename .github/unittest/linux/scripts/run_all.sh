@@ -360,7 +360,7 @@ run_non_distributed_tests() {
   #
   # Test sharding: Split tests into groups for parallel execution.
   # TORCHRL_TEST_SHARD can be: "all" (default), "1", "2", or "3"
-  # - Shard 1: test_transforms.py (heaviest file, 571 parametrize decorators)
+  # - Shard 1: test/transforms/ (transform tests)
   # - Shard 2: test/envs/, test_collectors.py (multiprocessing-heavy)
   # - Shard 3: Everything else (can use pytest-xdist for parallelism)
   local shard="${TORCHRL_TEST_SHARD:-all}"
@@ -381,8 +381,8 @@ run_non_distributed_tests() {
 
   case "${shard}" in
     1)
-      echo "Running shard 1: test_transforms.py only"
-      python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_transforms.py \
+      echo "Running shard 1: test/transforms/ only"
+      python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/transforms \
         "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
         ${common_args}
@@ -398,7 +398,7 @@ run_non_distributed_tests() {
       echo "Running shard 3: All other tests"
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
         ${common_ignores} \
-        --ignore test/test_transforms.py \
+        --ignore test/transforms \
         --ignore test/envs \
         --ignore test/test_collectors.py \
         ${xdist_args} \
