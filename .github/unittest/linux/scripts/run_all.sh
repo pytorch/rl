@@ -280,6 +280,12 @@ print(model_utils)
 "
 fi
 
+# Re-enforce huggingface-hub upper bound.
+# Later `uv pip install` calls (ray, dm_control, torchcodec, etc.) can pull in
+# huggingface-hub>=1.0 which breaks transformers' runtime version check.
+printf "* Enforcing huggingface-hub<1.0\n"
+uv_pip_install "huggingface-hub>=0.34.0,<1.0"
+
 # ==================================================================================== #
 # ================================ Run tests ========================================= #
 

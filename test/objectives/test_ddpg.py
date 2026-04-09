@@ -688,6 +688,7 @@ class TestDDPG(LossModuleTestBase):
     @pytest.mark.xfail(
         pkg_version.parse(torch.__version__) < pkg_version.parse("2.2"),
         reason="Flaky numeric tolerance on PyTorch < 2.2",
+        strict=False,
     )
     def test_ddpg_prioritized_weights(self):
         """Test DDPG with prioritized replay buffer weighted loss reduction."""
