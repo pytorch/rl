@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 
 import torch
@@ -87,13 +88,14 @@ class _R3MNet(Transform):
             tensordict_reset = self._call(tensordict_reset)
         return tensordict_reset
 
-    @torch.no_grad()
     def _apply_transform(self, obs: torch.Tensor) -> None:
+        ctx = torch.no_grad() if not self.training else contextlib.nullcontext()
         shape = None
         if obs.ndimension() > 4:
             shape = obs.shape[:-3]
             obs = obs.flatten(0, -4)
-        out = self.convnet(obs)
+        with ctx:
+            out = self.convnet(obs)
         if shape is not None:
             out = out.view(*shape, *out.shape[1:])
         return out
