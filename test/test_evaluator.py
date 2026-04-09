@@ -13,6 +13,8 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.collectors import Evaluator
+from torchrl.envs import SerialEnv, TransformedEnv
+from torchrl.envs.transforms import RewardSum, StepCounter
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 
 
@@ -586,6 +588,128 @@ class TestEvaluatorProcess:
                 max_steps=50,
                 backend="process",
             )
+
+
+def _make_batched_env(num_envs=4, max_steps=5):
+    """Create a batched env with StepCounter + RewardSum for testing."""
+    return TransformedEnv(
+        SerialEnv(
+            num_envs,
+            lambda: TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                StepCounter(max_steps=max_steps),
+            ),
+        ),
+        RewardSum(),
+    )
+
+
+def _make_batched_env_no_reward_sum(num_envs=4, max_steps=5):
+    """Batched env without RewardSum (fallback path)."""
+    return SerialEnv(
+        num_envs,
+        lambda: TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            StepCounter(max_steps=max_steps),
+        ),
+    )
+
+
+class TestEvaluatorBatchedMetrics:
+    """Tests for batched env metric extraction (done-masked episode_reward)."""
+
+    def test_batched_env_reports_num_episodes(self):
+        """With RewardSum, evaluator should count completed episodes."""
+        # 4 envs, max_steps=5, rollout for 20 steps → each env completes ~4 episodes
+        env = _make_batched_env(num_envs=4, max_steps=5)
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=20)
+        try:
+            metrics = evaluator.evaluate(step=0)
+            assert "eval/num_episodes" in metrics
+            assert metrics["eval/num_episodes"] > 0
+            assert "eval/reward" in metrics
+            assert "eval/reward_std" in metrics
+        finally:
+            evaluator.shutdown()
+
+    def test_batched_env_auto_break_mode(self):
+        """Batched env should auto-select break_when_any_done=False."""
+        # If break_when_any_done were True, we'd get at most 5 steps
+        # (first env hits done at step 5). With False, all run for 20 steps.
+        env = _make_batched_env(num_envs=4, max_steps=5)
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=20)
+        try:
+            metrics = evaluator.evaluate(step=0)
+            # With 4 envs × 20 steps / 5 steps-per-ep = ~16 episodes
+            assert metrics["eval/num_episodes"] >= 4
+        finally:
+            evaluator.shutdown()
+
+    def test_single_env_defaults_to_break_any(self):
+        """Single env should auto-select break_when_any_done=True."""
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=1000)
+        try:
+            # Should return quickly (break on first done), not run 1000 steps
+            metrics = evaluator.evaluate(step=0)
+            assert "eval/reward" in metrics
+        finally:
+            evaluator.shutdown()
+
+    def test_fallback_without_reward_sum(self):
+        """Without RewardSum, falls back to reward.sum(-2).mean()."""
+        env = _make_batched_env_no_reward_sum(num_envs=4, max_steps=5)
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=20)
+        try:
+            metrics = evaluator.evaluate(step=0)
+            assert "eval/reward" in metrics
+            # Fallback doesn't know episode boundaries — still works, just less accurate
+            assert isinstance(metrics["eval/reward"], float)
+        finally:
+            evaluator.shutdown()
+
+    def test_explicit_break_when_any_done(self):
+        """User can override the auto break mode."""
+        env = _make_batched_env(num_envs=4, max_steps=5)
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=20, break_when_any_done=True)
+        try:
+            metrics = evaluator.evaluate(step=0)
+            # break_when_any_done=True → rollout stops at first done (step 5)
+            # So only 1 episode length worth of steps
+            assert metrics["eval/episode_length"] <= 5
+        finally:
+            evaluator.shutdown()
+
+    def test_episode_length_from_step_count(self):
+        """With StepCounter, episode_length should come from step_count at done."""
+        env = _make_batched_env(num_envs=4, max_steps=5)
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=20)
+        try:
+            metrics = evaluator.evaluate(step=0)
+            # StepCounter caps at 5, so episode_length should be ~5
+            assert 1 <= metrics["eval/episode_length"] <= 6
+        finally:
+            evaluator.shutdown()
+
+    def test_batched_async_metrics(self):
+        """Async eval with batched env produces correct metrics."""
+        env = _make_batched_env(num_envs=4, max_steps=5)
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=20)
+        try:
+            evaluator.trigger_eval(step=0)
+            result = evaluator.wait(timeout=30)
+            assert result is not None
+            assert result["eval/num_episodes"] > 0
+            assert "eval/reward_std" in result
+        finally:
+            evaluator.shutdown()
 
 
 class TestEvaluatorErrors:

@@ -140,6 +140,22 @@ class Evaluator:
             backend="process",  # or "thread"
         )
 
+    **Batched eval environments**: when the evaluation environment has a
+    batch dimension (e.g. 1024 parallel envs), the default break mode
+    switches to ``break_when_any_done=False`` so that every environment
+    runs for *max_steps*.  Metrics are computed from completed episodes
+    only (done-masked ``episode_reward``).  Add a
+    :class:`~torchrl.envs.transforms.RewardSum` transform to the eval
+    env for correct per-episode returns.
+
+    .. note::
+
+        If your batched env supports **partial steps** (i.e. it can
+        mask out already-done sub-environments), prefer
+        ``break_when_all_done=True`` instead: it stops as soon as
+        every sub-environment has completed at least one episode,
+        avoiding wasted steps after the slowest env finishes.
+
     Args:
         env: An :class:`~torchrl.envs.EnvBase` instance **or** a callable
             that returns one.  For the ``"process"`` and ``"ray"`` backends
@@ -169,8 +185,14 @@ class Evaluator:
             Default: :attr:`ExplorationType.DETERMINISTIC`.
         metrics_fn: Optional ``(TensorDictBase) -> dict[str, float]``
             called on every rollout result to extract custom metrics.
-        break_when_any_done (bool): Stop the rollout as soon as any
-            sub-environment reports done.  Default: ``True``.
+        break_when_any_done (bool or None): Stop the rollout as soon as
+            any sub-environment reports done.  ``None`` (default) means
+            *auto*: ``True`` for unbatched envs, ``False`` for batched
+            envs (so every env runs for *max_steps*).
+        break_when_all_done (bool): Stop the rollout when **all**
+            sub-environments have reported done at least once.  Requires
+            the env to support partial steps.  Mutually exclusive with
+            ``break_when_any_done=True``.  Default: ``False``.
         auto_cast_to_device (bool): Auto-cast tensordicts to policy device.
             Default: ``True``.
         dump_video (bool): Call ``dump()`` on :class:`VideoRecorder`
@@ -204,7 +226,8 @@ class Evaluator:
         device: torch.device | str | None = None,
         exploration_type: ExplorationType = ExplorationType.DETERMINISTIC,
         metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None = None,
-        break_when_any_done: bool = True,
+        break_when_any_done: bool | None = None,
+        break_when_all_done: bool = False,
         auto_cast_to_device: bool = True,
         dump_video: bool = True,
         callback: Callable[[dict, int], None] | None = None,
@@ -236,7 +259,9 @@ class Evaluator:
                 device=device,
                 exploration_type=exploration_type,
                 reward_keys=reward_keys,
+                done_keys=done_keys,
                 break_when_any_done=break_when_any_done,
+                break_when_all_done=break_when_all_done,
                 auto_cast_to_device=auto_cast_to_device,
                 metrics_fn=metrics_fn,
             )
@@ -260,7 +285,9 @@ class Evaluator:
                 max_steps=max_steps,
                 exploration_type=exploration_type,
                 reward_keys=reward_keys,
+                done_keys=done_keys,
                 break_when_any_done=break_when_any_done,
+                break_when_all_done=break_when_all_done,
                 auto_cast_to_device=auto_cast_to_device,
                 metrics_fn=metrics_fn,
             )
@@ -271,6 +298,7 @@ class Evaluator:
                 max_steps=max_steps,
                 reward_keys=reward_keys,
                 break_when_any_done=break_when_any_done,
+                break_when_all_done=break_when_all_done,
                 init_fn=init_fn,
                 num_gpus=num_gpus,
                 ray_kwargs=ray_kwargs or {},
@@ -431,10 +459,9 @@ class Evaluator:
     def _format_metrics(self, raw: dict[str, Any]) -> dict[str, Any]:
         prefix = self._log_prefix
         out: dict[str, Any] = {}
-        if "reward" in raw:
-            out[f"{prefix}/reward"] = raw["reward"]
-        if "episode_length" in raw:
-            out[f"{prefix}/episode_length"] = raw["episode_length"]
+        for key in ("reward", "reward_std", "num_episodes", "episode_length"):
+            if key in raw:
+                out[f"{prefix}/{key}"] = raw[key]
         if "frames" in raw and raw["frames"] is not None:
             out[f"{prefix}/video"] = raw["frames"]
         if "_step" in raw:
@@ -511,6 +538,97 @@ class _EvalBackend(abc.ABC):
 
 
 # ======================================================================
+# Shared metric helpers
+# ======================================================================
+
+_EPISODE_REWARD_KEY = ("next", "episode_reward")
+
+
+def _resolve_break_mode(
+    break_when_any_done: bool | None,
+    break_when_all_done: bool,
+    env: EnvBase,
+) -> tuple[bool, bool]:
+    """Resolve ``None`` break mode based on env batch size."""
+    if break_when_any_done is None:
+        if break_when_all_done:
+            break_when_any_done = False
+        else:
+            # Auto: single env → break on first done;
+            #        batched env → run for max_steps
+            break_when_any_done = env.batch_size.numel() <= 1
+    if break_when_all_done and break_when_any_done:
+        raise ValueError(
+            "break_when_all_done and break_when_any_done cannot both be True."
+        )
+    return break_when_any_done, break_when_all_done
+
+
+def _extract_metrics(
+    rollout_td: TensorDictBase,
+    reward_keys: NestedKey,
+    done_keys: NestedKey,
+    metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
+) -> dict[str, Any]:
+    """Extract evaluation metrics from a rollout tensordict.
+
+    Prefers done-masked ``episode_reward`` (from :class:`RewardSum`) when
+    available, falling back to ``reward.sum(time).mean(batch)`` for
+    environments without a ``RewardSum`` transform.
+    """
+    episode_reward_td = rollout_td.get(_EPISODE_REWARD_KEY, None)
+    done_td = rollout_td.get(done_keys, None)
+
+    if episode_reward_td is not None and done_td is not None:
+        # --- Done-masked extraction (correct for any break mode) ---
+        done_mask = done_td.squeeze(-1).bool()
+        completed_rewards = episode_reward_td[done_mask]
+        # episode_reward may have a trailing singleton dim
+        if completed_rewards.ndim > 1:
+            completed_rewards = completed_rewards.squeeze(-1)
+        num_episodes = int(completed_rewards.numel())
+
+        if num_episodes > 0:
+            mean_reward = completed_rewards.mean().item()
+            std_reward = completed_rewards.std().item() if num_episodes > 1 else 0.0
+        else:
+            mean_reward = float("nan")
+            std_reward = float("nan")
+
+        # Episode length from step_count if StepCounter is present
+        step_count = rollout_td.get(("next", "step_count"), None)
+        if step_count is not None and num_episodes > 0:
+            episode_length = step_count[done_mask].float().mean().item()
+        else:
+            episode_length = float(rollout_td.shape[-1])
+    else:
+        # --- Fallback: raw reward sum (only correct for single-env,
+        #     break_when_any_done=True) ---
+        reward = rollout_td.get(reward_keys, None)
+        if reward is not None:
+            mean_reward = reward.sum(-2).mean().item()
+        else:
+            mean_reward = float("nan")
+        std_reward = float("nan")
+        num_episodes = int(rollout_td.batch_size[0]) if rollout_td.batch_size else 1
+        episode_length = float(rollout_td.shape[-1])
+
+    metrics: dict[str, Any] = {
+        "reward": mean_reward,
+        "reward_std": std_reward,
+        "num_episodes": num_episodes,
+        "episode_length": episode_length,
+    }
+
+    if metrics_fn is not None:
+        custom = metrics_fn(rollout_td)
+        for k, v in custom.items():
+            metrics[f"custom/{k}"] = v
+
+    return metrics
+
+
+# ======================================================================
 # Thread backend
 # ======================================================================
 
@@ -534,7 +652,9 @@ class _ThreadEvalBackend(_EvalBackend):
         device: torch.device | str | None,
         exploration_type: ExplorationType,
         reward_keys: NestedKey,
-        break_when_any_done: bool,
+        done_keys: NestedKey,
+        break_when_any_done: bool | None,
+        break_when_all_done: bool,
         auto_cast_to_device: bool,
         metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
     ) -> None:
@@ -580,7 +700,9 @@ class _ThreadEvalBackend(_EvalBackend):
         self._max_steps = max_steps
         self._exploration_type = exploration_type
         self._reward_keys = reward_keys
+        self._done_keys = done_keys
         self._break_when_any_done = break_when_any_done
+        self._break_when_all_done = break_when_all_done
         self._auto_cast_to_device = auto_cast_to_device
         self._metrics_fn = metrics_fn
 
@@ -708,6 +830,13 @@ class _ThreadEvalBackend(_EvalBackend):
                 pass
 
     def _run_eval(self, weights: TensorDictBase | None) -> dict[str, Any]:
+        # Resolve break mode (needs env batch size, so must happen after lazy init)
+        break_any, break_all = _resolve_break_mode(
+            self._break_when_any_done,
+            self._break_when_all_done,
+            self._env,
+        )
+
         # Apply weights
         if weights is not None:
             weights.to(self._device).to_module(self._policy)
@@ -720,34 +849,19 @@ class _ThreadEvalBackend(_EvalBackend):
                 self._max_steps,
                 self._policy,
                 auto_cast_to_device=self._auto_cast_to_device,
-                break_when_any_done=self._break_when_any_done,
+                break_when_any_done=break_any,
+                break_when_all_done=break_all,
             )
 
         if isinstance(self._policy, nn.Module):
             self._policy.train()
 
-        # Compute metrics
-        reward = rollout_td.get(self._reward_keys, None)
-        if reward is not None:
-            # sum over time, mean over batch
-            episode_reward = reward.sum(-2).mean().item()
-        else:
-            episode_reward = float("nan")
-
-        episode_length = rollout_td.shape[-1]
-
-        metrics: dict[str, Any] = {
-            "reward": episode_reward,
-            "episode_length": episode_length,
-        }
-
-        # Custom metrics
-        if self._metrics_fn is not None:
-            custom = self._metrics_fn(rollout_td)
-            for k, v in custom.items():
-                metrics[f"custom/{k}"] = v
-
-        return metrics
+        return _extract_metrics(
+            rollout_td,
+            self._reward_keys,
+            self._done_keys,
+            self._metrics_fn,
+        )
 
     def dump_video(self, step: int | None = None) -> None:
         """Dump accumulated video frames from VideoRecorder transforms.
@@ -756,9 +870,15 @@ class _ThreadEvalBackend(_EvalBackend):
         """
         if self._env is None or not hasattr(self._env, "transform"):
             return
-        for transform in self._env.transform:
-            if hasattr(transform, "dump"):
-                transform.dump(step=step)
+        transform = self._env.transform
+        try:
+            transforms = iter(transform)
+        except TypeError:
+            # Single transform, not Compose — wrap in a list
+            transforms = [transform]
+        for t in transforms:
+            if hasattr(t, "dump"):
+                t.dump(step=step)
 
 
 # ======================================================================
@@ -775,7 +895,8 @@ class _RayEvalBackend(_EvalBackend):
         policy_factory: Callable[..., Any] | None,
         max_steps: int,
         reward_keys: NestedKey,
-        break_when_any_done: bool,
+        break_when_any_done: bool | None,
+        break_when_all_done: bool,
         init_fn: Callable[[], None] | None,
         num_gpus: int,
         ray_kwargs: dict,
@@ -804,7 +925,12 @@ class _RayEvalBackend(_EvalBackend):
             **ray_kwargs,
         )
         self._max_steps = max_steps
+        # Ray backend doesn't have access to env batch size at init,
+        # so we resolve None → True (Ray eval uses single-env actors).
+        if break_when_any_done is None:
+            break_when_any_done = not break_when_all_done
         self._break_when_any_done = break_when_any_done
+        self._break_when_all_done = break_when_all_done
         self._last_step: int | None = None
         self._pending_flag = False
 
@@ -867,7 +993,9 @@ def _process_eval_worker(
     max_steps: int,
     exploration_type: ExplorationType,
     reward_keys: NestedKey,
-    break_when_any_done: bool,
+    done_keys: NestedKey,
+    break_when_any_done: bool | None,
+    break_when_all_done: bool,
     auto_cast_to_device: bool,
     metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
 ) -> None:
@@ -884,6 +1012,10 @@ def _process_eval_worker(
         device = next(policy.parameters()).device
     except StopIteration:
         device = torch.device("cpu")
+
+    break_any, break_all = _resolve_break_mode(
+        break_when_any_done, break_when_all_done, env
+    )
 
     while True:
         request = request_queue.get()
@@ -904,31 +1036,15 @@ def _process_eval_worker(
                 max_steps,
                 policy,
                 auto_cast_to_device=auto_cast_to_device,
-                break_when_any_done=break_when_any_done,
+                break_when_any_done=break_any,
+                break_when_all_done=break_all,
             )
 
         if isinstance(policy, nn.Module):
             policy.train()
 
-        reward = rollout_td.get(reward_keys, None)
-        if reward is not None:
-            episode_reward = reward.sum(-2).mean().item()
-        else:
-            episode_reward = float("nan")
-
-        episode_length = rollout_td.shape[-1]
-
-        metrics: dict[str, Any] = {
-            "reward": episode_reward,
-            "episode_length": episode_length,
-            "_step": step,
-        }
-
-        if metrics_fn is not None:
-            custom = metrics_fn(rollout_td)
-            for k, v in custom.items():
-                metrics[f"custom/{k}"] = v
-
+        metrics = _extract_metrics(rollout_td, reward_keys, done_keys, metrics_fn)
+        metrics["_step"] = step
         result_queue.put(metrics)
 
     if not env.is_closed:
@@ -954,7 +1070,9 @@ class _ProcessEvalBackend(_EvalBackend):
         max_steps: int,
         exploration_type: ExplorationType,
         reward_keys: NestedKey,
-        break_when_any_done: bool,
+        done_keys: NestedKey,
+        break_when_any_done: bool | None,
+        break_when_all_done: bool,
         auto_cast_to_device: bool,
         metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
     ) -> None:
@@ -974,7 +1092,9 @@ class _ProcessEvalBackend(_EvalBackend):
                 "max_steps": max_steps,
                 "exploration_type": exploration_type,
                 "reward_keys": reward_keys,
+                "done_keys": done_keys,
                 "break_when_any_done": break_when_any_done,
+                "break_when_all_done": break_when_all_done,
                 "auto_cast_to_device": auto_cast_to_device,
                 "metrics_fn": metrics_fn,
             },
