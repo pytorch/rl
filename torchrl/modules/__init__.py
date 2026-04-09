@@ -64,6 +64,7 @@ from .tensordict_module import (
     AdditiveGaussianModule,
     AdditiveGaussianWrapper,
     DecisionTransformerInferenceWrapper,
+    DiffusionActor,
     DistributionalQValueActor,
     DistributionalQValueHook,
     DistributionalQValueModule,
@@ -111,6 +112,7 @@ from .mcts import (  # usort:skip
 
 __all__ = [
     "Actor",
+    "DiffusionActor",
     "ActorCriticOperator",
     "ActorCriticWrapper",
     "ActorValueOperator",
