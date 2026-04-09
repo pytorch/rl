@@ -80,7 +80,7 @@ jobs:
         python_version: ["3.12"]
         cuda_arch_version: ["13.0"]
         # Test sharding: split tests into 3 parallel jobs for faster execution
-        # Shard 1: test_transforms.py (heaviest)
+        # Shard 1: test/transforms/ (transform tests)
         # Shard 2: test/envs/ + test_collectors.py (multiprocessing-heavy)
         # Shard 3: all other tests
         shard: ["1", "2", "3"]
@@ -181,7 +181,7 @@ jobs:
         export PYTHON_VERSION="3.10"
         export CU_VERSION="cu118"
         # Olddeps tests with older torch/dependencies. Pin tensordict to stable range.
-        export TORCHRL_TENSORDICT_SPEC="tensordict>=0.11.0,<0.12.0"
+        export TORCHRL_TENSORDICT_SPEC="tensordict>=0.12.0,<0.13.0"
         export TAR_OPTIONS="--no-same-owner"
         if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1

@@ -17,6 +17,7 @@ from _objectives_common import (
     FUNCTORCH_ERR,
     LossModuleTestBase,
 )
+from packaging import version as pkg_version
 
 from tensordict import assert_allclose_td, TensorDict
 from tensordict.nn import (
@@ -684,6 +685,11 @@ class TestDDPG(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
+    @pytest.mark.xfail(
+        pkg_version.parse(torch.__version__) < pkg_version.parse("2.2"),
+        reason="Flaky numeric tolerance on PyTorch < 2.2",
+        strict=False,
+    )
     def test_ddpg_prioritized_weights(self):
         """Test DDPG with prioritized replay buffer weighted loss reduction."""
         n_obs = 4

@@ -35,7 +35,7 @@ from torchrl.modules.tensordict_module.actors import (
     ProbabilisticActor,
     ValueOperator,
 )
-from torchrl.objectives import DQNLoss, PPOLoss, SACLoss
+from torchrl.objectives import ClipPPOLoss, DQNLoss, PPOLoss, SACLoss
 from torchrl.objectives.common import add_random_module, LossModule
 from torchrl.objectives.utils import _vmap_func, HardUpdate, hold_out_net, SoftUpdate
 from torchrl.objectives.value.advantages import GAE, TD0Estimator
@@ -1266,3 +1266,157 @@ class TestMakeValueEstimator:
         # Verify it was set directly
         assert loss_fn._value_estimator is gae
         assert loss_fn.value_type is GAE
+
+
+@pytest.mark.parametrize("device", get_default_devices())
+class TestSchedulableBuffers:
+    """Tests for the _schedulable_buffers / __setattr__ mechanism."""
+
+    def _create_mock_actor(self, obs_dim=4, action_dim=2, device="cpu"):
+        return ProbabilisticActor(
+            module=TensorDictModule(
+                nn.Linear(obs_dim, 2 * action_dim),
+                in_keys=["observation"],
+                out_keys=["loc", "scale"],
+            ),
+            in_keys=["loc", "scale"],
+            distribution_class=TanhNormal,
+            return_log_prob=True,
+            spec=Composite(action=Bounded(-1, 1, (action_dim,))),
+        ).to(device)
+
+    def _create_mock_value_net(self, obs_dim=4, device="cpu"):
+        return TensorDictModule(
+            nn.Linear(obs_dim, 1),
+            in_keys=["observation"],
+            out_keys=["state_value"],
+        ).to(device)
+
+    def _create_mock_qvalue(self, obs_dim=4, action_dim=2, device="cpu"):
+        return TensorDictModule(
+            nn.Linear(obs_dim + action_dim, 1),
+            in_keys=["observation", "action"],
+            out_keys=["state_action_value"],
+        ).to(device)
+
+    @set_composite_lp_aggregate(False)
+    def test_float_assignment(self, device):
+        actor = self._create_mock_actor(device=device)
+        critic = self._create_mock_value_net(device=device)
+        loss = ClipPPOLoss(actor, critic)
+        loss = loss.to(device)
+
+        # Assign float to entropy_coeff
+        loss.entropy_coeff = 0.003
+        assert loss.entropy_coeff.item() == pytest.approx(0.003)
+        # Buffer should still be in _buffers dict
+        assert "entropy_coeff" in loss._buffers
+        # Buffer should still be in state_dict
+        assert "entropy_coeff" in loss.state_dict()
+
+    @set_composite_lp_aggregate(False)
+    def test_int_assignment(self, device):
+        actor = self._create_mock_actor(device=device)
+        critic = self._create_mock_value_net(device=device)
+        loss = ClipPPOLoss(actor, critic)
+        loss = loss.to(device)
+
+        loss.entropy_coeff = 0
+        assert loss.entropy_coeff.item() == 0.0
+        assert "entropy_coeff" in loss._buffers
+
+    @set_composite_lp_aggregate(False)
+    def test_device_preservation(self, device):
+        actor = self._create_mock_actor(device=device)
+        critic = self._create_mock_value_net(device=device)
+        loss = ClipPPOLoss(actor, critic)
+        loss = loss.to(device)
+
+        loss.entropy_coeff = 0.05
+        assert loss.entropy_coeff.device == torch.device(device)
+
+    @set_composite_lp_aggregate(False)
+    def test_tensor_assignment_still_works(self, device):
+        actor = self._create_mock_actor(device=device)
+        critic = self._create_mock_value_net(device=device)
+        loss = ClipPPOLoss(actor, critic)
+        loss = loss.to(device)
+
+        # Tensor assignment goes through normal nn.Module path
+        loss.entropy_coeff = torch.tensor(0.05, device=device)
+        assert loss.entropy_coeff.item() == pytest.approx(0.05)
+
+    @set_composite_lp_aggregate(False)
+    def test_inheritance_merging(self, device):
+        # ClipPPOLoss should have both PPOLoss buffers and its own
+        merged = ClipPPOLoss._all_schedulable_buffers
+        assert "entropy_coeff" in merged  # from PPOLoss
+        assert "critic_coeff" in merged  # from PPOLoss
+        assert "clip_value" in merged  # from PPOLoss
+        assert "clip_epsilon" in merged  # from ClipPPOLoss
+
+        # Actually set clip_epsilon
+        actor = self._create_mock_actor(device=device)
+        critic = self._create_mock_value_net(device=device)
+        loss = ClipPPOLoss(actor, critic)
+        loss = loss.to(device)
+
+        loss.clip_epsilon = 0.1
+        assert loss.clip_epsilon.item() == pytest.approx(0.1)
+        assert "clip_epsilon" in loss._buffers
+
+    @set_composite_lp_aggregate(False)
+    def test_sac_log_alpha_as_buffer(self, device):
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+        loss = SACLoss(actor, qvalue, fixed_alpha=True)
+        loss = loss.to(device)
+
+        # log_alpha is a buffer when fixed_alpha=True
+        assert "log_alpha" in loss._buffers
+        loss.log_alpha = 0.5
+        assert loss.log_alpha.item() == pytest.approx(0.5)
+
+    @set_composite_lp_aggregate(False)
+    def test_sac_log_alpha_as_parameter(self, device):
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+        loss = SACLoss(actor, qvalue, fixed_alpha=False)
+        loss = loss.to(device)
+
+        # log_alpha is a Parameter when fixed_alpha=False
+        assert isinstance(loss.log_alpha, nn.Parameter)
+        # Float assignment should NOT be intercepted (not in _buffers)
+        assert "log_alpha" not in loss._buffers
+
+    @set_composite_lp_aggregate(False)
+    def test_optional_none_buffer(self, device):
+        actor = self._create_mock_actor(device=device)
+        critic = self._create_mock_value_net(device=device)
+        # clip_value defaults to None
+        loss = ClipPPOLoss(actor, critic, clip_value=None)
+        loss = loss.to(device)
+
+        assert loss.clip_value is None
+        # Assigning float when buffer is None should NOT raise
+        # (it just sets a plain attribute via nn.Module)
+        loss.clip_value = 0.5
+        # Now it's a plain float, not a buffer
+        assert loss.clip_value == 0.5
+
+    @set_composite_lp_aggregate(False)
+    def test_state_dict_roundtrip(self, device):
+        actor = self._create_mock_actor(device=device)
+        critic = self._create_mock_value_net(device=device)
+        loss = ClipPPOLoss(actor, critic)
+        loss = loss.to(device)
+
+        loss.entropy_coeff = 0.042
+        loss.clip_epsilon = 0.15
+        sd = loss.state_dict()
+
+        loss2 = ClipPPOLoss(actor, critic)
+        loss2 = loss2.to(device)
+        loss2.load_state_dict(sd)
+        assert loss2.entropy_coeff.item() == pytest.approx(0.042)
+        assert loss2.clip_epsilon.item() == pytest.approx(0.15)

@@ -62,9 +62,9 @@ export PATH="$HOME/.local/bin:$PATH"
 printf "* Creating venv with Python ${PYTHON_VERSION}\n"
 # IMPORTANT: ensure a clean environment.
 # In CI (and some local workflows), the workspace directory can be reused across runs.
-# A reused venv may contain packages that violate our constraints (e.g. transformers'
-# huggingface-hub upper bound), and `uv pip install` does not always guarantee
-# downgrades of already-present packages unless the environment is clean.
+# A reused venv may contain packages with incompatible versions, and `uv pip install`
+# does not always guarantee downgrades of already-present packages unless the
+# environment is clean.
 rm -rf "${env_dir}"
 uv venv --python "${PYTHON_VERSION}" "${env_dir}"
 source "${env_dir}/bin/activate"
@@ -127,7 +127,7 @@ uv_pip_install \
   hydra-core \
   tensorboard \
   "imageio==2.26.0" \
-  "huggingface-hub>=0.34.0,<1.0" \
+  "huggingface-hub>=1.5.0,<2.0" \
   wandb \
   mlflow \
   av \
@@ -269,9 +269,7 @@ if [ "${CU_VERSION:-}" != cpu ] ; then
   uv_pip_install "git+https://github.com/facebookresearch/eai-vc.git#subdirectory=vc_models"
 
   printf "* Upgrading timm\n"
-  # Keep HF Hub constrained: timm can pull a hub>=1.x which breaks transformers'
-  # import-time version check.
-  uv_pip_install --upgrade "timm>=0.9.0" "huggingface-hub>=0.34.0,<1.0"
+  uv_pip_install --upgrade "timm>=0.9.0" "huggingface-hub>=1.5.0,<2.0"
 
   python -c "
 import vc_models
@@ -360,7 +358,7 @@ run_non_distributed_tests() {
   #
   # Test sharding: Split tests into groups for parallel execution.
   # TORCHRL_TEST_SHARD can be: "all" (default), "1", "2", or "3"
-  # - Shard 1: test_transforms.py (heaviest file, 571 parametrize decorators)
+  # - Shard 1: test/transforms/ (transform tests)
   # - Shard 2: test/envs/, test_collectors.py (multiprocessing-heavy)
   # - Shard 3: Everything else (can use pytest-xdist for parallelism)
   local shard="${TORCHRL_TEST_SHARD:-all}"
@@ -381,8 +379,8 @@ run_non_distributed_tests() {
 
   case "${shard}" in
     1)
-      echo "Running shard 1: test_transforms.py only"
-      python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_transforms.py \
+      echo "Running shard 1: test/transforms/ only"
+      python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/transforms \
         "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
         ${common_args}
@@ -398,7 +396,7 @@ run_non_distributed_tests() {
       echo "Running shard 3: All other tests"
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
         ${common_ignores} \
-        --ignore test/test_transforms.py \
+        --ignore test/transforms \
         --ignore test/envs \
         --ignore test/test_collectors.py \
         ${xdist_args} \

@@ -31,7 +31,8 @@ def _clear_gym_implement_for_state():
     """Clear all gym/gymnasium-related state from implement_for caches.
 
     This is necessary for test isolation when mocking gym/gymnasium modules.
-    Clears _cache_modules, _implementations, and resets DEFAULT_GYM.
+    Clears _cache_modules, _implementations, and resets DEFAULT_GYM, then
+    re-resolves the correct implementations based on the real installed backend.
     Does NOT clear _lazy_impl since it contains all registered implementations
     from import time.
     """
@@ -50,6 +51,17 @@ def _clear_gym_implement_for_state():
     ]
     for k in keys_to_remove:
         implement_for._implementations.pop(k, None)
+
+    # Re-resolve gym-related module-level functions from _lazy_impl.
+    # set_gym_backend().module_set() may have replaced module-level functions
+    # (like _set_gym_environments, _set_gym_args) with implementations for a
+    # mocked backend. We must re-dispatch via _lazy_impl so that implement_for
+    # re-evaluates the real installed gym version and calls module_set() with
+    # the correct implementation.
+    for func_name in list(implement_for._lazy_impl.keys()):
+        if "gym" in func_name.lower():
+            for local_call in implement_for._lazy_impl[func_name]:
+                local_call()
 
 
 @pytest.mark.parametrize("value", ["True", "1", "true"])

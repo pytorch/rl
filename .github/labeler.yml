@@ -146,7 +146,7 @@
   - changed-files:
     - any-glob-to-any-file:
       - 'torchrl/envs/transforms/**'
-      - 'test/test_transforms.py'
+      - 'test/transforms/**'
 
 "Trainers":
   - changed-files:
