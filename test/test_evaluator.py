@@ -711,6 +711,41 @@ class TestEvaluatorBatchedMetrics:
         finally:
             evaluator.shutdown()
 
+    def test_incomplete_trajectories_excluded(self):
+        """Partial trajectories at end of rollout must not affect metrics.
+
+        With max_steps=7 and episode length=5, each env completes 1 full
+        episode (done at step 5) and has 2 leftover steps (partial).
+        num_episodes should count only the completed ones.
+        """
+        env = _make_batched_env(num_envs=4, max_steps=5)
+        policy = _make_policy(env)
+        # 7 steps: done at step 5, then 2 more steps (partial episode)
+        evaluator = Evaluator(env, policy, max_steps=7)
+        try:
+            metrics = evaluator.evaluate(step=0)
+            # 4 envs × 1 completed episode each = 4
+            assert metrics["eval/num_episodes"] == 4
+            # episode_length should be ~5 (from completed episodes only)
+            assert 4 <= metrics["eval/episode_length"] <= 6
+        finally:
+            evaluator.shutdown()
+
+    def test_zero_completed_episodes(self):
+        """When max_steps < episode length, no episodes complete → NaN reward."""
+        env = _make_batched_env(num_envs=4, max_steps=5)
+        policy = _make_policy(env)
+        # Only 3 steps — no env can complete (needs 5)
+        evaluator = Evaluator(env, policy, max_steps=3)
+        try:
+            metrics = evaluator.evaluate(step=0)
+            assert metrics["eval/num_episodes"] == 0
+            import math
+
+            assert math.isnan(metrics["eval/reward"])
+        finally:
+            evaluator.shutdown()
+
 
 class TestEvaluatorErrors:
     def test_no_policy_raises(self):
