@@ -326,6 +326,268 @@ class TestEvaluatorMultiDevice:
             evaluator.shutdown()
 
 
+class TestEvaluatorPending:
+    def test_pending_false_initially(self):
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=50)
+        try:
+            assert not evaluator.pending
+        finally:
+            evaluator.shutdown()
+
+    def test_pending_during_async_eval(self):
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=500)
+        try:
+            evaluator.trigger_eval(step=0)
+            assert evaluator.pending
+            result = evaluator.wait(timeout=30)
+            assert result is not None
+            assert not evaluator.pending
+        finally:
+            evaluator.shutdown()
+
+    def test_pending_cleared_by_poll(self):
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=50)
+        try:
+            evaluator.trigger_eval(step=0)
+            result = evaluator.poll(timeout=30)
+            assert result is not None
+            assert not evaluator.pending
+        finally:
+            evaluator.shutdown()
+
+    def test_pending_cleared_by_shutdown(self):
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=5000)
+        evaluator.trigger_eval(step=0)
+        assert evaluator.pending
+        evaluator.shutdown(timeout=5.0)
+        assert not evaluator.pending
+
+
+class TestEvaluatorLazyInit:
+    """Tests for lazy env/policy creation when using factories with thread backend."""
+
+    def test_sync_eval_with_factories(self):
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=lambda env: _make_policy(env),
+            max_steps=50,
+        )
+        try:
+            metrics = evaluator.evaluate(step=0)
+            assert "eval/reward" in metrics
+        finally:
+            evaluator.shutdown()
+
+    def test_async_eval_with_factories(self):
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=lambda env: _make_policy(env),
+            max_steps=50,
+        )
+        try:
+            evaluator.trigger_eval(step=0)
+            result = evaluator.wait(timeout=30)
+            assert result is not None
+            assert "eval/reward" in result
+        finally:
+            evaluator.shutdown()
+
+    def test_lazy_init_deferred_to_worker_thread(self):
+        """Verify env/policy are created in the worker thread, not the constructor."""
+        creation_thread_names = []
+
+        def tracked_env_factory():
+            creation_thread_names.append(threading.current_thread().name)
+            return _make_env()
+
+        def tracked_policy_factory(env):
+            creation_thread_names.append(threading.current_thread().name)
+            return _make_policy(env)
+
+        evaluator = Evaluator(
+            tracked_env_factory,
+            policy_factory=tracked_policy_factory,
+            max_steps=50,
+        )
+        # Nothing created yet
+        assert len(creation_thread_names) == 0
+
+        try:
+            evaluator.trigger_eval(step=0)
+            result = evaluator.wait(timeout=30)
+            assert result is not None
+            # Both env and policy created on the worker thread, not MainThread
+            assert len(creation_thread_names) == 2
+            for name in creation_thread_names:
+                assert (
+                    name != "MainThread"
+                ), f"Expected creation on worker thread, got {name}"
+        finally:
+            evaluator.shutdown()
+
+    def test_lazy_init_with_weights(self):
+        """Weights are applied after lazy creation."""
+        train_policy = _make_policy()
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=lambda env: _make_policy(env),
+            max_steps=50,
+        )
+        try:
+            evaluator.trigger_eval(weights=train_policy, step=0)
+            result = evaluator.wait(timeout=30)
+            assert result is not None
+            assert "eval/reward" in result
+        finally:
+            evaluator.shutdown()
+
+
+class TestEvaluatorProcess:
+    """Tests for the process-based backend.
+
+    Note: the ``spawn`` mp context requires picklable callables, so we
+    use top-level functions (``_make_env``, ``_make_policy``) rather than
+    lambdas.
+    """
+
+    def test_sync_eval(self):
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            metrics = evaluator.evaluate(step=0)
+            assert "eval/reward" in metrics
+            assert "eval/episode_length" in metrics
+            assert isinstance(metrics["eval/reward"], float)
+        finally:
+            evaluator.shutdown()
+
+    def test_async_trigger_and_wait(self):
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            evaluator.trigger_eval(step=0)
+            assert evaluator.pending
+            result = evaluator.wait(timeout=30)
+            assert result is not None
+            assert "eval/reward" in result
+            assert not evaluator.pending
+        finally:
+            evaluator.shutdown()
+
+    def test_async_trigger_and_poll(self):
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            evaluator.trigger_eval(step=0)
+            result = evaluator.poll(timeout=30)
+            assert result is not None
+            assert "eval/reward" in result
+        finally:
+            evaluator.shutdown()
+
+    def test_with_weights(self):
+        train_policy = _make_policy()
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            metrics = evaluator.evaluate(weights=train_policy, step=0)
+            assert "eval/reward" in metrics
+        finally:
+            evaluator.shutdown()
+
+    def test_multiple_evals(self):
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            for i in range(3):
+                evaluator.trigger_eval(step=i)
+                result = evaluator.wait(timeout=30)
+                assert result is not None
+                assert "eval/reward" in result
+        finally:
+            evaluator.shutdown()
+
+    def test_step_provenance(self):
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            metrics = evaluator.evaluate(step=456)
+            assert metrics["eval/step"] == 456
+        finally:
+            evaluator.shutdown()
+
+    def test_callback(self):
+        results = []
+
+        def cb(metrics, step):
+            results.append((metrics, step))
+
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+            callback=cb,
+        )
+        try:
+            evaluator.evaluate(step=42)
+            assert len(results) == 1
+            assert results[0][1] == 42
+        finally:
+            evaluator.shutdown()
+
+    def test_requires_callable_env(self):
+        env = _make_env()
+        with pytest.raises(ValueError, match="callable"):
+            Evaluator(
+                env,
+                policy_factory=_make_policy,
+                max_steps=50,
+                backend="process",
+            )
+
+    def test_requires_policy_factory(self):
+        with pytest.raises(ValueError, match="policy_factory"):
+            Evaluator(
+                _make_env,
+                policy=_make_policy(),
+                max_steps=50,
+                backend="process",
+            )
+
+
 class TestEvaluatorErrors:
     def test_no_policy_raises(self):
         with pytest.raises(ValueError, match="policy.*must be provided"):
