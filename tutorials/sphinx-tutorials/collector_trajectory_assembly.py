@@ -45,10 +45,15 @@ from torchrl.data import LazyTensorStorage, ReplayBuffer
 # Because real episodes have very different lengths, a single batch often contains
 # pieces from multiple different trajectories.
 #
-# This can be inconvenient when training recurrent policies or when you want
-# clean, complete episodes in your replay buffer. In this tutorial we explain
-# how TorchRL handles trajectory assembly and how you can get full trajectories
-# when you need them.
+# **In this tutorial you will learn:**
+#
+# - Why collectors return fixed-size chunks instead of full episodes
+# - How ``split_trajectories()`` reassembles trajectories with padding and masking
+# - How to request complete trajectories using ``trajs_per_batch``
+# - How to store complete trajectories in a replay buffer
+# - The meaning of ``("collector", "traj_ids")`` and ``("collector", "mask")``
+# - Proper handling of ``done`` versus ``truncated``
+# - When to use ``as_nested=True`` versus zero-padded tensors
 
 ######################################################################
 # Section 1: Why trajectories get split
@@ -218,13 +223,16 @@ print("\n" + "=" * 80)
 print("Conclusion")
 print("=" * 80)
 
-print("In this tutorial we looked at how TorchRL collectors handle trajectories.")
-print("You now understand why they return fixed-size chunks, how to reassemble them,")
-print("how to request complete trajectories with ``trajs_per_batch``, and how to")
-print("store them cleanly in a replay buffer.")
+print("In this tutorial we have covered how TorchRL collectors handle trajectories.")
+print("You now understand why they return fixed-size chunks instead of full episodes,")
+print("how to reassemble them using ``split_trajectories()``, how to request complete")
+print(
+    "trajectories with ``trajs_per_batch``, and how to store them cleanly in a replay buffer."
+)
 
 print("\nUseful next resources:")
 print("- tutorials/sphinx-tutorials/getting-started-3.py (basic data collection)")
 print("- tutorials/sphinx-tutorials/dqn_with_rnn.py (RNN policy example)")
+print("- The main TorchRL documentation: https://pytorch.org/rl/")
 
 print("\nThank you for reading!")
