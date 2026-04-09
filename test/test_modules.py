@@ -957,6 +957,7 @@ class TestMultiAgent:
             assert p in param_set
 
     def test_multiagent_mlp_lazy(self):
+        torch.manual_seed(0)
         mlp = MultiAgentMLP(
             n_agent_inputs=None,
             n_agent_outputs=6,
