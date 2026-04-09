@@ -8,6 +8,7 @@ import gc
 
 import pytest
 import torch
+from packaging import version as pkg_version
 from tensordict import (
     assert_allclose_td,
     dense_stack_tds,
@@ -276,6 +277,13 @@ class TestHeteroEnvs:
     def test_vec_env(
         self, batch_size, env_type, break_when_any_done, rollout_steps=4, n_workers=2
     ):
+        if env_type == "parallel" and pkg_version.parse(
+            torch.__version__
+        ) < pkg_version.parse("2.2"):
+            pytest.xfail(
+                "ParallelEnv with spawn start method hits 'bad value(s) in "
+                "fds_to_keep' on PyTorch < 2.2"
+            )
         gc.collect()
         env_fun = lambda: HeterogeneousCountingEnv(batch_size=batch_size)
         if env_type == "serial":
