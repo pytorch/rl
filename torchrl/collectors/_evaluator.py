@@ -28,6 +28,23 @@ Typical usage -- **thread backend** (default)::
 
     evaluator.shutdown()
 
+Typical usage -- **process backend** (dedicated eval device)::
+
+    evaluator = Evaluator(
+        lambda: make_eval_env(device="cuda:7"),
+        policy_factory=lambda env: make_eval_policy(env).to("cuda:7"),
+        max_steps=1000,
+        logger=logger,
+        backend="process",
+    )
+
+    evaluator.trigger_eval(train_policy, step=collected_frames)
+    # ... training continues ...
+    if not evaluator.pending:
+        result = evaluator.poll()
+
+    evaluator.shutdown()
+
 Typical usage -- **Ray backend**::
 
     evaluator = Evaluator(
@@ -49,6 +66,7 @@ from __future__ import annotations
 import abc
 import importlib
 import logging
+import multiprocessing as mp
 import threading
 from collections.abc import Callable
 from typing import Any
@@ -79,32 +97,79 @@ class Evaluator:
       get metrics back immediately.
     * **Asynchronous** -- call :meth:`trigger_eval` to kick off a rollout in
       the background, then :meth:`poll` (non-blocking) or :meth:`wait`
-      (blocking) to retrieve the result.  Results are also auto-logged if a
-      *logger* is provided.
+      (blocking) to retrieve the result.  Use the :attr:`pending` property
+      to check whether an evaluation is currently in progress.
+      Results are also auto-logged if a *logger* is provided.
+
+    Three backends are available:
+
+    * ``"thread"`` (default) -- runs in a daemon thread.  Low overhead,
+      well suited for GPU-bound evaluation where the GIL is released by
+      CUDA ops.  When *env* is a callable **and** *policy_factory* is
+      provided, both are created lazily inside the worker thread, which is
+      useful for dedicated eval devices.
+    * ``"process"`` -- runs in a child process (``spawn`` context).  The
+      env and policy are always created inside the child process, giving
+      full CUDA context isolation and avoiding the GIL entirely.  Requires
+      *env* to be a callable and *policy_factory* to be provided.
+    * ``"ray"`` -- runs in a Ray actor, suitable for distributed setups.
+      Requires *env* to be a callable and *policy_factory* to be provided.
 
     **Backpressure / overlap policy**: calling :meth:`trigger_eval` while a
     previous evaluation is still running **drops** the in-progress result
     (fire-and-forget).  The new evaluation starts as soon as the background
-    thread finishes the current ``env.rollout()`` call — there is no queue,
+    worker finishes the current ``env.rollout()`` call — there is no queue,
     no coalescing, and no error.  Only the most-recently-triggered evaluation
-    will produce a result.
+    will produce a result.  Use :attr:`pending` to conditionally skip
+    trigger calls::
+
+        if not evaluator.pending:
+            evaluator.trigger_eval(weights, step=step)
 
     **Logging thread-safety**: all logger writes (scalar metrics, video
     encoding) happen on the **caller thread** inside :meth:`poll`,
-    :meth:`wait`, or :meth:`evaluate`.  The background thread only computes
+    :meth:`wait`, or :meth:`evaluate`.  The background worker only computes
     plain metrics and returns them; it never touches the logger.
+
+    **Dedicated eval device** (multi-GPU example)::
+
+        evaluator = Evaluator(
+            lambda: make_env(device="cuda:7"),
+            policy_factory=lambda env: make_policy(env).to("cuda:7"),
+            max_steps=1000,
+            backend="process",  # or "thread"
+        )
+
+    **Batched eval environments**: when the evaluation environment has a
+    batch dimension (e.g. 1024 parallel envs), the default break mode
+    switches to ``break_when_any_done=False`` so that every environment
+    runs for *max_steps*.  Metrics are computed from completed episodes
+    only (done-masked ``episode_reward``).  Add a
+    :class:`~torchrl.envs.transforms.RewardSum` transform to the eval
+    env for correct per-episode returns.
+
+    .. note::
+
+        If your batched env supports **partial steps** (i.e. it can
+        mask out already-done sub-environments), prefer
+        ``break_when_all_done=True`` instead: it stops as soon as
+        every sub-environment has completed at least one episode,
+        avoiding wasted steps after the slowest env finishes.
 
     Args:
         env: An :class:`~torchrl.envs.EnvBase` instance **or** a callable
-            that returns one.  For the ``"ray"`` backend the callable form is
-            required (the env is created inside the Ray actor process).
+            that returns one.  For the ``"process"`` and ``"ray"`` backends
+            the callable form is required.  For the ``"thread"`` backend,
+            when combined with *policy_factory*, passing a callable defers
+            construction to the worker thread.
         policy: The evaluation policy.  Mutually exclusive with
             *policy_factory*.
 
     Keyword Args:
         policy_factory: A callable ``(env) -> policy`` used to build the
-            policy.  Required for the ``"ray"`` backend; optional for
-            ``"thread"`` (if provided, called once at construction time).
+            policy.  Required for the ``"process"`` and ``"ray"`` backends.
+            For ``"thread"``, if both *env* (callable) and *policy_factory*
+            are provided, construction is deferred to the worker thread.
         max_steps (int): Maximum environment steps per rollout.
         logger: Optional :class:`~torchrl.record.loggers.Logger` for
             automatic metric / video logging.
@@ -120,8 +185,14 @@ class Evaluator:
             Default: :attr:`ExplorationType.DETERMINISTIC`.
         metrics_fn: Optional ``(TensorDictBase) -> dict[str, float]``
             called on every rollout result to extract custom metrics.
-        break_when_any_done (bool): Stop the rollout as soon as any
-            sub-environment reports done.  Default: ``True``.
+        break_when_any_done (bool or None): Stop the rollout as soon as
+            any sub-environment reports done.  ``None`` (default) means
+            *auto*: ``True`` for unbatched envs, ``False`` for batched
+            envs (so every env runs for *max_steps*).
+        break_when_all_done (bool): Stop the rollout when **all**
+            sub-environments have reported done at least once.  Requires
+            the env to support partial steps.  Mutually exclusive with
+            ``break_when_any_done=True``.  Default: ``False``.
         auto_cast_to_device (bool): Auto-cast tensordicts to policy device.
             Default: ``True``.
         dump_video (bool): Call ``dump()`` on :class:`VideoRecorder`
@@ -132,7 +203,7 @@ class Evaluator:
         logger_lock: A :class:`threading.Lock` shared with the training
             loop to serialise logger access.  If ``None`` a private lock
             is created.
-        backend (str): ``"thread"`` (default) or ``"ray"``.
+        backend (str): ``"thread"`` (default), ``"process"``, or ``"ray"``.
         init_fn: (*Ray only*) Callable invoked at the start of the actor
             process, before any ``torch`` import.
         num_gpus (int): (*Ray only*) GPUs requested for the actor.
@@ -155,7 +226,8 @@ class Evaluator:
         device: torch.device | str | None = None,
         exploration_type: ExplorationType = ExplorationType.DETERMINISTIC,
         metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None = None,
-        break_when_any_done: bool = True,
+        break_when_any_done: bool | None = None,
+        break_when_all_done: bool = False,
         auto_cast_to_device: bool = True,
         dump_video: bool = True,
         callback: Callable[[dict, int], None] | None = None,
@@ -187,7 +259,35 @@ class Evaluator:
                 device=device,
                 exploration_type=exploration_type,
                 reward_keys=reward_keys,
+                done_keys=done_keys,
                 break_when_any_done=break_when_any_done,
+                break_when_all_done=break_when_all_done,
+                auto_cast_to_device=auto_cast_to_device,
+                metrics_fn=metrics_fn,
+            )
+        elif backend == "process":
+            env_is_callable = callable(env) and not isinstance(env, EnvBase)
+            if not env_is_callable:
+                raise ValueError(
+                    "The 'process' backend requires `env` to be a callable "
+                    "(factory function) because the env is created inside "
+                    "the child process."
+                )
+            if policy_factory is None:
+                raise ValueError(
+                    "The 'process' backend requires `policy_factory` (a "
+                    "callable `(env) -> policy`) because the policy is "
+                    "created inside the child process."
+                )
+            self._backend = _ProcessEvalBackend(
+                env_factory=env,
+                policy_factory=policy_factory,
+                max_steps=max_steps,
+                exploration_type=exploration_type,
+                reward_keys=reward_keys,
+                done_keys=done_keys,
+                break_when_any_done=break_when_any_done,
+                break_when_all_done=break_when_all_done,
                 auto_cast_to_device=auto_cast_to_device,
                 metrics_fn=metrics_fn,
             )
@@ -198,12 +298,15 @@ class Evaluator:
                 max_steps=max_steps,
                 reward_keys=reward_keys,
                 break_when_any_done=break_when_any_done,
+                break_when_all_done=break_when_all_done,
                 init_fn=init_fn,
                 num_gpus=num_gpus,
                 ray_kwargs=ray_kwargs or {},
             )
         else:
-            raise ValueError(f"Unknown backend {backend!r}. Choose 'thread' or 'ray'.")
+            raise ValueError(
+                f"Unknown backend {backend!r}. " "Choose 'thread', 'process', or 'ray'."
+            )
 
     # ------------------------------------------------------------------
     # Synchronous API
@@ -278,6 +381,21 @@ class Evaluator:
         return self._finalize(raw)
 
     # ------------------------------------------------------------------
+    # Status
+    # ------------------------------------------------------------------
+
+    @property
+    def pending(self) -> bool:
+        """Return ``True`` if an async evaluation is currently in progress.
+
+        This can be used to avoid triggering overlapping evaluations::
+
+            if not evaluator.pending:
+                evaluator.trigger_eval(weights, step=step)
+        """
+        return self._backend.pending
+
+    # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
@@ -341,10 +459,9 @@ class Evaluator:
     def _format_metrics(self, raw: dict[str, Any]) -> dict[str, Any]:
         prefix = self._log_prefix
         out: dict[str, Any] = {}
-        if "reward" in raw:
-            out[f"{prefix}/reward"] = raw["reward"]
-        if "episode_length" in raw:
-            out[f"{prefix}/episode_length"] = raw["episode_length"]
+        for key in ("reward", "reward_std", "num_episodes", "episode_length"):
+            if key in raw:
+                out[f"{prefix}/{key}"] = raw[key]
         if "frames" in raw and raw["frames"] is not None:
             out[f"{prefix}/video"] = raw["frames"]
         if "_step" in raw:
@@ -401,6 +518,12 @@ class _EvalBackend(abc.ABC):
         """Blocking wait for results."""
         ...
 
+    @property
+    @abc.abstractmethod
+    def pending(self) -> bool:
+        """Return ``True`` if an async evaluation is currently in progress."""
+        ...
+
     @abc.abstractmethod
     def shutdown(self, timeout: float) -> None:
         """Clean up resources."""
@@ -415,12 +538,110 @@ class _EvalBackend(abc.ABC):
 
 
 # ======================================================================
+# Shared metric helpers
+# ======================================================================
+
+_EPISODE_REWARD_KEY = ("next", "episode_reward")
+
+
+def _resolve_break_mode(
+    break_when_any_done: bool | None,
+    break_when_all_done: bool,
+    env: EnvBase,
+) -> tuple[bool, bool]:
+    """Resolve ``None`` break mode based on env batch size."""
+    if break_when_any_done is None:
+        if break_when_all_done:
+            break_when_any_done = False
+        else:
+            # Auto: single env → break on first done;
+            #        batched env → run for max_steps
+            break_when_any_done = env.batch_size.numel() <= 1
+    if break_when_all_done and break_when_any_done:
+        raise ValueError(
+            "break_when_all_done and break_when_any_done cannot both be True."
+        )
+    return break_when_any_done, break_when_all_done
+
+
+def _extract_metrics(
+    rollout_td: TensorDictBase,
+    reward_keys: NestedKey,
+    done_keys: NestedKey,
+    metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
+) -> dict[str, Any]:
+    """Extract evaluation metrics from a rollout tensordict.
+
+    Prefers done-masked ``episode_reward`` (from :class:`RewardSum`) when
+    available, falling back to ``reward.sum(time).mean(batch)`` for
+    environments without a ``RewardSum`` transform.
+    """
+    episode_reward_td = rollout_td.get(_EPISODE_REWARD_KEY, None)
+    done_td = rollout_td.get(done_keys, None)
+
+    if episode_reward_td is not None and done_td is not None:
+        # --- Done-masked extraction (correct for any break mode) ---
+        done_mask = done_td.squeeze(-1).bool()
+        completed_rewards = episode_reward_td[done_mask]
+        # episode_reward may have a trailing singleton dim
+        if completed_rewards.ndim > 1:
+            completed_rewards = completed_rewards.squeeze(-1)
+        num_episodes = int(completed_rewards.numel())
+
+        if num_episodes > 0:
+            mean_reward = completed_rewards.mean().item()
+            std_reward = completed_rewards.std().item() if num_episodes > 1 else 0.0
+        else:
+            mean_reward = float("nan")
+            std_reward = float("nan")
+
+        # Episode length from step_count if StepCounter is present
+        step_count = rollout_td.get(("next", "step_count"), None)
+        if step_count is not None and num_episodes > 0:
+            episode_length = step_count[done_mask].float().mean().item()
+        else:
+            episode_length = float(rollout_td.shape[-1])
+    else:
+        # --- Fallback: raw reward sum (only correct for single-env,
+        #     break_when_any_done=True) ---
+        reward = rollout_td.get(reward_keys, None)
+        if reward is not None:
+            mean_reward = reward.sum(-2).mean().item()
+        else:
+            mean_reward = float("nan")
+        std_reward = float("nan")
+        num_episodes = int(rollout_td.batch_size[0]) if rollout_td.batch_size else 1
+        episode_length = float(rollout_td.shape[-1])
+
+    metrics: dict[str, Any] = {
+        "reward": mean_reward,
+        "reward_std": std_reward,
+        "num_episodes": num_episodes,
+        "episode_length": episode_length,
+    }
+
+    if metrics_fn is not None:
+        custom = metrics_fn(rollout_td)
+        for k, v in custom.items():
+            metrics[f"custom/{k}"] = v
+
+    return metrics
+
+
+# ======================================================================
 # Thread backend
 # ======================================================================
 
 
 class _ThreadEvalBackend(_EvalBackend):
-    """Runs evaluation in a daemon thread using ``env.rollout()``."""
+    """Runs evaluation in a daemon thread using ``env.rollout()``.
+
+    When *policy_factory* is provided and *env* is a callable, the
+    environment and policy are created **lazily** on the first evaluation
+    call.  For async evaluation this means construction happens inside the
+    worker thread, which is critical for multi-device setups where the
+    eval environment lives on a dedicated GPU.
+    """
 
     def __init__(
         self,
@@ -431,36 +652,57 @@ class _ThreadEvalBackend(_EvalBackend):
         device: torch.device | str | None,
         exploration_type: ExplorationType,
         reward_keys: NestedKey,
-        break_when_any_done: bool,
+        done_keys: NestedKey,
+        break_when_any_done: bool | None,
+        break_when_all_done: bool,
         auto_cast_to_device: bool,
         metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
     ) -> None:
-        # Build env
-        if callable(env) and not isinstance(env, EnvBase):
-            env = env()
-        self._env: EnvBase = env
-
-        # Build policy
         if policy is not None and policy_factory is not None:
             raise ValueError("Provide either `policy` or `policy_factory`, not both.")
-        if policy_factory is not None:
-            policy = policy_factory(self._env)
-        if policy is None:
-            raise ValueError("Either `policy` or `policy_factory` must be provided.")
-        self._policy = policy
 
-        # Device
-        if device is None:
+        self._env_factory: Callable[[], EnvBase] | None = None
+        self._policy_factory: Callable[..., Callable] | None = None
+
+        env_is_callable = callable(env) and not isinstance(env, EnvBase)
+
+        # Lazy path: defer both env and policy creation to the worker thread
+        if policy_factory is not None and env_is_callable:
+            self._env_factory = env
+            self._policy_factory = policy_factory
+            self._env: EnvBase | None = None
+            self._policy = None
+        else:
+            # Eager path (existing behaviour)
+            if env_is_callable:
+                env = env()
+            self._env = env
+
+            if policy_factory is not None:
+                policy = policy_factory(self._env)
+            if policy is None:
+                raise ValueError(
+                    "Either `policy` or `policy_factory` must be provided."
+                )
+            self._policy = policy
+
+        # Device -- may be set lazily after env/policy creation
+        if device is not None:
+            self._device = torch.device(device)
+        elif self._policy is not None:
             try:
-                device = next(self._policy.parameters()).device
+                self._device = next(self._policy.parameters()).device
             except StopIteration:
-                device = torch.device("cpu")
-        self._device = torch.device(device)
+                self._device = torch.device("cpu")
+        else:
+            self._device: torch.device | None = None
 
         self._max_steps = max_steps
         self._exploration_type = exploration_type
         self._reward_keys = reward_keys
+        self._done_keys = done_keys
         self._break_when_any_done = break_when_any_done
+        self._break_when_all_done = break_when_all_done
         self._auto_cast_to_device = auto_cast_to_device
         self._metrics_fn = metrics_fn
 
@@ -469,6 +711,7 @@ class _ThreadEvalBackend(_EvalBackend):
         self._cancel = threading.Event()
         self._eval_ready = threading.Event()
         self._result_ready = threading.Event()
+        self._pending = threading.Event()  # set while an eval is in-flight
         self._pending_request: tuple[TensorDictBase | None, int] | None = None
         self._result: dict[str, Any] | None = None
         self._shutdown_flag = False
@@ -477,6 +720,7 @@ class _ThreadEvalBackend(_EvalBackend):
     # ---- sync ----
 
     def run_sync(self, weights: TensorDictBase | None, step: int) -> dict[str, Any]:
+        self._ensure_env_and_policy()
         metrics = self._run_eval(weights)
         metrics["_step"] = step
         return metrics
@@ -489,6 +733,7 @@ class _ThreadEvalBackend(_EvalBackend):
             self._pending_request = (weights, step)
             self._result = None
             self._result_ready.clear()
+            self._pending.set()
         self._eval_ready.set()
         self._ensure_thread()
 
@@ -499,6 +744,7 @@ class _ThreadEvalBackend(_EvalBackend):
             result = self._result
             if result is not None:
                 self._result = None
+                self._pending.clear()
             return result
 
     def wait(self, timeout: float | None) -> dict[str, Any] | None:
@@ -507,7 +753,12 @@ class _ThreadEvalBackend(_EvalBackend):
             result = self._result
             if result is not None:
                 self._result = None
+                self._pending.clear()
             return result
+
+    @property
+    def pending(self) -> bool:
+        return self._pending.is_set()
 
     def shutdown(self, timeout: float) -> None:
         self._shutdown_flag = True
@@ -515,10 +766,32 @@ class _ThreadEvalBackend(_EvalBackend):
         self._eval_ready.set()  # wake thread so it can exit
         if self._thread is not None and self._thread.is_alive():
             self._thread.join(timeout=timeout)
-        if not self._env.is_closed:
+        self._pending.clear()
+        if self._env is not None and not self._env.is_closed:
             self._env.close()
 
     # ---- internals ----
+
+    def _ensure_env_and_policy(self) -> None:
+        """Create env and policy from factories (lazy initialisation)."""
+        if self._env is not None:
+            return
+        if self._env_factory is None:
+            raise RuntimeError(
+                "Evaluator backend has no env and no env factory -- "
+                "this should not happen."
+            )
+        self._env = self._env_factory()
+        self._policy = self._policy_factory(self._env)
+        # Free the factories
+        self._env_factory = None
+        self._policy_factory = None
+        # Infer device if not set explicitly
+        if self._device is None:
+            try:
+                self._device = next(self._policy.parameters()).device
+            except StopIteration:
+                self._device = torch.device("cpu")
 
     def _ensure_thread(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -528,6 +801,7 @@ class _ThreadEvalBackend(_EvalBackend):
         self._thread.start()
 
     def _eval_loop(self) -> None:
+        self._ensure_env_and_policy()
         while not self._shutdown_flag:
             self._eval_ready.wait(timeout=1.0)
             if self._shutdown_flag:
@@ -550,8 +824,19 @@ class _ThreadEvalBackend(_EvalBackend):
                 with self._lock:
                     self._result = metrics
                 self._result_ready.set()
+            else:
+                # Cancelled -- clear pending since the result was discarded
+                # (submit() will re-set it for the new request)
+                pass
 
     def _run_eval(self, weights: TensorDictBase | None) -> dict[str, Any]:
+        # Resolve break mode (needs env batch size, so must happen after lazy init)
+        break_any, break_all = _resolve_break_mode(
+            self._break_when_any_done,
+            self._break_when_all_done,
+            self._env,
+        )
+
         # Apply weights
         if weights is not None:
             weights.to(self._device).to_module(self._policy)
@@ -564,45 +849,36 @@ class _ThreadEvalBackend(_EvalBackend):
                 self._max_steps,
                 self._policy,
                 auto_cast_to_device=self._auto_cast_to_device,
-                break_when_any_done=self._break_when_any_done,
+                break_when_any_done=break_any,
+                break_when_all_done=break_all,
             )
 
         if isinstance(self._policy, nn.Module):
             self._policy.train()
 
-        # Compute metrics
-        reward = rollout_td.get(self._reward_keys, None)
-        if reward is not None:
-            # sum over time, mean over batch
-            episode_reward = reward.sum(-2).mean().item()
-        else:
-            episode_reward = float("nan")
-
-        episode_length = rollout_td.shape[-1]
-
-        metrics: dict[str, Any] = {
-            "reward": episode_reward,
-            "episode_length": episode_length,
-        }
-
-        # Custom metrics
-        if self._metrics_fn is not None:
-            custom = self._metrics_fn(rollout_td)
-            for k, v in custom.items():
-                metrics[f"custom/{k}"] = v
-
-        return metrics
+        return _extract_metrics(
+            rollout_td,
+            self._reward_keys,
+            self._done_keys,
+            self._metrics_fn,
+        )
 
     def dump_video(self, step: int | None = None) -> None:
         """Dump accumulated video frames from VideoRecorder transforms.
 
         Called on the caller thread so that logger writes are thread-safe.
         """
-        if not hasattr(self._env, "transform"):
+        if self._env is None or not hasattr(self._env, "transform"):
             return
-        for transform in self._env.transform:
-            if hasattr(transform, "dump"):
-                transform.dump(step=step)
+        transform = self._env.transform
+        try:
+            transforms = iter(transform)
+        except TypeError:
+            # Single transform, not Compose — wrap in a list
+            transforms = [transform]
+        for t in transforms:
+            if hasattr(t, "dump"):
+                t.dump(step=step)
 
 
 # ======================================================================
@@ -619,7 +895,8 @@ class _RayEvalBackend(_EvalBackend):
         policy_factory: Callable[..., Any] | None,
         max_steps: int,
         reward_keys: NestedKey,
-        break_when_any_done: bool,
+        break_when_any_done: bool | None,
+        break_when_all_done: bool,
         init_fn: Callable[[], None] | None,
         num_gpus: int,
         ray_kwargs: dict,
@@ -648,8 +925,14 @@ class _RayEvalBackend(_EvalBackend):
             **ray_kwargs,
         )
         self._max_steps = max_steps
+        # Ray backend doesn't have access to env batch size at init,
+        # so we resolve None → True (Ray eval uses single-env actors).
+        if break_when_any_done is None:
+            break_when_any_done = not break_when_all_done
         self._break_when_any_done = break_when_any_done
+        self._break_when_all_done = break_when_all_done
         self._last_step: int | None = None
+        self._pending_flag = False
 
     def run_sync(self, weights: TensorDictBase | None, step: int) -> dict[str, Any]:
         self._worker.submit(
@@ -665,16 +948,22 @@ class _RayEvalBackend(_EvalBackend):
 
     def submit(self, weights: TensorDictBase | None, step: int) -> None:
         self._last_step = step
+        self._pending_flag = True
         self._worker.submit(
             weights,
             self._max_steps,
             break_when_any_done=self._break_when_any_done,
         )
 
+    @property
+    def pending(self) -> bool:
+        return self._pending_flag
+
     def poll(self, timeout: float) -> dict[str, Any] | None:
         result = self._worker.poll(timeout=timeout)
         if result is None:
             return None
+        self._pending_flag = False
         result["_step"] = self._last_step
         result.setdefault("episode_length", self._max_steps)
         return result
@@ -684,7 +973,186 @@ class _RayEvalBackend(_EvalBackend):
         return self.poll(timeout=timeout if timeout is not None else 1e9)
 
     def shutdown(self, timeout: float) -> None:
+        self._pending_flag = False
         try:
             self._worker.shutdown()
         except Exception:
             logger.warning("RayEvalBackend: error during shutdown", exc_info=True)
+
+
+# ======================================================================
+# Process backend
+# ======================================================================
+
+
+def _process_eval_worker(
+    env_factory: Callable[[], EnvBase],
+    policy_factory: Callable,
+    request_queue: mp.Queue,
+    result_queue: mp.Queue,
+    max_steps: int,
+    exploration_type: ExplorationType,
+    reward_keys: NestedKey,
+    done_keys: NestedKey,
+    break_when_any_done: bool | None,
+    break_when_all_done: bool,
+    auto_cast_to_device: bool,
+    metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
+) -> None:
+    """Entry point for the evaluator child process.
+
+    Creates env and policy inside the process, then loops waiting for
+    ``(weights, step)`` requests on *request_queue* and puts result dicts
+    on *result_queue*.  A ``None`` sentinel terminates the loop.
+    """
+    env = env_factory()
+    policy = policy_factory(env)
+
+    try:
+        device = next(policy.parameters()).device
+    except StopIteration:
+        device = torch.device("cpu")
+
+    break_any, break_all = _resolve_break_mode(
+        break_when_any_done, break_when_all_done, env
+    )
+
+    while True:
+        request = request_queue.get()
+        if request is None:
+            break
+
+        weights, step = request
+
+        # Apply weights
+        if weights is not None:
+            weights.to(device).to_module(policy)
+
+        if isinstance(policy, nn.Module):
+            policy.eval()
+
+        with set_exploration_type(exploration_type), torch.no_grad():
+            rollout_td = env.rollout(
+                max_steps,
+                policy,
+                auto_cast_to_device=auto_cast_to_device,
+                break_when_any_done=break_any,
+                break_when_all_done=break_all,
+            )
+
+        if isinstance(policy, nn.Module):
+            policy.train()
+
+        metrics = _extract_metrics(rollout_td, reward_keys, done_keys, metrics_fn)
+        metrics["_step"] = step
+        result_queue.put(metrics)
+
+    if not env.is_closed:
+        env.close()
+
+
+class _ProcessEvalBackend(_EvalBackend):
+    """Runs evaluation in a child process.
+
+    The environment and policy are created **inside** the child process
+    from the provided factories, which means they live in an entirely
+    separate address space.  This avoids GIL contention for CPU-bound
+    work and gives clean CUDA context isolation for multi-GPU setups.
+
+    Like the thread backend, only the most-recently-triggered evaluation
+    produces a result (fire-and-forget).
+    """
+
+    def __init__(
+        self,
+        env_factory: Callable[[], EnvBase],
+        policy_factory: Callable[..., Callable],
+        max_steps: int,
+        exploration_type: ExplorationType,
+        reward_keys: NestedKey,
+        done_keys: NestedKey,
+        break_when_any_done: bool | None,
+        break_when_all_done: bool,
+        auto_cast_to_device: bool,
+        metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
+    ) -> None:
+        ctx = mp.get_context("spawn")
+        self._request_queue: mp.Queue = ctx.Queue(maxsize=1)
+        self._result_queue: mp.Queue = ctx.Queue(maxsize=1)
+        self._pending_flag = False
+        self._last_step: int | None = None
+
+        self._process = ctx.Process(
+            target=_process_eval_worker,
+            kwargs={
+                "env_factory": env_factory,
+                "policy_factory": policy_factory,
+                "request_queue": self._request_queue,
+                "result_queue": self._result_queue,
+                "max_steps": max_steps,
+                "exploration_type": exploration_type,
+                "reward_keys": reward_keys,
+                "done_keys": done_keys,
+                "break_when_any_done": break_when_any_done,
+                "break_when_all_done": break_when_all_done,
+                "auto_cast_to_device": auto_cast_to_device,
+                "metrics_fn": metrics_fn,
+            },
+            daemon=True,
+        )
+        self._process.start()
+
+    # ---- sync ----
+
+    def run_sync(self, weights: TensorDictBase | None, step: int) -> dict[str, Any]:
+        self._request_queue.put((weights, step))
+        return self._result_queue.get()
+
+    # ---- async ----
+
+    def submit(self, weights: TensorDictBase | None, step: int) -> None:
+        # Drain any stale result from a previous (possibly cancelled) eval
+        self._drain_result_queue()
+        self._last_step = step
+        self._pending_flag = True
+        self._request_queue.put((weights, step))
+
+    def poll(self, timeout: float) -> dict[str, Any] | None:
+        try:
+            result = self._result_queue.get(timeout=timeout if timeout > 0 else 0.001)
+            self._pending_flag = False
+            return result
+        except Exception:
+            # queue.Empty
+            return None
+
+    def wait(self, timeout: float | None) -> dict[str, Any] | None:
+        try:
+            result = self._result_queue.get(timeout=timeout)
+            self._pending_flag = False
+            return result
+        except Exception:
+            return None
+
+    @property
+    def pending(self) -> bool:
+        return self._pending_flag
+
+    def shutdown(self, timeout: float) -> None:
+        self._pending_flag = False
+        try:
+            self._request_queue.put_nowait(None)  # sentinel
+        except Exception:
+            pass
+        if self._process.is_alive():
+            self._process.join(timeout=timeout)
+            if self._process.is_alive():
+                self._process.terminate()
+
+    def _drain_result_queue(self) -> None:
+        """Remove any stale result left in the queue."""
+        while not self._result_queue.empty():
+            try:
+                self._result_queue.get_nowait()
+            except Exception:
+                break

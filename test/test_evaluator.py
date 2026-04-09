@@ -13,6 +13,8 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.collectors import Evaluator
+from torchrl.envs import SerialEnv, TransformedEnv
+from torchrl.envs.transforms import RewardSum, StepCounter
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 
 
@@ -322,6 +324,425 @@ class TestEvaluatorMultiDevice:
             result = evaluator.wait(timeout=30)
             assert result is not None
             assert "eval/reward" in result
+        finally:
+            evaluator.shutdown()
+
+
+class TestEvaluatorPending:
+    def test_pending_false_initially(self):
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=50)
+        try:
+            assert not evaluator.pending
+        finally:
+            evaluator.shutdown()
+
+    def test_pending_during_async_eval(self):
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=500)
+        try:
+            evaluator.trigger_eval(step=0)
+            assert evaluator.pending
+            result = evaluator.wait(timeout=30)
+            assert result is not None
+            assert not evaluator.pending
+        finally:
+            evaluator.shutdown()
+
+    def test_pending_cleared_by_poll(self):
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=50)
+        try:
+            evaluator.trigger_eval(step=0)
+            result = evaluator.poll(timeout=30)
+            assert result is not None
+            assert not evaluator.pending
+        finally:
+            evaluator.shutdown()
+
+    def test_pending_cleared_by_shutdown(self):
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=5000)
+        evaluator.trigger_eval(step=0)
+        assert evaluator.pending
+        evaluator.shutdown(timeout=5.0)
+        assert not evaluator.pending
+
+
+class TestEvaluatorLazyInit:
+    """Tests for lazy env/policy creation when using factories with thread backend."""
+
+    def test_sync_eval_with_factories(self):
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=lambda env: _make_policy(env),
+            max_steps=50,
+        )
+        try:
+            metrics = evaluator.evaluate(step=0)
+            assert "eval/reward" in metrics
+        finally:
+            evaluator.shutdown()
+
+    def test_async_eval_with_factories(self):
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=lambda env: _make_policy(env),
+            max_steps=50,
+        )
+        try:
+            evaluator.trigger_eval(step=0)
+            result = evaluator.wait(timeout=30)
+            assert result is not None
+            assert "eval/reward" in result
+        finally:
+            evaluator.shutdown()
+
+    def test_lazy_init_deferred_to_worker_thread(self):
+        """Verify env/policy are created in the worker thread, not the constructor."""
+        creation_thread_names = []
+
+        def tracked_env_factory():
+            creation_thread_names.append(threading.current_thread().name)
+            return _make_env()
+
+        def tracked_policy_factory(env):
+            creation_thread_names.append(threading.current_thread().name)
+            return _make_policy(env)
+
+        evaluator = Evaluator(
+            tracked_env_factory,
+            policy_factory=tracked_policy_factory,
+            max_steps=50,
+        )
+        # Nothing created yet
+        assert len(creation_thread_names) == 0
+
+        try:
+            evaluator.trigger_eval(step=0)
+            result = evaluator.wait(timeout=30)
+            assert result is not None
+            # Both env and policy created on the worker thread, not MainThread
+            assert len(creation_thread_names) == 2
+            for name in creation_thread_names:
+                assert (
+                    name != "MainThread"
+                ), f"Expected creation on worker thread, got {name}"
+        finally:
+            evaluator.shutdown()
+
+    def test_lazy_init_with_weights(self):
+        """Weights are applied after lazy creation."""
+        train_policy = _make_policy()
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=lambda env: _make_policy(env),
+            max_steps=50,
+        )
+        try:
+            evaluator.trigger_eval(weights=train_policy, step=0)
+            result = evaluator.wait(timeout=30)
+            assert result is not None
+            assert "eval/reward" in result
+        finally:
+            evaluator.shutdown()
+
+
+class TestEvaluatorProcess:
+    """Tests for the process-based backend.
+
+    Note: the ``spawn`` mp context requires picklable callables, so we
+    use top-level functions (``_make_env``, ``_make_policy``) rather than
+    lambdas.
+    """
+
+    def test_sync_eval(self):
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            metrics = evaluator.evaluate(step=0)
+            assert "eval/reward" in metrics
+            assert "eval/episode_length" in metrics
+            assert isinstance(metrics["eval/reward"], float)
+        finally:
+            evaluator.shutdown()
+
+    def test_async_trigger_and_wait(self):
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            evaluator.trigger_eval(step=0)
+            assert evaluator.pending
+            result = evaluator.wait(timeout=30)
+            assert result is not None
+            assert "eval/reward" in result
+            assert not evaluator.pending
+        finally:
+            evaluator.shutdown()
+
+    def test_async_trigger_and_poll(self):
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            evaluator.trigger_eval(step=0)
+            result = evaluator.poll(timeout=30)
+            assert result is not None
+            assert "eval/reward" in result
+        finally:
+            evaluator.shutdown()
+
+    def test_with_weights(self):
+        train_policy = _make_policy()
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            metrics = evaluator.evaluate(weights=train_policy, step=0)
+            assert "eval/reward" in metrics
+        finally:
+            evaluator.shutdown()
+
+    def test_multiple_evals(self):
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            for i in range(3):
+                evaluator.trigger_eval(step=i)
+                result = evaluator.wait(timeout=30)
+                assert result is not None
+                assert "eval/reward" in result
+        finally:
+            evaluator.shutdown()
+
+    def test_step_provenance(self):
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            metrics = evaluator.evaluate(step=456)
+            assert metrics["eval/step"] == 456
+        finally:
+            evaluator.shutdown()
+
+    def test_callback(self):
+        results = []
+
+        def cb(metrics, step):
+            results.append((metrics, step))
+
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+            callback=cb,
+        )
+        try:
+            evaluator.evaluate(step=42)
+            assert len(results) == 1
+            assert results[0][1] == 42
+        finally:
+            evaluator.shutdown()
+
+    def test_requires_callable_env(self):
+        env = _make_env()
+        with pytest.raises(ValueError, match="callable"):
+            Evaluator(
+                env,
+                policy_factory=_make_policy,
+                max_steps=50,
+                backend="process",
+            )
+
+    def test_requires_policy_factory(self):
+        with pytest.raises(ValueError, match="policy_factory"):
+            Evaluator(
+                _make_env,
+                policy=_make_policy(),
+                max_steps=50,
+                backend="process",
+            )
+
+
+def _make_batched_env(num_envs=4, max_steps=5):
+    """Create a batched env with StepCounter + RewardSum for testing."""
+    return TransformedEnv(
+        SerialEnv(
+            num_envs,
+            lambda: TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                StepCounter(max_steps=max_steps),
+            ),
+        ),
+        RewardSum(),
+    )
+
+
+def _make_batched_env_no_reward_sum(num_envs=4, max_steps=5):
+    """Batched env without RewardSum (fallback path)."""
+    return SerialEnv(
+        num_envs,
+        lambda: TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            StepCounter(max_steps=max_steps),
+        ),
+    )
+
+
+class TestEvaluatorBatchedMetrics:
+    """Tests for batched env metric extraction (done-masked episode_reward)."""
+
+    def test_batched_env_reports_num_episodes(self):
+        """With RewardSum, evaluator should count completed episodes."""
+        # 4 envs, max_steps=5, rollout for 20 steps → each env completes ~4 episodes
+        env = _make_batched_env(num_envs=4, max_steps=5)
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=20)
+        try:
+            metrics = evaluator.evaluate(step=0)
+            assert "eval/num_episodes" in metrics
+            assert metrics["eval/num_episodes"] > 0
+            assert "eval/reward" in metrics
+            assert "eval/reward_std" in metrics
+        finally:
+            evaluator.shutdown()
+
+    def test_batched_env_auto_break_mode(self):
+        """Batched env should auto-select break_when_any_done=False."""
+        # If break_when_any_done were True, we'd get at most 5 steps
+        # (first env hits done at step 5). With False, all run for 20 steps.
+        env = _make_batched_env(num_envs=4, max_steps=5)
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=20)
+        try:
+            metrics = evaluator.evaluate(step=0)
+            # With 4 envs × 20 steps / 5 steps-per-ep = ~16 episodes
+            assert metrics["eval/num_episodes"] >= 4
+        finally:
+            evaluator.shutdown()
+
+    def test_single_env_defaults_to_break_any(self):
+        """Single env should auto-select break_when_any_done=True."""
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=1000)
+        try:
+            # Should return quickly (break on first done), not run 1000 steps
+            metrics = evaluator.evaluate(step=0)
+            assert "eval/reward" in metrics
+        finally:
+            evaluator.shutdown()
+
+    def test_fallback_without_reward_sum(self):
+        """Without RewardSum, falls back to reward.sum(-2).mean()."""
+        env = _make_batched_env_no_reward_sum(num_envs=4, max_steps=5)
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=20)
+        try:
+            metrics = evaluator.evaluate(step=0)
+            assert "eval/reward" in metrics
+            # Fallback doesn't know episode boundaries — still works, just less accurate
+            assert isinstance(metrics["eval/reward"], float)
+        finally:
+            evaluator.shutdown()
+
+    def test_explicit_break_when_any_done(self):
+        """User can override the auto break mode."""
+        env = _make_batched_env(num_envs=4, max_steps=5)
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=20, break_when_any_done=True)
+        try:
+            metrics = evaluator.evaluate(step=0)
+            # break_when_any_done=True → rollout stops at first done (step 5)
+            # So only 1 episode length worth of steps
+            assert metrics["eval/episode_length"] <= 5
+        finally:
+            evaluator.shutdown()
+
+    def test_episode_length_from_step_count(self):
+        """With StepCounter, episode_length should come from step_count at done."""
+        env = _make_batched_env(num_envs=4, max_steps=5)
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=20)
+        try:
+            metrics = evaluator.evaluate(step=0)
+            # StepCounter caps at 5, so episode_length should be ~5
+            assert 1 <= metrics["eval/episode_length"] <= 6
+        finally:
+            evaluator.shutdown()
+
+    def test_batched_async_metrics(self):
+        """Async eval with batched env produces correct metrics."""
+        env = _make_batched_env(num_envs=4, max_steps=5)
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=20)
+        try:
+            evaluator.trigger_eval(step=0)
+            result = evaluator.wait(timeout=30)
+            assert result is not None
+            assert result["eval/num_episodes"] > 0
+            assert "eval/reward_std" in result
+        finally:
+            evaluator.shutdown()
+
+    def test_incomplete_trajectories_excluded(self):
+        """Partial trajectories at end of rollout must not affect metrics.
+
+        With max_steps=7 and episode length=5, each env completes 1 full
+        episode (done at step 5) and has 2 leftover steps (partial).
+        num_episodes should count only the completed ones.
+        """
+        env = _make_batched_env(num_envs=4, max_steps=5)
+        policy = _make_policy(env)
+        # 7 steps: done at step 5, then 2 more steps (partial episode)
+        evaluator = Evaluator(env, policy, max_steps=7)
+        try:
+            metrics = evaluator.evaluate(step=0)
+            # 4 envs × 1 completed episode each = 4
+            assert metrics["eval/num_episodes"] == 4
+            # episode_length should be ~5 (from completed episodes only)
+            assert 4 <= metrics["eval/episode_length"] <= 6
+        finally:
+            evaluator.shutdown()
+
+    def test_zero_completed_episodes(self):
+        """When max_steps < episode length, no episodes complete → NaN reward."""
+        env = _make_batched_env(num_envs=4, max_steps=5)
+        policy = _make_policy(env)
+        # Only 3 steps — no env can complete (needs 5)
+        evaluator = Evaluator(env, policy, max_steps=3)
+        try:
+            metrics = evaluator.evaluate(step=0)
+            assert metrics["eval/num_episodes"] == 0
+            import math
+
+            assert math.isnan(metrics["eval/reward"])
         finally:
             evaluator.shutdown()
 
