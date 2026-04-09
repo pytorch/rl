@@ -181,7 +181,7 @@ jobs:
         export PYTHON_VERSION="3.10"
         export CU_VERSION="cu118"
         # Olddeps tests with older torch/dependencies. Pin tensordict to stable range.
-        export TORCHRL_TENSORDICT_SPEC="tensordict>=0.11.0,<0.12.0"
+        export TORCHRL_TENSORDICT_SPEC="tensordict>=0.12.0,<0.13.0"
         export TAR_OPTIONS="--no-same-owner"
         if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
