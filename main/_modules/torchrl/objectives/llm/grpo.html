@@ -446,6 +446,8 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tensor_keys</span>
 
+    <span class="n">_schedulable_buffers</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;clip_epsilon_low&quot;</span><span class="p">,</span> <span class="s2">&quot;clip_epsilon_high&quot;</span><span class="p">})</span>
+
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">actor_network</span><span class="p">:</span> <span class="n">LLMWrapperBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>

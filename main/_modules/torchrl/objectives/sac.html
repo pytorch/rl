@@ -553,6 +553,9 @@
     <span class="n">default_keys</span> <span class="o">=</span> <span class="n">_AcceptedKeys</span>
     <span class="n">tensor_keys</span><span class="p">:</span> <span class="n">_AcceptedKeys</span>
     <span class="n">default_value_estimator</span> <span class="o">=</span> <span class="n">ValueEstimators</span><span class="o">.</span><span class="n">TD0</span>
+    <span class="n">_schedulable_buffers</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+        <span class="p">{</span><span class="s2">&quot;alpha_init&quot;</span><span class="p">,</span> <span class="s2">&quot;min_log_alpha&quot;</span><span class="p">,</span> <span class="s2">&quot;max_log_alpha&quot;</span><span class="p">,</span> <span class="s2">&quot;log_alpha&quot;</span><span class="p">}</span>
+    <span class="p">)</span>
 
     <span class="n">actor_network</span><span class="p">:</span> <span class="n">TensorDictModule</span>
     <span class="n">qvalue_network</span><span class="p">:</span> <span class="n">TensorDictModule</span>
@@ -1430,6 +1433,9 @@
     <span class="n">tensor_keys</span><span class="p">:</span> <span class="n">_AcceptedKeys</span>
     <span class="n">default_keys</span> <span class="o">=</span> <span class="n">_AcceptedKeys</span>
     <span class="n">default_value_estimator</span> <span class="o">=</span> <span class="n">ValueEstimators</span><span class="o">.</span><span class="n">TD0</span>
+    <span class="n">_schedulable_buffers</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+        <span class="p">{</span><span class="s2">&quot;alpha_init&quot;</span><span class="p">,</span> <span class="s2">&quot;min_log_alpha&quot;</span><span class="p">,</span> <span class="s2">&quot;max_log_alpha&quot;</span><span class="p">,</span> <span class="s2">&quot;log_alpha&quot;</span><span class="p">}</span>
+    <span class="p">)</span>
     <span class="n">delay_actor</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span>
         <span class="s2">&quot;loss_actor&quot;</span><span class="p">,</span>

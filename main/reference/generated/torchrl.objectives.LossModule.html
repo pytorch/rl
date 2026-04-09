@@ -276,6 +276,10 @@ This dataclass should include all keys that are intended to be configurable.
 In addition, the subclass must implement the
 :meth:._forward_value_estimator_keys() method. This function is crucial for
 forwarding any altered tensordict keys to the underlying value_estimator.</p>
+<p>Subclasses can declare a <code class="docutils literal notranslate"><span class="pre">_schedulable_buffers</span></code> frozenset to allow direct
+scalar assignment (e.g. <code class="docutils literal notranslate"><span class="pre">loss.entropy_coeff</span> <span class="pre">=</span> <span class="pre">0.003</span></code>) for registered
+buffers that are commonly scheduled during training. The assignment performs
+an in-place update, preserving the buffer’s device and dtype.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">MyLoss</span><span class="p">(</span><span class="n">LossModule</span><span class="p">):</span>
 <span class="gp">&gt;&gt;&gt; </span>    <span class="nd">@dataclass</span>
