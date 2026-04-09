@@ -255,6 +255,7 @@
     <span class="n">TensorDictModuleWrapper</span><span class="p">,</span>
     <span class="n">TensorDictSequential</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">tensordict.nn.probabilistic</span> <span class="kn">import</span> <span class="n">interaction_type</span><span class="p">,</span> <span class="n">InteractionType</span>
 <span class="kn">from</span> <span class="nn">tensordict.utils</span> <span class="kn">import</span> <span class="n">expand_as_right</span><span class="p">,</span> <span class="n">NestedKey</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
 <span class="kn">from</span> <span class="nn">torch.distributions</span> <span class="kn">import</span> <span class="n">Categorical</span>
@@ -2817,6 +2818,237 @@
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">counter_key</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">_replace_last</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">init_key</span><span class="p">,</span> <span class="s2">&quot;counter&quot;</span><span class="p">)</span></div>
+
+
+
+<span class="k">class</span> <span class="nc">_DDPMModule</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Internal DDPM denoising module used by :class:`DiffusionActor`.</span>
+
+<span class="sd">    Implements a fixed linear-beta DDPM scheduler and runs the full reverse</span>
+<span class="sd">    diffusion chain (``num_steps`` denoising steps) at inference time.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        score_network (nn.Module): Network that predicts noise given</span>
+<span class="sd">            ``(noisy_action, observation, timestep)``.  Its input size must</span>
+<span class="sd">            be ``obs_dim + action_dim + 1`` and output size ``action_dim``.</span>
+<span class="sd">        action_dim (int): Dimensionality of the action.</span>
+<span class="sd">        num_steps (int): Number of DDPM denoising steps.  Defaults to 100.</span>
+<span class="sd">        beta_start (float): Starting beta for the linear schedule.</span>
+<span class="sd">            Defaults to 1e-4.</span>
+<span class="sd">        beta_end (float): Ending beta for the linear schedule.</span>
+<span class="sd">            Defaults to 0.02.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">score_network</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+        <span class="n">action_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">num_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+        <span class="n">beta_start</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-4</span><span class="p">,</span>
+        <span class="n">beta_end</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.02</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">score_network</span> <span class="o">=</span> <span class="n">score_network</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_dim</span> <span class="o">=</span> <span class="n">action_dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_steps</span> <span class="o">=</span> <span class="n">num_steps</span>
+
+        <span class="c1"># Linear beta schedule — fixed, not learnable</span>
+        <span class="n">betas</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">beta_start</span><span class="p">,</span> <span class="n">beta_end</span><span class="p">,</span> <span class="n">num_steps</span><span class="p">)</span>
+        <span class="n">alphas</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">betas</span>
+        <span class="n">alphas_cumprod</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cumprod</span><span class="p">(</span><span class="n">alphas</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;betas&quot;</span><span class="p">,</span> <span class="n">betas</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;alphas&quot;</span><span class="p">,</span> <span class="n">alphas</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;alphas_cumprod&quot;</span><span class="p">,</span> <span class="n">alphas_cumprod</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">add_noise</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">clean_action</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Forward diffusion: corrupt *clean_action* with noise at timestep *t*.</span>
+
+<span class="sd">        This is the training-time counterpart to :meth:`forward`.  Given a</span>
+<span class="sd">        clean action and a (randomly sampled) timestep, it returns the noisy</span>
+<span class="sd">        action and the noise that was added, which can be used to compute a</span>
+<span class="sd">        denoising loss.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            clean_action: ``(..., action_dim)`` tensor of clean actions.</span>
+<span class="sd">            t: Integer tensor of shape ``(...)`` with timestep indices in</span>
+<span class="sd">                ``[0, num_steps)``.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Tuple of ``(noisy_action, noise)`` both of shape</span>
+<span class="sd">            ``(..., action_dim)``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">alpha_bar_t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">alphas_cumprod</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>  <span class="c1"># (...)</span>
+        <span class="c1"># Broadcast scalar/batch alpha_bar_t to match action dimensions</span>
+        <span class="k">while</span> <span class="n">alpha_bar_t</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">clean_action</span><span class="o">.</span><span class="n">dim</span><span class="p">():</span>
+            <span class="n">alpha_bar_t</span> <span class="o">=</span> <span class="n">alpha_bar_t</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">noise</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn_like</span><span class="p">(</span><span class="n">clean_action</span><span class="p">)</span>
+        <span class="n">noisy_action</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">alpha_bar_t</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span> <span class="o">*</span> <span class="n">clean_action</span> <span class="o">+</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">alpha_bar_t</span><span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span> <span class="o">*</span> <span class="n">noise</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">noisy_action</span><span class="p">,</span> <span class="n">noise</span>
+
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the full DDPM reverse chain conditioned on *observation*.</span>
+
+<span class="sd">        Respects :func:`~tensordict.nn.probabilistic.interaction_type`:</span>
+<span class="sd">        when the interaction type is ``DETERMINISTIC``, the stochastic noise</span>
+<span class="sd">        injection step is skipped, producing a deterministic (mean) trajectory.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            observation: ``(..., obs_dim)`` tensor.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Denoised action of shape ``(..., action_dim)``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">batch_shape</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">device</span>
+        <span class="n">deterministic</span> <span class="o">=</span> <span class="n">interaction_type</span><span class="p">()</span> <span class="o">==</span> <span class="n">InteractionType</span><span class="o">.</span><span class="n">DETERMINISTIC</span>
+
+        <span class="c1"># Start from pure Gaussian noise</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="o">*</span><span class="n">batch_shape</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_dim</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_steps</span><span class="p">)):</span>
+            <span class="n">t_tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+                <span class="p">(</span><span class="o">*</span><span class="n">batch_shape</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">t</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+            <span class="p">)</span>
+            <span class="n">model_input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">x</span><span class="p">,</span> <span class="n">observation</span><span class="p">,</span> <span class="n">t_tensor</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">predicted_noise</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">score_network</span><span class="p">(</span><span class="n">model_input</span><span class="p">)</span>
+
+            <span class="n">beta_t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">betas</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
+            <span class="n">alpha_t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">alphas</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
+            <span class="n">alpha_bar_t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">alphas_cumprod</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
+
+            <span class="c1"># DDPM reverse step</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">alpha_t</span><span class="o">.</span><span class="n">sqrt</span><span class="p">())</span> <span class="o">*</span> <span class="p">(</span>
+                <span class="n">x</span> <span class="o">-</span> <span class="p">(</span><span class="n">beta_t</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">alpha_bar_t</span><span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">())</span> <span class="o">*</span> <span class="n">predicted_noise</span>
+            <span class="p">)</span>
+            <span class="c1"># Use torch.where instead of a Python conditional to avoid</span>
+            <span class="c1"># graph breaks under torch.compile.</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">deterministic</span><span class="p">:</span>
+                <span class="n">noise</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn_like</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+                <span class="n">x</span> <span class="o">=</span> <span class="n">x</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+                    <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">t</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span>
+                    <span class="n">beta_t</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span> <span class="o">*</span> <span class="n">noise</span><span class="p">,</span>
+                    <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">x</span><span class="p">),</span>
+                <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">x</span>
+
+
+<div class="viewcode-block" id="DiffusionActor">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.tensordict_module.DiffusionActor.html#torchrl.modules.DiffusionActor">[docs]</a>
+<span class="k">class</span> <span class="nc">DiffusionActor</span><span class="p">(</span><span class="n">SafeModule</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Diffusion-based actor for RL.</span>
+
+<span class="sd">    Implements a score-based policy that denoises latent actions conditioned on</span>
+<span class="sd">    observations using a fixed DDPM scheduler.  A small MLP is used as the</span>
+<span class="sd">    score network by default; pass a custom ``score_network`` to override.</span>
+
+<span class="sd">    The strict TensorDict contract is ``in_keys=[&quot;observation&quot;]`` →</span>
+<span class="sd">    ``out_keys=[&quot;action&quot;]``.</span>
+
+<span class="sd">    Respects :func:`~tensordict.nn.probabilistic.interaction_type`: setting</span>
+<span class="sd">    the interaction type to ``DETERMINISTIC`` disables stochastic noise</span>
+<span class="sd">    injection during the reverse chain, yielding a deterministic output.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        action_dim (int): Dimensionality of the action space.</span>
+<span class="sd">        obs_dim (int, optional): Dimensionality of the observation space.</span>
+<span class="sd">            Only required when ``score_network`` is ``None`` (i.e., when the</span>
+<span class="sd">            default MLP is used).  When a custom ``score_network`` is</span>
+<span class="sd">            provided this argument is ignored.  Defaults to ``None``.</span>
+<span class="sd">        score_network (nn.Module, optional): Network that predicts noise given</span>
+<span class="sd">            ``(noisy_action, observation, timestep)`` concatenated along the</span>
+<span class="sd">            last dimension.  If ``None``, a two-hidden-layer MLP of width 256</span>
+<span class="sd">            with a :class:`~torch.nn.LazyLinear` first layer is constructed</span>
+<span class="sd">            automatically (``obs_dim`` need not be specified in this case).</span>
+<span class="sd">        num_steps (int): Number of DDPM denoising steps.  Defaults to 100.</span>
+<span class="sd">        beta_start (float): Starting beta for the linear schedule.</span>
+<span class="sd">            Defaults to 1e-4.</span>
+<span class="sd">        beta_end (float): Ending beta for the linear schedule.</span>
+<span class="sd">            Defaults to 0.02.</span>
+<span class="sd">        in_keys (list of NestedKey, optional): Keys read from the input</span>
+<span class="sd">            TensorDict.  Defaults to ``[&quot;observation&quot;]``.</span>
+<span class="sd">        out_keys (list of NestedKey, optional): Keys written to the output</span>
+<span class="sd">            TensorDict.  Defaults to ``[&quot;action&quot;]``.</span>
+<span class="sd">        spec (TensorSpec, optional): Spec for the action output.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules import DiffusionActor</span>
+<span class="sd">        &gt;&gt;&gt; # obs_dim not required when using the default network</span>
+<span class="sd">        &gt;&gt;&gt; actor = DiffusionActor(action_dim=2, num_steps=10)</span>
+<span class="sd">        &gt;&gt;&gt; td = TensorDict({&quot;observation&quot;: torch.randn(4, 3)}, batch_size=[4])</span>
+<span class="sd">        &gt;&gt;&gt; td = actor(td)</span>
+<span class="sd">        &gt;&gt;&gt; td[&quot;action&quot;].shape</span>
+<span class="sd">        torch.Size([4, 2])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">action_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">obs_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">score_network</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+        <span class="n">beta_start</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-4</span><span class="p">,</span>
+        <span class="n">beta_end</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.02</span><span class="p">,</span>
+        <span class="n">in_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">out_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">spec</span><span class="p">:</span> <span class="n">TensorSpec</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">in_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">out_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="s2">&quot;action&quot;</span> <span class="ow">in</span> <span class="n">out_keys</span>
+            <span class="ow">and</span> <span class="n">spec</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">Composite</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="n">spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="n">spec</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">score_network</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">obs_dim</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># Fully-specified MLP: input size known upfront</span>
+                <span class="n">score_network</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+                    <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">action_dim</span> <span class="o">+</span> <span class="n">obs_dim</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">256</span><span class="p">),</span>
+                    <span class="n">nn</span><span class="o">.</span><span class="n">SiLU</span><span class="p">(),</span>
+                    <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">),</span>
+                    <span class="n">nn</span><span class="o">.</span><span class="n">SiLU</span><span class="p">(),</span>
+                    <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="n">action_dim</span><span class="p">),</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># LazyLinear infers input size on first forward pass;</span>
+                <span class="c1"># obs_dim need not be specified by the caller.</span>
+                <span class="n">score_network</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+                    <span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="mi">256</span><span class="p">),</span>
+                    <span class="n">nn</span><span class="o">.</span><span class="n">SiLU</span><span class="p">(),</span>
+                    <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">),</span>
+                    <span class="n">nn</span><span class="o">.</span><span class="n">SiLU</span><span class="p">(),</span>
+                    <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="n">action_dim</span><span class="p">),</span>
+                <span class="p">)</span>
+
+        <span class="n">module</span> <span class="o">=</span> <span class="n">_DDPMModule</span><span class="p">(</span>
+            <span class="n">score_network</span><span class="o">=</span><span class="n">score_network</span><span class="p">,</span>
+            <span class="n">action_dim</span><span class="o">=</span><span class="n">action_dim</span><span class="p">,</span>
+            <span class="n">num_steps</span><span class="o">=</span><span class="n">num_steps</span><span class="p">,</span>
+            <span class="n">beta_start</span><span class="o">=</span><span class="n">beta_start</span><span class="p">,</span>
+            <span class="n">beta_end</span><span class="o">=</span><span class="n">beta_end</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">module</span><span class="p">,</span>
+            <span class="n">in_keys</span><span class="o">=</span><span class="n">in_keys</span><span class="p">,</span>
+            <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">,</span>
+            <span class="n">spec</span><span class="o">=</span><span class="n">spec</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span></div>
 
 </pre></div>
 

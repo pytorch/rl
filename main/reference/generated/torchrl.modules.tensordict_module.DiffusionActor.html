@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Actor &mdash; torchrl main documentation</title>
+  <title>DiffusionActor &mdash; torchrl main documentation</title>
   
 
   
@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="DiffusionActor" href="torchrl.modules.tensordict_module.DiffusionActor.html" />
-    <link rel="prev" title="Actor Modules" href="../modules_actors.html" /> 
+    <link rel="next" title="MultiStepActorWrapper" href="torchrl.modules.tensordict_module.MultiStepActorWrapper.html" />
+    <link rel="prev" title="Actor" href="torchrl.modules.tensordict_module.Actor.html" /> 
 
   
   <script src="../../_static/js/modernizr.min.js"></script>
@@ -216,13 +216,13 @@
         
           <li><a href="../modules_actors.html">Actor Modules</a> &gt;</li>
         
-      <li>Actor</li>
+      <li>DiffusionActor</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="../../_sources/reference/generated/torchrl.modules.tensordict_module.Actor.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+            <a href="../../_sources/reference/generated/torchrl.modules.tensordict_module.DiffusionActor.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -247,74 +247,56 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" class="pytorch-article">
               
-  <section id="actor">
-<h1>Actor<a class="headerlink" href="#actor" title="Link to this heading">¶</a></h1>
+  <section id="diffusionactor">
+<h1>DiffusionActor<a class="headerlink" href="#diffusionactor" title="Link to this heading">¶</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="torchrl.modules.tensordict_module.Actor">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.tensordict_module.</span></span><span class="sig-name descname"><span class="pre">Actor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/tensordict_module/actors.html#Actor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.tensordict_module.Actor" title="Link to this definition">¶</a></dt>
-<dd><p>General class for deterministic actors in RL.</p>
-<p>The Actor class comes with default values for the out_keys (<code class="docutils literal notranslate"><span class="pre">[&quot;action&quot;]</span></code>)
-and if the spec is provided but not as a
-<a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.Composite"><code class="xref py py-class docutils literal notranslate"><span class="pre">Composite</span></code></a> object, it will be
-automatically translated into <code class="docutils literal notranslate"><span class="pre">spec</span> <span class="pre">=</span> <span class="pre">Composite(action=spec)</span></code>.</p>
+<dt class="sig sig-object py" id="torchrl.modules.tensordict_module.DiffusionActor">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.tensordict_module.</span></span><span class="sig-name descname"><span class="pre">DiffusionActor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/tensordict_module/actors.html#DiffusionActor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.tensordict_module.DiffusionActor" title="Link to this definition">¶</a></dt>
+<dd><p>Diffusion-based actor for RL.</p>
+<p>Implements a score-based policy that denoises latent actions conditioned on
+observations using a fixed DDPM scheduler.  A small MLP is used as the
+score network by default; pass a custom <code class="docutils literal notranslate"><span class="pre">score_network</span></code> to override.</p>
+<p>The strict TensorDict contract is <code class="docutils literal notranslate"><span class="pre">in_keys=[&quot;observation&quot;]</span></code> →
+<code class="docutils literal notranslate"><span class="pre">out_keys=[&quot;action&quot;]</span></code>.</p>
+<p>Respects <code class="xref py py-func docutils literal notranslate"><span class="pre">interaction_type()</span></code>: setting
+the interaction type to <code class="docutils literal notranslate"><span class="pre">DETERMINISTIC</span></code> disables stochastic noise
+injection during the reverse chain, yielding a deterministic output.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>module</strong> (<em>nn.Module</em>) – a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> used to map the input to
-the output parameter space.</p></li>
-<li><p><strong>in_keys</strong> (<em>iterable</em><em> of </em><em>str</em><em>, </em><em>optional</em>) – keys to be read from input
-tensordict and passed to the module. If it
-contains more than one element, the values will be passed in the
-order given by the in_keys iterable.
-Defaults to <code class="docutils literal notranslate"><span class="pre">[&quot;observation&quot;]</span></code>.</p></li>
-<li><p><strong>out_keys</strong> (<em>iterable</em><em> of </em><em>str</em>) – keys to be written to the input tensordict.
-The length of out_keys must match the
-number of tensors returned by the embedded module. Using <code class="docutils literal notranslate"><span class="pre">&quot;_&quot;</span></code> as a
-key avoid writing tensor to output.
-Defaults to <code class="docutils literal notranslate"><span class="pre">[&quot;action&quot;]</span></code>.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><ul class="simple">
-<li><p><strong>spec</strong> (<a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><em>TensorSpec</em></a><em>, </em><em>optional</em>) – Keyword-only argument.
-Specs of the output tensor. If the module
-outputs multiple output tensors,
-spec characterize the space of the first output tensor.</p></li>
-<li><p><strong>safe</strong> (<em>bool</em>) – Keyword-only argument.
-If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the value of the output is checked against the
-input spec. Out-of-domain sampling can
-occur because of exploration policies or numerical under/overflow
-issues. If this value is out of bounds, it is projected back onto the
-desired space using the <a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec.project" title="torchrl.data.TensorSpec.project"><code class="xref py py-meth docutils literal notranslate"><span class="pre">project()</span></code></a>
-method. Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>action_dim</strong> (<em>int</em>) – Dimensionality of the action space.</p></li>
+<li><p><strong>obs_dim</strong> (<em>int</em><em>, </em><em>optional</em>) – Dimensionality of the observation space.
+Only required when <code class="docutils literal notranslate"><span class="pre">score_network</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code> (i.e., when the
+default MLP is used).  When a custom <code class="docutils literal notranslate"><span class="pre">score_network</span></code> is
+provided this argument is ignored.  Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>score_network</strong> (<em>nn.Module</em><em>, </em><em>optional</em>) – Network that predicts noise given
+<code class="docutils literal notranslate"><span class="pre">(noisy_action,</span> <span class="pre">observation,</span> <span class="pre">timestep)</span></code> concatenated along the
+last dimension.  If <code class="docutils literal notranslate"><span class="pre">None</span></code>, a two-hidden-layer MLP of width 256
+with a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear" title="(in PyTorch v2.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyLinear</span></code></a> first layer is constructed
+automatically (<code class="docutils literal notranslate"><span class="pre">obs_dim</span></code> need not be specified in this case).</p></li>
+<li><p><strong>num_steps</strong> (<em>int</em>) – Number of DDPM denoising steps.  Defaults to 100.</p></li>
+<li><p><strong>beta_start</strong> (<em>float</em>) – Starting beta for the linear schedule.
+Defaults to 1e-4.</p></li>
+<li><p><strong>beta_end</strong> (<em>float</em>) – Ending beta for the linear schedule.
+Defaults to 0.02.</p></li>
+<li><p><strong>in_keys</strong> (<em>list</em><em> of </em><em>NestedKey</em><em>, </em><em>optional</em>) – Keys read from the input
+TensorDict.  Defaults to <code class="docutils literal notranslate"><span class="pre">[&quot;observation&quot;]</span></code>.</p></li>
+<li><p><strong>out_keys</strong> (<em>list</em><em> of </em><em>NestedKey</em><em>, </em><em>optional</em>) – Keys written to the output
+TensorDict.  Defaults to <code class="docutils literal notranslate"><span class="pre">[&quot;action&quot;]</span></code>.</p></li>
+<li><p><strong>spec</strong> (<a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><em>TensorSpec</em></a><em>, </em><em>optional</em>) – Spec for the action output.</p></li>
 </ul>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">Unbounded</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <span class="n">Actor</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;observation&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)},</span> <span class="p">[</span><span class="mi">3</span><span class="p">,])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_module</span> <span class="o">=</span> <span class="n">Actor</span><span class="p">(</span>
-<span class="gp">... </span>   <span class="n">module</span><span class="o">=</span><span class="n">module</span><span class="p">,</span>
-<span class="gp">... </span>   <span class="n">spec</span><span class="o">=</span><span class="n">action_spec</span><span class="p">,</span>
-<span class="gp">... </span>   <span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_module</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        action: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        observation: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([3]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">))</span>
-<span class="go">tensor([[-1.3635, -0.0340,  0.1476, -1.3911],</span>
-<span class="go">        [-0.1664,  0.5455,  0.2247, -0.4583],</span>
-<span class="go">        [-0.2916,  0.2160,  0.5337, -0.5193]], grad_fn=&lt;AddmmBackward0&gt;)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <span class="n">DiffusionActor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># obs_dim not required when using the default network</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">actor</span> <span class="o">=</span> <span class="n">DiffusionActor</span><span class="p">(</span><span class="n">action_dim</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">num_steps</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;observation&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">actor</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">torch.Size([4, 2])</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -329,10 +311,10 @@ method. Default is <code class="docutils literal notranslate"><span class="pre">
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.modules.tensordict_module.DiffusionActor.html" class="btn btn-neutral float-right" title="DiffusionActor" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.modules.tensordict_module.MultiStepActorWrapper.html" class="btn btn-neutral float-right" title="MultiStepActorWrapper" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="../modules_actors.html" class="btn btn-neutral" title="Actor Modules" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.modules.tensordict_module.Actor.html" class="btn btn-neutral" title="Actor" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -358,8 +340,8 @@ method. Default is <code class="docutils literal notranslate"><span class="pre">
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">Actor</a><ul>
-<li><a class="reference internal" href="#torchrl.modules.tensordict_module.Actor"><code class="docutils literal notranslate"><span class="pre">Actor</span></code></a></li>
+<li><a class="reference internal" href="#">DiffusionActor</a><ul>
+<li><a class="reference internal" href="#torchrl.modules.tensordict_module.DiffusionActor"><code class="docutils literal notranslate"><span class="pre">DiffusionActor</span></code></a></li>
 </ul>
 </li>
 </ul>
