@@ -227,6 +227,13 @@ sample = rb.sample()
 print(sample)
 
 ######################################################################
+# With ``batch_size=32`` and ``slice_len=16`` the sampler must draw
+# exactly ``32 // 16 = 2`` contiguous trajectory slices per call:
+
+traj_ids = sample["collector", "traj_ids"]
+print(f"Unique trajectories in sample: {traj_ids.unique().numel()}")
+
+######################################################################
 # Each sampled batch contains contiguous slices of 16 steps drawn from
 # the stored transitions. A typical training loop looks like this:
 #
