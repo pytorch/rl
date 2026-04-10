@@ -71,7 +71,10 @@ def main(cfg: DictConfig):  # noqa: F821
     eval_env = make_environment(cfg, logger=logger)
 
     # Create offline replay buffer
-    replay_buffer = make_offline_replay_buffer(cfg.replay_buffer, cfg, device=device)
+    with timeit("setup/replay_buffer"):
+        replay_buffer = make_offline_replay_buffer(
+            cfg.replay_buffer, cfg, device=device
+        )
 
     compile_mode = None
     if cfg.compile.compile:
@@ -83,7 +86,8 @@ def main(cfg: DictConfig):  # noqa: F821
                 compile_mode = "reduce-overhead"
 
     # Create model
-    actor = make_diffusion_actor(cfg, eval_env, device)
+    with timeit("setup/model"):
+        actor = make_diffusion_actor(cfg, eval_env, device)
 
     # Create loss
     loss_module = make_loss_module(actor)
@@ -91,20 +95,27 @@ def main(cfg: DictConfig):  # noqa: F821
     # Create optimizer
     optimizer = make_optimizer(cfg, loss_module)
 
+    n_params = sum(p.numel() for p in actor.parameters())
+    n_trainable = sum(p.numel() for p in actor.parameters() if p.requires_grad)
+
     clip_grad = cfg.optim.clip_grad
 
     def update(sampled_tensordict):
         optimizer.zero_grad(set_to_none=True)
 
-        loss_td = loss_module(sampled_tensordict)
-        loss = loss_td["loss_diffusion_bc"]
+        with timeit("training/forward"):
+            loss_td = loss_module(sampled_tensordict)
+            loss = loss_td["loss_diffusion_bc"]
 
-        loss.backward()
-        if clip_grad:
-            torch.nn.utils.clip_grad_norm_(actor.parameters(), clip_grad)
-        optimizer.step()
+        with timeit("training/backward"):
+            loss.backward()
 
-        return loss_td.detach()
+        grad_norm = torch.nn.utils.clip_grad_norm_(actor.parameters(), clip_grad)
+
+        with timeit("training/optim_step"):
+            optimizer.step()
+
+        return loss_td.detach(), grad_norm
 
     if cfg.compile.compile:
         update = compile_with_warmup(update, mode=compile_mode, warmup=1)
@@ -120,33 +131,68 @@ def main(cfg: DictConfig):  # noqa: F821
     evaluation_interval = cfg.logger.eval_iter
     eval_steps = cfg.logger.eval_steps
     pbar = tqdm.tqdm(range(gradient_steps))
+
+    # Log setup info
+    if logger is not None:
+        log_metrics(
+            logger,
+            {
+                "setup/n_params": n_params,
+                "setup/n_trainable_params": n_trainable,
+                "setup/num_diffusion_steps": cfg.network.num_steps,
+                "setup/replay_buffer_size": len(replay_buffer),
+            },
+            0,
+        )
+
     # Training loop
     for update_counter in pbar:
         timeit.printevery(num_prints=1000, total_count=gradient_steps, erase=True)
 
-        with timeit("rb - sample"):
+        with timeit("training/rb_sample"):
             sampled_tensordict = replay_buffer.sample()
 
-        with timeit("update"):
+        with timeit("training/update"):
             torch.compiler.cudagraph_mark_step_begin()
-            loss_td = update(sampled_tensordict)
+            loss_td, grad_norm = update(sampled_tensordict)
 
-        metrics_to_log = {"loss_diffusion_bc": loss_td["loss_diffusion_bc"].item()}
+        loss_val = loss_td["loss_diffusion_bc"].item()
+
+        metrics_to_log = {
+            "training/loss": loss_val,
+            "training/grad_norm": grad_norm.item()
+            if isinstance(grad_norm, torch.Tensor)
+            else grad_norm,
+            "training/lr": optimizer.param_groups[0]["lr"],
+        }
+
+        pbar.set_postfix(loss=f"{loss_val:.4f}", grad=f"{grad_norm:.3f}")
 
         # Evaluation
         if update_counter % evaluation_interval == 0:
             with set_exploration_type(
                 ExplorationType.DETERMINISTIC
-            ), torch.no_grad(), timeit("eval"):
+            ), torch.no_grad(), timeit("eval/rollout"):
                 eval_td = eval_env.rollout(
                     max_steps=eval_steps, policy=actor, auto_cast_to_device=True
                 )
                 eval_env.apply(dump_video)
+            # Per-step reward
             eval_reward = eval_td["next", "reward"].sum(1).mean().item()
-            metrics_to_log["evaluation_reward"] = eval_reward
+            # Episode return (from RewardSum transform)
+            episode_return = eval_td["next", "episode_reward"][..., -1, :].mean().item()
+            # Episode length
+            episode_len = (
+                eval_td["next", "step_count"][..., -1, :].float().mean().item()
+            )
+
+            metrics_to_log["eval/episode_return"] = episode_return
+            metrics_to_log["eval/reward_sum"] = eval_reward
+            metrics_to_log["eval/episode_length"] = episode_len
+
         if logger is not None:
             metrics_to_log.update(timeit.todict(prefix="time"))
-            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
+            metrics_to_log["time/speed_iters_per_sec"] = pbar.format_dict["rate"]
             log_metrics(logger, metrics_to_log, update_counter)
 
     if not eval_env.is_closed:
