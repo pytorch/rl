@@ -313,7 +313,7 @@ collector_async.async_shutdown()
 #
 # * :ref:`Get started with data collection <gs_storage>` — basic collector
 #   and replay-buffer workflow.
-# * :ref:`Recurrent DQN tutorial <coding_dqn_rnn>` — training a recurrent
+# * :ref:`Recurrent DQN tutorial <RNN_tuto>` — training a recurrent
 #   policy where per-episode data is essential.
 # * `TorchRL documentation <https://pytorch.org/rl/>`_
 
