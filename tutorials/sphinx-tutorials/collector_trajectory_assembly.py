@@ -1,8 +1,8 @@
 """
-TorchRL Collectors Deep Dive: Trajectory IDs, Partial Chunks, and Emission
-=========================================================================
+Collectors Deep Dive: Trajectory Assembly
+==========================================
 
-**Author**: `Jay Prajapati <https://github.com/coder-jayp>`_
+**Author**: `Vincent Moens <https://github.com/vmoens>`_
 
 .. _collector_trajectory_assembly:
 
@@ -10,21 +10,21 @@ TorchRL Collectors Deep Dive: Trajectory IDs, Partial Chunks, and Emission
 
     .. grid-item-card:: :octicon:`mortar-board;1em;` What you will learn
 
-      * Why collectors return fixed-size chunks instead of full episodes
-      * How ``split_trajectories()`` reassembles trajectories with padding and masking
-      * How to request complete trajectories using ``trajs_per_batch``
+      * Why collectors return fixed-size batches that mix multiple trajectories
+      * How ``split_trajectories()`` reassembles them into padded, per-episode tensors
+      * What ``("collector", "traj_ids")`` and ``("collector", "mask")`` mean
+      * How ``done`` and ``truncated`` interact with trajectory splitting
+      * When to use ``as_nested=True`` for memory-efficient ragged batches
+      * How to request complete trajectories with ``trajs_per_batch``
       * How to store complete trajectories in a replay buffer
-      * The meaning of ``("collector", "traj_ids")`` and ``("collector", "mask")``
-      * Proper handling of ``done`` versus ``truncated``
-      * When to use ``as_nested=True`` versus zero-padded tensors
 
     .. grid-item-card:: :octicon:`list-unordered;1em;` Prerequisites
 
-      * TorchRL >= 0.5
-      * gym or gymnasium
+      * `TorchRL <https://github.com/pytorch/rl>`_ and
+        `gymnasium <https://gymnasium.farama.org>`_ installed
+      * Familiarity with :class:`~torchrl.collectors.SyncDataCollector`
+        (see :ref:`the data-collection tutorial <gs_storage_collector>`)
 """
-
-import time
 
 # sphinx_gallery_start_ignore
 import warnings
@@ -33,206 +33,217 @@ warnings.filterwarnings("ignore")
 # sphinx_gallery_end_ignore
 
 import torch
-from tensordict import TensorDict
+from torchrl.collectors import SyncDataCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import LazyTensorStorage, ReplayBuffer
+from torchrl.envs import GymEnv
+from torchrl.modules import RandomPolicy
+
+torch.manual_seed(0)
 
 ######################################################################
-# Overview
-# --------
+# Why collectors return fixed-size chunks
+# ---------------------------------------
 #
-# TorchRL collectors are designed to return batches of a fixed number of frames.
-# Because real episodes have very different lengths, a single batch often contains
-# pieces from multiple different trajectories.
+# In reinforcement learning, episodes can have wildly different lengths.
+# A CartPole episode may last 10 steps or 500, depending on the policy.
+# To keep training loops predictable, TorchRL collectors always return
+# batches of exactly ``frames_per_batch`` transitions, regardless of how
+# many episodes those transitions span.
 #
-# **In this tutorial you will learn:**
+# This means a single batch will typically contain **fragments of
+# multiple trajectories** stitched together. Let's see this in practice.
+
+env = GymEnv("CartPole-v1")
+env.set_seed(0)
+
+policy = RandomPolicy(env.action_spec)
+collector = SyncDataCollector(env, policy, frames_per_batch=200, total_frames=-1)
+
+for data in collector:
+    print(data)
+    break
+
+######################################################################
+# The batch has exactly 200 transitions. Let's inspect its trajectory
+# IDs — each integer labels which episode a given transition belongs to:
+
+print(data["collector", "traj_ids"])
+
+######################################################################
+# Multiple trajectory IDs appear because several short episodes were
+# packed into a single 200-frame batch. The ``("next", "done")`` key
+# marks where each episode ends:
+
+print(data["next", "done"].squeeze(-1))
+
+######################################################################
+# We can count how many complete episodes fell within this batch:
+
+n_episodes = data["next", "done"].sum().item()
+print(f"This batch of {data.shape[0]} frames contains {n_episodes} episodes.")
+
+######################################################################
+# Reassembling trajectories with ``split_trajectories``
+# -----------------------------------------------------
 #
-# - Why collectors return fixed-size chunks instead of full episodes
-# - How ``split_trajectories()`` reassembles trajectories with padding and masking
-# - How to request complete trajectories using ``trajs_per_batch``
-# - How to store complete trajectories in a replay buffer
-# - The meaning of ``("collector", "traj_ids")`` and ``("collector", "mask")``
-# - Proper handling of ``done`` versus ``truncated``
-# - When to use ``as_nested=True`` versus zero-padded tensors
+# For many algorithms (especially those involving recurrent networks or
+# episode-level returns), you need data organized **per episode**, not
+# as a flat interleaved stream. :func:`~torchrl.collectors.utils.split_trajectories`
+# takes a flat batch with ``("collector", "traj_ids")`` and returns a
+# zero-padded ``TensorDict`` of shape ``(num_trajectories, max_length)``.
+
+split_data = split_trajectories(data)
+
+print(split_data)
+print(f"Shape: {split_data.shape}  →  (num_trajectories, max_episode_length)")
 
 ######################################################################
-# Section 1: Why trajectories get split
-# -------------------------------------
+# Because episodes have different lengths, shorter ones are padded with
+# zeros. The ``("collector", "mask")`` key tells you which time-steps
+# contain real data (``True``) and which are padding (``False``):
 
-print("=== Section 1: Why trajectories get split ===\n")
-
-data = TensorDict(
-    {
-        "observation": torch.randn(15, 4),
-        ("next", "observation"): torch.randn(15, 4),
-        ("next", "reward"): torch.randn(15, 1),
-        ("next", "done"): torch.tensor(
-            [0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1], dtype=torch.bool
-        ).unsqueeze(-1),
-        ("collector", "traj_ids"): torch.tensor(
-            [0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2], dtype=torch.int64
-        ),
-    },
-    batch_size=[15],
-)
-
-print("Raw collector batch shape:", data.shape)
-print("Trajectory IDs:", data.get(("collector", "traj_ids")))
-print("Done signals: ", data.get(("next", "done")).squeeze(-1))
+print(split_data["collector", "mask"])
 
 ######################################################################
-# Section 2: Reassembling trajectories
-# ------------------------------------
-
-print("\n" + "=" * 80)
-print("=== Section 2: Reassembling trajectories ===\n")
-
-split_data = split_trajectories(data, trajectory_key=("collector", "traj_ids"))
-
-print("After split_trajectories:")
-print(f"  Shape: {split_data.shape} → (num_trajectories, max_length, ...)")
-print("\nPadded traj_ids:\n", split_data.get(("collector", "traj_ids")))
-print("Mask (True = real data):\n", split_data.get(("collector", "mask")))
+# When computing losses on this padded tensor, **always multiply by the
+# mask** (or index with it) so that padding does not leak into your
+# gradients. This is especially important for recurrent models.
 
 ######################################################################
-# Edge Case: Trajectory spanning multiple batches
-# -----------------------------------------------
+# ``done`` vs ``truncated`` and the mask
+# ---------------------------------------
+#
+# TorchRL distinguishes two flavours of episode termination:
+#
+# * ``("next", "done")`` is ``True`` whenever an episode ends, for any
+#   reason.
+# * ``("next", "truncated")`` is ``True`` only when the episode was cut
+#   short by an external limit (a time limit, or the collector running
+#   out of frames before the environment signalled a natural end).
+#
+# When a trajectory is still in-flight at the edge of a batch, its last
+# step will be ``truncated=True, done=True``. ``split_trajectories``
+# handles this correctly: the mask covers exactly the valid steps,
+# and the ``done`` / ``truncated`` flags are preserved so that you can
+# treat natural terminations and artificial truncations differently in
+# your value-function bootstrap.
 
-print("\nEdge Case: Trajectory spanning multiple collector iterations")
-
-batch1 = TensorDict(
-    {
-        "obs": torch.randn(8, 4),
-        ("next", "done"): torch.zeros(8, 1, dtype=torch.bool),
-        ("collector", "traj_ids"): torch.zeros(8, dtype=torch.int64),
-    },
-    [8],
-)
-
-batch2 = TensorDict(
-    {
-        "obs": torch.randn(7, 4),
-        ("next", "done"): torch.tensor([0, 0, 0, 0, 0, 0, 1]).unsqueeze(-1),
-        ("collector", "traj_ids"): torch.zeros(7, dtype=torch.int64),
-    },
-    [7],
-)
-
-combined = torch.cat([batch1, batch2], dim=0)
-split_combined = split_trajectories(combined, trajectory_key=("collector", "traj_ids"))
-
-print(f"Combined shape : {combined.shape}")
-print(f"After split    : {split_combined.shape}")
-print(
-    "Mask shows full trajectory is valid:",
-    split_combined.get(("collector", "mask")).all().item(),
-)
+print("done shape:     ", split_data["next", "done"].shape)
+print("truncated shape:", split_data["next", "truncated"].shape)
 
 ######################################################################
-# Section 3: Getting complete trajectories
-# ----------------------------------------
+# Padded vs nested tensors
+# ------------------------
+#
+# By default ``split_trajectories`` zero-pads to the length of the
+# longest trajectory. If your episodes vary a lot in length this wastes
+# memory. Passing ``as_nested=True`` returns a
+# :class:`~tensordict.TensorDict` backed by nested tensors instead:
 
-print("\n" + "=" * 80)
-print("=== Section 3: Getting complete trajectories ===\n")
+padded = split_trajectories(data, as_nested=False)
+nested = split_trajectories(data, as_nested=True)
 
-print("If you want full episodes instead of fixed-size frame batches,")
-print("you can use the ``trajs_per_batch`` argument when creating the collector:")
+print(f"Padded shape : {padded.shape}")
+print(f"Nested result: {type(nested).__name__}, batch_size={nested.batch_size}")
 
-print(
-    """
-collector = SyncDataCollector(
+######################################################################
+# **Recommendation:** use the default (padded) for simplicity and broad
+# compatibility. Switch to ``as_nested=True`` when episode lengths are
+# highly variable and memory is a concern.
+
+######################################################################
+# Getting complete trajectories with ``trajs_per_batch``
+# -------------------------------------------------------
+#
+# Sometimes you want the collector itself to hand you **complete
+# episodes** rather than fixed-frame chunks. The ``trajs_per_batch``
+# argument tells the collector to buffer partial trajectories internally
+# and yield only once it has accumulated the requested number of
+# finished episodes.
+
+collector_trajs = SyncDataCollector(
     env,
     policy,
-    frames_per_batch=1000,
-    trajs_per_batch=8,          # ask for 8 complete trajectories
-    ...
-)
-"""
+    frames_per_batch=200,
+    total_frames=-1,
+    trajs_per_batch=5,
 )
 
-print("The collector will automatically buffer partial trajectories and")
-print("only return them once they are finished.")
+for traj_data in collector_trajs:
+    print(traj_data)
+    break
+print(f"Shape: {traj_data.shape}  →  (trajs_per_batch, max_episode_length)")
 
 ######################################################################
-# Section 4: Populating replay buffers
-# ------------------------------------
+# Every row is a **complete** episode. The mask confirms this — each
+# trajectory starts at step 0 and runs until the episode's natural (or
+# truncated) end:
 
-print("\n" + "=" * 80)
-print("=== Section 4: Populating replay buffers ===\n")
-
-print(
-    "Once you have complete trajectories, storing them in a replay buffer is straightforward:"
-)
-
-rb = ReplayBuffer(storage=LazyTensorStorage(max_size=100_000))
-
-# rb.extend(split_data)   # this is the usual pattern
-
-print("This approach keeps your buffer clean and avoids manual padding logic.")
+print(traj_data["collector", "mask"])
 
 ######################################################################
-# Section 5: done vs truncated and the mask
-# -----------------------------------------
+# Storing trajectories in a replay buffer
+# ----------------------------------------
+#
+# Once you have per-episode data (from ``split_trajectories`` or
+# ``trajs_per_batch``), storing it in a
+# :class:`~torchrl.data.ReplayBuffer` is straightforward. Each episode
+# becomes a single entry in the buffer, and sampling returns
+# ready-to-use episode tensors.
 
-print("\n" + "=" * 80)
-print("=== Section 5: done vs truncated and the mask ===\n")
+rb = ReplayBuffer(storage=LazyTensorStorage(max_size=10_000))
+rb.extend(traj_data)
 
-print("The ``('collector', 'mask')`` indicates which timesteps are real data.")
-print("You should always use it when training recurrent models so padding is ignored.")
+print(f"Buffer length after one batch: {len(rb)}")
 
-print("\nAbout done and truncated:")
-print("- 'done' means the episode ended naturally")
-print("- 'truncated' means the episode was cut off early (e.g. by a time limit)")
-print("If a trajectory is incomplete at the end of a batch, the last step")
-print("is typically marked as truncated. ``split_trajectories()`` handles this")
-print("correctly by respecting the mask.")
+sample = rb.sample(batch_size=3)
+print(sample)
 
 ######################################################################
-# Section 6: Padded vs nested tensors
-# -----------------------------------
-
-print("\n" + "=" * 80)
-print("=== Section 6: Padded vs nested tensors ===\n")
-
-t0 = time.time()
-padded = split_trajectories(
-    data, trajectory_key=("collector", "traj_ids"), as_nested=False
-)
-t_padded = time.time() - t0
-
-t0 = time.time()
-nested = split_trajectories(
-    data, trajectory_key=("collector", "traj_ids"), as_nested=True
-)
-t_nested = time.time() - t0
-
-print(f"Default padded   → shape: {str(padded.shape):20} time: {t_padded:.4f}s")
-print(f"Nested output    → type : {type(nested).__name__:20} time: {t_nested:.4f}s")
-
-print("\nRecommendation:")
-print("- Use the default (zero-padded) for simplicity and broad compatibility")
-print(
-    "- Use as_nested=True when trajectory lengths vary a lot and you want to save memory"
-)
+# A typical training loop combines all of the above:
+#
+# .. code-block:: python
+#
+#     collector = SyncDataCollector(env, policy, ..., trajs_per_batch=32)
+#     rb = ReplayBuffer(storage=LazyTensorStorage(max_size=100_000))
+#
+#     for traj_batch in collector:
+#         rb.extend(traj_batch)
+#         for _ in range(n_optim):
+#             sample = rb.sample(batch_size=16)
+#             loss = loss_fn(sample)
+#             loss.backward()
+#             optim.step()
 
 ######################################################################
 # Conclusion
 # ----------
+#
+# In this tutorial we covered how TorchRL collectors handle trajectories:
+#
+# * Collectors return **fixed-size batches** that interleave fragments of
+#   multiple episodes.
+# * :func:`~torchrl.collectors.utils.split_trajectories` reassembles them
+#   into a ``(num_trajectories, max_length)`` padded tensor with a mask.
+# * ``done`` marks any episode end; ``truncated`` flags artificial
+#   cut-offs. The mask covers valid time-steps only.
+# * ``as_nested=True`` gives memory-efficient ragged tensors.
+# * ``trajs_per_batch`` makes the collector yield complete episodes
+#   directly.
+# * Complete episodes slot naturally into a
+#   :class:`~torchrl.data.ReplayBuffer`.
+#
+# Useful next resources
+# ~~~~~~~~~~~~~~~~~~~~~
+#
+# * :ref:`Get started with data collection <gs_storage>` — basic collector
+#   and replay-buffer workflow.
+# * :ref:`Recurrent DQN tutorial <coding_dqn_rnn>` — training a recurrent
+#   policy where per-episode data is essential.
+# * `TorchRL documentation <https://pytorch.org/rl/>`_
 
-print("\n" + "=" * 80)
-print("Conclusion")
-print("=" * 80)
-
-print("In this tutorial we have covered how TorchRL collectors handle trajectories.")
-print("You now understand why they return fixed-size chunks instead of full episodes,")
-print("how to reassemble them using ``split_trajectories()``, how to request complete")
-print(
-    "trajectories with ``trajs_per_batch``, and how to store them cleanly in a replay buffer."
-)
-
-print("\nUseful next resources:")
-print("- tutorials/sphinx-tutorials/getting-started-3.py (basic data collection)")
-print("- tutorials/sphinx-tutorials/dqn_with_rnn.py (RNN policy example)")
-print("- The main TorchRL documentation: https://pytorch.org/rl/")
-
-print("\nThank you for reading!")
+# sphinx_gallery_start_ignore
+collector.shutdown()
+collector_trajs.shutdown()
+# sphinx_gallery_end_ignore
