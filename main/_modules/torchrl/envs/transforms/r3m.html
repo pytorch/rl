@@ -278,7 +278,14 @@
 
     <span class="n">inplace</span> <span class="o">=</span> <span class="kc">False</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="p">,</span> <span class="n">model_name</span><span class="p">,</span> <span class="n">del_keys</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">in_keys</span><span class="p">,</span>
+        <span class="n">out_keys</span><span class="p">,</span>
+        <span class="n">model_name</span><span class="p">,</span>
+        <span class="n">del_keys</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">requires_grad</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_tv</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
                 <span class="s2">&quot;Tried to instantiate R3M without torchvision. Make sure you have &quot;</span>
@@ -307,6 +314,7 @@
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">convnet</span> <span class="o">=</span> <span class="n">convnet</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">del_keys</span> <span class="o">=</span> <span class="n">del_keys</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="n">requires_grad</span>
 
     <span class="nd">@set_lazy_legacy</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">):</span>
@@ -326,13 +334,16 @@
             <span class="n">tensordict_reset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call</span><span class="p">(</span><span class="n">tensordict_reset</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">tensordict_reset</span>
 
-    <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
     <span class="k">def</span> <span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">shape</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="n">obs</span><span class="o">.</span><span class="n">ndimension</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">4</span><span class="p">:</span>
             <span class="n">shape</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">3</span><span class="p">]</span>
             <span class="n">obs</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">4</span><span class="p">)</span>
-        <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">convnet</span><span class="p">(</span><span class="n">obs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">convnet</span><span class="p">(</span><span class="n">obs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">convnet</span><span class="p">(</span><span class="n">obs</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">*</span><span class="n">shape</span><span class="p">,</span> <span class="o">*</span><span class="n">out</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
         <span class="k">return</span> <span class="n">out</span>
@@ -461,6 +472,10 @@
 <span class="sd">        tensor_pixels_keys (list of str, optional): Optionally, one can keep the</span>
 <span class="sd">            original images (as collected from the env) in the output tensordict.</span>
 <span class="sd">            If no value is provided, this won&#39;t be collected.</span>
+<span class="sd">        requires_grad (bool, optional): if ``True``, gradients will flow through</span>
+<span class="sd">            the R3M encoder, allowing it to be fine-tuned as part of a policy.</span>
+<span class="sd">            Defaults to ``False`` (no_grad, frozen encoder) to preserve the</span>
+<span class="sd">            original behaviour.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="nd">@classmethod</span>
@@ -480,6 +495,7 @@
         <span class="n">download</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">WeightsEnum</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
         <span class="n">download_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">tensor_pixels_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">requires_grad</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="n">in_keys</span> <span class="k">if</span> <span class="n">in_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">]</span>
@@ -490,6 +506,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">size</span> <span class="o">=</span> <span class="n">size</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">stack_images</span> <span class="o">=</span> <span class="n">stack_images</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">tensor_pixels_keys</span> <span class="o">=</span> <span class="n">tensor_pixels_keys</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="n">requires_grad</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">_init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -570,6 +587,7 @@
                 <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">,</span>
                 <span class="n">model_name</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span>
                 <span class="n">del_keys</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">requires_grad</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">flatten</span> <span class="o">=</span> <span class="n">FlattenObservation</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">out_keys</span><span class="p">)</span>
             <span class="n">transforms</span> <span class="o">=</span> <span class="p">[</span><span class="o">*</span><span class="n">transforms</span><span class="p">,</span> <span class="n">cattensors</span><span class="p">,</span> <span class="n">network</span><span class="p">,</span> <span class="n">flatten</span><span class="p">]</span>
@@ -580,6 +598,7 @@
                 <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">,</span>
                 <span class="n">model_name</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span>
                 <span class="n">del_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">requires_grad</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">transforms</span> <span class="o">=</span> <span class="p">[</span><span class="o">*</span><span class="n">transforms</span><span class="p">,</span> <span class="n">network</span><span class="p">]</span>
 

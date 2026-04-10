@@ -300,6 +300,10 @@ Default is None (cache path determined by torch.hub utils).</p></li>
 <li><p><strong>tensor_pixels_keys</strong> (<em>list</em><em> of </em><em>str</em><em>, </em><em>optional</em>) – Optionally, one can keep the
 original images (as collected from the env) in the output tensordict.
 If no value is provided, this won’t be collected.</p></li>
+<li><p><strong>requires_grad</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, gradients will flow through
+the R3M encoder, allowing it to be fine-tuned as part of a policy.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code> (no_grad, frozen encoder) to preserve the
+original behaviour.</p></li>
 </ul>
 </dd>
 </dl>
