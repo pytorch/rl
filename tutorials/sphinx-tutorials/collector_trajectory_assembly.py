@@ -232,9 +232,20 @@ print(sample)
 import time
 
 from torchrl.collectors import Collector
+from torchrl.data import SliceSampler
+
+######################################################################
+# Because the buffer stores complete trajectories, we can pair it with a
+# :class:`~torchrl.data.SliceSampler` to draw contiguous sub-sequences
+# that respect episode boundaries — exactly what recurrent policies and
+# n-step return estimators need.
 
 rb_async = ReplayBuffer(
     storage=LazyTensorStorage(max_size=10_000),
+    sampler=SliceSampler(
+        slice_len=16,
+        end_key=("next", "done"),
+    ),
     shared=True,
 )
 
@@ -252,7 +263,8 @@ collector_async.start()
 ######################################################################
 # The collector is now filling ``rb_async`` in the background. We can
 # poll ``rb_async.write_count`` to see data arriving and sample from it
-# as soon as enough data is available.
+# as soon as enough data is available. Each sample will contain
+# contiguous slices of length 16 drawn from complete trajectories.
 
 for _ in range(10):
     time.sleep(0.1)
@@ -261,8 +273,8 @@ for _ in range(10):
 
 print(f"Buffer length after background collection: {len(rb_async)}")
 
-if len(rb_async) >= 3:
-    sample = rb_async.sample(batch_size=3)
+if len(rb_async) >= 16:
+    sample = rb_async.sample(batch_size=32)
     print(sample)
 
 ######################################################################
