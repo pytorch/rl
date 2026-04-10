@@ -7,7 +7,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict.nn import TensorDictModule
 from tensordict.utils import NestedKey
 
 from torchrl.objectives.common import LossModule
@@ -84,12 +85,16 @@ class DiffusionBCLoss(LossModule):
         action: NestedKey = "action"
         observation: NestedKey = "observation"
 
+    actor_network: TensorDictModule
+    actor_network_params: TensorDictParams | None
+    target_actor_network_params: TensorDictParams | None
+
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         pass
 
     def __init__(
         self,
-        actor_network,
+        actor_network: TensorDictModule,
         *,
         reduction: str = "mean",
     ) -> None:
