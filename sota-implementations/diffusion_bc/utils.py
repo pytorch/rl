@@ -9,6 +9,7 @@ import functools
 import torch
 from torch import nn, optim
 
+from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs import (
@@ -88,19 +89,44 @@ def make_environment(cfg, logger=None):
 # ---------------------------
 
 
-def make_offline_replay_buffer(rb_cfg, device):
-    data = D4RLExperienceReplay(
-        dataset_id=rb_cfg.dataset,
-        split_trajs=False,
+def make_offline_replay_buffer(rb_cfg, cfg, device):
+    """Make an offline replay buffer.
+
+    When ``rb_cfg.dataset`` is set, loads a D4RL dataset.
+    Otherwise, collects random demonstrations from the environment.
+    """
+    if rb_cfg.dataset:
+        data = D4RLExperienceReplay(
+            dataset_id=rb_cfg.dataset,
+            split_trajs=False,
+            batch_size=rb_cfg.batch_size,
+            sampler=SamplerWithoutReplacement(drop_last=True),
+            prefetch=4,
+            direct_download=True,
+        )
+        data.append_transform(DoubleToFloat())
+        data.append_transform(lambda td: td.to(device))
+        return data
+
+    # Collect demonstrations from the environment with a random policy
+    demo_episodes = rb_cfg.demo_episodes
+    env = env_maker(cfg, device="cpu")
+    env = apply_env_transforms(env, cfg.env.max_episode_steps)
+    transitions = []
+    for _ in range(demo_episodes):
+        td = env.rollout(max_steps=cfg.env.max_episode_steps)
+        transitions.append(td)
+    env.close()
+
+    all_data = torch.cat(transitions, dim=0)
+
+    data = ReplayBuffer(
+        storage=LazyTensorStorage(len(all_data)),
         batch_size=rb_cfg.batch_size,
         sampler=SamplerWithoutReplacement(drop_last=True),
-        prefetch=4,
-        direct_download=True,
     )
-
-    data.append_transform(DoubleToFloat())
+    data.extend(all_data)
     data.append_transform(lambda td: td.to(device))
-
     return data
 
 

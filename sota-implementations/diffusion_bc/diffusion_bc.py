@@ -71,7 +71,7 @@ def main(cfg: DictConfig):  # noqa: F821
     eval_env = make_environment(cfg, logger=logger)
 
     # Create offline replay buffer
-    replay_buffer = make_offline_replay_buffer(cfg.replay_buffer, device=device)
+    replay_buffer = make_offline_replay_buffer(cfg.replay_buffer, cfg, device=device)
 
     compile_mode = None
     if cfg.compile.compile:

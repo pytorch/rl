@@ -8,7 +8,8 @@ env:
 
 # replay buffer
 replay_buffer:
-  dataset: halfcheetah-medium-v2
+  dataset: halfcheetah-medium-v2  # set to null to collect demos from env
+  demo_episodes: 50  # only used when dataset is null
   batch_size: 256
 
 # optim
@@ -31,9 +32,9 @@ network:
 # logging
 logger:
   backend: wandb
-  project_name: diffusion_bc_${replay_buffer.dataset}
+  project_name: diffusion_bc
   group_name: null
-  exp_name: DiffusionBC_${replay_buffer.dataset}
+  exp_name: DiffusionBC_${env.name}
   mode: online
   eval_iter: 5000
   eval_steps: 1000
