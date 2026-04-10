@@ -217,6 +217,65 @@ print(sample)
 #             optim.step()
 
 ######################################################################
+# Asynchronous collection with ``collector.start()``
+# ---------------------------------------------------
+#
+# When a replay buffer is passed directly to the collector, you can
+# decouple collection from training entirely using
+# :meth:`~torchrl.collectors.Collector.start`. The collector runs in a
+# background thread and populates the buffer continuously while your
+# training loop samples from it.
+#
+# This works with ``trajs_per_batch`` too: the buffer receives complete,
+# padded trajectory batches rather than raw interleaved frames.
+
+import time
+
+from torchrl.collectors import Collector
+
+rb_async = ReplayBuffer(
+    storage=LazyTensorStorage(max_size=10_000),
+    shared=True,
+)
+
+collector_async = Collector(
+    env,
+    policy,
+    replay_buffer=rb_async,
+    frames_per_batch=200,
+    total_frames=-1,
+    trajs_per_batch=5,
+)
+
+collector_async.start()
+
+######################################################################
+# The collector is now filling ``rb_async`` in the background. We can
+# poll ``rb_async.write_count`` to see data arriving and sample from it
+# as soon as enough data is available.
+
+for _ in range(10):
+    time.sleep(0.1)
+    if len(rb_async) > 0:
+        break
+
+print(f"Buffer length after background collection: {len(rb_async)}")
+
+if len(rb_async) >= 3:
+    sample = rb_async.sample(batch_size=3)
+    print(sample)
+
+######################################################################
+# When you are done, shut the collector down:
+
+collector_async.async_shutdown()
+
+######################################################################
+# This pattern is especially useful when environment stepping is slow
+# (e.g. physics simulators or LLM inference): the training loop never
+# idles waiting for new data, and the buffer is always fresh.
+
+######################################################################
 # Conclusion
 # ----------
 #
@@ -233,6 +292,9 @@ print(sample)
 #   directly.
 # * Complete episodes slot naturally into a
 #   :class:`~torchrl.data.ReplayBuffer`.
+# * Passing a replay buffer and calling
+#   :meth:`~torchrl.collectors.Collector.start` enables fully
+#   asynchronous collection in a background thread.
 #
 # Useful next resources
 # ~~~~~~~~~~~~~~~~~~~~~
