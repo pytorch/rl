@@ -188,30 +188,52 @@ print(traj_data["collector", "mask"])
 #
 # Once you have per-episode data (from ``split_trajectories`` or
 # ``trajs_per_batch``), storing it in a
-# :class:`~torchrl.data.ReplayBuffer` is straightforward. Each episode
-# becomes a single entry in the buffer, and sampling returns
-# ready-to-use episode tensors.
+# :class:`~torchrl.data.ReplayBuffer` is straightforward. Pair the
+# buffer with a :class:`~torchrl.data.SliceSampler` so that samples
+# are contiguous sub-sequences drawn from complete episodes rather
+# than isolated transitions — exactly what recurrent policies and
+# n-step return estimators need.
+#
+# .. seealso::
+#   The :ref:`replay buffer tutorial <tuto_rb_traj>` covers trajectory
+#   storage in more depth, including alternative samplers such as
+#   :class:`~torchrl.data.PrioritizedSliceSampler` and
+#   :class:`~torchrl.data.SliceSamplerWithoutReplacement`.
 
-rb = ReplayBuffer(storage=LazyTensorStorage(max_size=10_000))
+from torchrl.data import SliceSampler
+
+rb = ReplayBuffer(
+    storage=LazyTensorStorage(max_size=10_000),
+    sampler=SliceSampler(
+        slice_len=16,
+        end_key=("next", "done"),
+    ),
+    batch_size=32,
+)
 rb.extend(traj_data)
 
 print(f"Buffer length after one batch: {len(rb)}")
 
-sample = rb.sample(batch_size=3)
+sample = rb.sample()
 print(sample)
 
 ######################################################################
-# A typical training loop combines all of the above:
+# Each sampled batch contains contiguous slices of 16 steps drawn from
+# complete trajectories. A typical training loop looks like this:
 #
 # .. code-block:: python
 #
 #     collector = SyncDataCollector(env, policy, ..., trajs_per_batch=32)
-#     rb = ReplayBuffer(storage=LazyTensorStorage(max_size=100_000))
+#     rb = ReplayBuffer(
+#         storage=LazyTensorStorage(max_size=100_000),
+#         sampler=SliceSampler(slice_len=16, end_key=("next", "done")),
+#         batch_size=64,
+#     )
 #
 #     for traj_batch in collector:
 #         rb.extend(traj_batch)
 #         for _ in range(n_optim):
-#             sample = rb.sample(batch_size=16)
+#             sample = rb.sample()
 #             loss = loss_fn(sample)
 #             loss.backward()
 #             optim.step()
@@ -232,7 +254,6 @@ print(sample)
 import time
 
 from torchrl.collectors import Collector
-from torchrl.data import SliceSampler
 
 ######################################################################
 # Because the buffer stores complete trajectories, we can pair it with a
