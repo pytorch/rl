@@ -1402,7 +1402,9 @@ class TestLineariseRewards(TransformBase):
         ],
     )
     def test_transform_model(self, num_rewards, weights):
-        weights_list = weights if weights is not None else [1.0 for _ in range(num_rewards)]
+        weights_list = (
+            weights if weights is not None else [1.0 for _ in range(num_rewards)]
+        )
         transform = LineariseRewards(
             in_keys=("reward",), out_keys=("scalar_reward",), weights=weights_list
         )
@@ -1429,7 +1431,9 @@ class TestLineariseRewards(TransformBase):
         rb.extend(td)
 
         td = rb.sample(2)
-        torch.testing.assert_close(td["scalar_reward"], td["reward"].sum(-1, keepdim=True))
+        torch.testing.assert_close(
+            td["scalar_reward"], td["reward"].sum(-1, keepdim=True)
+        )
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for LineariseReward")
