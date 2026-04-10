@@ -85,6 +85,36 @@ def make_environment(cfg, logger=None):
 
 
 # ====================================================================
+# Expert policies for demo collection
+# ------------------------------------
+
+
+def _make_expert_policy(env_name):
+    """Return a simple expert policy for demo collection.
+
+    Falls back to ``None`` (random actions) for unknown environments.
+    """
+    if "Pendulum" in env_name:
+        return _PendulumExpert()
+    return None
+
+
+class _PendulumExpert:
+    """PD controller for Pendulum-v1.
+
+    obs = [cos(theta), sin(theta), theta_dot]
+    """
+
+    def __call__(self, td):
+        obs = td["observation"]
+        cos_th, sin_th, th_dot = obs[..., 0], obs[..., 1], obs[..., 2]
+        theta = torch.atan2(sin_th, cos_th)
+        torque = (-8.0 * theta - 2.0 * th_dot).clamp(-2.0, 2.0)
+        td["action"] = torque.unsqueeze(-1)
+        return td
+
+
+# ====================================================================
 # Replay buffer
 # ---------------------------
 
@@ -108,13 +138,14 @@ def make_offline_replay_buffer(rb_cfg, cfg, device):
         data.append_transform(lambda td: td.to(device))
         return data
 
-    # Collect demonstrations from the environment with a random policy
+    # Collect demonstrations from the environment
     demo_episodes = rb_cfg.demo_episodes
     env = env_maker(cfg, device="cpu")
     env = apply_env_transforms(env, cfg.env.max_episode_steps)
+    policy = _make_expert_policy(cfg.env.name)
     transitions = []
     for _ in range(demo_episodes):
-        td = env.rollout(max_steps=cfg.env.max_episode_steps)
+        td = env.rollout(max_steps=cfg.env.max_episode_steps, policy=policy)
         transitions.append(td)
     env.close()
 
