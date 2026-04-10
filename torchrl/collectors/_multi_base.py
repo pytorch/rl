@@ -382,6 +382,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         self.closed = True
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
+        self._worker_trajs_per_batch = None
 
         # Set up workers and environment functions
         create_env_fn, total_frames_per_batch = self._setup_workers_and_env_fns(
@@ -859,13 +860,14 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         if self.replay_buffer is None:
             return
         if getattr(self, "trajs_per_batch", None) is not None:
-            raise NotImplementedError(
-                "trajs_per_batch is not supported together with replay_buffer on "
-                "multi-process collectors. Multi-process collectors write frames "
-                "directly to a shared replay buffer at the worker level, so "
-                "trajectory reassembly cannot be performed in the main process. "
-                "Use a single-process Collector instead."
-            )
+            # Trajectory assembly will happen at the worker level: each worker's
+            # inner Collector uses _iter_by_trajectories() to assemble complete
+            # trajectories and write them to the shared replay buffer.
+            # Null out trajs_per_batch on the multi-collector so that __iter__
+            # routes to self.iterator() directly (not _iter_by_trajectories,
+            # which would spin forever on the None yields from the RB path).
+            self._worker_trajs_per_batch = self.trajs_per_batch
+            self.trajs_per_batch = None
         is_init = hasattr(self.replay_buffer, "_storage") and getattr(
             self.replay_buffer._storage, "initialized", True
         )
@@ -1170,6 +1172,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "worker_idx": i,  # Worker index for queue-based weight distribution
                     "init_random_frames": self.init_random_frames,
                     "profile_config": self._profile_config,
+                    "trajs_per_batch": self._worker_trajs_per_batch,
                 }
                 proc = _ProcessNoWarnCtx(
                     target=_main_async_collector,

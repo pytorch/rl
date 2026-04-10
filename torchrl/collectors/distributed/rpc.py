@@ -336,6 +336,7 @@ class RPCCollector(BaseCollector):
         | None = None,
         weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
         weight_recv_schemes: dict[str, WeightSyncScheme] | None = None,
+        trajs_per_batch: int | None = None,
     ):
 
         if self._VERBOSE:
@@ -434,6 +435,8 @@ class RPCCollector(BaseCollector):
             collector_kwarg["storing_device"] = self.storing_device[i]
             collector_kwarg["env_device"] = self.env_device[i]
             collector_kwarg["policy_device"] = self.policy_device[i]
+            if trajs_per_batch is not None:
+                collector_kwarg["trajs_per_batch"] = trajs_per_batch
 
         self.postproc = postproc
         self.split_trajs = split_trajs

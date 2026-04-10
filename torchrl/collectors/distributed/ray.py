@@ -356,6 +356,7 @@ class RayCollector(BaseCollector):
         weight_recv_schemes: dict[str, WeightSyncScheme] | None = None,
         use_env_creator: bool = False,
         no_cuda_sync: bool | None = None,
+        trajs_per_batch: int | None = None,
     ):
         self.frames_per_batch = frames_per_batch
         if remote_configs is None:
@@ -374,6 +375,12 @@ class RayCollector(BaseCollector):
                     ck.setdefault("replay_buffer", replay_buffer)
                     for ck in collector_kwargs
                 ]
+        if trajs_per_batch is not None:
+            if isinstance(collector_kwargs, dict):
+                collector_kwargs.setdefault("trajs_per_batch", trajs_per_batch)
+            else:
+                for ck in collector_kwargs:
+                    ck.setdefault("trajs_per_batch", trajs_per_batch)
 
         # Make sure input parameters are consistent
         def check_consistency_with_num_collectors(param, param_name, num_collectors):
@@ -938,11 +945,14 @@ class RayCollector(BaseCollector):
     def _run_collection_loop(self):
         """Runs the collection loop in a background thread."""
         try:
-            for _ in self.iterator():
+            for data in self.iterator():
                 if self._stop_event.is_set():
                     break
                 # When RayReplayBuffer is configured, sub-collectors write directly
-                # to the buffer and data will be None. Otherwise, data contains rollouts.
+                # to the buffer and data will be None. Otherwise, write returned
+                # data (e.g. trajectory batches) to the local replay buffer.
+                if self.replay_buffer is not None and data is not None:
+                    self.replay_buffer.extend(data)
         except Exception as e:
             torchrl_logger.error(f"Error in collection thread: {e}")
             raise

@@ -176,10 +176,10 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                 collector.start()   # fills rb with [32, max_len] trajectory batches
 
             .. note::
-                ``trajs_per_batch`` combined with ``replay_buffer`` is only
-                supported for single-process collectors. Multi-process collectors
-                write frames directly to a shared buffer at the worker level and
-                cannot reassemble trajectories in the main process.
+                ``trajs_per_batch`` combined with ``replay_buffer`` is supported
+                for both single-process and multi-process collectors. For
+                multi-process collectors, trajectory assembly is delegated to
+                each worker's inner collector.
 
             Defaults to ``None`` (fixed-frame batches).
     """
@@ -1001,20 +1001,17 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
     def _iter_by_trajectories(self) -> Iterator[TensorDictBase]:
         """Yield padded batches of exactly ``trajs_per_batch`` complete trajectories.
 
-        When a replay buffer is configured on a single-process collector, each
-        complete trajectory is stored as a **flat sequence of valid timesteps**
-        (padding stripped via ``("collector", "mask")``), and this method yields
-        ``None`` each time — matching the behaviour of :meth:`iterator` in
-        replay-buffer mode.  Flat storage makes the buffer directly compatible
-        with :class:`~torchrl.data.SliceSampler` using
+        When a replay buffer is configured, each complete trajectory is stored
+        as a **flat sequence of valid timesteps** (padding stripped via
+        ``("collector", "mask")``), and this method yields ``None`` each time —
+        matching the behaviour of :meth:`iterator` in replay-buffer mode.
+        Flat storage makes the buffer directly compatible with
+        :class:`~torchrl.data.SliceSampler` using
         ``end_key=("next", "done")``.
 
-        .. note::
-            Replay buffer integration with ``trajs_per_batch`` is only supported
-            for single-process collectors (:class:`~torchrl.collectors.Collector`).
-            Multi-process collectors write frames directly to a shared replay
-            buffer at the worker level and cannot reassemble trajectories in the
-            main process.
+        For multi-process collectors, trajectory assembly is delegated to each
+        worker's inner collector, which calls this method independently and
+        writes complete trajectories to the shared replay buffer.
         """
         partial_trajs: dict[int, list] = {}
         complete_trajs: list = []
