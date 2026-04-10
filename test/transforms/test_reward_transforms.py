@@ -1197,13 +1197,7 @@ class TestLineariseRewards(TransformBase):
         t._call(td)
 
         weights = torch.ones(num_rewards) if weights is None else torch.tensor(weights)
-        expected = sum(
-            w * r
-            for w, r in zip(
-                weights,
-                td[reward_key],
-            )
-        )
+        expected = (weights * td[reward_key]).sum(-1, keepdim=True)
         torch.testing.assert_close(td[out_keys], expected)
 
     @pytest.mark.parametrize("reward_key", [("reward",), ("agents", "reward")])
@@ -1224,13 +1218,7 @@ class TestLineariseRewards(TransformBase):
         t._call(td)
 
         weights = torch.ones(num_rewards) if weights is None else torch.tensor(weights)
-        expected = sum(
-            w * r
-            for w, r in zip(
-                weights,
-                td[reward_key],
-            )
-        )
+        expected = (weights * td[reward_key]).sum(-1, keepdim=True)
         torch.testing.assert_close(td[out_keys], expected)
 
     def test_compose_with_reward_scaling(self):
@@ -1414,16 +1402,17 @@ class TestLineariseRewards(TransformBase):
         ],
     )
     def test_transform_model(self, num_rewards, weights):
-        weights = weights if weights is not None else [1.0 for _ in range(num_rewards)]
+        weights_list = weights if weights is not None else [1.0 for _ in range(num_rewards)]
         transform = LineariseRewards(
-            in_keys=("reward",), out_keys=("scalar_reward",), weights=weights
+            in_keys=("reward",), out_keys=("scalar_reward",), weights=weights_list
         )
 
         model = nn.Sequential(transform, nn.Identity())
         td = TensorDict({"reward": torch.randn(num_rewards)}, [])
         model(td)
 
-        expected = sum(w * r for w, r in zip(weights, td["reward"]))
+        w = torch.tensor(weights_list)
+        expected = (w * td["reward"]).sum(-1, keepdim=True)
         torch.testing.assert_close(td["scalar_reward"], expected)
 
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
@@ -1440,7 +1429,7 @@ class TestLineariseRewards(TransformBase):
         rb.extend(td)
 
         td = rb.sample(2)
-        torch.testing.assert_close(td["scalar_reward"], td["reward"].sum(-1))
+        torch.testing.assert_close(td["scalar_reward"], td["reward"].sum(-1, keepdim=True))
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for LineariseReward")
@@ -1510,6 +1499,43 @@ class TestLineariseRewards(TransformBase):
             in_keys=[("agent_0", "reward"), ("agent_1", "reward")], weights=weights
         )
         assert transform.transform_reward_spec(reward_spec) == expected_reward_spec
+
+    @pytest.mark.parametrize("weights", [None, torch.ones(3)])
+    def test_apply_transform_keepdim(self, weights):
+        """Test that _apply_transform preserves the last dimension (keepdim).
+
+        LineariseRewards spec sets shape [..., 1], so _apply_transform must
+        output a tensor with the same trailing 1-dim, not squeeze it away.
+        """
+        transform = LineariseRewards(in_keys=("reward",), weights=weights)
+        reward = torch.randn(2, 3)
+        result = transform._apply_transform(reward)
+        # The result should keep the last dimension as size 1
+        assert result.shape == torch.Size(
+            [2, 1]
+        ), f"Expected shape [2, 1], got {result.shape}"
+
+    @pytest.mark.parametrize(
+        "reward_spec",
+        [
+            UnboundedContinuous(shape=3),
+            BoundedContinuous(0, 1, shape=3),
+        ],
+    )
+    def test_output_matches_spec(self, reward_spec):
+        """Test that the reward tensor produced by the transform matches the spec."""
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(reward_spec=reward_spec),
+            LineariseRewards(in_keys=["reward"]),
+        )
+        td = env.reset()
+        td = env.rand_action(td)
+        td = env.step(td)
+        reward = td["next", "reward"]
+        spec = env.reward_spec
+        assert spec.is_in(
+            reward
+        ), f"Reward shape {reward.shape} doesn't match spec shape {spec.shape}"
 
 
 class TestSignTransform(TransformBase):
