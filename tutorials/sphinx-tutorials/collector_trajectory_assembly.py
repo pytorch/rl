@@ -183,16 +183,18 @@ print(f"Shape: {traj_data.shape}  →  (trajs_per_batch, max_episode_length)")
 print(traj_data["collector", "mask"])
 
 ######################################################################
-# Storing trajectories in a replay buffer
-# ----------------------------------------
+# Storing transitions and sampling trajectory slices
+# ---------------------------------------------------
 #
-# Once you have per-episode data (from ``split_trajectories`` or
-# ``trajs_per_batch``), storing it in a
-# :class:`~torchrl.data.ReplayBuffer` is straightforward. Pair the
-# buffer with a :class:`~torchrl.data.SliceSampler` so that samples
-# are contiguous sub-sequences drawn from complete episodes rather
-# than isolated transitions — exactly what recurrent policies and
-# n-step return estimators need.
+# In off-policy training the standard pattern is to store **flat
+# transitions** in a :class:`~torchrl.data.ReplayBuffer` and let a
+# :class:`~torchrl.data.SliceSampler` carve out contiguous
+# sub-sequences that respect episode boundaries. The sampler uses
+# ``("next", "done")`` to locate where episodes end, so you never get a
+# slice that straddles two unrelated trajectories.
+#
+# This is the approach used in the
+# :ref:`Recurrent DQN tutorial <RNN_tuto>`.
 #
 # .. seealso::
 #   The :ref:`replay buffer tutorial <tuto_rb_traj>` covers trajectory
@@ -210,7 +212,14 @@ rb = ReplayBuffer(
     ),
     batch_size=32,
 )
-rb.extend(traj_data)
+
+######################################################################
+# We extend the buffer with the **flat** collector batch (``data``, shape
+# ``(200,)``), not with the pre-assembled trajectory tensor.  The
+# ``SliceSampler`` reads the ``("next", "done")`` flags in this flat
+# storage to figure out where episodes start and stop.
+
+rb.extend(data)
 
 print(f"Buffer length after one batch: {len(rb)}")
 
@@ -219,19 +228,19 @@ print(sample)
 
 ######################################################################
 # Each sampled batch contains contiguous slices of 16 steps drawn from
-# complete trajectories. A typical training loop looks like this:
+# the stored transitions. A typical training loop looks like this:
 #
 # .. code-block:: python
 #
-#     collector = SyncDataCollector(env, policy, ..., trajs_per_batch=32)
+#     collector = SyncDataCollector(env, policy, frames_per_batch=200, ...)
 #     rb = ReplayBuffer(
 #         storage=LazyTensorStorage(max_size=100_000),
 #         sampler=SliceSampler(slice_len=16, end_key=("next", "done")),
 #         batch_size=64,
 #     )
 #
-#     for traj_batch in collector:
-#         rb.extend(traj_batch)
+#     for batch in collector:
+#         rb.extend(batch)
 #         for _ in range(n_optim):
 #             sample = rb.sample()
 #             loss = loss_fn(sample)
@@ -245,21 +254,12 @@ print(sample)
 # When a replay buffer is passed directly to the collector, you can
 # decouple collection from training entirely using
 # :meth:`~torchrl.collectors.Collector.start`. The collector runs in a
-# background thread and populates the buffer continuously while your
-# training loop samples from it.
-#
-# This works with ``trajs_per_batch`` too: the buffer receives complete,
-# padded trajectory batches rather than raw interleaved frames.
+# background thread and writes flat transitions into the buffer
+# continuously while your training loop samples from it.
 
 import time
 
 from torchrl.collectors import Collector
-
-######################################################################
-# Because the buffer stores complete trajectories, we can pair it with a
-# :class:`~torchrl.data.SliceSampler` to draw contiguous sub-sequences
-# that respect episode boundaries — exactly what recurrent policies and
-# n-step return estimators need.
 
 rb_async = ReplayBuffer(
     storage=LazyTensorStorage(max_size=10_000),
@@ -276,16 +276,14 @@ collector_async = Collector(
     replay_buffer=rb_async,
     frames_per_batch=200,
     total_frames=-1,
-    trajs_per_batch=5,
 )
 
 collector_async.start()
 
 ######################################################################
-# The collector is now filling ``rb_async`` in the background. We can
-# poll ``rb_async.write_count`` to see data arriving and sample from it
-# as soon as enough data is available. Each sample will contain
-# contiguous slices of length 16 drawn from complete trajectories.
+# The collector is now filling ``rb_async`` in the background with flat
+# transitions. The ``SliceSampler`` will carve contiguous 16-step slices
+# out of this flat storage, respecting episode boundaries.
 
 for _ in range(10):
     time.sleep(0.1)
