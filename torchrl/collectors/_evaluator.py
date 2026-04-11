@@ -78,6 +78,7 @@ from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 
 from torchrl.envs import EnvBase
+from torchrl.envs.batched_envs import BatchedEnvBase
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 
 _has_ray = importlib.util.find_spec("ray") is not None
@@ -553,10 +554,20 @@ def _resolve_break_mode(
     if break_when_any_done is None:
         if break_when_all_done:
             break_when_any_done = False
+        elif env.batch_size.numel() <= 1:
+            # Single env → break on first done
+            break_when_any_done = True
         else:
-            # Auto: single env → break on first done;
-            #        batched env → run for max_steps
-            break_when_any_done = env.batch_size.numel() <= 1
+            if isinstance(env, BatchedEnvBase):
+                # BatchedEnvBase subclasses (ParallelEnv, SerialEnv) support
+                # partial steps, so we can use break_when_all_done to ensure
+                # every sub-env completes at least one episode.
+                break_when_any_done = False
+                break_when_all_done = True
+            else:
+                # Other batched envs (e.g. VecEnv wrappers) — run for
+                # max_steps since partial steps may not be supported.
+                break_when_any_done = False
     if break_when_all_done and break_when_any_done:
         raise ValueError(
             "break_when_all_done and break_when_any_done cannot both be True."
@@ -1098,7 +1109,7 @@ class _ProcessEvalBackend(_EvalBackend):
                 "auto_cast_to_device": auto_cast_to_device,
                 "metrics_fn": metrics_fn,
             },
-            daemon=True,
+            daemon=False,
         )
         self._process.start()
 
