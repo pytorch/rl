@@ -1263,8 +1263,10 @@ but got an object of type {type(transform)}."""
                 next_tensordict.update(
                     next_preset.exclude(*next_tensordict.keys(True, True))
                 )
-            self.base_env._complete_done(self.base_env.full_done_spec, next_tensordict)
-            # we want the input entries to remain unchanged
+            if not self.base_env._trust_step_output:
+                self.base_env._complete_done(
+                    self.base_env.full_done_spec, next_tensordict
+                )
             next_tensordict = self.transform._step(tensordict_in, next_tensordict)
 
         if partial_steps is not None:
