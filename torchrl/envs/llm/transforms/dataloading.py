@@ -195,7 +195,8 @@ class RayDataLoadingPrimer(RayTransform):
 
         if self._actor_name is not None:
             RemoteDataLoadingPrimer = RemoteDataLoadingPrimer.options(
-                name=self._actor_name
+                name=self._actor_name,
+                lifetime="detached",
             )
 
         # Create the shared actor, passing factory or dataloader as appropriate

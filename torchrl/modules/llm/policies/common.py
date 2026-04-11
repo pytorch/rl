@@ -1708,9 +1708,12 @@ def _extract_responses_from_full_histories(
         prompt_histories.unbind(0), full_histories.unbind(0)
     ):
         if h_full.shape[0] <= h_prompt.shape[0]:
-            raise RuntimeError(
-                f"Full history is shorter than prompt history: {h_full.shape} <= {h_prompt.shape}"
+            # Empty response: model generated 0 tokens. Create a minimal
+            # response history with an empty assistant message.
+            response_histories.append(
+                History(role="assistant", content="", batch_size=(1,))
             )
+            continue
         # Note: there can be more than one response, so the response has the same number of dims as prompt
         response_histories.append(h_full[h_prompt.shape[0] :])
 
