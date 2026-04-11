@@ -5737,12 +5737,13 @@ class TestTrajsPerBatchReplayBuffer:
         assert ("collector", "traj_ids") in sample.keys(True)
 
     @pytest.mark.parametrize("with_rb", [False, True])
-    def test_trajs_per_batch_batched_env_ndim2(self, with_rb):
-        """SerialEnv (batched) + trajs_per_batch, with and without ndim=2 replay buffer.
+    def test_trajs_per_batch_batched_env(self, with_rb):
+        """SerialEnv (batched) + trajs_per_batch, with and without replay buffer.
 
         Verifies trajectory completeness via InitTracker (is_init=True at start)
         and done=True at the last valid step (per ("collector", "mask")).
-        When with_rb=True, also checks the ndim=2 replay buffer is populated.
+        When with_rb=True, trajectories are written as flat sequences to a 1-D
+        replay buffer (ndim=2 is incompatible with variable-length trajectories).
         """
         max_steps = 4
         num_envs = 2
@@ -5757,11 +5758,7 @@ class TestTrajsPerBatchReplayBuffer:
         batched_env = SerialEnv(num_envs, env_fn)
         try:
             policy = RandomPolicy(batched_env.action_spec)
-            rb = (
-                ReplayBuffer(storage=LazyTensorStorage(400, ndim=2))
-                if with_rb
-                else None
-            )
+            rb = ReplayBuffer(storage=LazyTensorStorage(400)) if with_rb else None
             collector = Collector(
                 batched_env,
                 policy,
@@ -5792,7 +5789,7 @@ class TestTrajsPerBatchReplayBuffer:
             batched_env.close(raise_if_closed=False)
 
         if with_rb:
-            assert len(rb) > 0, "ndim=2 replay buffer must be populated"
+            assert len(rb) > 0, "replay buffer must be populated"
             assert ("collector", "traj_ids") in rb.sample(1).keys(True)
 
     @pytest.mark.parametrize("with_rb", [False, True])

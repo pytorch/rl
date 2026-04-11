@@ -1029,27 +1029,20 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                 if batch is None:
                     continue
                 _traj_ingest(batch, partial_trajs, complete_trajs)
-                while len(complete_trajs) >= self.trajs_per_batch:
-                    traj_batch = _traj_emit(complete_trajs, self.trajs_per_batch)
-                    if has_rb:
-                        rb_ndim = getattr(getattr(rb, "_storage", None), "ndim", 1)
-                        if rb_ndim > 1:
-                            # Multi-dim storage (e.g. ndim=2 for batched envs):
-                            # store the full padded [N, max_len] batch so the
-                            # storage shape is preserved. The ("collector", "mask")
-                            # field marks valid steps within each row.
-                            rb.extend(traj_batch)
-                        else:
-                            # 1-D storage: strip padding and store each trajectory
-                            # as a flat sequence of valid timesteps so that
-                            # slice-oriented samplers (e.g. SliceSampler) work
-                            # correctly with done-signal boundaries.
-                            mask = traj_batch.get(("collector", "mask"))
-                            for i in range(traj_batch.shape[0]):
-                                valid_len = int(mask[i].sum().item())
-                                rb.extend(traj_batch[i, :valid_len])
-                        yield
-                    else:
+                if has_rb:
+                    # Write each complete trajectory to the replay buffer
+                    # immediately as a flat sequence — no padding, no
+                    # accumulation to trajs_per_batch.  This avoids the
+                    # pad-then-unpad round-trip and works with any storage
+                    # ndim (variable-length trajectories cannot fill a
+                    # fixed second dimension reliably).
+                    while complete_trajs:
+                        traj = complete_trajs.pop(0)
+                        rb.extend(traj)
+                    yield
+                else:
+                    while len(complete_trajs) >= self.trajs_per_batch:
+                        traj_batch = _traj_emit(complete_trajs, self.trajs_per_batch)
                         yield traj_batch
         finally:
             if has_rb:
