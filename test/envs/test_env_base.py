@@ -892,3 +892,44 @@ class TestRollout:
         else:
             assert r_outplace.shape[-1:] == (40,)
         assert_allclose_td(r_inplace, r_outplace)
+
+
+class TestTrustStepOutput:
+    def test_trust_step_output_default(self):
+        env = ContinuousActionVecMockEnv()
+        assert not env._trust_step_output
+
+    def test_trust_step_output_fast_path(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter())
+        td = env.reset()
+        td = env.rand_action(td)
+
+        out_normal = env.step(td.clone())
+
+        env._trust_step_output = True
+        env.base_env._trust_step_output = True
+        out_fast = env.step(td.clone())
+
+        torch.testing.assert_close(
+            out_normal["next", "observation"],
+            out_fast["next", "observation"],
+        )
+        torch.testing.assert_close(
+            out_normal["next", "reward"],
+            out_fast["next", "reward"],
+        )
+
+    def test_trust_step_fast_path_step_and_maybe_reset(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter())
+        env._trust_step_output = True
+        env.base_env._trust_step_output = True
+        env._skip_maybe_reset = True
+
+        td = env.reset()
+        td = env.rand_action(td)
+
+        out, next_out = env.step_and_maybe_reset(td)
+
+        assert "next" in out.keys()
+        assert "observation" in next_out.keys()
+        assert "step_count" in next_out.keys()

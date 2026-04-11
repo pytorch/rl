@@ -202,6 +202,32 @@ class TestAutoReset:
             assert not lazy["lidar"][~done.squeeze()].isnan().any()
             assert (lazy_root["lidar"][1:][done[:-1].squeeze()] == 0).all()
 
+    def test_skip_maybe_reset_default(self):
+        env = AutoResettingCountingEnv(4, auto_reset=True)
+        assert not env._skip_maybe_reset
+
+    def test_skip_maybe_reset_step_and_maybe_reset(self):
+        env_normal = AutoResettingCountingEnv(100, auto_reset=True)
+        td_normal = env_normal.reset()
+        td_normal.set("action", torch.ones((*td_normal.shape, 1), dtype=torch.int64))
+
+        env_skip = AutoResettingCountingEnv(100, auto_reset=True)
+        env_skip._skip_maybe_reset = True
+        td_skip = env_skip.reset()
+        td_skip.set("action", torch.ones((*td_skip.shape, 1), dtype=torch.int64))
+
+        out_normal, next_normal = env_normal.step_and_maybe_reset(td_normal)
+        out_skip, next_skip = env_skip.step_and_maybe_reset(td_skip)
+
+        torch.testing.assert_close(
+            out_normal["next", "observation"],
+            out_skip["next", "observation"],
+        )
+        torch.testing.assert_close(
+            next_normal["observation"],
+            next_skip["observation"],
+        )
+
 
 class TestEnvWithDynamicSpec:
     def test_dynamic_rollout(self):

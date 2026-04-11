@@ -128,6 +128,47 @@ def test_step_mdp_speed(
     )
 
 
+def _step_and_maybe_reset_loop(env, td):
+    for _ in range(100):
+        _, td = env.step_and_maybe_reset(td)
+        td = env.rand_action(td)
+
+
+def make_env_fast_path():
+    device = "cuda:0" if torch.cuda.device_count() else "cpu"
+    env = TransformedEnv(DMControlEnv("cheetah", "run", device=device), StepCounter(50))
+    env._trust_step_output = True
+    env.base_env._trust_step_output = True
+    env._skip_maybe_reset = True
+    td = env.reset()
+    td = env.rand_action(td)
+    for _ in range(3):
+        _, td = env.step_and_maybe_reset(td)
+        td = env.rand_action(td)
+    return ((env, td), {})
+
+
+def make_env_normal_path():
+    device = "cuda:0" if torch.cuda.device_count() else "cpu"
+    env = TransformedEnv(DMControlEnv("cheetah", "run", device=device), StepCounter(50))
+    td = env.reset()
+    td = env.rand_action(td)
+    for _ in range(3):
+        _, td = env.step_and_maybe_reset(td)
+        td = env.rand_action(td)
+    return ((env, td), {})
+
+
+def test_step_and_maybe_reset_fast_path(benchmark):
+    (env, td), _ = make_env_fast_path()
+    benchmark(_step_and_maybe_reset_loop, env, td)
+
+
+def test_step_and_maybe_reset_normal(benchmark):
+    (env, td), _ = make_env_normal_path()
+    benchmark(_step_and_maybe_reset_loop, env, td)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

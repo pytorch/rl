@@ -117,6 +117,42 @@ class TestCompile:
             collector.shutdown()
             del collector
 
+    def test_compile_step_and_maybe_reset_fullgraph(self):
+        torch._dynamo.reset_code_caches()
+
+        env = ContinuousActionVecMockEnv()
+        env._trust_step_output = True
+        env._skip_maybe_reset = True
+
+        td = env.reset()
+        td = env.rand_action(td)
+
+        for _ in range(3):
+            _, td = env.step_and_maybe_reset(td)
+            td = env.rand_action(td)
+
+        torch._dynamo.reset()
+        explanation = torch._dynamo.explain(env.step_and_maybe_reset)(td)
+        assert explanation.graph_count == 1
+        assert explanation.graph_break_count == 0
+
+        out_eager, next_eager = env.step_and_maybe_reset(td.clone())
+
+        compiled_fn = torch.compile(env.step_and_maybe_reset, fullgraph=True)
+        out_compiled, next_compiled = compiled_fn(td.clone())
+
+        for key in out_eager.keys(True, True):
+            v_e = out_eager.get(key)
+            v_c = out_compiled.get(key)
+            if isinstance(v_e, torch.Tensor):
+                torch.testing.assert_close(v_e, v_c)
+
+        for key in next_eager.keys(True, True):
+            v_e = next_eager.get(key)
+            v_c = next_compiled.get(key)
+            if isinstance(v_e, torch.Tensor):
+                torch.testing.assert_close(v_e, v_c)
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

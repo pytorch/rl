@@ -178,6 +178,28 @@ class TestStepMdp:
         out_cls = step_func(tensordict)
         assert (out_func == out_cls).all()
 
+    @pytest.mark.parametrize(
+        "envcls",
+        [
+            ContinuousActionVecMockEnv,
+            CountingBatchedEnv,
+            CountingEnv,
+        ],
+    )
+    def test_step_class_out_reuse(self, envcls):
+        torch.manual_seed(0)
+        env = envcls()
+        tensordict = env.rand_step(env.reset())
+
+        step_func = _StepMDP(env, exclude_action=False)
+        result_no_out = step_func(tensordict.clone())
+        out_buf = result_no_out.clone()
+        out_buf_id = id(out_buf)
+
+        result_with_out = step_func(tensordict.clone(), out=out_buf)
+        assert id(result_with_out) == out_buf_id
+        assert (result_no_out == result_with_out).all()
+
     @pytest.mark.parametrize("nested_obs", [True, False])
     @pytest.mark.parametrize("nested_action", [True, False])
     @pytest.mark.parametrize("nested_done", [True, False])
