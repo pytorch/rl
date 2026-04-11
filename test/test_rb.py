@@ -1865,6 +1865,58 @@ class TestBuffers:
         assert len(rb[size - 2 :]) == 1
 
 
+def test_replay_buffer_set_at_():
+    """Tests that set_at_ writes through to storage in-place."""
+    from tensordict import TensorDict
+
+    rb = ReplayBuffer(
+        storage=LazyTensorStorage(10),
+        batch_size=5,
+    )
+    data = TensorDict({"a": torch.zeros(10), "b": torch.ones(10)}, batch_size=[10])
+    rb.extend(data)
+    # Modify key "a" at indices [2, 5]
+    rb.set_at_("a", torch.tensor([99.0, 99.0]), torch.tensor([2, 5]))
+    assert rb["a"][2] == 99.0
+    assert rb["a"][5] == 99.0
+    assert rb["a"][0] == 0.0  # unchanged
+    assert rb["b"][2] == 1.0  # other key unchanged
+
+
+def test_replay_buffer_set_():
+    """Tests that set_ writes through to storage in-place."""
+    from tensordict import TensorDict
+
+    rb = ReplayBuffer(
+        storage=LazyTensorStorage(10),
+        batch_size=5,
+    )
+    data = TensorDict({"a": torch.zeros(10), "b": torch.ones(10)}, batch_size=[10])
+    rb.extend(data)
+    rb.set_("a", torch.full((10,), 42.0))
+    assert (rb["a"] == 42.0).all()
+    assert (rb["b"] == 1.0).all()  # other key unchanged
+
+
+def test_replay_buffer_update_():
+    """Tests that update_ writes through to storage in-place."""
+    from tensordict import TensorDict
+
+    rb = ReplayBuffer(
+        storage=LazyTensorStorage(10),
+        batch_size=5,
+    )
+    data = TensorDict({"a": torch.zeros(10), "b": torch.ones(10)}, batch_size=[10])
+    rb.extend(data)
+    update = TensorDict(
+        {"a": torch.full((10,), 7.0), "b": torch.full((10,), 8.0)},
+        batch_size=[10],
+    )
+    rb.update_(update)
+    assert (rb["a"] == 7.0).all()
+    assert (rb["b"] == 8.0).all()
+
+
 def test_multi_loops():
     """Tests that one can iterate multiple times over a buffer without rep."""
     rb = ReplayBuffer(
