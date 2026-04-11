@@ -415,6 +415,7 @@ def _train_start(
         # Train ppo_epochs gradient steps, then push weights
         for _epoch in range(cfg_loss_ppo_epochs):
             batch, info = data_buffer.sample(return_info=True)
+            batch = batch.to(device)
             batch_staleness = info.get("staleness")
 
             # Compute TD(0) advantage on learner if needed
@@ -610,6 +611,7 @@ def _train_iterate(
         # Train
         for _epoch in range(cfg_loss_ppo_epochs):
             batch, info = data_buffer.sample(return_info=True)
+            batch = batch.to(device)
             batch_staleness = info.get("staleness")
 
             alpha = 1.0
