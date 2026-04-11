@@ -20,6 +20,6 @@ lib_dir="${env_dir}/lib"
 
 conda deactivate && conda activate ./env
 
-python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestGenDGRL --error-for-skips --runslow
+python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/libs --instafail -v --durations 200 --capture no -k TestGenDGRL --error-for-skips --runslow
 coverage combine -q
 coverage xml -i

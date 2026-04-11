@@ -49,12 +49,12 @@ on:
         description: 'Build with CUDA (enable/disable)'
         required: false
         type: string
-        default: 'enable'
+        default: 'disable'
       with-rocm:
         description: 'Build with ROCm (enable/disable)'
         required: false
         type: string
-        default: 'enable'
+        default: 'disable'
       with-cpu:
         description: 'Build with CPU (enable/disable)'
         required: false
@@ -83,9 +83,9 @@ jobs:
       use-only-dl-pytorch-org: ${{ inputs.channel == 'release' && 'true' || 'false' }}
       # For workflow_dispatch: convert boolean to enable/disable string
       # For workflow_call: use the string input directly
-      # Default: enable all variants
-      with-cuda: ${{ github.event_name == 'workflow_dispatch' && (inputs.build-cuda && 'enable' || 'disable') || inputs.with-cuda || 'enable' }}
-      with-rocm: ${{ github.event_name == 'workflow_dispatch' && (inputs.build-rocm && 'enable' || 'disable') || inputs.with-rocm || 'enable' }}
+      # Default: disable CUDA/ROCm (torchrl is CPU-only), enable CPU
+      with-cuda: ${{ github.event_name == 'workflow_dispatch' && (inputs.build-cuda && 'enable' || 'disable') || inputs.with-cuda || 'disable' }}
+      with-rocm: ${{ github.event_name == 'workflow_dispatch' && (inputs.build-rocm && 'enable' || 'disable') || inputs.with-rocm || 'disable' }}
       with-cpu: ${{ github.event_name == 'workflow_dispatch' && (inputs.build-cpu && 'enable' || 'disable') || inputs.with-cpu || 'enable' }}
   build:
     needs: generate-matrix

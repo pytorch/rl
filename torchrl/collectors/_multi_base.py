@@ -249,6 +249,27 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             a rollout is reached. If no ``"truncated"`` key is found, an exception is raised.
             Truncated keys can be set through ``env.add_truncated_keys``.
             Defaults to ``False``.
+        trajs_per_batch (int, optional): When set together with ``replay_buffer``,
+            trajectory assembly is delegated to each worker's inner
+            :class:`~torchrl.collectors.Collector`.  Each worker calls
+            :meth:`~torchrl.collectors.BaseCollector._iter_by_trajectories`
+            independently and writes **complete trajectories** (episodes whose
+            last step has ``("next", "done") == True``) to the shared replay
+            buffer as flat 1-D sequences — no padding, no accumulation.
+
+            When set *without* ``replay_buffer``, each worker assembles
+            trajectories and the multi-collector yields zero-padded batches
+            of shape ``(trajs_per_batch, max_traj_len)`` with a
+            ``("collector", "mask")`` boolean field.
+
+            Both the iteration pattern (``for data in collector``) and the
+            async ``start()`` pattern are supported.
+
+            Defaults to ``None`` (fixed-frame batches).
+
+            See :class:`~torchrl.collectors.BaseCollector` for the full
+            description of the completeness guarantee and replay-buffer
+            storage contract.
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
@@ -338,9 +359,9 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
         *,
         num_workers: int | None = None,
-        policy_factory: Callable[[], Callable]
-        | list[Callable[[], Callable]]
-        | None = None,
+        policy_factory: (
+            Callable[[], Callable] | list[Callable[[], Callable]] | None
+        ) = None,
         frames_per_batch: int | Sequence[int],
         total_frames: int | None = -1,
         device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
@@ -370,16 +391,19 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
         no_cuda_sync: bool = False,
-        weight_updater: WeightUpdaterBase
-        | Callable[[], WeightUpdaterBase]
-        | None = None,
+        weight_updater: (
+            WeightUpdaterBase | Callable[[], WeightUpdaterBase] | None
+        ) = None,
         weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
         weight_recv_schemes: dict[str, WeightSyncScheme] | None = None,
         track_policy_version: bool = False,
         worker_idx: int | None = None,
+        trajs_per_batch: int | None = None,
     ):
         self.closed = True
         self.worker_idx = worker_idx
+        self.trajs_per_batch = trajs_per_batch
+        self._worker_trajs_per_batch = None
 
         # Set up workers and environment functions
         create_env_fn, total_frames_per_batch = self._setup_workers_and_env_fns(
@@ -856,6 +880,39 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
     def _check_replay_buffer_init(self):
         if self.replay_buffer is None:
             return
+
+        # Warn when a SliceSampler is used without trajs_per_batch: workers
+        # write batches independently so adjacent frames in the buffer can
+        # come from different episodes without an intervening done signal.
+        from torchrl.data.replay_buffers.samplers import SliceSampler
+
+        if (
+            getattr(self, "trajs_per_batch", None) is None
+            and isinstance(getattr(self.replay_buffer, "_sampler", None), SliceSampler)
+            and not self.set_truncated
+        ):
+            warnings.warn(
+                "A SliceSampler is used with a multi-process collector but "
+                "trajs_per_batch is not set and set_truncated is False. "
+                "Adjacent frames in the replay buffer may come from different "
+                "workers and different episodes, causing SliceSampler to "
+                "sample slices that cross trajectory boundaries. "
+                "Consider setting trajs_per_batch to write only complete "
+                "trajectories, or set_truncated=True to mark batch "
+                "boundaries (note: this introduces artificial truncations).",
+                category=UserWarning,
+                stacklevel=2,
+            )
+
+        if getattr(self, "trajs_per_batch", None) is not None:
+            # Trajectory assembly will happen at the worker level: each worker's
+            # inner Collector uses _iter_by_trajectories() to assemble complete
+            # trajectories and write them to the shared replay buffer.
+            # Null out trajs_per_batch on the multi-collector so that __iter__
+            # routes to self.iterator() directly (not _iter_by_trajectories,
+            # which would spin forever on the None yields from the RB path).
+            self._worker_trajs_per_batch = self.trajs_per_batch
+            self.trajs_per_batch = None
         is_init = hasattr(self.replay_buffer, "_storage") and getattr(
             self.replay_buffer._storage, "initialized", True
         )
@@ -1143,21 +1200,24 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "extend_buffer": self.extend_buffer,
                     "traj_pool": self._traj_pool,
                     "trust_policy": self.trust_policy,
-                    "compile_policy": self.compiled_policy_kwargs
-                    if self.compiled_policy
-                    else False,
-                    "cudagraph_policy": self.cudagraphed_policy_kwargs
-                    if self.cudagraphed_policy
-                    else False,
+                    "compile_policy": (
+                        self.compiled_policy_kwargs if self.compiled_policy else False
+                    ),
+                    "cudagraph_policy": (
+                        self.cudagraphed_policy_kwargs
+                        if self.cudagraphed_policy
+                        else False
+                    ),
                     "no_cuda_sync": self.no_cuda_sync,
                     "collector_class": self.collector_class,
-                    "postproc": self.postprocs
-                    if self.replay_buffer is not None
-                    else None,
+                    "postproc": (
+                        self.postprocs if self.replay_buffer is not None else None
+                    ),
                     "weight_sync_schemes": self._weight_sync_schemes,
                     "worker_idx": i,  # Worker index for queue-based weight distribution
                     "init_random_frames": self.init_random_frames,
                     "profile_config": self._profile_config,
+                    "trajs_per_batch": self._worker_trajs_per_batch,
                 }
                 proc = _ProcessNoWarnCtx(
                     target=_main_async_collector,

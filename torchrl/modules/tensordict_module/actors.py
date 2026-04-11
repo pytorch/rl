@@ -16,6 +16,7 @@ from tensordict.nn import (
     TensorDictModuleWrapper,
     TensorDictSequential,
 )
+from tensordict.nn.probabilistic import interaction_type, InteractionType
 from tensordict.utils import expand_as_right, NestedKey
 from torch import nn
 from torch.distributions import Categorical
@@ -538,10 +539,12 @@ class QValueModule(TensorDictModuleBase):
         var_nums: int | None = None,
         spec: TensorSpec | None = None,
         safe: bool = False,
+        strict_shape: bool | str | None = None,
     ):
         if isinstance(action_space, TensorSpec):
             raise TypeError("Using specs in action_space is deprecated")
         action_space, spec = _process_action_space_spec(action_space, spec)
+        self.strict_shape = strict_shape
         self.action_space = action_space
         self.var_nums = var_nums
         self.action_func_mapping = {
@@ -618,6 +621,48 @@ class QValueModule(TensorDictModuleBase):
             self.action_space, self._default_action_value
         )
         chosen_action_value = action_value_func(action_values, action)
+
+        # Enforce action shape to match spec (after chosen_action_value computation)
+        action_key = self.out_keys[0]
+        action_spec = (
+            self.spec.get(action_key, None)
+            if isinstance(self.spec, Composite)
+            else None
+        )
+        if action_spec is not None and self.strict_shape is not False:
+            composite_batch_ndim = len(self.spec.shape)
+            per_sample_shape = action_spec.shape[composite_batch_ndim:]
+            batch_shape = action_values.shape[:-1]
+            target_shape = torch.Size(list(batch_shape) + list(per_sample_shape))
+
+            if action.shape != target_shape:
+                if self.strict_shape is True:
+                    raise RuntimeError(
+                        f"Action shape {action.shape} does not match expected shape {target_shape} "
+                        f"(per-sample spec shape: {per_sample_shape}). "
+                        f"Set strict_shape='auto' to attempt automatic reshaping."
+                    )
+                elif self.strict_shape == "auto":
+                    try:
+                        action = action.reshape(target_shape)
+                    except RuntimeError:
+                        raise RuntimeError(
+                            f"Cannot reshape action from {action.shape} to {target_shape}."
+                        )
+                elif self.strict_shape is None:
+                    import warnings
+
+                    warnings.warn(
+                        f"Action shape {action.shape} does not match expected shape {target_shape} "
+                        f"(per-sample spec shape: {per_sample_shape}). "
+                        f"In v0.14, this will raise an error. "
+                        f"Set strict_shape='auto' to automatically reshape, "
+                        f"strict_shape=True to raise immediately, "
+                        f"or strict_shape=False to silence this warning.",
+                        FutureWarning,
+                        stacklevel=2,
+                    )
+
         tensordict.update(
             dict(zip(self.out_keys, (action, action_values, chosen_action_value)))
         )
@@ -1127,6 +1172,7 @@ class QValueActor(SafeSequential):
         action_space: str | None = None,
         action_value_key=None,
         action_mask_key: NestedKey | None = None,
+        strict_shape: bool | str | None = None,
     ):
         if isinstance(action_space, TensorSpec):
             raise RuntimeError(
@@ -1172,6 +1218,7 @@ class QValueActor(SafeSequential):
             safe=safe,
             action_space=action_space,
             action_mask_key=action_mask_key,
+            strict_shape=strict_shape,
         )
 
         super().__init__(module, qvalue)
@@ -2455,3 +2502,236 @@ class MultiStepActorWrapper(TensorDictModuleBase):
     @property
     def counter_key(self):
         return _replace_last(self.init_key, "counter")
+
+
+class _DDPMModule(nn.Module):
+    """Internal DDPM denoising module used by :class:`DiffusionActor`.
+
+    Implements a fixed linear-beta DDPM scheduler and runs the full reverse
+    diffusion chain (``num_steps`` denoising steps) at inference time.
+
+    Args:
+        score_network (nn.Module): Network that predicts noise given
+            ``(noisy_action, observation, timestep)``.  Its input size must
+            be ``obs_dim + action_dim + 1`` and output size ``action_dim``.
+        action_dim (int): Dimensionality of the action.
+        num_steps (int): Number of DDPM denoising steps.  Defaults to 100.
+        beta_start (float): Starting beta for the linear schedule.
+            Defaults to 1e-4.
+        beta_end (float): Ending beta for the linear schedule.
+            Defaults to 0.02.
+    """
+
+    def __init__(
+        self,
+        score_network: nn.Module,
+        action_dim: int,
+        num_steps: int = 100,
+        beta_start: float = 1e-4,
+        beta_end: float = 0.02,
+    ) -> None:
+        super().__init__()
+        self.score_network = score_network
+        self.action_dim = action_dim
+        self.num_steps = num_steps
+
+        # Linear beta schedule — fixed, not learnable
+        betas = torch.linspace(beta_start, beta_end, num_steps)
+        alphas = 1.0 - betas
+        alphas_cumprod = torch.cumprod(alphas, dim=0)
+
+        self.register_buffer("betas", betas)
+        self.register_buffer("alphas", alphas)
+        self.register_buffer("alphas_cumprod", alphas_cumprod)
+
+    def add_noise(
+        self, clean_action: torch.Tensor, t: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Forward diffusion: corrupt *clean_action* with noise at timestep *t*.
+
+        This is the training-time counterpart to :meth:`forward`.  Given a
+        clean action and a (randomly sampled) timestep, it returns the noisy
+        action and the noise that was added, which can be used to compute a
+        denoising loss.
+
+        Args:
+            clean_action: ``(..., action_dim)`` tensor of clean actions.
+            t: Integer tensor of shape ``(...)`` with timestep indices in
+                ``[0, num_steps)``.
+
+        Returns:
+            Tuple of ``(noisy_action, noise)`` both of shape
+            ``(..., action_dim)``.
+        """
+        alpha_bar_t = self.alphas_cumprod.to(clean_action.device)[t]  # (...)
+        # Broadcast scalar/batch alpha_bar_t to match action dimensions
+        while alpha_bar_t.dim() < clean_action.dim():
+            alpha_bar_t = alpha_bar_t.unsqueeze(-1)
+        noise = torch.randn_like(clean_action)
+        noisy_action = (
+            alpha_bar_t.sqrt() * clean_action + (1.0 - alpha_bar_t).sqrt() * noise
+        )
+        return noisy_action, noise
+
+    def forward(self, observation: torch.Tensor) -> torch.Tensor:
+        """Run the full DDPM reverse chain conditioned on *observation*.
+
+        Respects :func:`~tensordict.nn.probabilistic.interaction_type`:
+        when the interaction type is ``DETERMINISTIC``, the stochastic noise
+        injection step is skipped, producing a deterministic (mean) trajectory.
+
+        Args:
+            observation: ``(..., obs_dim)`` tensor.
+
+        Returns:
+            Denoised action of shape ``(..., action_dim)``.
+        """
+        batch_shape = observation.shape[:-1]
+        device = observation.device
+        deterministic = interaction_type() == InteractionType.DETERMINISTIC
+
+        # Move schedule buffers to the observation device
+        betas = self.betas.to(device)
+        alphas = self.alphas.to(device)
+        alphas_cumprod = self.alphas_cumprod.to(device)
+
+        # Start from pure Gaussian noise
+        x = torch.randn(*batch_shape, self.action_dim, device=device)
+
+        for t in reversed(range(self.num_steps)):
+            t_tensor = torch.full(
+                (*batch_shape, 1), t, dtype=torch.float32, device=device
+            )
+            model_input = torch.cat([x, observation, t_tensor], dim=-1)
+            predicted_noise = self.score_network(model_input)
+
+            beta_t = betas[t]
+            alpha_t = alphas[t]
+            alpha_bar_t = alphas_cumprod[t]
+
+            # DDPM reverse step
+            x = (1.0 / alpha_t.sqrt()) * (
+                x - (beta_t / (1.0 - alpha_bar_t).sqrt()) * predicted_noise
+            )
+            # Use torch.where instead of a Python conditional to avoid
+            # graph breaks under torch.compile.
+            if not deterministic:
+                noise = torch.randn_like(x)
+                x = x + torch.where(
+                    torch.tensor(t > 0, device=device),
+                    beta_t.sqrt() * noise,
+                    torch.zeros_like(x),
+                )
+
+        return x
+
+
+class DiffusionActor(SafeModule):
+    """Diffusion-based actor for RL.
+
+    Implements a score-based policy that denoises latent actions conditioned on
+    observations using a fixed DDPM scheduler.  A small MLP is used as the
+    score network by default; pass a custom ``score_network`` to override.
+
+    The strict TensorDict contract is ``in_keys=["observation"]`` →
+    ``out_keys=["action"]``.
+
+    Respects :func:`~tensordict.nn.probabilistic.interaction_type`: setting
+    the interaction type to ``DETERMINISTIC`` disables stochastic noise
+    injection during the reverse chain, yielding a deterministic output.
+
+    Args:
+        action_dim (int): Dimensionality of the action space.
+        obs_dim (int, optional): Dimensionality of the observation space.
+            Only required when ``score_network`` is ``None`` (i.e., when the
+            default MLP is used).  When a custom ``score_network`` is
+            provided this argument is ignored.  Defaults to ``None``.
+        score_network (nn.Module, optional): Network that predicts noise given
+            ``(noisy_action, observation, timestep)`` concatenated along the
+            last dimension.  If ``None``, a two-hidden-layer MLP of width 256
+            with a :class:`~torch.nn.LazyLinear` first layer is constructed
+            automatically (``obs_dim`` need not be specified in this case).
+        num_steps (int): Number of DDPM denoising steps.  Defaults to 100.
+        beta_start (float): Starting beta for the linear schedule.
+            Defaults to 1e-4.
+        beta_end (float): Ending beta for the linear schedule.
+            Defaults to 0.02.
+        in_keys (list of NestedKey, optional): Keys read from the input
+            TensorDict.  Defaults to ``["observation"]``.
+        out_keys (list of NestedKey, optional): Keys written to the output
+            TensorDict.  Defaults to ``["action"]``.
+        spec (TensorSpec, optional): Spec for the action output.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.modules import DiffusionActor
+        >>> # obs_dim not required when using the default network
+        >>> actor = DiffusionActor(action_dim=2, num_steps=10)
+        >>> td = TensorDict({"observation": torch.randn(4, 3)}, batch_size=[4])
+        >>> td = actor(td)
+        >>> td["action"].shape
+        torch.Size([4, 2])
+    """
+
+    def __init__(
+        self,
+        action_dim: int,
+        obs_dim: int | None = None,
+        score_network: nn.Module | None = None,
+        num_steps: int = 100,
+        beta_start: float = 1e-4,
+        beta_end: float = 0.02,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
+        *,
+        spec: TensorSpec | None = None,
+        **kwargs,
+    ) -> None:
+        if in_keys is None:
+            in_keys = ["observation"]
+        if out_keys is None:
+            out_keys = ["action"]
+        if (
+            "action" in out_keys
+            and spec is not None
+            and not isinstance(spec, Composite)
+        ):
+            spec = Composite(action=spec)
+
+        if score_network is None:
+            if obs_dim is not None:
+                # Fully-specified MLP: input size known upfront
+                score_network = nn.Sequential(
+                    nn.Linear(action_dim + obs_dim + 1, 256),
+                    nn.SiLU(),
+                    nn.Linear(256, 256),
+                    nn.SiLU(),
+                    nn.Linear(256, action_dim),
+                )
+            else:
+                # LazyLinear infers input size on first forward pass;
+                # obs_dim need not be specified by the caller.
+                score_network = nn.Sequential(
+                    nn.LazyLinear(256),
+                    nn.SiLU(),
+                    nn.Linear(256, 256),
+                    nn.SiLU(),
+                    nn.Linear(256, action_dim),
+                )
+
+        module = _DDPMModule(
+            score_network=score_network,
+            action_dim=action_dim,
+            num_steps=num_steps,
+            beta_start=beta_start,
+            beta_end=beta_end,
+        )
+
+        super().__init__(
+            module,
+            in_keys=in_keys,
+            out_keys=out_keys,
+            spec=spec,
+            **kwargs,
+        )
