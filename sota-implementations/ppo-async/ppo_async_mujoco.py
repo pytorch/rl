@@ -21,7 +21,7 @@ Supports three collection/advantage modes (configured via YAML):
   async_mode=start, advantage_on=worker (fully async, worker GAE):
     Uses `collector.start()` for fully decoupled collection. GAE computed on
     collector workers via postproc with a (stale) critic copy. Uses
-    ActorCriticWrapper so update_policy_weights_ syncs both actor and critic.
+    SharedMemWeightSyncScheme to sync both actor and critic to workers.
 
   async_mode=start, advantage_on=learner (fully async, learner TD(0)):
     Uses `collector.start()` for fully decoupled collection. TD(0) advantage
@@ -36,178 +36,30 @@ Key components:
 """
 from __future__ import annotations
 
-import multiprocessing
+from functools import partial
 
 import hydra
-
 import torch
+import torch.optim
+
+from omegaconf import DictConfig
 from torchrl._utils import get_available_device
-
-
-# ---------------------------------------------------------------------------
-# Postproc callables (module-level for pickle compatibility with spawn)
-# ---------------------------------------------------------------------------
-
-
-class _ActorWithCritic(torch.nn.Module):
-    """Wrapper that holds both actor and critic but only runs the actor.
-
-    This ensures ``update_policy_weights_()`` syncs both modules to workers,
-    while keeping per-step collection lightweight (actor only). The critic is
-    used by the postproc for batched GAE computation.
-    """
-
-    def __init__(self, actor, critic):
-        super().__init__()
-        self.actor = actor
-        self.critic = critic
-
-    def forward(self, td):
-        return self.actor(td)
-
-
-class _WorkerGAEPostproc:
-    """Postproc for worker GAE mode: critic + GAE, flatten, stamp policy_version.
-
-    The adv_module's value_network (critic) is synced to the collector device
-    automatically via a dedicated SharedMemWeightSyncScheme registered with
-    model_id="postproc.adv_module". No manual .to() calls needed.
-    """
-
-    def __init__(self, adv_module, version_counter):
-        self.adv_module = adv_module
-        self.version_counter = version_counter
-
-    def __call__(self, data):
-        with torch.no_grad():
-            data = self.adv_module(data)
-        data_flat = data.reshape(-1)
-        data_flat["policy_version"] = torch.full(
-            (data_flat.shape[0],),
-            float(self.version_counter.value),
-            device=data_flat.device,
-        )
-        return data_flat
-
-
-def _make_eval_env(
-    env_name, device, from_pixels, num_eval_envs, backend="gymnasium", logger=None
-):
-    """Env factory for the Evaluator.
-
-    When backend is mujoco_torch, creates a compiled GPU-batched env with
-    optional VideoRecorder (renders only env 0 via headless ray-cast).
-    Otherwise uses ParallelEnv + Gymnasium.
-    """
-    if backend == "mujoco_torch":
-        from utils_mujoco import make_env_gpu
-
-        env = make_env_gpu(
-            env_name, device=device, num_envs=num_eval_envs, compile=True
-        )
-        if from_pixels and logger is not None:
-            from torchrl.envs.transforms import Transform
-            from torchrl.record import VideoRecorder
-
-            class _RenderFirstEnv(Transform):
-                """Render only env 0 and store as pixels (avoids 4096× render)."""
-
-                def __init__(self, width=256, height=256):
-                    super().__init__(
-                        in_keys=[],
-                        out_keys=["pixels"],
-                    )
-                    self._width = width
-                    self._height = height
-
-                def _call(self, tensordict):
-                    return tensordict
-
-                def forward(self, tensordict):
-                    return tensordict
-
-                def _step(self, tensordict, next_tensordict):
-                    base = self.parent
-                    while hasattr(base, "base_env"):
-                        base = base.base_env
-                    pixels = base.render(width=self._width, height=self._height)
-                    next_tensordict.set(
-                        "pixels",
-                        torch.as_tensor(pixels, device="cpu"),
-                    )
-                    return next_tensordict
-
-                def _reset(self, tensordict, tensordict_reset):
-                    base = self.parent
-                    while hasattr(base, "base_env"):
-                        base = base.base_env
-                    pixels = base.render(width=self._width, height=self._height)
-                    tensordict_reset.set(
-                        "pixels",
-                        torch.as_tensor(pixels, device="cpu"),
-                    )
-                    return tensordict_reset
-
-            env.append_transform(_RenderFirstEnv(width=256, height=256))
-            env.append_transform(
-                VideoRecorder(
-                    logger=logger,
-                    tag="eval/video",
-                    in_keys=["pixels"],
-                    make_grid=False,
-                    skip=2,
-                )
-            )
-        return env
-    else:
-        from torchrl.envs import ParallelEnv
-        from utils_mujoco import _MUJOCO_TORCH_TO_GYM, make_env
-
-        gym_name = _MUJOCO_TORCH_TO_GYM.get(env_name, env_name)
-        return ParallelEnv(
-            num_eval_envs,
-            lambda: make_env(gym_name, device=device, from_pixels=from_pixels),
-        )
-
-
-def _make_eval_policy(env_name, device, env):
-    """Policy factory for the process-based Evaluator."""
-    from utils_mujoco import make_ppo_models
-
-    return make_ppo_models(env_name, device=device)[0]
-
-
-class _LearnerPostproc:
-    """Postproc for start+learner mode: flatten, stamp policy_version."""
-
-    def __init__(self, version_counter):
-        self.version_counter = version_counter
-
-    def __call__(self, data):
-        data_flat = data.reshape(-1)
-        data_flat["policy_version"] = torch.full(
-            (data_flat.shape[0],),
-            float(self.version_counter.value),
-            device=data_flat.device,
-        )
-        return data_flat
+from torchrl.collectors import Evaluator
+from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
+from torchrl.data.replay_buffers.samplers import (
+    RandomSampler,
+    SamplerWithoutReplacement,
+    StalenessAwareSampler,
+)
+from torchrl.objectives import ClipPPOLoss, group_optimizers
+from torchrl.objectives.value.advantages import GAE
+from torchrl.record.loggers import generate_exp_name, get_logger
+from train import train_iterate, train_start
+from utils_mujoco import make_eval_env, make_ppo_models
 
 
 @hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
-def main(cfg: DictConfig):  # noqa: F821
-
-    import torch.optim
-
-    from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
-    from torchrl.data.replay_buffers.samplers import (
-        RandomSampler,
-        SamplerWithoutReplacement,
-        StalenessAwareSampler,
-    )
-    from torchrl.objectives import ClipPPOLoss, group_optimizers
-    from torchrl.objectives.value.advantages import GAE
-    from torchrl.record.loggers import generate_exp_name, get_logger
-    from utils_mujoco import make_ppo_models
+def main(cfg: DictConfig):
 
     torch.set_float32_matmul_precision("high")
 
@@ -281,8 +133,6 @@ def main(cfg: DictConfig):  # noqa: F821
         raise ValueError(f"Unknown sampler type: {sampler_type}")
 
     # ── Replay buffer ───────────────────────────────────────────────────
-    # shared_init=True allows workers to initialize the storage schema
-    # when using collector.start() mode (local_init_rb=True).
     data_buffer = TensorDictReplayBuffer(
         storage=LazyTensorStorage(
             cfg.buffer.size,
@@ -313,32 +163,23 @@ def main(cfg: DictConfig):  # noqa: F821
     else:
         logger_video = False
 
-    # ── Async evaluator ──────────────────────────────────────────────────
-    # Thread backend for mujoco_torch (GPU work releases GIL, and thread
-    # backend supports VideoRecorder dump_video). Process backend for
-    # gymnasium (CPU-bound, avoids GIL contention).
-    from functools import partial
-
-    from torchrl.collectors import Evaluator
-
+    # ── Async evaluator ─────────────────────────────────────────────────
+    # Thread backend for mujoco-torch (GPU work releases GIL, and thread
+    # backend supports VideoRecorder dump_video).
     num_eval_envs = cfg.logger.get("num_eval_envs", 4096)
-    env_backend = cfg.env.get("backend", "gymnasium")
-    eval_backend = "thread" if env_backend == "mujoco_torch" else "process"
     evaluator = Evaluator(
         env=partial(
-            _make_eval_env,
+            make_eval_env,
             cfg.env.env_name,
             eval_device,
-            logger_video,
             num_eval_envs,
-            env_backend,
             logger if logger_video else None,
         ),
-        policy_factory=partial(_make_eval_policy, cfg.env.env_name, eval_device),
+        policy_factory=lambda env: make_ppo_models(cfg.env.env_name, eval_device)[0],
         max_steps=10_000,
         logger=logger,
         log_prefix="eval",
-        backend=eval_backend,
+        backend="thread",
     )
 
     # ── Config extraction ───────────────────────────────────────────────
@@ -360,11 +201,7 @@ def main(cfg: DictConfig):  # noqa: F821
         * num_mini_batches
     )
 
-    # ====================================================================
-    # Dispatch to the appropriate training loop
-    # ====================================================================
-
-    # Shared kwargs for both training loops
+    # ── Dispatch to training loop ───────────────────────────────────────
     shared_kwargs = {
         "cfg": cfg,
         "actor": actor,
@@ -391,460 +228,15 @@ def main(cfg: DictConfig):  # noqa: F821
     }
 
     if async_mode == "start":
-        _train_start(
+        train_start(
             **shared_kwargs,
             advantage_on=advantage_on,
             cfg_loss_gamma=cfg_loss_gamma,
         )
     else:
-        _train_iterate(**shared_kwargs)
+        train_iterate(**shared_kwargs)
 
     evaluator.shutdown()
-
-
-# ========================================================================
-# Training loop: start mode (fully async)
-# ========================================================================
-
-
-def _train_start(
-    *,
-    cfg,
-    actor,
-    critic,
-    adv_module,
-    loss_module,
-    optim,
-    sampler,
-    data_buffer,
-    advantage_on,
-    device,
-    collect_device,
-    logger,
-    evaluator,
-    cfg_loss_ppo_epochs,
-    cfg_optim_anneal_lr,
-    cfg_optim_lr,
-    cfg_loss_anneal_clip_eps,
-    cfg_loss_clip_epsilon,
-    cfg_logger_test_interval,
-    cfg_optim_max_grad_norm,
-    cfg_buffer_min_fill,
-    cfg_loss_gamma,
-    total_frames,
-    total_network_updates,
-):
-    import time
-    from functools import partial as _partial
-
-    import tqdm
-    from torchrl.collectors import MultiaSyncDataCollector
-    from torchrl.weight_update import SharedMemWeightSyncScheme
-    from utils_mujoco import make_env
-
-    # Shared version counter (readable by workers via postproc)
-    version_counter = multiprocessing.Value("i", 0)
-
-    # Build collector policy and postproc based on advantage_on mode
-    weight_sync_schemes = None
-    if advantage_on == "worker":
-        # Workers compute GAE via postproc. The actor runs per-step during
-        # collection; the adv_module (with critic) runs in the postproc.
-        # A dedicated weight sync scheme keeps the worker's adv_module in
-        # sync with the trainer's critic — resolved via model_id so both
-        # device placement and weight updates are handled automatically.
-        collector_policy = actor
-        postproc = _WorkerGAEPostproc(adv_module, version_counter)
-        weight_sync_schemes = {
-            "policy": SharedMemWeightSyncScheme(),
-            "postproc.adv_module": SharedMemWeightSyncScheme(),
-        }
-    else:
-        # Workers only collect; TD(0) advantage on learner at training time
-        collector_policy = actor
-        postproc = _LearnerPostproc(version_counter)
-
-    # Build env factories: GPU batched env or CPU Gymnasium envs
-    env_backend = cfg.env.get("backend", "gymnasium")
-    if env_backend == "mujoco_torch":
-        from utils_mujoco import make_env_gpu
-
-        num_envs = cfg.env.get("num_envs", 4096)
-        env_compile = cfg.env.get("compile", True)
-        # Env + policy both on collect_device (no device movement per step)
-        create_env_fn = [
-            _partial(
-                make_env_gpu, cfg.env.env_name, collect_device, num_envs, env_compile
-            )
-        ]
-    else:
-        create_env_fn = [
-            make_env(cfg.env.env_name, collect_device)
-        ] * cfg.collector.num_workers
-
-    collector = MultiaSyncDataCollector(
-        create_env_fn=create_env_fn,
-        policy=collector_policy,
-        frames_per_batch=cfg.collector.frames_per_batch,
-        total_frames=total_frames,
-        device=collect_device,
-        storing_device=device,
-        max_frames_per_traj=-1,
-        replay_buffer=data_buffer,
-        postproc=postproc,
-        local_init_rb=True,
-        weight_sync_schemes=weight_sync_schemes,
-    )
-
-    # Start collection — workers fill buffer independently
-    collector.start()
-
-    policy_version = 0
-    num_network_updates = 0
-    pbar = tqdm.tqdm(total=total_frames)
-    start_time = time.time()
-    train_start_time = None  # set when first data arrives (after compile)
-    last_write_count = 0
-    last_test_frames = 0
-    last_trained_wc = 0  # gate training on new data arriving
-
-    while True:
-        # Track collection progress
-        current_wc = data_buffer.write_count
-        if current_wc > last_write_count:
-            if train_start_time is None:
-                train_start_time = time.time()
-            pbar.update(current_wc - last_write_count)
-            last_write_count = current_wc
-        if current_wc >= total_frames:
-            break
-
-        # Wait for new data before training (prevents consumer_version
-        # from racing ahead of what's in the buffer)
-        if current_wc <= last_trained_wc or len(data_buffer) < cfg_buffer_min_fill:
-            time.sleep(0.05)
-            continue
-        last_trained_wc = current_wc
-
-        metrics_to_log = {}
-
-        # Train ppo_epochs gradient steps, then push weights
-        for _epoch in range(cfg_loss_ppo_epochs):
-            batch, info = data_buffer.sample(return_info=True)
-            batch = batch.to(device)
-            batch_staleness = info.get("staleness")
-
-            # Compute TD(0) advantage on learner if needed
-            if advantage_on == "learner":
-                with torch.no_grad():
-                    state_value = critic(batch).get("state_value")
-                    next_state_value = critic(batch.get("next")).get("state_value")
-                    reward = batch.get(("next", "reward"))
-                    done = batch.get(("next", "done")).float()
-                    value_target = (
-                        reward + cfg_loss_gamma * (1 - done) * next_state_value
-                    )
-                    advantage = value_target - state_value
-                    batch.set("advantage", advantage)
-                    batch.set("value_target", value_target)
-
-            # LR annealing based on collection progress
-            alpha = 1.0
-            if cfg_optim_anneal_lr:
-                alpha = 1 - (current_wc / total_frames)
-                for group in optim.param_groups:
-                    group["lr"] = cfg_optim_lr * alpha
-            if cfg_loss_anneal_clip_eps:
-                loss_module.clip_epsilon.copy_(cfg_loss_clip_epsilon * alpha)
-
-            # Forward / backward
-            optim.zero_grad(set_to_none=True)
-            loss = loss_module(batch)
-            total_loss = (
-                loss["loss_objective"] + loss["loss_entropy"] + loss["loss_critic"]
-            )
-            total_loss.backward()
-            torch.nn.utils.clip_grad_norm_(
-                loss_module.parameters(), max_norm=cfg_optim_max_grad_norm
-            )
-            optim.step()
-            num_network_updates += 1
-
-        # Push updated weights to workers and bump version.
-        # In worker mode, sync both actor and adv_module (critic) via
-        # their registered weight sync schemes.
-        if advantage_on == "worker":
-            collector.update_policy_weights_(
-                weights_dict={"policy": None, "postproc.adv_module": None}
-            )
-        else:
-            collector.update_policy_weights_()
-        policy_version += 1
-        version_counter.value = policy_version
-        if hasattr(sampler, "consumer_version"):
-            sampler.consumer_version = policy_version
-
-        # Log training metrics
-        metrics_to_log.update(
-            {
-                "train/loss_objective": loss["loss_objective"].item(),
-                "train/loss_critic": loss["loss_critic"].item(),
-                "train/loss_entropy": loss["loss_entropy"].item(),
-                "train/lr": alpha * cfg_optim_lr.item(),
-                "train/clip_epsilon": (alpha * cfg_loss_clip_epsilon)
-                if cfg_loss_anneal_clip_eps
-                else cfg_loss_clip_epsilon,
-                "train/ESS": loss["ESS"].item(),
-                "train/clip_fraction": loss["clip_fraction"].item(),
-                "train/kl_approx": loss["kl_approx"].item(),
-                "train/max_ratio": loss["max_ratio"].item(),
-                "train/mean_ratio": loss["mean_ratio"].item(),
-                "staleness/consumer_version": getattr(sampler, "consumer_version", 0),
-                "staleness/policy_version": policy_version,
-                "staleness/batch_mean": batch_staleness.float().mean().item()
-                if batch_staleness is not None
-                else 0,
-                "staleness/batch_max": batch_staleness.max().item()
-                if batch_staleness is not None
-                else 0,
-                "staleness/batch_min": batch_staleness.min().item()
-                if batch_staleness is not None
-                else 0,
-                "buffer/size": len(data_buffer),
-                "buffer/write_count": current_wc,
-                "collector/collected_frames": current_wc,
-                "time/train_time": time.time() - train_start_time
-                if train_start_time is not None
-                else 0.0,
-                "time/wall_time": time.time() - start_time,
-            }
-        )
-
-        # Async eval: trigger at intervals, poll for results (non-blocking)
-        if (current_wc // cfg_logger_test_interval) > (
-            last_test_frames // cfg_logger_test_interval
-        ):
-            if not evaluator.pending:
-                evaluator.trigger_eval(actor, step=current_wc)
-            last_test_frames = current_wc
-        eval_metrics = evaluator.poll()
-        if eval_metrics is not None:
-            metrics_to_log.update(eval_metrics)
-
-        if logger:
-            logger.log_metrics(metrics_to_log, current_wc)
-
-    pbar.close()
-    collector.shutdown()
-
-    elapsed = time.time() - start_time
-    train_elapsed = time.time() - train_start_time if train_start_time else 0
-    print(  # noqa: T001
-        f"Training took {train_elapsed:.2f}s ({elapsed:.2f}s wall, mode=start, advantage_on={advantage_on})"
-    )
-
-
-# ========================================================================
-# Training loop: iterate mode (semi-async, current behaviour)
-# ========================================================================
-
-
-def _train_iterate(
-    *,
-    cfg,
-    actor,
-    critic,
-    adv_module,
-    loss_module,
-    optim,
-    sampler,
-    data_buffer,
-    device,
-    collect_device,
-    logger,
-    evaluator,
-    cfg_loss_ppo_epochs,
-    cfg_optim_anneal_lr,
-    cfg_optim_lr,
-    cfg_loss_anneal_clip_eps,
-    cfg_loss_clip_epsilon,
-    cfg_logger_test_interval,
-    cfg_optim_max_grad_norm,
-    cfg_buffer_min_fill,
-    total_frames,
-    total_network_updates,
-):
-    import time
-    from functools import partial as _partial
-
-    import tqdm
-    from torchrl.collectors import MultiaSyncDataCollector
-    from utils_mujoco import make_env
-
-    # Use _ActorWithCritic so update_policy_weights_ syncs both actor and
-    # critic to workers. Only the actor runs per env step; the critic runs
-    # batched in the postproc for GAE.
-    collector_policy = _ActorWithCritic(actor, critic)
-
-    # Build env factories: GPU batched env or CPU Gymnasium envs
-    env_backend = cfg.env.get("backend", "gymnasium")
-    if env_backend == "mujoco_torch":
-        from utils_mujoco import make_env_gpu
-
-        num_envs = cfg.env.get("num_envs", 4096)
-        env_compile = cfg.env.get("compile", True)
-        # Env + policy both on collect_device (no device movement per step)
-        create_env_fn = [
-            _partial(
-                make_env_gpu, cfg.env.env_name, collect_device, num_envs, env_compile
-            )
-        ]
-    else:
-        create_env_fn = [
-            make_env(cfg.env.env_name, collect_device)
-        ] * cfg.collector.num_workers
-
-    collector = MultiaSyncDataCollector(
-        create_env_fn=create_env_fn,
-        policy=collector_policy,
-        frames_per_batch=cfg.collector.frames_per_batch,
-        total_frames=total_frames,
-        device=collect_device,
-        storing_device=device,
-        max_frames_per_traj=-1,
-        update_at_each_batch=True,
-        postproc=adv_module,
-    )
-
-    policy_version = 0
-    collected_frames = 0
-    num_network_updates = 0
-    pbar = tqdm.tqdm(total=total_frames)
-    start_time = time.time()
-    train_start_time = None  # set when first data arrives (after compile)
-
-    for i, data in enumerate(collector):
-        if train_start_time is None:
-            train_start_time = time.time()
-
-        metrics_to_log = {}
-        frames_in_batch = data.numel()
-        collected_frames += frames_in_batch
-        pbar.update(frames_in_batch)
-
-        # Train episode rewards
-        episode_rewards = data["next", "episode_reward"][data["next", "done"]]
-        if len(episode_rewards) > 0:
-            episode_length = data["next", "step_count"][data["next", "done"]]
-            metrics_to_log.update(
-                {
-                    "train/reward": episode_rewards.mean().item(),
-                    "train/episode_length": episode_length.sum().item()
-                    / len(episode_length),
-                }
-            )
-
-        # Data already has GAE advantages from postproc; flatten and stamp version
-        data_flat = data.reshape(-1)
-        data_flat["policy_version"] = torch.full(
-            (data_flat.shape[0],), float(policy_version), device=device
-        )
-        data_buffer.extend(data_flat)
-
-        # Warmup
-        if len(data_buffer) < cfg_buffer_min_fill:
-            if logger:
-                metrics_to_log["buffer/size"] = len(data_buffer)
-                logger.log_metrics(metrics_to_log, collected_frames)
-            continue
-
-        # Train
-        for _epoch in range(cfg_loss_ppo_epochs):
-            batch, info = data_buffer.sample(return_info=True)
-            batch = batch.to(device)
-            batch_staleness = info.get("staleness")
-
-            alpha = 1.0
-            if cfg_optim_anneal_lr:
-                alpha = 1 - (num_network_updates / total_network_updates)
-                for group in optim.param_groups:
-                    group["lr"] = cfg_optim_lr * alpha
-            if cfg_loss_anneal_clip_eps:
-                loss_module.clip_epsilon.copy_(cfg_loss_clip_epsilon * alpha)
-
-            optim.zero_grad(set_to_none=True)
-            loss = loss_module(batch)
-            total_loss = (
-                loss["loss_objective"] + loss["loss_entropy"] + loss["loss_critic"]
-            )
-            total_loss.backward()
-            torch.nn.utils.clip_grad_norm_(
-                loss_module.parameters(), max_norm=cfg_optim_max_grad_norm
-            )
-            optim.step()
-            num_network_updates += 1
-
-        # Push weights & bump version
-        collector.update_policy_weights_()
-        policy_version += 1
-        if hasattr(sampler, "consumer_version"):
-            sampler.consumer_version = policy_version
-
-        metrics_to_log.update(
-            {
-                "train/loss_objective": loss["loss_objective"].item(),
-                "train/loss_critic": loss["loss_critic"].item(),
-                "train/loss_entropy": loss["loss_entropy"].item(),
-                "train/lr": alpha * cfg_optim_lr.item(),
-                "train/clip_epsilon": (alpha * cfg_loss_clip_epsilon)
-                if cfg_loss_anneal_clip_eps
-                else cfg_loss_clip_epsilon,
-                "train/ESS": loss["ESS"].item(),
-                "train/clip_fraction": loss["clip_fraction"].item(),
-                "train/kl_approx": loss["kl_approx"].item(),
-                "train/max_ratio": loss["max_ratio"].item(),
-                "train/mean_ratio": loss["mean_ratio"].item(),
-                "staleness/consumer_version": getattr(sampler, "consumer_version", 0),
-                "staleness/policy_version": policy_version,
-                "staleness/batch_mean": batch_staleness.float().mean().item()
-                if batch_staleness is not None
-                else 0,
-                "staleness/batch_max": batch_staleness.max().item()
-                if batch_staleness is not None
-                else 0,
-                "staleness/batch_min": batch_staleness.min().item()
-                if batch_staleness is not None
-                else 0,
-                "buffer/size": len(data_buffer),
-                "collector/collected_frames": collected_frames,
-                "time/train_time": time.time() - train_start_time
-                if train_start_time is not None
-                else 0.0,
-                "time/wall_time": time.time() - start_time,
-            }
-        )
-
-        # Async eval: trigger at intervals, poll for results (non-blocking)
-        if ((i - 1) * frames_in_batch) // cfg_logger_test_interval < (
-            i * frames_in_batch
-        ) // cfg_logger_test_interval:
-            if not evaluator.pending:
-                evaluator.trigger_eval(actor, step=collected_frames)
-        eval_metrics = evaluator.poll()
-        if eval_metrics is not None:
-            metrics_to_log.update(eval_metrics)
-
-        if logger:
-            logger.log_metrics(metrics_to_log, collected_frames)
-
-    pbar.close()
-    collector.shutdown()
-
-    train_elapsed = time.time() - train_start_time if train_start_time else 0
-    elapsed = time.time() - start_time
-    print(  # noqa: T001
-        f"Training took {train_elapsed:.2f}s ({elapsed:.2f}s wall, mode=iterate)"
-    )
 
 
 if __name__ == "__main__":

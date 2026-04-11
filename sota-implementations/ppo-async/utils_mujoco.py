@@ -5,57 +5,38 @@
 
 """Shared utilities for async PPO MuJoCo experiments.
 
-Identical to the standard PPO utils — defined here (not re-exported via
-importlib) so that functions are picklable for multiprocessing.
+Contains environment factories, model construction, and postproc callables
+used by the training loops.
 """
 from __future__ import annotations
 
+import torch
 import torch.nn
-import torch.optim
 
+from mujoco_torch.zoo import ENVS
 from tensordict.nn import AddStateIndependentNormalScale, TensorDictModule
 from torchrl.envs import (
     ClipTransform,
-    DoubleToFloat,
     ExplorationType,
     RewardSum,
     StepCounter,
     TransformedEnv,
-    VecNorm,
+    VecNormV2,
 )
-from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs.transforms import Transform
 from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 from torchrl.record import VideoRecorder
 
-# Mapping from mujoco-torch env names to Gymnasium env names
-_MUJOCO_TORCH_TO_GYM = {
-    "halfcheetah": "HalfCheetah-v4",
-    "ant": "Ant-v4",
-    "humanoid": "Humanoid-v4",
-    "hopper": "Hopper-v4",
-    "walker2d": "Walker2d-v4",
-}
+
+# ── Environment factories ──────────────────────────────────────────────
 
 
-def make_env(env_name="HalfCheetah-v4", device="cpu", from_pixels: bool = False):
-    env = GymEnv(env_name, device=device, from_pixels=from_pixels, pixels_only=False)
-    env = TransformedEnv(env)
-    env.append_transform(VecNorm(in_keys=["observation"], decay=0.99999, eps=1e-2))
-    env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
-    env.append_transform(RewardSum())
-    env.append_transform(StepCounter())
-    env.append_transform(DoubleToFloat(in_keys=["observation"]))
-    return env
-
-
-def make_env_gpu(env_name="halfcheetah", device="cuda:0", num_envs=4096, compile=True):
-    """Create a GPU-accelerated batched MuJoCo env using mujoco-torch.
+def make_env(env_name="halfcheetah", device="cpu", num_envs=4096, compile=True):
+    """Create a batched MuJoCo env using mujoco-torch.
 
     Returns a single env with batch_size=[num_envs], where all envs run
-    in parallel on GPU via torch.vmap.
+    in parallel via torch.vmap (GPU) or sequential (CPU).
     """
-    from mujoco_torch.zoo import ENVS
-
     compile_kwargs = {"mode": "default"} if compile else None
     env = ENVS[env_name](
         num_envs=num_envs,
@@ -65,14 +46,52 @@ def make_env_gpu(env_name="halfcheetah", device="cuda:0", num_envs=4096, compile
         compile_kwargs=compile_kwargs,
     )
     env = TransformedEnv(env)
-    env.append_transform(VecNorm(in_keys=["observation"], decay=0.99999, eps=1e-2))
+    env.append_transform(VecNormV2(in_keys=["observation"], decay=0.99999, eps=1e-2))
     env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
     return env
 
 
-def make_ppo_models_state(proof_environment, device):
+def make_eval_env(env_name, device, num_eval_envs, logger=None):
+    """Env factory for the Evaluator.
+
+    Creates a compiled GPU-batched mujoco-torch env with optional
+    VideoRecorder (renders only env 0 via headless ray-cast).
+    """
+    env = make_env(env_name, device=device, num_envs=num_eval_envs, compile=True)
+    if logger is not None:
+        env.append_transform(RenderFirstEnv(width=256, height=256))
+        env.append_transform(
+            VideoRecorder(
+                logger=logger,
+                tag="eval/video",
+                in_keys=["pixels"],
+                make_grid=False,
+                skip=2,
+            )
+        )
+    return env
+
+
+# ── Model factories ────────────────────────────────────────────────────
+
+
+def make_ppo_models(env_name, device, num_envs=1):
+    """Build PPO actor and critic networks.
+
+    Uses a small mujoco-torch env as a proof environment to read
+    observation/action specs. The proof env is discarded after construction.
+    """
+    proof_environment = make_env(
+        env_name, device="cpu", num_envs=num_envs, compile=False
+    )
+    actor, critic = _make_ppo_models_state(proof_environment, device=device)
+    del proof_environment
+    return actor, critic
+
+
+def _make_ppo_models_state(proof_environment, device):
     input_shape = proof_environment.observation_spec["observation"].shape
     num_outputs = proof_environment.action_spec_unbatched.shape[-1]
     distribution_class = TanhNormal
@@ -86,7 +105,7 @@ def make_ppo_models_state(proof_environment, device):
         in_features=input_shape[-1],
         activation_class=torch.nn.Tanh,
         out_features=num_outputs,
-        num_cells=[64, 64],
+        num_cells=[256, 256, 256, 256],
         device=device,
     )
     for layer in policy_mlp.modules():
@@ -119,7 +138,7 @@ def make_ppo_models_state(proof_environment, device):
         in_features=input_shape[-1],
         activation_class=torch.nn.Tanh,
         out_features=1,
-        num_cells=[64, 64],
+        num_cells=[256, 256, 256, 256],
         device=device,
     )
     for layer in value_mlp.modules():
@@ -131,32 +150,95 @@ def make_ppo_models_state(proof_environment, device):
     return policy_module, value_module
 
 
-def make_ppo_models(env_name, device, proof_environment=None):
-    if proof_environment is None:
-        # Map mujoco-torch names to Gymnasium names for proof env construction
-        gym_name = _MUJOCO_TORCH_TO_GYM.get(env_name, env_name)
-        proof_environment = make_env(gym_name, device="cpu")
-    actor, critic = make_ppo_models_state(proof_environment, device=device)
-    return actor, critic
+# ── Postproc callables (module-level for pickle compatibility) ─────────
 
 
-def dump_video(module):
-    if isinstance(module, VideoRecorder):
-        module.dump()
+class ActorWithCritic(torch.nn.Module):
+    """Wrapper that holds both actor and critic but only runs the actor.
+
+    Ensures ``update_policy_weights_()`` syncs both modules to workers,
+    while keeping per-step collection lightweight (actor only). The critic is
+    used by the postproc for batched GAE computation.
+    """
+
+    def __init__(self, actor, critic):
+        super().__init__()
+        self.actor = actor
+        self.critic = critic
+
+    def forward(self, td):
+        return self.actor(td)
 
 
-def eval_model(actor, test_env, num_episodes=3):
-    test_rewards = []
-    for _ in range(num_episodes):
-        td_test = test_env.rollout(
-            policy=actor,
-            auto_reset=True,
-            auto_cast_to_device=True,
-            break_when_any_done=True,
-            max_steps=10_000_000,
+class WorkerGAEPostproc:
+    """Postproc for worker GAE mode: critic + GAE, flatten, stamp policy_version.
+
+    The adv_module's value_network (critic) is synced to the collector device
+    automatically via a dedicated SharedMemWeightSyncScheme registered with
+    model_id="postproc.adv_module". No manual .to() calls needed.
+    """
+
+    def __init__(self, adv_module, version_counter):
+        self.adv_module = adv_module
+        self.version_counter = version_counter
+
+    def __call__(self, data):
+        with torch.no_grad():
+            data = self.adv_module(data)
+        data_flat = data.reshape(-1)
+        data_flat["policy_version"] = torch.full(
+            (data_flat.shape[0],),
+            float(self.version_counter.value),
+            device=data_flat.device,
         )
-        reward = td_test["next", "episode_reward"][td_test["next", "done"]]
-        test_rewards.append(reward.cpu())
-        test_env.apply(dump_video)
-    del td_test
-    return torch.cat(test_rewards, 0).mean()
+        return data_flat
+
+
+class LearnerPostproc:
+    """Postproc for start+learner mode: flatten, stamp policy_version."""
+
+    def __init__(self, version_counter):
+        self.version_counter = version_counter
+
+    def __call__(self, data):
+        data_flat = data.reshape(-1)
+        data_flat["policy_version"] = torch.full(
+            (data_flat.shape[0],),
+            float(self.version_counter.value),
+            device=data_flat.device,
+        )
+        return data_flat
+
+
+class RenderFirstEnv(Transform):
+    """Render only env 0 and store as pixels (avoids 4096x render)."""
+
+    def __init__(self, width=256, height=256):
+        super().__init__(
+            in_keys=[],
+            out_keys=["pixels"],
+        )
+        self._width = width
+        self._height = height
+
+    def _call(self, tensordict):
+        return tensordict
+
+    def forward(self, tensordict):
+        return tensordict
+
+    def _get_base_env(self):
+        base = self.parent
+        while hasattr(base, "base_env"):
+            base = base.base_env
+        return base
+
+    def _step(self, tensordict, next_tensordict):
+        pixels = self._get_base_env().render(width=self._width, height=self._height)
+        next_tensordict.set("pixels", torch.as_tensor(pixels, device="cpu"))
+        return next_tensordict
+
+    def _reset(self, tensordict, tensordict_reset):
+        pixels = self._get_base_env().render(width=self._width, height=self._height)
+        tensordict_reset.set("pixels", torch.as_tensor(pixels, device="cpu"))
+        return tensordict_reset

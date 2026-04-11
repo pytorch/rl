@@ -1,15 +1,13 @@
 # task and env
 env:
   env_name: halfcheetah
-  backend: mujoco_torch  # mujoco_torch | gymnasium
-  num_envs: 4096          # batch size for mujoco_torch (ignored for gymnasium)
-  compile: true            # torch.compile for env stepping (mujoco_torch only)
+  num_envs: 4096          # batch size for mujoco-torch GPU-batched envs
+  compile: true            # torch.compile for env stepping
 
 # collector
 collector:
   frames_per_batch: 65536  # 4096 envs x 16 steps (for GAE trajectory segments)
   total_frames: 50_000_000
-  num_workers: 1           # 1 worker with batched GPU env (increase for gymnasium)
   async_mode: start  # iterate | start
   # iterate: semi-async, training gated on collector batches (for data in collector)
   # start: fully async, collector.start() fills buffer independently
@@ -54,6 +52,6 @@ loss:
   entropy_coeff: 0.01
   loss_critic_type: l2
   advantage_on: worker  # worker | learner
-  # worker: GAE computed on collector worker (stale critic, uses ActorCriticWrapper)
+  # worker: GAE computed on collector worker (stale critic, synced via SharedMemWeightSyncScheme)
   # learner: TD(0) advantage computed at training time with current critic
   # Only meaningful when collector.async_mode=start. Ignored when iterate.
