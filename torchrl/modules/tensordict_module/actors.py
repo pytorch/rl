@@ -2563,7 +2563,7 @@ class _DDPMModule(nn.Module):
             Tuple of ``(noisy_action, noise)`` both of shape
             ``(..., action_dim)``.
         """
-        alpha_bar_t = self.alphas_cumprod[t]  # (...)
+        alpha_bar_t = self.alphas_cumprod.to(clean_action.device)[t]  # (...)
         # Broadcast scalar/batch alpha_bar_t to match action dimensions
         while alpha_bar_t.dim() < clean_action.dim():
             alpha_bar_t = alpha_bar_t.unsqueeze(-1)
@@ -2590,6 +2590,11 @@ class _DDPMModule(nn.Module):
         device = observation.device
         deterministic = interaction_type() == InteractionType.DETERMINISTIC
 
+        # Move schedule buffers to the observation device
+        betas = self.betas.to(device)
+        alphas = self.alphas.to(device)
+        alphas_cumprod = self.alphas_cumprod.to(device)
+
         # Start from pure Gaussian noise
         x = torch.randn(*batch_shape, self.action_dim, device=device)
 
@@ -2600,9 +2605,9 @@ class _DDPMModule(nn.Module):
             model_input = torch.cat([x, observation, t_tensor], dim=-1)
             predicted_noise = self.score_network(model_input)
 
-            beta_t = self.betas[t]
-            alpha_t = self.alphas[t]
-            alpha_bar_t = self.alphas_cumprod[t]
+            beta_t = betas[t]
+            alpha_t = alphas[t]
+            alpha_bar_t = alphas_cumprod[t]
 
             # DDPM reverse step
             x = (1.0 / alpha_t.sqrt()) * (
