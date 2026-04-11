@@ -371,13 +371,11 @@ def _train_start(
         postproc = _LearnerPostproc(version_counter)
 
     collector = MultiaSyncDataCollector(
-        create_env_fn=[make_env(cfg.env.env_name, collect_device)]
-        * cfg.collector.num_workers,
+        create_env_fn=[make_env(cfg.env.env_name, device)] * cfg.collector.num_workers,
         policy=collector_policy,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=total_frames,
-        device=collect_device,
-        storing_device=device,
+        device=device,
         max_frames_per_traj=-1,
         replay_buffer=data_buffer,
         postproc=postproc,
@@ -558,13 +556,11 @@ def _train_iterate(
     collector_policy = _ActorWithCritic(actor, critic)
 
     collector = MultiaSyncDataCollector(
-        create_env_fn=[make_env(cfg.env.env_name, collect_device)]
-        * cfg.collector.num_workers,
+        create_env_fn=[make_env(cfg.env.env_name, device)] * cfg.collector.num_workers,
         policy=collector_policy,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=total_frames,
-        device=collect_device,
-        storing_device=device,
+        device=device,
         max_frames_per_traj=-1,
         update_at_each_batch=True,
         postproc=adv_module,
