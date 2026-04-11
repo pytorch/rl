@@ -263,6 +263,18 @@ class TestRanges:
                     ts.encode(categorical)
                 assert (ts.expand(*shape, *ts.shape).encode(categorical) == r).all()
 
+    @pytest.mark.parametrize("ns", [[11, 3], [2, 3, 4], [5, 2]])
+    @pytest.mark.parametrize("shape", [[], [3], [4, 5]])
+    def test_multionehot_to_numpy(self, shape, ns):
+        ts = MultiOneHot(nvec=ns)
+        for _ in range(10):
+            r = ts.rand(shape)
+            result = ts.to_numpy(r)
+            categorical = ts.to_categorical(r)
+            expected = categorical.cpu().numpy()
+            np.testing.assert_array_equal(result, expected)
+            assert result.shape == (*shape, len(ns))
+
     @pytest.mark.parametrize(
         "ns",
         [

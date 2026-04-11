@@ -28,6 +28,15 @@ def get_open_port() -> int:
         return s.getsockname()[1]
 
 
+def get_local_ip_address() -> str:
+    """Get a routable local IP address for single-node distributed init."""
+    hostname = socket.gethostname()
+    try:
+        return socket.gethostbyname(hostname)
+    except socket.gaierror:
+        return "127.0.0.1"
+
+
 def wait_for_server(
     server_url: str,
     timeout: float = 300.0,

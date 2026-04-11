@@ -145,6 +145,11 @@ class ReplayBuffer:
             multi-dimensional and keep consistent notions of storage-capacity
             and batch-size during sampling.
 
+            .. important:: When using a collector with ``trajs_per_batch``,
+                trajectories are written as flat 1-D sequences of variable
+                length.  Do not set ``dim_extend > 0`` or ``ndim >= 2`` in
+                this case — the storage must be 1-dimensional.
+
             .. note:: This argument has no effect on :meth:`add` and
                 therefore should be used with caution when both :meth:`add`
                 and :meth:`extend` are used in a codebase. For example:
@@ -694,6 +699,63 @@ class ReplayBuffer:
             with self._replay_lock:
                 self._storage[index] = value
         return
+
+    @_maybe_delay_init
+    def set_at_(self, key, value, index):
+        """Sets the value of a key at specified indices in the replay buffer.
+
+        Args:
+            key (NestedKey): the key to set.
+            value (torch.Tensor): the value to write.
+            index: the indices where to write the value.
+
+        Returns:
+            self
+
+        """
+        index = _to_numpy(index)
+        with self._replay_lock:
+            self._storage[:].set_at_(key, value, index)
+        return self
+
+    @_maybe_delay_init
+    def set_(self, key, value):
+        """Sets the value of a key across the entire replay buffer in-place.
+
+        Args:
+            key (NestedKey): the key to set.
+            value (torch.Tensor): the value to write.
+
+        Returns:
+            self
+
+        """
+        with self._replay_lock:
+            self._storage[:].set_(key, value)
+        return self
+
+    @_maybe_delay_init
+    def update_(self, input_dict_or_td, clone=False, *, keys_to_update=None):
+        """Updates the replay buffer in-place with the given dict or TensorDict.
+
+        Args:
+            input_dict_or_td (dict or TensorDictBase): the data to update with.
+            clone (bool, optional): whether to clone the values before writing.
+                Defaults to ``False``.
+            keys_to_update (sequence of NestedKey, optional): if provided, only
+                these keys will be updated.
+
+        Returns:
+            self
+
+        """
+        with self._replay_lock:
+            self._storage[:].update_(
+                input_dict_or_td,
+                clone=clone,
+                keys_to_update=keys_to_update,
+            )
+        return self
 
     @_maybe_delay_init
     def state_dict(self) -> dict[str, Any]:
@@ -1290,6 +1352,11 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             available, to let storages know that the data is
             multi-dimensional and keep consistent notions of storage-capacity
             and batch-size during sampling.
+
+            .. important:: When using a collector with ``trajs_per_batch``,
+                trajectories are written as flat 1-D sequences of variable
+                length.  Do not set ``dim_extend > 0`` or ``ndim >= 2`` in
+                this case — the storage must be 1-dimensional.
 
             .. note:: This argument has no effect on :meth:`add` and
                 therefore should be used with caution when both :meth:`add`

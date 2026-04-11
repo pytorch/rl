@@ -8,7 +8,6 @@ from copy import deepcopy
 from queue import Empty
 
 import torch
-
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from torchrl._utils import (

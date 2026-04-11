@@ -3678,6 +3678,15 @@ class MultiOneHot(OneHot):
         """No-op for MultiOneHot."""
         return self
 
+    def to_numpy(self, val: torch.Tensor, safe: bool | None = None) -> np.ndarray:
+        if safe is None:
+            safe = _CHECK_SPEC_ENCODE
+        if safe:
+            if not isinstance(val, torch.Tensor):
+                raise NotImplementedError
+            self.assert_is_in(val)
+        return self.to_categorical(val, safe=False).cpu().numpy()
+
     def expand(self, *shape):
         nvecs = [space.n for space in self.space]
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
