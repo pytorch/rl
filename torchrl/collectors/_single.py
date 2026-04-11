@@ -349,6 +349,10 @@ class Collector(BaseCollector):
             Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
             the policy version.
             Defaults to `False`.
+        update_traj_ids (bool, optional): if ``True``, trajectory IDs are updated at each step
+            to track episode boundaries. Set to ``False`` to skip this overhead when trajectory
+            splitting is not needed (e.g., fixed-length PPO rollouts).
+            Defaults to ``True``.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -449,6 +453,7 @@ class Collector(BaseCollector):
         weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
         weight_recv_schemes: dict[str, WeightSyncScheme] | None = None,
         track_policy_version: bool = False,
+        update_traj_ids: bool = True,
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
         **kwargs,
@@ -542,6 +547,7 @@ class Collector(BaseCollector):
         )
         self.return_same_td = return_same_td
         self.set_truncated = set_truncated
+        self.update_traj_ids = update_traj_ids
 
         # Create shuttle and rollout buffers
         self._make_shuttle()
@@ -1731,7 +1737,8 @@ class Collector(BaseCollector):
                 if self._shuttle_has_no_device:
                     self._carrier.clear_device_()
                 self._carrier.set("collector", collector_data)
-                self._update_traj_ids(env_output)
+                if self.update_traj_ids:
+                    self._update_traj_ids(env_output)
 
                 if (
                     self.interruptor is not None
