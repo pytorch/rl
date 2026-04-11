@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from .gym_transforms import EndOfLifeTransform
+from .mean_action_selector import MeanActionSelector
 from .module import ModuleTransform
 from .r3m import R3MTransform
 from .ray_service import RayTransform
@@ -103,6 +104,7 @@ __all__ = [
     "Hash",
     "InitTracker",
     "LineariseRewards",
+    "MeanActionSelector",
     "ModuleTransform",
     "MultiAction",
     "MultiStepTransform",

@@ -38,6 +38,6 @@ CKPT_BACKEND=torch MUJOCO_GL=egl python .github/unittest/helpers/coverage_run_pa
     --mp_fork_if_no_cuda
 
 #pytest --instafail -v --durations 200
-#python test/test_libs.py
+#python test/libs
 coverage combine -q
 coverage xml -i

@@ -158,6 +158,10 @@ class WeightStrategy:
         elif self.extract_as == "state_dict":  # state_dict
             # Extract as state_dict
             if isinstance(source, nn.Module):
+                if hasattr(source, "merge_and_unload"):
+                    # LoRA model: merge weights to get clean parameter names
+                    # that match vLLM's expected format
+                    return source.merge_and_unload().state_dict()
                 return source.state_dict()
             elif isinstance(source, dict):
                 return source

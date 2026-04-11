@@ -273,6 +273,7 @@ Available Transforms
     Hash
     InitTracker
     LineariseRewards
+    MeanActionSelector
     ModuleTransform
     MultiAction
     NoopResetEnv
