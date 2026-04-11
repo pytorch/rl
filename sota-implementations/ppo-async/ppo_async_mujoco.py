@@ -85,18 +85,75 @@ class _WorkerGAEPostproc:
         return data_flat
 
 
-def _make_eval_env(env_name, device, from_pixels, num_eval_envs, backend="gymnasium"):
-    """Env factory for the process-based Evaluator.
+def _make_eval_env(
+    env_name, device, from_pixels, num_eval_envs, backend="gymnasium", logger=None
+):
+    """Env factory for the Evaluator.
 
-    When backend is mujoco_torch, creates a compiled GPU-batched env.
+    When backend is mujoco_torch, creates a compiled GPU-batched env with
+    optional VideoRecorder (renders only env 0 via headless ray-cast).
     Otherwise uses ParallelEnv + Gymnasium.
     """
     if backend == "mujoco_torch":
         from utils_mujoco import make_env_gpu
 
-        return make_env_gpu(
+        env = make_env_gpu(
             env_name, device=device, num_envs=num_eval_envs, compile=True
         )
+        if from_pixels and logger is not None:
+            from torchrl.envs.transforms import Transform
+            from torchrl.record import VideoRecorder
+
+            class _RenderFirstEnv(Transform):
+                """Render only env 0 and store as pixels (avoids 4096× render)."""
+
+                def __init__(self, width=256, height=256):
+                    super().__init__(
+                        in_keys=[],
+                        out_keys=["pixels"],
+                    )
+                    self._width = width
+                    self._height = height
+
+                def _call(self, tensordict):
+                    return tensordict
+
+                def forward(self, tensordict):
+                    return tensordict
+
+                def _step(self, tensordict, next_tensordict):
+                    base = self.parent
+                    while hasattr(base, "base_env"):
+                        base = base.base_env
+                    pixels = base.render(width=self._width, height=self._height)
+                    next_tensordict.set(
+                        "pixels",
+                        torch.as_tensor(pixels, device="cpu"),
+                    )
+                    return next_tensordict
+
+                def _reset(self, tensordict, tensordict_reset):
+                    base = self.parent
+                    while hasattr(base, "base_env"):
+                        base = base.base_env
+                    pixels = base.render(width=self._width, height=self._height)
+                    tensordict_reset.set(
+                        "pixels",
+                        torch.as_tensor(pixels, device="cpu"),
+                    )
+                    return tensordict_reset
+
+            env.append_transform(_RenderFirstEnv(width=256, height=256))
+            env.append_transform(
+                VideoRecorder(
+                    logger=logger,
+                    tag="eval/video",
+                    in_keys=["pixels"],
+                    make_grid=False,
+                    skip=2,
+                )
+            )
+        return env
     else:
         from torchrl.envs import ParallelEnv
         from utils_mujoco import _MUJOCO_TORCH_TO_GYM, make_env
@@ -251,13 +308,17 @@ def main(cfg: DictConfig):  # noqa: F821
     else:
         logger_video = False
 
-    # ── Async evaluator (separate process — no GIL contention) ─────────
+    # ── Async evaluator ──────────────────────────────────────────────────
+    # Thread backend for mujoco_torch (GPU work releases GIL, and thread
+    # backend supports VideoRecorder dump_video). Process backend for
+    # gymnasium (CPU-bound, avoids GIL contention).
     from functools import partial
 
     from torchrl.collectors import Evaluator
 
     num_eval_envs = cfg.logger.get("num_eval_envs", 4096)
     env_backend = cfg.env.get("backend", "gymnasium")
+    eval_backend = "thread" if env_backend == "mujoco_torch" else "process"
     evaluator = Evaluator(
         env=partial(
             _make_eval_env,
@@ -266,12 +327,13 @@ def main(cfg: DictConfig):  # noqa: F821
             logger_video,
             num_eval_envs,
             env_backend,
+            logger if logger_video else None,
         ),
         policy_factory=partial(_make_eval_policy, cfg.env.env_name, eval_device),
         max_steps=10_000,
         logger=logger,
         log_prefix="eval",
-        backend="process",
+        backend=eval_backend,
     )
 
     # ── Config extraction ───────────────────────────────────────────────
