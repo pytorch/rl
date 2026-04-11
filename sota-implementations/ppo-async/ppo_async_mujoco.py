@@ -86,13 +86,18 @@ class _WorkerGAEPostproc:
 
 
 def _make_eval_env(env_name, device, from_pixels, num_eval_envs):
-    """Env factory for the process-based Evaluator (batched ParallelEnv)."""
-    from torchrl.envs import ParallelEnv
-    from utils_mujoco import make_env
+    """Env factory for the process-based Evaluator (batched ParallelEnv).
 
+    Always uses Gymnasium envs via ParallelEnv for eval (simpler, correct
+    break_when_all_done handling). Maps mujoco-torch names to Gymnasium names.
+    """
+    from torchrl.envs import ParallelEnv
+    from utils_mujoco import _MUJOCO_TORCH_TO_GYM, make_env
+
+    gym_name = _MUJOCO_TORCH_TO_GYM.get(env_name, env_name)
     return ParallelEnv(
         num_eval_envs,
-        lambda: make_env(env_name, device=device, from_pixels=from_pixels),
+        lambda: make_env(gym_name, device=device, from_pixels=from_pixels),
     )
 
 
@@ -350,6 +355,7 @@ def _train_start(
     total_network_updates,
 ):
     import time
+    from functools import partial as _partial
 
     import tqdm
     from torchrl.collectors import MultiaSyncDataCollector
@@ -370,8 +376,21 @@ def _train_start(
         collector_policy = actor
         postproc = _LearnerPostproc(version_counter)
 
+    # Build env factories: GPU batched env or CPU Gymnasium envs
+    env_backend = cfg.env.get("backend", "gymnasium")
+    if env_backend == "mujoco_torch":
+        from utils_mujoco import make_env_gpu
+
+        num_envs = cfg.env.get("num_envs", 4096)
+        env_compile = cfg.env.get("compile", True)
+        create_env_fn = [
+            _partial(make_env_gpu, cfg.env.env_name, device, num_envs, env_compile)
+        ]
+    else:
+        create_env_fn = [make_env(cfg.env.env_name, device)] * cfg.collector.num_workers
+
     collector = MultiaSyncDataCollector(
-        create_env_fn=[make_env(cfg.env.env_name, device)] * cfg.collector.num_workers,
+        create_env_fn=create_env_fn,
         policy=collector_policy,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=total_frames,
@@ -547,6 +566,7 @@ def _train_iterate(
     total_network_updates,
 ):
     import time
+    from functools import partial as _partial
 
     import tqdm
     from torchrl.collectors import MultiaSyncDataCollector
@@ -557,8 +577,21 @@ def _train_iterate(
     # batched in the postproc for GAE.
     collector_policy = _ActorWithCritic(actor, critic)
 
+    # Build env factories: GPU batched env or CPU Gymnasium envs
+    env_backend = cfg.env.get("backend", "gymnasium")
+    if env_backend == "mujoco_torch":
+        from utils_mujoco import make_env_gpu
+
+        num_envs = cfg.env.get("num_envs", 4096)
+        env_compile = cfg.env.get("compile", True)
+        create_env_fn = [
+            _partial(make_env_gpu, cfg.env.env_name, device, num_envs, env_compile)
+        ]
+    else:
+        create_env_fn = [make_env(cfg.env.env_name, device)] * cfg.collector.num_workers
+
     collector = MultiaSyncDataCollector(
-        create_env_fn=[make_env(cfg.env.env_name, device)] * cfg.collector.num_workers,
+        create_env_fn=create_env_fn,
         policy=collector_policy,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=total_frames,

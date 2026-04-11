@@ -1,21 +1,24 @@
 # task and env
 env:
-  env_name: HalfCheetah-v4
+  env_name: halfcheetah
+  backend: mujoco_torch  # mujoco_torch | gymnasium
+  num_envs: 4096          # batch size for mujoco_torch (ignored for gymnasium)
+  compile: true            # torch.compile for env stepping (mujoco_torch only)
 
 # collector
 collector:
-  frames_per_batch: 2048
-  total_frames: 1_000_000
-  num_workers: 4
+  frames_per_batch: 65536  # 4096 envs x 16 steps (for GAE trajectory segments)
+  total_frames: 50_000_000
+  num_workers: 1           # 1 worker with batched GPU env (increase for gymnasium)
   async_mode: start  # iterate | start
   # iterate: semi-async, training gated on collector batches (for data in collector)
   # start: fully async, collector.start() fills buffer independently
 
 # buffer
 buffer:
-  size: 20_000
-  max_staleness: 10
-  min_fill: 2048
+  size: 500_000
+  max_staleness: 20
+  min_fill: 65536
   sampler: staleness  # staleness | staleness_no_gate | random | no_replacement
 
 # logger
@@ -23,8 +26,8 @@ logger:
   backend: wandb
   project_name: torchrl_example_ppo_async
   group_name: null
-  exp_name: Mujoco_Async
-  test_interval: 50_000
+  exp_name: Mujoco_Async_GPU
+  test_interval: 500_000
   num_test_episodes: 5
   num_eval_envs: 16
   video: False
@@ -42,8 +45,8 @@ optim:
 # loss
 loss:
   gamma: 0.99
-  mini_batch_size: 64
-  ppo_epochs: 4
+  mini_batch_size: 4096
+  ppo_epochs: 10
   gae_lambda: 0.95
   clip_epsilon: 0.2
   anneal_clip_epsilon: False

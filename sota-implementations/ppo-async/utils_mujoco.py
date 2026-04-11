@@ -27,6 +27,15 @@ from torchrl.envs.libs.gym import GymEnv
 from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 from torchrl.record import VideoRecorder
 
+# Mapping from mujoco-torch env names to Gymnasium env names
+_MUJOCO_TORCH_TO_GYM = {
+    "halfcheetah": "HalfCheetah-v4",
+    "ant": "Ant-v4",
+    "humanoid": "Humanoid-v4",
+    "hopper": "Hopper-v4",
+    "walker2d": "Walker2d-v4",
+}
+
 
 def make_env(env_name="HalfCheetah-v4", device="cpu", from_pixels: bool = False):
     env = GymEnv(env_name, device=device, from_pixels=from_pixels, pixels_only=False)
@@ -36,6 +45,30 @@ def make_env(env_name="HalfCheetah-v4", device="cpu", from_pixels: bool = False)
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
     env.append_transform(DoubleToFloat(in_keys=["observation"]))
+    return env
+
+
+def make_env_gpu(env_name="halfcheetah", device="cuda:0", num_envs=4096, compile=True):
+    """Create a GPU-accelerated batched MuJoCo env using mujoco-torch.
+
+    Returns a single env with batch_size=[num_envs], where all envs run
+    in parallel on GPU via torch.vmap.
+    """
+    from mujoco_torch.zoo import ENVS
+
+    compile_kwargs = {"mode": "reduce-overhead"} if compile else None
+    env = ENVS[env_name](
+        num_envs=num_envs,
+        device=device,
+        dtype=torch.float32,
+        compile_step=compile,
+        compile_kwargs=compile_kwargs,
+    )
+    env = TransformedEnv(env)
+    env.append_transform(VecNorm(in_keys=["observation"], decay=0.99999, eps=1e-2))
+    env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
+    env.append_transform(RewardSum())
+    env.append_transform(StepCounter())
     return env
 
 
@@ -98,8 +131,11 @@ def make_ppo_models_state(proof_environment, device):
     return policy_module, value_module
 
 
-def make_ppo_models(env_name, device):
-    proof_environment = make_env(env_name, device=device)
+def make_ppo_models(env_name, device, proof_environment=None):
+    if proof_environment is None:
+        # Map mujoco-torch names to Gymnasium names for proof env construction
+        gym_name = _MUJOCO_TORCH_TO_GYM.get(env_name, env_name)
+        proof_environment = make_env(gym_name, device="cpu")
     actor, critic = make_ppo_models_state(proof_environment, device=device)
     return actor, critic
 
