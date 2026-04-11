@@ -9,6 +9,7 @@ from torchrl.objectives.cql import CQLLoss, DiscreteCQLLoss
 from torchrl.objectives.crossq import CrossQLoss
 from torchrl.objectives.ddpg import DDPGLoss
 from torchrl.objectives.decision_transformer import DTLoss, OnlineDTLoss
+from torchrl.objectives.diffusion_bc import DiffusionBCLoss
 from torchrl.objectives.dqn import DistributionalDQNLoss, DQNLoss
 from torchrl.objectives.dreamer import (
     DreamerActorLoss,
@@ -18,6 +19,7 @@ from torchrl.objectives.dreamer import (
 from torchrl.objectives.gail import GAILLoss
 from torchrl.objectives.iql import DiscreteIQLLoss, IQLLoss
 from torchrl.objectives.multiagent import QMixerLoss
+from torchrl.objectives.pilco import ExponentialQuadraticCost
 from torchrl.objectives.ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
 from torchrl.objectives.redq import REDQLoss
 from torchrl.objectives.reinforce import ReinforceLoss
@@ -40,6 +42,7 @@ from torchrl.objectives.utils import (
 __all__ = [
     "A2CLoss",
     "CQLLoss",
+    "DiffusionBCLoss",
     "ClipPPOLoss",
     "CrossQLoss",
     "DDPGLoss",
@@ -52,6 +55,7 @@ __all__ = [
     "DreamerActorLoss",
     "DreamerModelLoss",
     "DreamerValueLoss",
+    "ExponentialQuadraticCost",
     "GAILLoss",
     "HardUpdate",
     "IQLLoss",

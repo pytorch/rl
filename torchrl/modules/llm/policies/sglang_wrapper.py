@@ -455,6 +455,11 @@ class SGLangWrapper(LLMWrapperBase):
             text_prompts = self.tokenizer.batch_decode(
                 tokens_list, skip_special_tokens=False
             )
+            # Convert tokens_list to tensors for output processing
+            tokens_prompt = [
+                t if isinstance(t, torch.Tensor) else torch.tensor(t, dtype=torch.long)
+                for t in tokens_list
+            ]
         else:
             # Fall back to tokenizing from history (original behavior)
             # Apply chat template to get text prompts
@@ -476,9 +481,18 @@ class SGLangWrapper(LLMWrapperBase):
                 return_logprobs=self.return_log_probs,
             )
 
+            # Tokenize prompts for output token processing
+            tokens_prompt = [
+                torch.tensor(
+                    self.tokenizer.encode(tp, add_special_tokens=False),
+                    dtype=torch.long,
+                )
+                for tp in text_prompts
+            ]
+
         # Process results
         return self._process_generation_results(
-            results, text_prompts, out, history=history
+            results, text_prompts, out, history=history, tokens_prompt=tokens_prompt
         )
 
     def _generate_from_text(
@@ -582,12 +596,12 @@ class SGLangWrapper(LLMWrapperBase):
                 logprobs = meta_info["logprobs"]
 
             if logprobs is not None:
-                # SGLang returns list of (token_id, logprob) tuples or just logprobs
+                # SGLang returns list of (logprob, token_id, token_text) tuples or just logprobs
                 if isinstance(logprobs, list) and logprobs:
                     if isinstance(logprobs[0], (list, tuple)):
-                        # Format: [(token_id, logprob), ...] - extract just logprobs
+                        # Format: [(logprob, token_id, token_text), ...] - extract just logprobs (index 0)
                         logprobs = [
-                            lp[1] if isinstance(lp, (list, tuple)) else lp
+                            lp[0] if isinstance(lp, (list, tuple)) else lp
                             for lp in logprobs
                         ]
                 log_probs_list.append(torch.tensor(logprobs, dtype=torch.float32))
@@ -686,6 +700,23 @@ class SGLangWrapper(LLMWrapperBase):
         if self.return_log_probs and any(lp is not None for lp in log_probs_list):
             log_probs_obj = LogProbs._from_tensordict(out.empty())
             log_probs_obj.response = log_probs_list
+            # Build full log probs (zeros for prompt + response log probs)
+            # This is needed for GRPO loss importance sampling
+            if tokens_prompt is not None:
+                full_log_probs = []
+                for i, lp in enumerate(log_probs_list):
+                    if lp is not None:
+                        prompt_len = (
+                            len(tokens_prompt[i])
+                            if isinstance(tokens_prompt[i], (list, torch.Tensor))
+                            else 0
+                        )
+                        prompt_zeros = torch.zeros(prompt_len, dtype=lp.dtype)
+                        full_log_probs.append(torch.cat([prompt_zeros, lp]))
+                    else:
+                        full_log_probs.append(None)
+                if any(lp is not None for lp in full_log_probs):
+                    log_probs_obj.full = full_log_probs
             log_probs_obj.padded = MetaData(self.pad_output)
             out.set(self.log_probs_key, log_probs_obj)
 
@@ -701,18 +732,22 @@ class SGLangWrapper(LLMWrapperBase):
             # simple assistant History objects instead of trying to parse
             response_histories = []
             for resp_text in response_texts:
-                # Create a History object with a single assistant message
+                # Create an unbatched History object with a single assistant message
                 resp_history = History(
-                    role=["assistant"],
-                    content=[resp_text],
+                    role="assistant",
+                    content=resp_text,
                 )
                 response_histories.append(resp_history)
 
-            chat_history.response = lazy_stack(response_histories)
-            # Note: We don't compute full history here because extending History objects
-            # with different batch structures is complex. Users can construct full
-            # history by combining prompt and response if needed.
-            chat_history.full = None
+            h_responses = lazy_stack(response_histories)
+            chat_history.response = h_responses
+            # Build full history by appending each response to each prompt individually
+            full_histories = []
+            for prompt_hist, resp_hist in zip(history.unbind(0), response_histories):
+                full_histories.append(
+                    prompt_hist.append(resp_hist, inplace=False, dim=-1)
+                )
+            chat_history.full = lazy_stack(full_histories)
             out.set(self.history_key, chat_history)
 
         return out

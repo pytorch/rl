@@ -74,7 +74,7 @@
   - changed-files:
     - any-glob-to-any-file:
       - 'torchrl/envs/libs/**'
-      - 'test/test_libs.py'
+      - 'test/libs/**'
 
 # =============================================================================
 # Data Sub-Labels (trigger specific tests in test-linux-libs.yml)
@@ -132,7 +132,7 @@
   - changed-files:
     - any-glob-to-any-file:
       - 'torchrl/objectives/**'
-      - 'test/test_objectives.py'
+      - 'test/objectives/**'
 
 "Modules":
   - changed-files:
@@ -146,7 +146,7 @@
   - changed-files:
     - any-glob-to-any-file:
       - 'torchrl/envs/transforms/**'
-      - 'test/test_transforms.py'
+      - 'test/transforms/**'
 
 "Trainers":
   - changed-files:

@@ -840,6 +840,60 @@ print("steps are successive", sample["steps"])
 gc.collect()
 
 ######################################################################
+# Storing trajectories from a collector
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# The example above uses hand-crafted data.  In practice you will be
+# collecting data with a :class:`~torchrl.collectors.Collector` (or its
+# multi-process variants).  The collector already tags every transition with
+# a ``("collector", "traj_ids")`` key, so the
+# :class:`~torchrl.data.SliceSampler` can reconstruct episode boundaries
+# automatically.
+#
+# For **single-process** collectors the setup is straightforward — just
+# ``extend`` the buffer with the collected batch and use ``traj_ids`` as
+# the trajectory key:
+#
+# .. code-block:: python
+#
+#     from torchrl.collectors import Collector
+#     from torchrl.data import ReplayBuffer, LazyTensorStorage, SliceSampler
+#
+#     rb = ReplayBuffer(
+#         storage=LazyTensorStorage(100_000),
+#         sampler=SliceSampler(
+#             slice_len=20,
+#             traj_key=("collector", "traj_ids"),
+#         ),
+#         batch_size=256,
+#     )
+#     collector = Collector(env, policy, frames_per_batch=200, total_frames=-1)
+#     for data in collector:
+#         rb.extend(data)
+#         batch = rb.sample()  # contiguous sub-sequences
+#
+# For **multi-process** collectors, a subtlety arises: different workers
+# write their batches independently, so adjacent frames in the buffer can
+# come from unrelated episodes *without* an intervening ``done`` signal.
+# The sampler cannot detect these invisible boundaries and may draw slices
+# that cross episodes.
+#
+# The recommended solution is ``trajs_per_batch``, which makes each worker
+# write only **complete trajectories** to the buffer — see
+# :ref:`the dedicated collector + replay buffer section <collectors_replay_trajs>`
+# for full examples and discussion.
+#
+# .. important::
+#
+#     When using ``trajs_per_batch``, always use a **flat 1-D storage**
+#     (the default ``ndim=1``).  Although batched environments normally call
+#     for ``ndim=2``, ``trajs_per_batch`` disassembles batches and writes
+#     each trajectory as a variable-length 1-D sequence.  A storage with
+#     ``ndim >= 2`` expects a fixed second dimension that variable-length
+#     trajectories cannot fill.
+#
+
+######################################################################
 # Conclusion
 # ----------
 #

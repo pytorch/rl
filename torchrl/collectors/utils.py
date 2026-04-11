@@ -406,6 +406,67 @@ def _map_weight(
     return weight
 
 
+def _traj_chunk_ends_done(chunk: TensorDictBase) -> bool:
+    """Return ``True`` if the last step of *chunk* carries a done/terminated signal."""
+    for key in (("next", "done"), ("next", "terminated")):
+        signal = chunk.get(key, None)
+        if signal is not None and signal[-1].any().item():
+            return True
+    return False
+
+
+def _traj_ingest(
+    batch: TensorDictBase,
+    partial_trajs: dict,
+    complete_trajs: list,
+) -> None:
+    """Route steps from *batch* into per-trajectory buffers.
+
+    Completed trajectories are moved from *partial_trajs* into *complete_trajs*.
+    """
+    flat = batch.reshape(-1)
+    traj_ids = flat.get(("collector", "traj_ids"), None)
+    if traj_ids is None:
+        raise KeyError(
+            "trajs_per_batch requires ('collector', 'traj_ids') in every "
+            "collector batch.  Make sure the collector is initialized with "
+            "split_trajs=False (the default)."
+        )
+
+    unique_ids = traj_ids.unique()
+    for tid_tensor in unique_ids:
+        tid = tid_tensor.item()
+        chunk = flat[traj_ids == tid_tensor]
+
+        if tid in partial_trajs:
+            partial_trajs[tid].append(chunk)
+        else:
+            partial_trajs[tid] = [chunk]
+
+        if _traj_chunk_ends_done(chunk):
+            chunks = partial_trajs.pop(tid)
+            complete = torch.cat(chunks, dim=0) if len(chunks) > 1 else chunks[0]
+            complete_trajs.append(complete)
+
+
+def _traj_emit(complete_trajs: list, num_trajectories: int) -> TensorDictBase:
+    """Dequeue *num_trajectories* complete trajectories as a zero-padded batch."""
+    trajs = complete_trajs[:num_trajectories]
+    del complete_trajs[:num_trajectories]
+
+    max_len = max(t.shape[0] for t in trajs)
+    padded = []
+    for traj in trajs:
+        traj = traj.copy()
+        traj.set(
+            ("collector", "mask"),
+            torch.ones(traj.shape[0], dtype=torch.bool, device=traj.device),
+        )
+        padded.append(pad(traj, [0, max_len - traj.shape[0]]))
+
+    return torch.stack(padded, 0)
+
+
 def _make_policy_factory(
     *, policy: Callable, policy_factory, weight_sync_scheme, worker_idx, pipe=None
 ):
