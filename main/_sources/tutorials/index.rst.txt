@@ -121,6 +121,23 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
 
 .. only:: html
 
+  .. image:: /tutorials/images/thumb/sphx_glr_collector_trajectory_assembly_thumb.png
+    :alt:
+
+  :doc:`/tutorials/collector_trajectory_assembly`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Collectors Deep Dive: Trajectory Assembly</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
+
+.. only:: html
+
   .. image:: /tutorials/images/thumb/sphx_glr_getting-started-1_thumb.png
     :alt:
 
@@ -369,6 +386,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
    /tutorials/getting-started-3
    /tutorials/pretrained_models
    /tutorials/getting-started-5
+   /tutorials/collector_trajectory_assembly
    /tutorials/getting-started-1
    /tutorials/multi_task
    /tutorials/dqn_with_rnn

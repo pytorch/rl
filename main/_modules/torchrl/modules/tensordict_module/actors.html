@@ -151,6 +151,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/collector_trajectory_assembly.html">Collectors Deep Dive: Trajectory Assembly</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
 </ul>
@@ -2880,7 +2881,7 @@
 <span class="sd">            Tuple of ``(noisy_action, noise)`` both of shape</span>
 <span class="sd">            ``(..., action_dim)``.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">alpha_bar_t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">alphas_cumprod</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>  <span class="c1"># (...)</span>
+        <span class="n">alpha_bar_t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">alphas_cumprod</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">clean_action</span><span class="o">.</span><span class="n">device</span><span class="p">)[</span><span class="n">t</span><span class="p">]</span>  <span class="c1"># (...)</span>
         <span class="c1"># Broadcast scalar/batch alpha_bar_t to match action dimensions</span>
         <span class="k">while</span> <span class="n">alpha_bar_t</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">clean_action</span><span class="o">.</span><span class="n">dim</span><span class="p">():</span>
             <span class="n">alpha_bar_t</span> <span class="o">=</span> <span class="n">alpha_bar_t</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
@@ -2907,6 +2908,11 @@
         <span class="n">device</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">device</span>
         <span class="n">deterministic</span> <span class="o">=</span> <span class="n">interaction_type</span><span class="p">()</span> <span class="o">==</span> <span class="n">InteractionType</span><span class="o">.</span><span class="n">DETERMINISTIC</span>
 
+        <span class="c1"># Move schedule buffers to the observation device</span>
+        <span class="n">betas</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">betas</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">alphas</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">alphas</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">alphas_cumprod</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">alphas_cumprod</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+
         <span class="c1"># Start from pure Gaussian noise</span>
         <span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="o">*</span><span class="n">batch_shape</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_dim</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
 
@@ -2917,9 +2923,9 @@
             <span class="n">model_input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">x</span><span class="p">,</span> <span class="n">observation</span><span class="p">,</span> <span class="n">t_tensor</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
             <span class="n">predicted_noise</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">score_network</span><span class="p">(</span><span class="n">model_input</span><span class="p">)</span>
 
-            <span class="n">beta_t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">betas</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
-            <span class="n">alpha_t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">alphas</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
-            <span class="n">alpha_bar_t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">alphas_cumprod</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
+            <span class="n">beta_t</span> <span class="o">=</span> <span class="n">betas</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
+            <span class="n">alpha_t</span> <span class="o">=</span> <span class="n">alphas</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
+            <span class="n">alpha_bar_t</span> <span class="o">=</span> <span class="n">alphas_cumprod</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
 
             <span class="c1"># DDPM reverse step</span>
             <span class="n">x</span> <span class="o">=</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">alpha_t</span><span class="o">.</span><span class="n">sqrt</span><span class="p">())</span> <span class="o">*</span> <span class="p">(</span>

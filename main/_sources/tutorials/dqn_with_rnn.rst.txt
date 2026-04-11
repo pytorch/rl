@@ -718,7 +718,7 @@ this work.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 376-396
+.. GENERATED FROM PYTHON SOURCE LINES 376-402
 
 Collector and replay buffer
 ---------------------------
@@ -736,12 +736,18 @@ We'll use a :class:`~torchrl.data.replay_buffers.LazyMemmapStorage` storage to k
 on disk, and pass the replay buffer directly to the data collector so it can
 automatically populate the buffer as data is collected.
 
+.. seealso::
+  The :ref:`collector trajectory assembly tutorial <collector_trajectory_assembly>`
+  explains how ``split_trajectories``, ``trajs_per_batch``, and
+  ``SliceSampler`` work together in detail, including asynchronous
+  collection with :meth:`~torchrl.collectors.Collector.start`.
+
 .. note::
   For the sake of efficiency, we're only running a few thousands iterations
   here. In a real setting, the total number of frames should be set to 1M.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 396-417
+.. GENERATED FROM PYTHON SOURCE LINES 402-423
 
 .. code-block:: Python
 
@@ -773,7 +779,7 @@ automatically populate the buffer as data is collected.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 418-427
+.. GENERATED FROM PYTHON SOURCE LINES 424-433
 
 Training loop
 -------------
@@ -785,7 +791,7 @@ To keep track of the progress, we will run the policy in the environment once
 every 50 data collection iterations, and plot the results after training.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 427-464
+.. GENERATED FROM PYTHON SOURCE LINES 433-470
 
 .. code-block:: Python
 
@@ -834,16 +840,16 @@ every 50 data collection iterations, and plot the results after training.
 
  .. code-block:: none
 
-      0%|          | 0/200 [00:00<?, ?it/s]     25%|██▌       | 50/200 [00:00<00:01, 125.20it/s]     50%|█████     | 100/200 [00:00<00:00, 127.98it/s]     75%|███████▌  | 150/200 [00:01<00:00, 129.31it/s]    100%|██████████| 200/200 [00:01<00:00, 129.82it/s]
+      0%|          | 0/200 [00:00<?, ?it/s]     25%|██▌       | 50/200 [00:00<00:01, 125.44it/s]     50%|█████     | 100/200 [00:00<00:00, 127.41it/s]     75%|███████▌  | 150/200 [00:01<00:00, 128.17it/s]    100%|██████████| 200/200 [00:01<00:00, 129.96it/s]
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 465-467
+.. GENERATED FROM PYTHON SOURCE LINES 471-473
 
 Let's plot our results:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 467-474
+.. GENERATED FROM PYTHON SOURCE LINES 473-480
 
 .. code-block:: Python
 
@@ -861,7 +867,7 @@ Let's plot our results:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 475-493
+.. GENERATED FROM PYTHON SOURCE LINES 481-499
 
 Conclusion
 ----------
@@ -885,7 +891,7 @@ Further Reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.701 seconds)
+   **Total running time of the script:** (0 minutes 5.638 seconds)
 
 
 .. _sphx_glr_download_tutorials_dqn_with_rnn.py:

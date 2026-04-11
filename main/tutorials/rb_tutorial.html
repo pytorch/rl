@@ -40,7 +40,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Exporting TorchRL modules" href="export.html" />
-    <link rel="prev" title="Recurrent DQN: Training recurrent policies" href="dqn_with_rnn.html" /> 
+    <link rel="prev" title="Collectors Deep Dive: Trajectory Assembly" href="collector_trajectory_assembly.html" /> 
 
   
   <script src="../_static/js/modernizr.min.js"></script>
@@ -154,6 +154,7 @@
 <li class="toctree-l1"><a class="reference internal" href="torchrl_envs.html">TorchRL envs</a></li>
 <li class="toctree-l1"><a class="reference internal" href="pretrained_models.html">Using pretrained models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="collector_trajectory_assembly.html">Collectors Deep Dive: Trajectory Assembly</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Using Replay Buffers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="export.html">Exporting TorchRL modules</a></li>
 </ul>
@@ -472,8 +473,8 @@ We can also customize the storage location on disk:</p>
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>The buffer has 3 elements
-the &#39;a&#39; tensor is stored in /tmp/tmp521juvzn/a.memmap
-the (&#39;b&#39;, &#39;c&#39;) tensor is stored in /tmp/tmp521juvzn/b/c.memmap
+the &#39;a&#39; tensor is stored in /tmp/tmp09_o0z9r/a.memmap
+the (&#39;b&#39;, &#39;c&#39;) tensor is stored in /tmp/tmp09_o0z9r/b/c.memmap
 samples: a= tensor([[ 0,  1,  2,  3],
         [ 8,  9, 10, 11],
         [ 0,  1,  2,  3],
@@ -1305,7 +1306,7 @@ which are based on our Replay Buffer API;</p></li>
 such as <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictMaxValueWriter</span></code>.</p></li>
 <li><p>Check how to checkpoint ReplayBuffers in <a class="reference internal" href="../reference/data_storage.html#checkpoint-rb"><span class="std std-ref">the doc</span></a>.</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.813 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.801 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-rb-tutorial-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/c64b1e484ba3e0219549719cc3c37479/rb_tutorial.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">rb_tutorial.ipynb</span></code></a></p>
@@ -1332,7 +1333,7 @@ such as <code class="xref py py-class docutils literal notranslate"><span class=
         <a href="export.html" class="btn btn-neutral float-right" title="Exporting TorchRL modules" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="dqn_with_rnn.html" class="btn btn-neutral" title="Recurrent DQN: Training recurrent policies" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="collector_trajectory_assembly.html" class="btn btn-neutral" title="Collectors Deep Dive: Trajectory Assembly" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
