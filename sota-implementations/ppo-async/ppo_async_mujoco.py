@@ -409,6 +409,7 @@ def _train_start(
     num_network_updates = 0
     pbar = tqdm.tqdm(total=total_frames)
     start_time = time.time()
+    train_start_time = None  # set when first data arrives (after compile)
     last_write_count = 0
     last_test_frames = 0
     last_trained_wc = 0  # gate training on new data arriving
@@ -417,6 +418,8 @@ def _train_start(
         # Track collection progress
         current_wc = data_buffer.write_count
         if current_wc > last_write_count:
+            if train_start_time is None:
+                train_start_time = time.time()
             pbar.update(current_wc - last_write_count)
             last_write_count = current_wc
         if current_wc >= total_frames:
@@ -509,6 +512,10 @@ def _train_start(
                 "buffer/size": len(data_buffer),
                 "buffer/write_count": current_wc,
                 "collector/collected_frames": current_wc,
+                "time/train_time": time.time() - train_start_time
+                if train_start_time is not None
+                else 0.0,
+                "time/wall_time": time.time() - start_time,
             }
         )
 
@@ -530,8 +537,9 @@ def _train_start(
     collector.shutdown()
 
     elapsed = time.time() - start_time
+    train_elapsed = time.time() - train_start_time if train_start_time else 0
     print(  # noqa: T001
-        f"Training took {elapsed:.2f} seconds (mode=start, advantage_on={advantage_on})"
+        f"Training took {train_elapsed:.2f}s ({elapsed:.2f}s wall, mode=start, advantage_on={advantage_on})"
     )
 
 
@@ -607,8 +615,11 @@ def _train_iterate(
     num_network_updates = 0
     pbar = tqdm.tqdm(total=total_frames)
     start_time = time.time()
+    train_start_time = None  # set when first data arrives (after compile)
 
     for i, data in enumerate(collector):
+        if train_start_time is None:
+            train_start_time = time.time()
 
         metrics_to_log = {}
         frames_in_batch = data.numel()
@@ -700,6 +711,10 @@ def _train_iterate(
                 else 0,
                 "buffer/size": len(data_buffer),
                 "collector/collected_frames": collected_frames,
+                "time/train_time": time.time() - train_start_time
+                if train_start_time is not None
+                else 0.0,
+                "time/wall_time": time.time() - start_time,
             }
         )
 
@@ -719,8 +734,11 @@ def _train_iterate(
     pbar.close()
     collector.shutdown()
 
+    train_elapsed = time.time() - train_start_time if train_start_time else 0
     elapsed = time.time() - start_time
-    print(f"Training took {elapsed:.2f} seconds (mode=iterate)")  # noqa: T001
+    print(  # noqa: T001
+        f"Training took {train_elapsed:.2f}s ({elapsed:.2f}s wall, mode=iterate)"
+    )
 
 
 if __name__ == "__main__":
