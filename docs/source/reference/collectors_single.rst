@@ -20,6 +20,48 @@ Single node data collectors
     MultiSyncCollector
     MultiAsyncCollector
 
+.. _collectors_single_traj:
+
+Trajectory batching
+-------------------
+
+Pass ``trajs_per_batch=N`` to any collector to receive batches of exactly *N*
+complete, zero-padded trajectories instead of fixed-frame batches.
+Trajectories that span multiple internal collection steps are automatically
+reassembled. Each yielded :class:`~tensordict.TensorDict` has shape
+``(N, max_traj_len)`` and includes a ``("collector", "mask")`` boolean tensor
+marking valid time steps.
+
+``frames_per_batch`` still controls how frequently the environment is polled
+internally; it does **not** determine the output batch size when
+``trajs_per_batch`` is set.
+
+.. code-block:: python
+
+    from torchrl.collectors import Collector
+    from torchrl.envs import GymEnv
+
+    collector = Collector(
+        GymEnv("CartPole-v1"),
+        policy=my_policy,
+        frames_per_batch=200,  # controls internal polling frequency
+        total_frames=10000,
+        trajs_per_batch=4,
+    )
+
+    for batch in collector:
+        # batch.shape == (4, max_traj_len)
+        valid = batch[("collector", "mask")]  # (4, max_traj_len) bool
+        loss = compute_loss(batch, valid)
+        collector.update_policy_weights_()
+
+**Replay buffer integration**: when a ``replay_buffer`` is also provided,
+complete trajectories are written to the buffer as **flat 1-D sequences** (no
+padding) instead of being yielded.  This is the recommended pattern for
+off-policy training with :class:`~torchrl.data.SliceSampler`, especially
+with multi-process collectors where fixed-frame batches can silently mix
+episodes.  See :ref:`collectors_replay_trajs` for full details and examples.
+
 .. note::
     The following legacy names are also available for backward compatibility:
 
@@ -150,6 +192,39 @@ which truly decouples the data collection and training.
 
 Data collectors that have been started with `start()` should be shut down using
 :meth:`~torchrl.collectors.BaseCollector.async_shutdown`.
+
+.. tip::
+
+    For maximum throughput with trajectory-based training (e.g. recurrent
+    policies, decision transformers), combine ``start()`` with
+    ``trajs_per_batch`` and a :class:`~torchrl.data.SliceSampler`:
+
+    .. code-block:: python
+
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(100_000),
+            sampler=SliceSampler(slice_len=32, end_key=("next", "done")),
+            batch_size=256,
+            shared=True,
+        )
+        collector = MultiCollector(
+            [make_env] * 4,
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=200,
+            total_frames=-1,
+            trajs_per_batch=8,
+            sync=False,
+        )
+        collector.start()
+        for step in range(train_steps):
+            batch = rb.sample()  # clean trajectory slices
+            # ...
+        collector.async_shutdown()
+
+    Each worker writes only **complete trajectories** to the buffer, so the
+    sampler never draws slices that cross episode boundaries.  See
+    :ref:`collectors_replay_trajs` for a full discussion.
 
 .. warning:: Running a collector asynchronously decouples the collection from training, which means that the training
     performance may be drastically different depending on the hardware, load and other factors (although it is generally

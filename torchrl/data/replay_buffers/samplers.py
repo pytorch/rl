@@ -889,6 +889,24 @@ class SliceSampler(Sampler):
         attempt to find the ``traj_key`` entry in the storage. If it cannot be
         found, the ``end_key`` will be used to reconstruct the episodes.
 
+    .. note:: When using a multi-process collector
+        (:class:`~torchrl.collectors.MultiSyncCollector` or
+        :class:`~torchrl.collectors.MultiAsyncCollector`) with a shared replay
+        buffer, adjacent transitions in the buffer may come from different
+        workers and different episodes. A ``SliceSampler`` that relies on
+        ``end_key`` can then sample slices that straddle unrelated trajectories.
+
+        To avoid this, either:
+
+        - set ``trajs_per_batch`` on the collector so that only **complete**
+          trajectories (each ending with ``done=True``) are written to the
+          buffer (use ``ndim=1`` on the storage — ``ndim >= 2`` is
+          incompatible with the variable-length flat sequences that
+          ``trajs_per_batch`` produces), or
+        - set ``set_truncated=True`` on the collector so that every batch
+          boundary carries a ``done`` signal (note: this introduces artificial
+          truncations that value estimators must account for).
+
     .. note:: When using `strict_length=False`, it is recommended to use
         :func:`~torchrl.collectors.utils.split_trajectories` to split the sampled trajectories.
         However, if two samples from the same episode are placed next to each other,
@@ -1358,6 +1376,12 @@ class SliceSampler(Sampler):
                 return vals
             except KeyError:
                 if fallback:
+                    logger.info(
+                        "SliceSampler could not find traj_key %r in storage. "
+                        "Falling back to end_key %r to reconstruct trajectory boundaries.",
+                        self.traj_key,
+                        self.end_key,
+                    )
                     self._fetch_traj = False
                     return self._get_stop_and_length(storage, fallback=False)
                 raise
@@ -1370,8 +1394,15 @@ class SliceSampler(Sampler):
                     raise RuntimeError(
                         "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
                     )
+                done = done.squeeze()
+                if done.ndim > 1:
+                    # Multi-dimensional done signals arise when pre-assembled
+                    # trajectory data (trajs, max_len, ...) is stored in the
+                    # buffer.  Flatten to 1-D so that _find_start_stop_traj
+                    # can locate episode boundaries correctly.
+                    done = done.reshape(-1)
                 vals = self._find_start_stop_traj(
-                    end=done.squeeze()[: len(storage)],
+                    end=done[: len(storage)],
                     at_capacity=storage._is_full,
                     cursor=getattr(storage, "_last_cursor", None),
                 )
