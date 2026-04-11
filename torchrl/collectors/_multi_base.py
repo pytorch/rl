@@ -249,6 +249,27 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             a rollout is reached. If no ``"truncated"`` key is found, an exception is raised.
             Truncated keys can be set through ``env.add_truncated_keys``.
             Defaults to ``False``.
+        trajs_per_batch (int, optional): When set together with ``replay_buffer``,
+            trajectory assembly is delegated to each worker's inner
+            :class:`~torchrl.collectors.Collector`.  Each worker calls
+            :meth:`~torchrl.collectors.BaseCollector._iter_by_trajectories`
+            independently and writes **complete trajectories** (episodes whose
+            last step has ``("next", "done") == True``) to the shared replay
+            buffer as flat 1-D sequences — no padding, no accumulation.
+
+            When set *without* ``replay_buffer``, each worker assembles
+            trajectories and the multi-collector yields zero-padded batches
+            of shape ``(trajs_per_batch, max_traj_len)`` with a
+            ``("collector", "mask")`` boolean field.
+
+            Both the iteration pattern (``for data in collector``) and the
+            async ``start()`` pattern are supported.
+
+            Defaults to ``None`` (fixed-frame batches).
+
+            See :class:`~torchrl.collectors.BaseCollector` for the full
+            description of the completeness guarantee and replay-buffer
+            storage contract.
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
@@ -859,6 +880,30 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
     def _check_replay_buffer_init(self):
         if self.replay_buffer is None:
             return
+
+        # Warn when a SliceSampler is used without trajs_per_batch: workers
+        # write batches independently so adjacent frames in the buffer can
+        # come from different episodes without an intervening done signal.
+        from torchrl.data.replay_buffers.samplers import SliceSampler
+
+        if (
+            getattr(self, "trajs_per_batch", None) is None
+            and isinstance(getattr(self.replay_buffer, "_sampler", None), SliceSampler)
+            and not self.set_truncated
+        ):
+            warnings.warn(
+                "A SliceSampler is used with a multi-process collector but "
+                "trajs_per_batch is not set and set_truncated is False. "
+                "Adjacent frames in the replay buffer may come from different "
+                "workers and different episodes, causing SliceSampler to "
+                "sample slices that cross trajectory boundaries. "
+                "Consider setting trajs_per_batch to write only complete "
+                "trajectories, or set_truncated=True to mark batch "
+                "boundaries (note: this introduces artificial truncations).",
+                category=UserWarning,
+                stacklevel=2,
+            )
+
         if getattr(self, "trajs_per_batch", None) is not None:
             # Trajectory assembly will happen at the worker level: each worker's
             # inner Collector uses _iter_by_trajectories() to assemble complete

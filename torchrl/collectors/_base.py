@@ -151,13 +151,49 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             how often the environment is polled internally, but the output
             batch size is determined by ``trajs_per_batch``.
 
-            When combined with a ``replay_buffer`` on a single-process
-            :class:`~torchrl.collectors.Collector`, trajectory batches are
-            written to the replay buffer instead of raw frames. This integrates
-            naturally with :class:`~torchrl.data.SliceSampler` — pass
-            ``end_key=("next", "done")`` to sample contiguous sub-sequences
-            that respect episode boundaries. Async collection via
-            :meth:`~torchrl.collectors.Collector.start` is supported:
+            **Replay buffer integration**
+
+            When combined with a ``replay_buffer``, each complete trajectory is
+            written to the buffer as a **flat 1-D sequence** of valid timesteps
+            (no padding, no accumulation to ``trajs_per_batch``).  The method
+            yields ``None`` on every write — matching the standard replay-buffer
+            collection convention.  This flat storage is directly compatible
+            with :class:`~torchrl.data.SliceSampler` using
+            ``end_key=("next", "done")``.
+
+            .. important::
+                When using a **multi-process** collector with a shared replay
+                buffer and a :class:`~torchrl.data.SliceSampler`, setting
+                ``trajs_per_batch`` is strongly recommended. Without it,
+                different workers write batches independently and adjacent
+                frames in the buffer can come from unrelated episodes without
+                an intervening ``done`` signal, causing the sampler to draw
+                slices that cross trajectory boundaries.
+
+            **Completeness guarantee**: only trajectories whose last step has
+            ``("next", "done") == True`` are written to the buffer.  Partial
+            trajectories (episodes still in flight) are held internally until
+            the episode terminates.  This means every trajectory in the buffer
+            is guaranteed to be a complete episode segment.
+
+            **Batched environments**: when the environment has a batch size > 1
+            (e.g. :class:`~torchrl.envs.SerialEnv`), steps are disassembled by
+            ``traj_id`` and each trajectory is written individually as a flat
+            sequence.  The buffer storage should use ``ndim=1`` — ``ndim=2``
+            is incompatible because variable-length trajectories cannot fill a
+            fixed second dimension.
+
+            **Multi-process and distributed collectors**: ``trajs_per_batch``
+            combined with ``replay_buffer`` is supported for
+            :class:`~torchrl.collectors.MultiSyncCollector`,
+            :class:`~torchrl.collectors.MultiAsyncCollector`,
+            :class:`~torchrl.collectors.distributed.RayCollector`, and
+            :class:`~torchrl.collectors.distributed.RPCDataCollector`.
+            Trajectory assembly is delegated to each worker's inner collector,
+            which calls :meth:`_iter_by_trajectories` independently and writes
+            complete trajectories to the shared replay buffer.  Both the
+            iteration pattern (``for data in collector``) and the async
+            ``start()`` pattern are supported.
 
             .. code-block:: python
 
@@ -166,20 +202,14 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                     sampler=SliceSampler(slice_len=16, end_key=("next", "done")),
                     shared=True,
                 )
-                collector = Collector(
-                    env, policy,
+                collector = MultiSyncCollector(
+                    [env_fn] * 4, policy,
                     replay_buffer=rb,
                     frames_per_batch=200,
                     total_frames=-1,
                     trajs_per_batch=32,
                 )
-                collector.start()   # fills rb with [32, max_len] trajectory batches
-
-            .. note::
-                ``trajs_per_batch`` combined with ``replay_buffer`` is supported
-                for both single-process and multi-process collectors. For
-                multi-process collectors, trajectory assembly is delegated to
-                each worker's inner collector.
+                collector.start()  # workers fill rb with complete trajectories
 
             Defaults to ``None`` (fixed-frame batches).
     """
@@ -999,19 +1029,38 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             raise
 
     def _iter_by_trajectories(self) -> Iterator[TensorDictBase]:
-        """Yield padded batches of exactly ``trajs_per_batch`` complete trajectories.
+        """Yield complete trajectories, either as padded batches or into a replay buffer.
 
-        When a replay buffer is configured, each complete trajectory is stored
-        as a **flat sequence of valid timesteps** (padding stripped via
-        ``("collector", "mask")``), and this method yields ``None`` each time —
-        matching the behaviour of :meth:`iterator` in replay-buffer mode.
-        Flat storage makes the buffer directly compatible with
+        **Without a replay buffer** (the default when iterating directly):
+        accumulates complete trajectories and yields zero-padded batches of
+        shape ``(trajs_per_batch, max_traj_len)`` with a
+        ``("collector", "mask")`` boolean field marking valid timesteps.
+
+        **With a replay buffer**: each complete trajectory is written to the
+        buffer immediately as a **flat 1-D sequence** of valid timesteps — no
+        padding, no accumulation to ``trajs_per_batch``.  The method yields
+        ``None`` on every write, matching the standard replay-buffer collection
+        convention.  This flat storage is directly compatible with
         :class:`~torchrl.data.SliceSampler` using
         ``end_key=("next", "done")``.
 
-        For multi-process collectors, trajectory assembly is delegated to each
-        worker's inner collector, which calls this method independently and
-        writes complete trajectories to the shared replay buffer.
+        **Completeness guarantee**: a trajectory is considered complete when
+        its last step carries ``("next", "done") == True`` (which equals
+        ``terminated | truncated``).  Partial trajectories (episodes still in
+        flight) are held in the internal ``partial_trajs`` dict and never
+        written to the buffer or yielded.
+
+        **Batched environments**: when the environment has ``batch_size > 1``,
+        :func:`_traj_ingest` flattens the batch and groups steps by
+        ``("collector", "traj_ids")``, so each trajectory is assembled and
+        written individually regardless of the environment batch shape.
+
+        **Multi-process / distributed collectors**: trajectory assembly is
+        delegated to each worker's inner collector.  The multi-collector
+        redirects ``trajs_per_batch`` to workers (nulling it on itself to
+        avoid an infinite loop in ``__iter__``), and each worker calls this
+        method independently to write complete trajectories to the shared
+        replay buffer.
         """
         partial_trajs: dict[int, list] = {}
         complete_trajs: list = []

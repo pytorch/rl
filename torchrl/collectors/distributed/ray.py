@@ -288,6 +288,16 @@ class RayCollector(BaseCollector):
             in :class:`~torchrl.envs.EnvCreator`. This is useful for multiprocessed settings where shared memory
             needs to be managed, but Ray has its own object storage mechanism, so this is typically not needed.
             Defaults to ``False``.
+        trajs_per_batch (int, optional): When set, each remote collector
+            assembles complete trajectories (episodes ending with
+            ``("next", "done") == True``) before writing them to the replay
+            buffer as flat 1-D sequences.  Passed through to
+            ``collector_kwargs`` so that each worker's inner collector calls
+            :meth:`~torchrl.collectors.BaseCollector._iter_by_trajectories`.
+
+            See :class:`~torchrl.collectors.BaseCollector` for the full
+            description of the completeness guarantee and storage contract.
+            Defaults to ``None``.
 
     Examples:
         >>> from torch import nn

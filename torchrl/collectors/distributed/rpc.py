@@ -294,6 +294,16 @@ class RPCCollector(BaseCollector):
             and values are WeightSyncScheme instances configured to receive weights.
             This is typically used when RPCDataCollector is itself a worker in a larger distributed setup.
             Defaults to ``None``.
+        trajs_per_batch (int, optional): When set, each remote collector
+            assembles complete trajectories (episodes ending with
+            ``("next", "done") == True``) before writing them to the replay
+            buffer as flat 1-D sequences.  Passed through to each worker's
+            ``collector_kwargs`` so that the inner collector calls
+            :meth:`~torchrl.collectors.BaseCollector._iter_by_trajectories`.
+
+            See :class:`~torchrl.collectors.BaseCollector` for the full
+            description of the completeness guarantee and storage contract.
+            Defaults to ``None``.
 
     """
 
