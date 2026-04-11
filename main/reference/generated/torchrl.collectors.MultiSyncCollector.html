@@ -513,6 +513,24 @@ interoperability with the rest of the library.</p>
 a rollout is reached. If no <code class="docutils literal notranslate"><span class="pre">&quot;truncated&quot;</span></code> key is found, an exception is raised.
 Truncated keys can be set through <code class="docutils literal notranslate"><span class="pre">env.add_truncated_keys</span></code>.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>trajs_per_batch</strong> (<em>int</em><em>, </em><em>optional</em>) – <p>When set together with <code class="docutils literal notranslate"><span class="pre">replay_buffer</span></code>,
+trajectory assembly is delegated to each worker’s inner
+<a class="reference internal" href="torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector"><code class="xref py py-class docutils literal notranslate"><span class="pre">Collector</span></code></a>.  Each worker calls
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">_iter_by_trajectories()</span></code>
+independently and writes <strong>complete trajectories</strong> (episodes whose
+last step has <code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;done&quot;)</span> <span class="pre">==</span> <span class="pre">True</span></code>) to the shared replay
+buffer as flat 1-D sequences — no padding, no accumulation.</p>
+<p>When set <em>without</em> <code class="docutils literal notranslate"><span class="pre">replay_buffer</span></code>, each worker assembles
+trajectories and the multi-collector yields zero-padded batches
+of shape <code class="docutils literal notranslate"><span class="pre">(trajs_per_batch,</span> <span class="pre">max_traj_len)</span></code> with a
+<code class="docutils literal notranslate"><span class="pre">(&quot;collector&quot;,</span> <span class="pre">&quot;mask&quot;)</span></code> boolean field.</p>
+<p>Both the iteration pattern (<code class="docutils literal notranslate"><span class="pre">for</span> <span class="pre">data</span> <span class="pre">in</span> <span class="pre">collector</span></code>) and the
+async <code class="docutils literal notranslate"><span class="pre">start()</span></code> pattern are supported.</p>
+<p>Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (fixed-frame batches).</p>
+<p>See <a class="reference internal" href="torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector" title="torchrl.collectors.BaseCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseCollector</span></code></a> for the full
+description of the completeness guarantee and replay-buffer
+storage contract.</p>
+</p></li>
 <li><p><strong>use_buffers</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a buffer will be used to stack the data.
 This isn’t compatible with environments with dynamic specs. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>
 for envs without dynamic specs, <code class="docutils literal notranslate"><span class="pre">False</span></code> for others.</p></li>

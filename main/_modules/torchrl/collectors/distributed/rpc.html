@@ -536,6 +536,16 @@
 <span class="sd">            and values are WeightSyncScheme instances configured to receive weights.</span>
 <span class="sd">            This is typically used when RPCDataCollector is itself a worker in a larger distributed setup.</span>
 <span class="sd">            Defaults to ``None``.</span>
+<span class="sd">        trajs_per_batch (int, optional): When set, each remote collector</span>
+<span class="sd">            assembles complete trajectories (episodes ending with</span>
+<span class="sd">            ``(&quot;next&quot;, &quot;done&quot;) == True``) before writing them to the replay</span>
+<span class="sd">            buffer as flat 1-D sequences.  Passed through to each worker&#39;s</span>
+<span class="sd">            ``collector_kwargs`` so that the inner collector calls</span>
+<span class="sd">            :meth:`~torchrl.collectors.BaseCollector._iter_by_trajectories`.</span>
+
+<span class="sd">            See :class:`~torchrl.collectors.BaseCollector` for the full</span>
+<span class="sd">            description of the completeness guarantee and storage contract.</span>
+<span class="sd">            Defaults to ``None``.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -578,6 +588,7 @@
         <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">weight_sync_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightSyncScheme</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">weight_recv_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightSyncScheme</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">trajs_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_VERBOSE</span><span class="p">:</span>
@@ -676,6 +687,8 @@
             <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;storing_device&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
             <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;env_device&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env_device</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
             <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;policy_device&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">trajs_per_batch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;trajs_per_batch&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">trajs_per_batch</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span> <span class="o">=</span> <span class="n">postproc</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">split_trajs</span> <span class="o">=</span> <span class="n">split_trajs</span>

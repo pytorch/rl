@@ -309,9 +309,121 @@ will work:</p>
 <span class="gp">... </span>    <span class="n">memory</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>Using replay buffers that sample trajectories with <code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code>
-isn’t currently fully supported as the data batches can come from any worker and in most cases consecutive
-batches written in the buffer won’t come from the same source (thereby interrupting the trajectories).</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">ndim=2</span></code> and <code class="docutils literal notranslate"><span class="pre">ndim=3</span></code> examples above apply to <strong>fixed-frame
+batches</strong> (the default, without <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code>).  When
+<code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code> is set, each trajectory is written to the buffer as a
+<strong>flat 1-D sequence</strong> of variable length.  A storage with <code class="docutils literal notranslate"><span class="pre">ndim</span> <span class="pre">&gt;=</span> <span class="pre">2</span></code>
+expects a fixed second dimension that variable-length trajectories cannot
+satisfy.  Always use the default <code class="docutils literal notranslate"><span class="pre">ndim=1</span></code> when combining
+<code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code> with a replay buffer.</p>
+</div>
+</section>
+<section id="complete-trajectory-collection-with-trajs-per-batch">
+<span id="collectors-replay-trajs"></span><h2>Complete trajectory collection with <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code><a class="headerlink" href="#complete-trajectory-collection-with-trajs-per-batch" title="Link to this heading">¶</a></h2>
+<p>When using a multi-process collector
+(<a class="reference internal" href="generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector" title="torchrl.collectors.MultiSyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncCollector</span></code></a> or
+<a class="reference internal" href="generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector" title="torchrl.collectors.MultiAsyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiAsyncCollector</span></code></a>) with fixed-frame batches
+and a <code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code>, adjacent frames in the buffer can
+come from <strong>different workers and different episodes</strong> without an intervening
+<code class="docutils literal notranslate"><span class="pre">done</span></code> signal.  The sampler has no way to detect these invisible boundaries,
+so it may draw slices that straddle unrelated trajectories — silently
+corrupting the training data.</p>
+<p>Setting <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code> on the collector solves this.  Each worker
+assembles <strong>complete trajectories</strong> (episodes whose last step carries
+<code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;done&quot;)</span> <span class="pre">==</span> <span class="pre">True</span></code>) before writing them to the buffer as flat 1-D
+sequences — no padding, no artificial boundaries.  Every trajectory in the
+buffer is guaranteed to be a genuine episode segment, making it directly
+compatible with <code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code>.</p>
+<p><strong>Synchronous iteration (for-loop)</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">MultiCollector</span>
+<span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">ReplayBuffer</span><span class="p">,</span> <span class="n">LazyTensorStorage</span><span class="p">,</span> <span class="n">SliceSampler</span>
+
+<span class="n">rb</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span>
+    <span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span><span class="mi">100_000</span><span class="p">),</span>
+    <span class="n">sampler</span><span class="o">=</span><span class="n">SliceSampler</span><span class="p">(</span><span class="n">slice_len</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">end_key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">)),</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">collector</span> <span class="o">=</span> <span class="n">MultiCollector</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">make_env</span><span class="p">]</span> <span class="o">*</span> <span class="mi">4</span><span class="p">,</span>
+    <span class="n">policy</span><span class="p">,</span>
+    <span class="n">replay_buffer</span><span class="o">=</span><span class="n">rb</span><span class="p">,</span>
+    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+    <span class="n">total_frames</span><span class="o">=</span><span class="mi">500_000</span><span class="p">,</span>
+    <span class="n">trajs_per_batch</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>   <span class="c1"># each worker writes complete trajectories</span>
+    <span class="n">sync</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">collector</span><span class="p">:</span>          <span class="c1"># yields None (data goes straight to rb)</span>
+    <span class="n">batch</span> <span class="o">=</span> <span class="n">rb</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>      <span class="c1"># contiguous sub-sequences, no cross-episode leaks</span>
+    <span class="n">loss</span> <span class="o">=</span> <span class="n">loss_fn</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+    <span class="c1"># ...</span>
+</pre></div>
+</div>
+<p><strong>Asynchronous collection (``start()``)</strong></p>
+<p>For off-policy algorithms where data collection and training run
+concurrently, use <a class="reference internal" href="generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.start" title="torchrl.collectors.BaseCollector.start"><code class="xref py py-meth docutils literal notranslate"><span class="pre">start()</span></code></a>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">collector</span> <span class="o">=</span> <span class="n">MultiCollector</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">make_env</span><span class="p">]</span> <span class="o">*</span> <span class="mi">4</span><span class="p">,</span>
+    <span class="n">policy</span><span class="p">,</span>
+    <span class="n">replay_buffer</span><span class="o">=</span><span class="n">rb</span><span class="p">,</span>
+    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+    <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">trajs_per_batch</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+    <span class="n">sync</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">collector</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>           <span class="c1"># workers fill rb in background threads/processes</span>
+<span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">train_steps</span><span class="p">):</span>
+    <span class="n">batch</span> <span class="o">=</span> <span class="n">rb</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+    <span class="n">loss</span> <span class="o">=</span> <span class="n">loss_fn</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+    <span class="c1"># ...</span>
+    <span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">()</span>
+<span class="n">collector</span><span class="o">.</span><span class="n">async_shutdown</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>This pattern fully decouples data collection from training and is the
+recommended way to maximise inference throughput on multi-core machines or
+GPU-accelerated environments.</p>
+<p><strong>Single-process collectors</strong> also support <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code> with the same
+replay-buffer semantics:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">collector</span> <span class="o">=</span> <span class="n">Collector</span><span class="p">(</span>
+    <span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span>
+    <span class="n">replay_buffer</span><span class="o">=</span><span class="n">rb</span><span class="p">,</span>
+    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+    <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">trajs_per_batch</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">collector</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+<span class="c1"># ...</span>
+</pre></div>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Without <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code>, a multi-process collector writes fixed-frame
+batches from each worker.  If the buffer uses a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code>, the sampler will reconstruct episode
+boundaries from <code class="docutils literal notranslate"><span class="pre">done</span></code> signals, but worker batch boundaries are invisible
+— consecutive frames in the buffer may belong to completely different
+episodes.</p>
+<p>A partial mitigation is <code class="docutils literal notranslate"><span class="pre">set_truncated=True</span></code>, which marks every batch
+boundary with a <code class="docutils literal notranslate"><span class="pre">truncated</span></code> (and therefore <code class="docutils literal notranslate"><span class="pre">done</span></code>) signal.  This
+prevents cross-episode slices but introduces artificial truncations that
+value estimators must handle correctly.</p>
+<p><code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code> is the recommended solution: it guarantees clean
+episode boundaries in the buffer without artificial truncations.</p>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector" title="torchrl.collectors.BaseCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseCollector</span></code></a> for the full <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code>
+API, completeness guarantee, and batched-environment behaviour.</p></li>
+<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code> for configuring sub-sequence sampling
+from the buffer.</p></li>
+<li><p><span class="xref std std-ref">The trajectory batching section</span> in the
+single-node collector docs for the non-replay-buffer usage
+(padded <code class="docutils literal notranslate"><span class="pre">(trajs,</span> <span class="pre">max_len)</span></code> batches).</p></li>
+</ul>
+</div>
 </section>
 <section id="helper-functions">
 <h2>Helper functions<a class="headerlink" href="#helper-functions" title="Link to this heading">¶</a></h2>
@@ -364,6 +476,7 @@ batches written in the buffer won’t come from the same source (thereby interru
               <ul>
 <li><a class="reference internal" href="#">Collectors and Replay Buffers</a><ul>
 <li><a class="reference internal" href="#collectors-and-replay-buffers-interoperability">Collectors and replay buffers interoperability</a></li>
+<li><a class="reference internal" href="#complete-trajectory-collection-with-trajs-per-batch">Complete trajectory collection with <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code></a></li>
 <li><a class="reference internal" href="#helper-functions">Helper functions</a></li>
 </ul>
 </li>

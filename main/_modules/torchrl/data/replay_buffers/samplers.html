@@ -1146,6 +1146,24 @@
 <span class="sd">        attempt to find the ``traj_key`` entry in the storage. If it cannot be</span>
 <span class="sd">        found, the ``end_key`` will be used to reconstruct the episodes.</span>
 
+<span class="sd">    .. note:: When using a multi-process collector</span>
+<span class="sd">        (:class:`~torchrl.collectors.MultiSyncCollector` or</span>
+<span class="sd">        :class:`~torchrl.collectors.MultiAsyncCollector`) with a shared replay</span>
+<span class="sd">        buffer, adjacent transitions in the buffer may come from different</span>
+<span class="sd">        workers and different episodes. A ``SliceSampler`` that relies on</span>
+<span class="sd">        ``end_key`` can then sample slices that straddle unrelated trajectories.</span>
+
+<span class="sd">        To avoid this, either:</span>
+
+<span class="sd">        - set ``trajs_per_batch`` on the collector so that only **complete**</span>
+<span class="sd">          trajectories (each ending with ``done=True``) are written to the</span>
+<span class="sd">          buffer (use ``ndim=1`` on the storage — ``ndim &gt;= 2`` is</span>
+<span class="sd">          incompatible with the variable-length flat sequences that</span>
+<span class="sd">          ``trajs_per_batch`` produces), or</span>
+<span class="sd">        - set ``set_truncated=True`` on the collector so that every batch</span>
+<span class="sd">          boundary carries a ``done`` signal (note: this introduces artificial</span>
+<span class="sd">          truncations that value estimators must account for).</span>
+
 <span class="sd">    .. note:: When using `strict_length=False`, it is recommended to use</span>
 <span class="sd">        :func:`~torchrl.collectors.utils.split_trajectories` to split the sampled trajectories.</span>
 <span class="sd">        However, if two samples from the same episode are placed next to each other,</span>
@@ -1615,6 +1633,12 @@
                 <span class="k">return</span> <span class="n">vals</span>
             <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">fallback</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                        <span class="s2">&quot;SliceSampler could not find traj_key </span><span class="si">%r</span><span class="s2"> in storage. &quot;</span>
+                        <span class="s2">&quot;Falling back to end_key </span><span class="si">%r</span><span class="s2"> to reconstruct trajectory boundaries.&quot;</span><span class="p">,</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">traj_key</span><span class="p">,</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">end_key</span><span class="p">,</span>
+                    <span class="p">)</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_traj</span> <span class="o">=</span> <span class="kc">False</span>
                     <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_stop_and_length</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
                 <span class="k">raise</span>
@@ -1627,8 +1651,15 @@
                     <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                         <span class="s2">&quot;Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories.&quot;</span>
                     <span class="p">)</span>
+                <span class="n">done</span> <span class="o">=</span> <span class="n">done</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">done</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="c1"># Multi-dimensional done signals arise when pre-assembled</span>
+                    <span class="c1"># trajectory data (trajs, max_len, ...) is stored in the</span>
+                    <span class="c1"># buffer.  Flatten to 1-D so that _find_start_stop_traj</span>
+                    <span class="c1"># can locate episode boundaries correctly.</span>
+                    <span class="n">done</span> <span class="o">=</span> <span class="n">done</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
                 <span class="n">vals</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_find_start_stop_traj</span><span class="p">(</span>
-                    <span class="n">end</span><span class="o">=</span><span class="n">done</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()[:</span> <span class="nb">len</span><span class="p">(</span><span class="n">storage</span><span class="p">)],</span>
+                    <span class="n">end</span><span class="o">=</span><span class="n">done</span><span class="p">[:</span> <span class="nb">len</span><span class="p">(</span><span class="n">storage</span><span class="p">)],</span>
                     <span class="n">at_capacity</span><span class="o">=</span><span class="n">storage</span><span class="o">.</span><span class="n">_is_full</span><span class="p">,</span>
                     <span class="n">cursor</span><span class="o">=</span><span class="nb">getattr</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="s2">&quot;_last_cursor&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
                 <span class="p">)</span>

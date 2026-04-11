@@ -265,34 +265,60 @@ Trajectories that span multiple internal collection steps are
 reassembled automatically. <code class="docutils literal notranslate"><span class="pre">frames_per_batch</span></code> still controls
 how often the environment is polled internally, but the output
 batch size is determined by <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code>.</p>
-<p>When combined with a <code class="docutils literal notranslate"><span class="pre">replay_buffer</span></code> on a single-process
-<a class="reference internal" href="torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector"><code class="xref py py-class docutils literal notranslate"><span class="pre">Collector</span></code></a>, trajectory batches are
-written to the replay buffer instead of raw frames. This integrates
-naturally with <code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code> — pass
-<code class="docutils literal notranslate"><span class="pre">end_key=(&quot;next&quot;,</span> <span class="pre">&quot;done&quot;)</span></code> to sample contiguous sub-sequences
-that respect episode boundaries. Async collection via
-<a class="reference internal" href="torchrl.collectors.Collector.html#torchrl.collectors.Collector.start" title="torchrl.collectors.Collector.start"><code class="xref py py-meth docutils literal notranslate"><span class="pre">start()</span></code></a> is supported:</p>
+<p><strong>Replay buffer integration</strong></p>
+<p>When combined with a <code class="docutils literal notranslate"><span class="pre">replay_buffer</span></code>, each complete trajectory is
+written to the buffer as a <strong>flat 1-D sequence</strong> of valid timesteps
+(no padding, no accumulation to <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code>).  The method
+yields <code class="docutils literal notranslate"><span class="pre">None</span></code> on every write — matching the standard replay-buffer
+collection convention.  This flat storage is directly compatible
+with <code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code> using
+<code class="docutils literal notranslate"><span class="pre">end_key=(&quot;next&quot;,</span> <span class="pre">&quot;done&quot;)</span></code>.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>When using a <strong>multi-process</strong> collector with a shared replay
+buffer and a <code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code>, setting
+<code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code> is strongly recommended. Without it,
+different workers write batches independently and adjacent
+frames in the buffer can come from unrelated episodes without
+an intervening <code class="docutils literal notranslate"><span class="pre">done</span></code> signal, causing the sampler to draw
+slices that cross trajectory boundaries.</p>
+</div>
+<p><strong>Completeness guarantee</strong>: only trajectories whose last step has
+<code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;done&quot;)</span> <span class="pre">==</span> <span class="pre">True</span></code> are written to the buffer.  Partial
+trajectories (episodes still in flight) are held internally until
+the episode terminates.  This means every trajectory in the buffer
+is guaranteed to be a complete episode segment.</p>
+<p><strong>Batched environments</strong>: when the environment has a batch size &gt; 1
+(e.g. <a class="reference internal" href="torchrl.envs.SerialEnv.html#torchrl.envs.SerialEnv" title="torchrl.envs.SerialEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">SerialEnv</span></code></a>), steps are disassembled by
+<code class="docutils literal notranslate"><span class="pre">traj_id</span></code> and each trajectory is written individually as a flat
+sequence.  The buffer storage should use <code class="docutils literal notranslate"><span class="pre">ndim=1</span></code> — <code class="docutils literal notranslate"><span class="pre">ndim=2</span></code>
+is incompatible because variable-length trajectories cannot fill a
+fixed second dimension.</p>
+<p><strong>Multi-process and distributed collectors</strong>: <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code>
+combined with <code class="docutils literal notranslate"><span class="pre">replay_buffer</span></code> is supported for
+<a class="reference internal" href="torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector" title="torchrl.collectors.MultiSyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncCollector</span></code></a>,
+<a class="reference internal" href="torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector" title="torchrl.collectors.MultiAsyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiAsyncCollector</span></code></a>,
+<a class="reference internal" href="torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector" title="torchrl.collectors.distributed.RayCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">RayCollector</span></code></a>, and
+<a class="reference internal" href="torchrl.collectors.distributed.RPCDataCollector.html#torchrl.collectors.distributed.RPCDataCollector" title="torchrl.collectors.distributed.RPCDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">RPCDataCollector</span></code></a>.
+Trajectory assembly is delegated to each worker’s inner collector,
+which calls <code class="xref py py-meth docutils literal notranslate"><span class="pre">_iter_by_trajectories()</span></code> independently and writes
+complete trajectories to the shared replay buffer.  Both the
+iteration pattern (<code class="docutils literal notranslate"><span class="pre">for</span> <span class="pre">data</span> <span class="pre">in</span> <span class="pre">collector</span></code>) and the async
+<code class="docutils literal notranslate"><span class="pre">start()</span></code> pattern are supported.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">rb</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span>
     <span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span><span class="mi">10_000</span><span class="p">),</span>
     <span class="n">sampler</span><span class="o">=</span><span class="n">SliceSampler</span><span class="p">(</span><span class="n">slice_len</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">end_key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">)),</span>
     <span class="n">shared</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="n">collector</span> <span class="o">=</span> <span class="n">Collector</span><span class="p">(</span>
-    <span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span>
+<span class="n">collector</span> <span class="o">=</span> <span class="n">MultiSyncCollector</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">env_fn</span><span class="p">]</span> <span class="o">*</span> <span class="mi">4</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span>
     <span class="n">replay_buffer</span><span class="o">=</span><span class="n">rb</span><span class="p">,</span>
     <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
     <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
     <span class="n">trajs_per_batch</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="n">collector</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>   <span class="c1"># fills rb with [32, max_len] trajectory batches</span>
+<span class="n">collector</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>  <span class="c1"># workers fill rb with complete trajectories</span>
 </pre></div>
-</div>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p><code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code> combined with <code class="docutils literal notranslate"><span class="pre">replay_buffer</span></code> is only
-supported for single-process collectors. Multi-process collectors
-write frames directly to a shared buffer at the worker level and
-cannot reassemble trajectories in the main process.</p>
 </div>
 <p>Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (fixed-frame batches).</p>
 </p>

@@ -491,6 +491,27 @@
 <span class="sd">            a rollout is reached. If no ``&quot;truncated&quot;`` key is found, an exception is raised.</span>
 <span class="sd">            Truncated keys can be set through ``env.add_truncated_keys``.</span>
 <span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        trajs_per_batch (int, optional): When set together with ``replay_buffer``,</span>
+<span class="sd">            trajectory assembly is delegated to each worker&#39;s inner</span>
+<span class="sd">            :class:`~torchrl.collectors.Collector`.  Each worker calls</span>
+<span class="sd">            :meth:`~torchrl.collectors.BaseCollector._iter_by_trajectories`</span>
+<span class="sd">            independently and writes **complete trajectories** (episodes whose</span>
+<span class="sd">            last step has ``(&quot;next&quot;, &quot;done&quot;) == True``) to the shared replay</span>
+<span class="sd">            buffer as flat 1-D sequences — no padding, no accumulation.</span>
+
+<span class="sd">            When set *without* ``replay_buffer``, each worker assembles</span>
+<span class="sd">            trajectories and the multi-collector yields zero-padded batches</span>
+<span class="sd">            of shape ``(trajs_per_batch, max_traj_len)`` with a</span>
+<span class="sd">            ``(&quot;collector&quot;, &quot;mask&quot;)`` boolean field.</span>
+
+<span class="sd">            Both the iteration pattern (``for data in collector``) and the</span>
+<span class="sd">            async ``start()`` pattern are supported.</span>
+
+<span class="sd">            Defaults to ``None`` (fixed-frame batches).</span>
+
+<span class="sd">            See :class:`~torchrl.collectors.BaseCollector` for the full</span>
+<span class="sd">            description of the completeness guarantee and replay-buffer</span>
+<span class="sd">            storage contract.</span>
 <span class="sd">        use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.</span>
 <span class="sd">            This isn&#39;t compatible with environments with dynamic specs. Defaults to ``True``</span>
 <span class="sd">            for envs without dynamic specs, ``False`` for others.</span>
@@ -624,6 +645,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">worker_idx</span> <span class="o">=</span> <span class="n">worker_idx</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">trajs_per_batch</span> <span class="o">=</span> <span class="n">trajs_per_batch</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_worker_trajs_per_batch</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="c1"># Set up workers and environment functions</span>
         <span class="n">create_env_fn</span><span class="p">,</span> <span class="n">total_frames_per_batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_setup_workers_and_env_fns</span><span class="p">(</span>
@@ -1100,14 +1122,39 @@
     <span class="k">def</span> <span class="nf">_check_replay_buffer_init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
-        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;trajs_per_batch&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-                <span class="s2">&quot;trajs_per_batch is not supported together with replay_buffer on &quot;</span>
-                <span class="s2">&quot;multi-process collectors. Multi-process collectors write frames &quot;</span>
-                <span class="s2">&quot;directly to a shared replay buffer at the worker level, so &quot;</span>
-                <span class="s2">&quot;trajectory reassembly cannot be performed in the main process. &quot;</span>
-                <span class="s2">&quot;Use a single-process Collector instead.&quot;</span>
+
+        <span class="c1"># Warn when a SliceSampler is used without trajs_per_batch: workers</span>
+        <span class="c1"># write batches independently so adjacent frames in the buffer can</span>
+        <span class="c1"># come from different episodes without an intervening done signal.</span>
+        <span class="kn">from</span> <span class="nn">torchrl.data.replay_buffers.samplers</span> <span class="kn">import</span> <span class="n">SliceSampler</span>
+
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;trajs_per_batch&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="p">,</span> <span class="s2">&quot;_sampler&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span> <span class="n">SliceSampler</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">set_truncated</span>
+        <span class="p">):</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;A SliceSampler is used with a multi-process collector but &quot;</span>
+                <span class="s2">&quot;trajs_per_batch is not set and set_truncated is False. &quot;</span>
+                <span class="s2">&quot;Adjacent frames in the replay buffer may come from different &quot;</span>
+                <span class="s2">&quot;workers and different episodes, causing SliceSampler to &quot;</span>
+                <span class="s2">&quot;sample slices that cross trajectory boundaries. &quot;</span>
+                <span class="s2">&quot;Consider setting trajs_per_batch to write only complete &quot;</span>
+                <span class="s2">&quot;trajectories, or set_truncated=True to mark batch &quot;</span>
+                <span class="s2">&quot;boundaries (note: this introduces artificial truncations).&quot;</span><span class="p">,</span>
+                <span class="n">category</span><span class="o">=</span><span class="ne">UserWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
             <span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;trajs_per_batch&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Trajectory assembly will happen at the worker level: each worker&#39;s</span>
+            <span class="c1"># inner Collector uses _iter_by_trajectories() to assemble complete</span>
+            <span class="c1"># trajectories and write them to the shared replay buffer.</span>
+            <span class="c1"># Null out trajs_per_batch on the multi-collector so that __iter__</span>
+            <span class="c1"># routes to self.iterator() directly (not _iter_by_trajectories,</span>
+            <span class="c1"># which would spin forever on the None yields from the RB path).</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_worker_trajs_per_batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajs_per_batch</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">trajs_per_batch</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="n">is_init</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="p">,</span> <span class="s2">&quot;_storage&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">_storage</span><span class="p">,</span> <span class="s2">&quot;initialized&quot;</span><span class="p">,</span> <span class="kc">True</span>
         <span class="p">)</span>
@@ -1412,6 +1459,7 @@
                     <span class="s2">&quot;worker_idx&quot;</span><span class="p">:</span> <span class="n">i</span><span class="p">,</span>  <span class="c1"># Worker index for queue-based weight distribution</span>
                     <span class="s2">&quot;init_random_frames&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span><span class="p">,</span>
                     <span class="s2">&quot;profile_config&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span><span class="p">,</span>
+                    <span class="s2">&quot;trajs_per_batch&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_worker_trajs_per_batch</span><span class="p">,</span>
                 <span class="p">}</span>
                 <span class="n">proc</span> <span class="o">=</span> <span class="n">_ProcessNoWarnCtx</span><span class="p">(</span>
                     <span class="n">target</span><span class="o">=</span><span class="n">_main_async_collector</span><span class="p">,</span>

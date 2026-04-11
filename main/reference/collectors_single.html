@@ -278,7 +278,7 @@
 </table>
 </section>
 <section id="trajectory-batching">
-<h2>Trajectory batching<a class="headerlink" href="#trajectory-batching" title="Link to this heading">¶</a></h2>
+<span id="collectors-single-traj"></span><h2>Trajectory batching<a class="headerlink" href="#trajectory-batching" title="Link to this heading">¶</a></h2>
 <p>Pass <code class="docutils literal notranslate"><span class="pre">trajs_per_batch=N</span></code> to any collector to receive batches of exactly <em>N</em>
 complete, zero-padded trajectories instead of fixed-frame batches.
 Trajectories that span multiple internal collection steps are automatically
@@ -306,6 +306,12 @@ internally; it does <strong>not</strong> determine the output batch size when
     <span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">()</span>
 </pre></div>
 </div>
+<p><strong>Replay buffer integration</strong>: when a <code class="docutils literal notranslate"><span class="pre">replay_buffer</span></code> is also provided,
+complete trajectories are written to the buffer as <strong>flat 1-D sequences</strong> (no
+padding) instead of being yielded.  This is the recommended pattern for
+off-policy training with <code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code>, especially
+with multi-process collectors where fixed-frame batches can silently mix
+episodes.  See <a class="reference internal" href="collectors_replay.html#collectors-replay-trajs"><span class="std std-ref">Complete trajectory collection with trajs_per_batch</span></a> for full details and examples.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>The following legacy names are also available for backward compatibility:</p>
@@ -445,6 +451,37 @@ so be mindful of Python’s GIL and related multithreading restrictions.</p>
 which truly decouples the data collection and training.</p>
 <p>Data collectors that have been started with <cite>start()</cite> should be shut down using
 <a class="reference internal" href="generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.async_shutdown" title="torchrl.collectors.BaseCollector.async_shutdown"><code class="xref py py-meth docutils literal notranslate"><span class="pre">async_shutdown()</span></code></a>.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>For maximum throughput with trajectory-based training (e.g. recurrent
+policies, decision transformers), combine <code class="docutils literal notranslate"><span class="pre">start()</span></code> with
+<code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code> and a <code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">rb</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span>
+    <span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span><span class="mi">100_000</span><span class="p">),</span>
+    <span class="n">sampler</span><span class="o">=</span><span class="n">SliceSampler</span><span class="p">(</span><span class="n">slice_len</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">end_key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">)),</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span>
+    <span class="n">shared</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">collector</span> <span class="o">=</span> <span class="n">MultiCollector</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">make_env</span><span class="p">]</span> <span class="o">*</span> <span class="mi">4</span><span class="p">,</span>
+    <span class="n">policy</span><span class="p">,</span>
+    <span class="n">replay_buffer</span><span class="o">=</span><span class="n">rb</span><span class="p">,</span>
+    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+    <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">trajs_per_batch</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+    <span class="n">sync</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">collector</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+<span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">train_steps</span><span class="p">):</span>
+    <span class="n">batch</span> <span class="o">=</span> <span class="n">rb</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>  <span class="c1"># clean trajectory slices</span>
+    <span class="c1"># ...</span>
+<span class="n">collector</span><span class="o">.</span><span class="n">async_shutdown</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Each worker writes only <strong>complete trajectories</strong> to the buffer, so the
+sampler never draws slices that cross episode boundaries.  See
+<a class="reference internal" href="collectors_replay.html#collectors-replay-trajs"><span class="std std-ref">Complete trajectory collection with trajs_per_batch</span></a> for a full discussion.</p>
+</div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>Running a collector asynchronously decouples the collection from training, which means that the training

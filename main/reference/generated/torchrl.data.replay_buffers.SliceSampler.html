@@ -355,6 +355,26 @@ found, the <code class="docutils literal notranslate"><span class="pre">end_key<
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
+<p>When using a multi-process collector
+(<a class="reference internal" href="torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector" title="torchrl.collectors.MultiSyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncCollector</span></code></a> or
+<a class="reference internal" href="torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector" title="torchrl.collectors.MultiAsyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiAsyncCollector</span></code></a>) with a shared replay
+buffer, adjacent transitions in the buffer may come from different
+workers and different episodes. A <code class="docutils literal notranslate"><span class="pre">SliceSampler</span></code> that relies on
+<code class="docutils literal notranslate"><span class="pre">end_key</span></code> can then sample slices that straddle unrelated trajectories.</p>
+<p>To avoid this, either:</p>
+<ul class="simple">
+<li><p>set <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code> on the collector so that only <strong>complete</strong>
+trajectories (each ending with <code class="docutils literal notranslate"><span class="pre">done=True</span></code>) are written to the
+buffer (use <code class="docutils literal notranslate"><span class="pre">ndim=1</span></code> on the storage — <code class="docutils literal notranslate"><span class="pre">ndim</span> <span class="pre">&gt;=</span> <span class="pre">2</span></code> is
+incompatible with the variable-length flat sequences that
+<code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code> produces), or</p></li>
+<li><p>set <code class="docutils literal notranslate"><span class="pre">set_truncated=True</span></code> on the collector so that every batch
+boundary carries a <code class="docutils literal notranslate"><span class="pre">done</span></code> signal (note: this introduces artificial
+truncations that value estimators must account for).</p></li>
+</ul>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
 <p>When using <cite>strict_length=False</cite>, it is recommended to use
 <a class="reference internal" href="torchrl.collectors.utils.split_trajectories.html#torchrl.collectors.utils.split_trajectories" title="torchrl.collectors.utils.split_trajectories"><code class="xref py py-func docutils literal notranslate"><span class="pre">split_trajectories()</span></code></a> to split the sampled trajectories.
 However, if two samples from the same episode are placed next to each other,

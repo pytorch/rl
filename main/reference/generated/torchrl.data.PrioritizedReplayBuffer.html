@@ -307,6 +307,13 @@ argument in the storage instantiation if that argument is
 available, to let storages know that the data is
 multi-dimensional and keep consistent notions of storage-capacity
 and batch-size during sampling.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>When using a collector with <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code>,
+trajectories are written as flat 1-D sequences of variable
+length.  Do not set <code class="docutils literal notranslate"><span class="pre">dim_extend</span> <span class="pre">&gt;</span> <span class="pre">0</span></code> or <code class="docutils literal notranslate"><span class="pre">ndim</span> <span class="pre">&gt;=</span> <span class="pre">2</span></code> in
+this case — the storage must be 1-dimensional.</p>
+</div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>This argument has no effect on <a class="reference internal" href="#torchrl.data.PrioritizedReplayBuffer.add" title="torchrl.data.PrioritizedReplayBuffer.add"><code class="xref py py-meth docutils literal notranslate"><span class="pre">add()</span></code></a> and

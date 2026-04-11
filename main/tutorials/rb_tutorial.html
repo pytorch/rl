@@ -473,8 +473,8 @@ We can also customize the storage location on disk:</p>
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>The buffer has 3 elements
-the &#39;a&#39; tensor is stored in /tmp/tmp09_o0z9r/a.memmap
-the (&#39;b&#39;, &#39;c&#39;) tensor is stored in /tmp/tmp09_o0z9r/b/c.memmap
+the &#39;a&#39; tensor is stored in /tmp/tmpma65a2cw/a.memmap
+the (&#39;b&#39;, &#39;c&#39;) tensor is stored in /tmp/tmpma65a2cw/b/c.memmap
 samples: a= tensor([[ 0,  1,  2,  3],
         [ 8,  9, 10, 11],
         [ 0,  1,  2,  3],
@@ -1278,9 +1278,56 @@ We mark the steps as well.</p>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>episode are grouped tensor([3, 3, 4, 4, 1, 1, 1, 1], dtype=torch.int32)
 steps are successive tensor([0, 1, 1, 2, 1, 2, 0, 1])
 
-1053
+4836
 </pre></div>
 </div>
+<section id="storing-trajectories-from-a-collector">
+<h3>Storing trajectories from a collector<a class="headerlink" href="#storing-trajectories-from-a-collector" title="Link to this heading">¶</a></h3>
+<p>The example above uses hand-crafted data.  In practice you will be
+collecting data with a <a class="reference internal" href="../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector"><code class="xref py py-class docutils literal notranslate"><span class="pre">Collector</span></code></a> (or its
+multi-process variants).  The collector already tags every transition with
+a <code class="docutils literal notranslate"><span class="pre">(&quot;collector&quot;,</span> <span class="pre">&quot;traj_ids&quot;)</span></code> key, so the
+<code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code> can reconstruct episode boundaries
+automatically.</p>
+<p>For <strong>single-process</strong> collectors the setup is straightforward — just
+<code class="docutils literal notranslate"><span class="pre">extend</span></code> the buffer with the collected batch and use <code class="docutils literal notranslate"><span class="pre">traj_ids</span></code> as
+the trajectory key:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">Collector</span>
+<span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">ReplayBuffer</span><span class="p">,</span> <span class="n">LazyTensorStorage</span><span class="p">,</span> <span class="n">SliceSampler</span>
+
+<span class="n">rb</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span>
+    <span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span><span class="mi">100_000</span><span class="p">),</span>
+    <span class="n">sampler</span><span class="o">=</span><span class="n">SliceSampler</span><span class="p">(</span>
+        <span class="n">slice_len</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+        <span class="n">traj_key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">),</span>
+    <span class="p">),</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">collector</span> <span class="o">=</span> <span class="n">Collector</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+<span class="k">for</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">data</span></a> <span class="ow">in</span> <span class="n">collector</span><span class="p">:</span>
+    <span class="n">rb</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">data</span></a><span class="p">)</span>
+    <span class="n">batch</span> <span class="o">=</span> <span class="n">rb</span><span class="o">.</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">sample</span></a><span class="p">()</span>  <span class="c1"># contiguous sub-sequences</span>
+</pre></div>
+</div>
+<p>For <strong>multi-process</strong> collectors, a subtlety arises: different workers
+write their batches independently, so adjacent frames in the buffer can
+come from unrelated episodes <em>without</em> an intervening <code class="docutils literal notranslate"><span class="pre">done</span></code> signal.
+The sampler cannot detect these invisible boundaries and may draw slices
+that cross episodes.</p>
+<p>The recommended solution is <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code>, which makes each worker
+write only <strong>complete trajectories</strong> to the buffer — see
+<a class="reference internal" href="../reference/collectors_replay.html#collectors-replay-trajs"><span class="std std-ref">the dedicated collector + replay buffer section</span></a>
+for full examples and discussion.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>When using <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code>, always use a <strong>flat 1-D storage</strong>
+(the default <code class="docutils literal notranslate"><span class="pre">ndim=1</span></code>).  Although batched environments normally call
+for <code class="docutils literal notranslate"><span class="pre">ndim=2</span></code>, <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code> disassembles batches and writes
+each trajectory as a variable-length 1-D sequence.  A storage with
+<code class="docutils literal notranslate"><span class="pre">ndim</span> <span class="pre">&gt;=</span> <span class="pre">2</span></code> expects a fixed second dimension that variable-length
+trajectories cannot fill.</p>
+</div>
+</section>
 </section>
 <section id="conclusion">
 <h2>Conclusion<a class="headerlink" href="#conclusion" title="Link to this heading">¶</a></h2>
@@ -1306,7 +1353,7 @@ which are based on our Replay Buffer API;</p></li>
 such as <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictMaxValueWriter</span></code>.</p></li>
 <li><p>Check how to checkpoint ReplayBuffers in <a class="reference internal" href="../reference/data_storage.html#checkpoint-rb"><span class="std std-ref">the doc</span></a>.</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.801 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.794 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-rb-tutorial-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/c64b1e484ba3e0219549719cc3c37479/rb_tutorial.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">rb_tutorial.ipynb</span></code></a></p>
@@ -1379,7 +1426,10 @@ such as <code class="xref py py-class docutils literal notranslate"><span class=
 <li><a class="reference internal" href="#a-more-complex-examples-using-catframes">A more complex examples: using CatFrames</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#storing-trajectories">Storing trajectories</a></li>
+<li><a class="reference internal" href="#storing-trajectories">Storing trajectories</a><ul>
+<li><a class="reference internal" href="#storing-trajectories-from-a-collector">Storing trajectories from a collector</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#conclusion">Conclusion</a></li>
 <li><a class="reference internal" href="#next-steps">Next steps</a></li>
 </ul>

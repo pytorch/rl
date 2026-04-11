@@ -387,6 +387,11 @@
 <span class="sd">            multi-dimensional and keep consistent notions of storage-capacity</span>
 <span class="sd">            and batch-size during sampling.</span>
 
+<span class="sd">            .. important:: When using a collector with ``trajs_per_batch``,</span>
+<span class="sd">                trajectories are written as flat 1-D sequences of variable</span>
+<span class="sd">                length.  Do not set ``dim_extend &gt; 0`` or ``ndim &gt;= 2`` in</span>
+<span class="sd">                this case — the storage must be 1-dimensional.</span>
+
 <span class="sd">            .. note:: This argument has no effect on :meth:`add` and</span>
 <span class="sd">                therefore should be used with caution when both :meth:`add`</span>
 <span class="sd">                and :meth:`extend` are used in a codebase. For example:</span>
@@ -1652,6 +1657,11 @@
 <span class="sd">            available, to let storages know that the data is</span>
 <span class="sd">            multi-dimensional and keep consistent notions of storage-capacity</span>
 <span class="sd">            and batch-size during sampling.</span>
+
+<span class="sd">            .. important:: When using a collector with ``trajs_per_batch``,</span>
+<span class="sd">                trajectories are written as flat 1-D sequences of variable</span>
+<span class="sd">                length.  Do not set ``dim_extend &gt; 0`` or ``ndim &gt;= 2`` in</span>
+<span class="sd">                this case — the storage must be 1-dimensional.</span>
 
 <span class="sd">            .. note:: This argument has no effect on :meth:`add` and</span>
 <span class="sd">                therefore should be used with caution when both :meth:`add`</span>

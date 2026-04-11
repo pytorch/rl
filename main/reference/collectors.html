@@ -295,6 +295,8 @@ Use the <code class="docutils literal notranslate"><span class="pre">sync</span>
 <li><p><strong>Device management</strong>: Control where environments and policies execute</p></li>
 <li><p><strong>Weight synchronization</strong>: Keep inference policies up-to-date with training weights</p></li>
 <li><p><strong>Replay buffer integration</strong>: Seamless compatibility with TorchRL’s replay buffers</p></li>
+<li><p><strong>Trajectory assembly</strong>: Collect complete trajectories with <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code> for
+clean <code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code> sampling — see <a class="reference internal" href="collectors_replay.html#collectors-replay-trajs"><span class="std std-ref">Complete trajectory collection with trajs_per_batch</span></a></p></li>
 <li><p><strong>Batching strategies</strong>: Multiple ways to organize collected data</p></li>
 </ul>
 </section>
@@ -394,6 +396,7 @@ Use the <code class="docutils literal notranslate"><span class="pre">sync</span>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="collectors_replay.html">Collectors and Replay Buffers</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="collectors_replay.html#collectors-and-replay-buffers-interoperability">Collectors and replay buffers interoperability</a></li>
+<li class="toctree-l2"><a class="reference internal" href="collectors_replay.html#complete-trajectory-collection-with-trajs-per-batch">Complete trajectory collection with <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="collectors_replay.html#helper-functions">Helper functions</a></li>
 </ul>
 </li>

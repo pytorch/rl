@@ -112,7 +112,7 @@ we will use a dummy, random policy in this example.
 
  .. code-block:: none
 
-    /pytorch/rl/torchrl/collectors/_base.py:1149: DeprecationWarning: SyncDataCollector has been deprecated and will be removed in v0.13. Please use Collector instead.
+    /pytorch/rl/torchrl/collectors/_base.py:1188: DeprecationWarning: SyncDataCollector has been deprecated and will be removed in v0.13. Please use Collector instead.
       warnings.warn(
 
 
@@ -375,7 +375,7 @@ will be unique:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 177-199
+.. GENERATED FROM PYTHON SOURCE LINES 177-204
 
 Again, our sample looks exactly the same as the data we gathered from the
 collector!
@@ -398,12 +398,17 @@ Next steps
   simplicity. Try it out for yourself: build a buffer and indicate its
   batch-size in the constructor, then try to iterate over it. This is
   equivalent to calling ``rb.sample()`` within a loop!
+- For trajectory-based training (recurrent policies, decision transformers),
+  see :ref:`collectors_replay_trajs` — it shows how to use
+  ``trajs_per_batch`` with a :class:`~torchrl.data.SliceSampler` to store
+  and sample clean trajectory slices from the replay buffer, especially
+  with multi-process collectors.
 
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.076 seconds)
+   **Total running time of the script:** (0 minutes 0.074 seconds)
 
 
 .. _sphx_glr_download_tutorials_getting-started-3.py:

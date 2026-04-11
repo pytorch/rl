@@ -530,6 +530,16 @@
 <span class="sd">            in :class:`~torchrl.envs.EnvCreator`. This is useful for multiprocessed settings where shared memory</span>
 <span class="sd">            needs to be managed, but Ray has its own object storage mechanism, so this is typically not needed.</span>
 <span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        trajs_per_batch (int, optional): When set, each remote collector</span>
+<span class="sd">            assembles complete trajectories (episodes ending with</span>
+<span class="sd">            ``(&quot;next&quot;, &quot;done&quot;) == True``) before writing them to the replay</span>
+<span class="sd">            buffer as flat 1-D sequences.  Passed through to</span>
+<span class="sd">            ``collector_kwargs`` so that each worker&#39;s inner collector calls</span>
+<span class="sd">            :meth:`~torchrl.collectors.BaseCollector._iter_by_trajectories`.</span>
+
+<span class="sd">            See :class:`~torchrl.collectors.BaseCollector` for the full</span>
+<span class="sd">            description of the completeness guarantee and storage contract.</span>
+<span class="sd">            Defaults to ``None``.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; from torch import nn</span>
@@ -598,6 +608,7 @@
         <span class="n">weight_recv_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightSyncScheme</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">use_env_creator</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">no_cuda_sync</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">trajs_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span> <span class="o">=</span> <span class="n">frames_per_batch</span>
         <span class="k">if</span> <span class="n">remote_configs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -616,6 +627,12 @@
                     <span class="n">ck</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;replay_buffer&quot;</span><span class="p">,</span> <span class="n">replay_buffer</span><span class="p">)</span>
                     <span class="k">for</span> <span class="n">ck</span> <span class="ow">in</span> <span class="n">collector_kwargs</span>
                 <span class="p">]</span>
+        <span class="k">if</span> <span class="n">trajs_per_batch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">collector_kwargs</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+                <span class="n">collector_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;trajs_per_batch&quot;</span><span class="p">,</span> <span class="n">trajs_per_batch</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">ck</span> <span class="ow">in</span> <span class="n">collector_kwargs</span><span class="p">:</span>
+                    <span class="n">ck</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;trajs_per_batch&quot;</span><span class="p">,</span> <span class="n">trajs_per_batch</span><span class="p">)</span>
 
         <span class="c1"># Make sure input parameters are consistent</span>
         <span class="k">def</span> <span class="nf">check_consistency_with_num_collectors</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">param_name</span><span class="p">,</span> <span class="n">num_collectors</span><span class="p">):</span>
@@ -1189,11 +1206,14 @@
     <span class="k">def</span> <span class="nf">_run_collection_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Runs the collection loop in a background thread.&quot;&quot;&quot;</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">iterator</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">iterator</span><span class="p">():</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
                     <span class="k">break</span>
                 <span class="c1"># When RayReplayBuffer is configured, sub-collectors write directly</span>
-                <span class="c1"># to the buffer and data will be None. Otherwise, data contains rollouts.</span>
+                <span class="c1"># to the buffer and data will be None. Otherwise, write returned</span>
+                <span class="c1"># data (e.g. trajectory batches) to the local replay buffer.</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
             <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error in collection thread: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
             <span class="k">raise</span>

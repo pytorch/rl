@@ -269,10 +269,19 @@ stored and sent. Default is <code class="xref py py-obj docutils literal notrans
 If <code class="docutils literal notranslate"><span class="pre">None</span></code> is provided, the device is automatically gathered from the
 first batch of data passed. This is not enabled by default to avoid
 data placed on GPU by mistake, causing OOM issues.</p></li>
-<li><p><strong>ndim</strong> (<em>int</em><em>, </em><em>optional</em>) – the number of dimensions to be accounted for when
+<li><p><strong>ndim</strong> (<em>int</em><em>, </em><em>optional</em>) – <p>the number of dimensions to be accounted for when
 measuring the storage size. For instance, a storage of shape <code class="docutils literal notranslate"><span class="pre">[3,</span> <span class="pre">4]</span></code>
 has capacity <code class="docutils literal notranslate"><span class="pre">3</span></code> if <code class="docutils literal notranslate"><span class="pre">ndim=1</span></code> and <code class="docutils literal notranslate"><span class="pre">12</span></code> if <code class="docutils literal notranslate"><span class="pre">ndim=2</span></code>.
-Defaults to <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
+Defaults to <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>When using a collector with <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code>,
+keep the default <code class="docutils literal notranslate"><span class="pre">ndim=1</span></code>.  <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code> writes
+variable-length trajectories as flat 1-D sequences, which is
+incompatible with a storage that expects a fixed second
+dimension (<code class="docutils literal notranslate"><span class="pre">ndim</span> <span class="pre">&gt;=</span> <span class="pre">2</span></code>).</p>
+</div>
+</p></li>
 <li><p><strong>existsok</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether an error should be raised if any of the
 tensors already exists on disk. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, the
 tensor will be opened as is, not overewritten.</p></li>

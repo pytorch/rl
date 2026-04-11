@@ -916,6 +916,13 @@
 <span class="sd">            measuring the storage size. For instance, a storage of shape ``[3, 4]``</span>
 <span class="sd">            has capacity ``3`` if ``ndim=1`` and ``12`` if ``ndim=2``.</span>
 <span class="sd">            Defaults to ``1``.</span>
+
+<span class="sd">            .. important:: When using a collector with ``trajs_per_batch``,</span>
+<span class="sd">                keep the default ``ndim=1``.  ``trajs_per_batch`` writes</span>
+<span class="sd">                variable-length trajectories as flat 1-D sequences, which is</span>
+<span class="sd">                incompatible with a storage that expects a fixed second</span>
+<span class="sd">                dimension (``ndim &gt;= 2``).</span>
+
 <span class="sd">        compilable (bool, optional): whether the storage is compilable.</span>
 <span class="sd">            If ``True``, the writer cannot be shared between multiple processes.</span>
 <span class="sd">            Defaults to ``False``.</span>
@@ -1604,6 +1611,12 @@
 <span class="sd">            measuring the storage size. For instance, a storage of shape ``[3, 4]``</span>
 <span class="sd">            has capacity ``3`` if ``ndim=1`` and ``12`` if ``ndim=2``.</span>
 <span class="sd">            Defaults to ``1``.</span>
+
+<span class="sd">            .. important:: When using a collector with ``trajs_per_batch``,</span>
+<span class="sd">                keep the default ``ndim=1``.  ``trajs_per_batch`` writes</span>
+<span class="sd">                variable-length trajectories as flat 1-D sequences, which is</span>
+<span class="sd">                incompatible with a storage that expects a fixed second</span>
+<span class="sd">                dimension (``ndim &gt;= 2``).</span>
 <span class="sd">        compilable (bool, optional): whether the storage is compilable.</span>
 <span class="sd">            If ``True``, the writer cannot be shared between multiple processes.</span>
 <span class="sd">            Defaults to ``False``.</span>
@@ -1841,6 +1854,13 @@
 <span class="sd">            measuring the storage size. For instance, a storage of shape ``[3, 4]``</span>
 <span class="sd">            has capacity ``3`` if ``ndim=1`` and ``12`` if ``ndim=2``.</span>
 <span class="sd">            Defaults to ``1``.</span>
+
+<span class="sd">            .. important:: When using a collector with ``trajs_per_batch``,</span>
+<span class="sd">                keep the default ``ndim=1``.  ``trajs_per_batch`` writes</span>
+<span class="sd">                variable-length trajectories as flat 1-D sequences, which is</span>
+<span class="sd">                incompatible with a storage that expects a fixed second</span>
+<span class="sd">                dimension (``ndim &gt;= 2``).</span>
+
 <span class="sd">        existsok (bool, optional): whether an error should be raised if any of the</span>
 <span class="sd">            tensors already exists on disk. Defaults to ``True``. If ``False``, the</span>
 <span class="sd">            tensor will be opened as is, not overewritten.</span>
