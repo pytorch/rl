@@ -44,7 +44,7 @@ on:
         description: 'Build with CUDA (enable/disable)'
         required: false
         type: string
-        default: 'enable'
+        default: 'disable'
       with-cpu:
         description: 'Build with CPU (enable/disable)'
         required: false
@@ -73,8 +73,8 @@ jobs:
       use-only-dl-pytorch-org: ${{ inputs.channel == 'release' && 'true' || 'false' }}
       # For workflow_dispatch: convert boolean to enable/disable string
       # For workflow_call: use the string input directly
-      # Default: enable all variants (Windows has no ROCm)
-      with-cuda: ${{ github.event_name == 'workflow_dispatch' && (inputs.build-cuda && 'enable' || 'disable') || inputs.with-cuda || 'enable' }}
+      # Default: disable CUDA (torchrl is CPU-only), enable CPU (Windows has no ROCm)
+      with-cuda: ${{ github.event_name == 'workflow_dispatch' && (inputs.build-cuda && 'enable' || 'disable') || inputs.with-cuda || 'disable' }}
       with-cpu: ${{ github.event_name == 'workflow_dispatch' && (inputs.build-cpu && 'enable' || 'disable') || inputs.with-cpu || 'enable' }}
   build:
     needs: generate-matrix

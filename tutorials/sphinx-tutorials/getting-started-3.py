@@ -195,6 +195,11 @@ print(sample)
 #   simplicity. Try it out for yourself: build a buffer and indicate its
 #   batch-size in the constructor, then try to iterate over it. This is
 #   equivalent to calling ``rb.sample()`` within a loop!
+# - For trajectory-based training (recurrent policies, decision transformers),
+#   see :ref:`collectors_replay_trajs` — it shows how to use
+#   ``trajs_per_batch`` with a :class:`~torchrl.data.SliceSampler` to store
+#   and sample clean trajectory slices from the replay buffer, especially
+#   with multi-process collectors.
 #
 
 # sphinx_gallery_start_ignore

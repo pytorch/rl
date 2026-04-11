@@ -68,6 +68,7 @@ from torchrl._utils import (  # noqa: E402
 )
 
 logger = logger
+torchrl_logger = logger
 
 # TorchRL's multiprocessing default.
 _preferred_start_method = _get_default_mp_start_method()
@@ -140,5 +141,5 @@ __all__ = [
     "set_auto_unwrap_transformed_env",
     "timeit",
     "logger",
-    "logger",
+    "torchrl_logger",
 ]
