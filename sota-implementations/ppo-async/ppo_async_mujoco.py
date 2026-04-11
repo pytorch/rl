@@ -67,16 +67,18 @@ class _ActorWithCritic(torch.nn.Module):
 
 
 class _WorkerGAEPostproc:
-    """Postproc for worker GAE mode: critic + GAE, flatten, stamp policy_version."""
+    """Postproc for worker GAE mode: critic + GAE, flatten, stamp policy_version.
+
+    The adv_module's value_network (critic) is synced to the collector device
+    automatically via a dedicated SharedMemWeightSyncScheme registered with
+    model_id="postproc.adv_module". No manual .to() calls needed.
+    """
 
     def __init__(self, adv_module, version_counter):
         self.adv_module = adv_module
         self.version_counter = version_counter
 
     def __call__(self, data):
-        # Move data to the critic's device for GAE computation
-        adv_device = next(self.adv_module.parameters()).device
-        data = data.to(adv_device)
         with torch.no_grad():
             data = self.adv_module(data)
         data_flat = data.reshape(-1)
@@ -437,18 +439,26 @@ def _train_start(
 
     import tqdm
     from torchrl.collectors import MultiaSyncDataCollector
+    from torchrl.weight_update import SharedMemWeightSyncScheme
     from utils_mujoco import make_env
 
     # Shared version counter (readable by workers via postproc)
     version_counter = multiprocessing.Value("i", 0)
 
     # Build collector policy and postproc based on advantage_on mode
+    weight_sync_schemes = None
     if advantage_on == "worker":
-        # Workers compute GAE via postproc; _ActorWithCritic ensures
-        # update_policy_weights_() syncs both actor and critic to workers,
-        # but only the actor runs per-step during collection.
-        collector_policy = _ActorWithCritic(actor, critic)
+        # Workers compute GAE via postproc. The actor runs per-step during
+        # collection; the adv_module (with critic) runs in the postproc.
+        # A dedicated weight sync scheme keeps the worker's adv_module in
+        # sync with the trainer's critic — resolved via model_id so both
+        # device placement and weight updates are handled automatically.
+        collector_policy = actor
         postproc = _WorkerGAEPostproc(adv_module, version_counter)
+        weight_sync_schemes = {
+            "policy": SharedMemWeightSyncScheme(),
+            "postproc.adv_module": SharedMemWeightSyncScheme(),
+        }
     else:
         # Workers only collect; TD(0) advantage on learner at training time
         collector_policy = actor
@@ -483,6 +493,7 @@ def _train_start(
         replay_buffer=data_buffer,
         postproc=postproc,
         local_init_rb=True,
+        weight_sync_schemes=weight_sync_schemes,
     )
 
     # Start collection — workers fill buffer independently
@@ -559,8 +570,15 @@ def _train_start(
             optim.step()
             num_network_updates += 1
 
-        # Push updated weights to workers and bump version
-        collector.update_policy_weights_()
+        # Push updated weights to workers and bump version.
+        # In worker mode, sync both actor and adv_module (critic) via
+        # their registered weight sync schemes.
+        if advantage_on == "worker":
+            collector.update_policy_weights_(
+                weights_dict={"policy": None, "postproc.adv_module": None}
+            )
+        else:
+            collector.update_policy_weights_()
         policy_version += 1
         version_counter.value = policy_version
         if hasattr(sampler, "consumer_version"):
