@@ -43,7 +43,7 @@ dependencies = [
     "numpy",
     "packaging",
     "cloudpickle",
-    "tensordict>=0.11.0,<0.12.0",
+    "tensordict>=0.12.0,<0.13.0",
 ]
 
 [project.optional-dependencies]
@@ -93,6 +93,10 @@ marl = ["vmas>=1.2.10", "pettingzoo>=1.24.1", "dm-meltingpot; python_version>='3
 open_spiel = ["open_spiel>=1.5"]
 brax = ["jax>=0.7.0; python_version>='3.11'", "brax; python_version>='3.11'"]
 procgen = ["procgen"]
+pilco = [
+    "botorch",
+    "gpytorch",
+]
 # Base LLM dependencies (no inference backend - use llm-vllm or llm-sglang)
 llm = [
     "transformers",
@@ -110,7 +114,7 @@ llm = [
 # LLM with vLLM backend
 llm-vllm = [
     "torchrl[llm]",
-    "vllm",
+    "vllm>=0.17",
 ]
 # LLM with SGLang backend
 llm-sglang = [
@@ -120,7 +124,7 @@ llm-sglang = [
 # LLM with both backends
 llm-all = [
     "torchrl[llm]",
-    "vllm",
+    "vllm>=0.17",
     "sglang[all]",
 ]
 grpo = [
@@ -158,7 +162,7 @@ version_scheme = "post-release"
 # Local scheme is handled by setup.py (appends +g<sha> unless on release/v<version> branch)
 local_scheme = "no-local-version"
 version_file = "torchrl/_version.py"
-fallback_version = "0.11.0"
+fallback_version = "0.12.0"
 
 [tool.setuptools.packages.find]
 exclude = [

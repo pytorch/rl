@@ -64,3 +64,9 @@ repos:
       files: ^docs/.*\.rst$
       pass_filenames: true
       description: Ensure Sphinx section underline lengths match section titles.
+    - id: forbid-version-file
+      name: Forbid committing _version.py
+      entry: bash -c 'git diff --cached --diff-filter=ACM --name-only | grep -qE "(^|/)_version\.py$" && { echo "ERROR - _version.py is auto-generated and must not be committed"; exit 1; } || exit 0'
+      language: system
+      always_run: true
+      pass_filenames: false

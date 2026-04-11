@@ -16,3 +16,15 @@ Modules for model-based reinforcement learning, including world models and dynam
     RSSMPosterior
     RSSMPrior
     RSSMRollout
+
+PILCO
+-----
+
+Components for moment-matching model-based policy search (PILCO).
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    GPWorldModel
+    RBFController
