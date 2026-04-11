@@ -18,13 +18,15 @@ permissions:
   issues: write
 
 env:
-  FLAKY_RUNS_TO_ANALYZE: ${{ inputs.num_runs || '30' }}
+  PYTHONUNBUFFERED: "1"
+  FLAKY_RUNS_TO_ANALYZE: ${{ inputs.num_runs || '15' }}
   # Workflows to analyze for flaky tests
   FLAKY_WORKFLOWS: 'test-linux.yml,test-linux-libs.yml,test-linux-habitat.yml,test-linux-llm.yml,test-linux-sota.yml,test-linux-tutorials.yml'
 
 jobs:
   analyze-flaky-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     outputs:
       flaky_count: ${{ steps.analyze.outputs.flaky_count }}
       new_flaky_count: ${{ steps.analyze.outputs.new_flaky_count }}
@@ -221,6 +223,49 @@ jobs:
                 title: title,
                 body: body,
                 labels: ['flaky-test-tracker', 'ci']
+              });
+              console.log(`Created issue #${newIssue.data.number}`);
+            }
+
+  notify-failure:
+    needs: analyze-flaky-tests
+    runs-on: ubuntu-latest
+    if: failure()
+
+    steps:
+      - name: Create or update failure issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const today = new Date().toISOString().split('T')[0];
+
+            // Look for existing failure tracking issue
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'flaky-tracker-failure',
+              state: 'open',
+              per_page: 1
+            });
+
+            if (issues.data.length > 0) {
+              // Add comment to existing issue
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issues.data[0].number,
+                body: `Flaky Test Tracker failed again on ${today}.\n\nRun: ${runUrl}`
+              });
+              console.log(`Commented on issue #${issues.data[0].number}`);
+            } else {
+              // Create new issue
+              const newIssue = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: '[CI] Flaky Test Tracker workflow is failing',
+                body: `The Flaky Test Tracker workflow failed on ${today}.\n\nRun: ${runUrl}\n\nThis issue is automatically created when the tracker fails. It will receive comments on subsequent failures. Close it once the issue is resolved.`,
+                labels: ['flaky-tracker-failure', 'ci']
               });
               console.log(`Created issue #${newIssue.data.number}`);
             }

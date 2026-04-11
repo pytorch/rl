@@ -16,14 +16,16 @@ from torch import device as torch_device, dtype as torch_dtype
 
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.envs.llm import AddThinkingPrompt, GSM8KEnv, KLRewardTransform, RetrieveKL
+from torchrl.envs.llm.datasets.countdown import CountdownEnv
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
+from torchrl.envs.llm.datasets.math import MATHEnv
 from torchrl.modules.llm import SGLangWrapper, TransformersWrapper, vLLMWrapper
 from torchrl.weight_update.llm import SGLangWeightSyncScheme, VLLMWeightSyncScheme
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
 
 
-def check_grpo_dependencies() -> None:
+def check_grpo_dependencies(backend: str = "vllm") -> None:
     """Check for required GRPO dependencies and provide helpful error messages.
 
     This function checks for critical dependencies needed for GRPO training and
@@ -37,12 +39,15 @@ def check_grpo_dependencies() -> None:
         "datasets": "pip install datasets",
         "peft": "pip install peft",
         "wandb": "pip install wandb",
-        "vllm": "pip install vllm",
         "transformers": "pip install transformers",
         "accelerate": "pip install accelerate",
         "ray": "pip install ray",
         "tqdm": "pip install tqdm",
     }
+    if backend == "sglang":
+        required_packages["sglang"] = "pip install sglang[all]"
+    else:
+        required_packages["vllm"] = "pip install vllm"
 
     # Optional but recommended packages
     optional_packages = {
@@ -135,10 +140,10 @@ def get_train_model(
     max_memory = {}
     for i in range(torch.cuda.device_count()):
         if i in train_devices:
-            max_memory[i] = "24GiB"  # Allow max memory for devices we want to use
+            max_memory[i] = "130GiB"  # Allow max memory for devices we want to use
         else:
             max_memory[i] = "0GiB"  # No memory for other devices
-    max_memory["cpu"] = "24GiB"  # Allow CPU memory as fallback
+    max_memory["cpu"] = "48GiB"  # Allow CPU memory as fallback
 
     # Let HF handle distribution with max_memory
     device_map = "balanced" if len(train_devices) > 1 else f"cuda:{train_devices[0]}"
@@ -249,30 +254,6 @@ def _get_vllm_inference_model(
         "compile": compile_model,
     }
 
-    # CRITICAL FIX: Configure attention implementation to prevent Flash Attention errors
-    # vLLM doesn't accept attn_implementation directly through AsyncEngineArgs
-    # Instead, we set the VLLM_ATTENTION_BACKEND environment variable
-    if hasattr(cfg.inference_model, "attn_implementation"):
-        import os
-
-        attn_impl = cfg.inference_model.attn_implementation
-
-        # Map common attention implementations to vLLM backend names
-        attn_backend_map = {
-            "flash_attention_2": "FLASH_ATTN",
-            "flash_attn": "FLASH_ATTN",
-            "sdpa": "TORCH_SDPA",
-            "torch_sdpa": "TORCH_SDPA",
-            "xformers": "XFORMERS",
-        }
-
-        vllm_backend = attn_backend_map.get(attn_impl, attn_impl.upper())
-        os.environ["VLLM_ATTENTION_BACKEND"] = vllm_backend
-
-        torchrl_logger.info(
-            f"Setting VLLM_ATTENTION_BACKEND={vllm_backend} (from config: {attn_impl})"
-        )
-
     # Handle FP32 output configuration
     if hasattr(cfg.inference_model, "enable_fp32_output"):
         import os
@@ -352,11 +333,11 @@ def _get_sglang_inference_model(
     from torchrl.modules.llm.backends.sglang import AsyncSGLang
 
     num_devices = cfg.inference_model.num_devices
+    sglang_devices = devices  # Always use allocated devices when provided
     if num_devices is None:
-        sglang_devices = devices if devices is not None else [1]
+        if sglang_devices is None:
+            sglang_devices = [1]
         num_devices = len(sglang_devices)
-    else:
-        sglang_devices = None
     torchrl_logger.info(
         f"Creating AsyncSGLang inference model with num_devices={num_devices}, devices={sglang_devices}"
     )
@@ -377,9 +358,9 @@ def _get_sglang_inference_model(
         dtype_str = cfg.inference_model.torch_dtype
         if dtype_str is not None:
             if isinstance(dtype_str, str):
-                inference_params["dtype"] = getattr(torch, dtype_str)
-            else:
                 inference_params["dtype"] = dtype_str
+            else:
+                inference_params["dtype"] = str(dtype_str).removeprefix("torch.")
 
     # Add optional SGLang parameters
     optional_sglang_params = [
@@ -392,6 +373,10 @@ def _get_sglang_inference_model(
             value = getattr(cfg.inference_model, param)
             if value is not None:
                 inference_params[param] = value
+
+    # Pin SGLang server to allocated GPUs via CUDA_VISIBLE_DEVICES
+    if sglang_devices is not None:
+        inference_params["cuda_devices"] = sglang_devices
 
     inference_server = AsyncSGLang.from_pretrained(**inference_params)
     assert inference_server is not None
@@ -454,10 +439,10 @@ def get_ref_model(
     max_memory = {}
     for i in range(torch.cuda.device_count()):
         if i in ref_devices:
-            max_memory[i] = "24GiB"  # Allow max memory for devices we want to use
+            max_memory[i] = "130GiB"  # Allow max memory for devices we want to use
         else:
             max_memory[i] = "0GiB"  # No memory for other devices
-    max_memory["cpu"] = "24GiB"  # Allow CPU memory as fallback
+    max_memory["cpu"] = "48GiB"  # Allow CPU memory as fallback
 
     # Let HF handle distribution with max_memory
     device_map = "balanced" if len(ref_devices) > 1 else f"cuda:{ref_devices[0]}"
@@ -654,6 +639,7 @@ def get_hf_model(
 def make_weight_sync_scheme(
     engine,
     cfg: DictConfig,
+    device: torch.device | str | int | None = None,
 ) -> VLLMWeightSyncScheme | SGLangWeightSyncScheme:
     """Creates a weight synchronization scheme using NCCL collectives.
 
@@ -665,6 +651,7 @@ def make_weight_sync_scheme(
             interface. This is typically obtained from the inference policy's model
             attribute.
         cfg: The hydra configuration object. Used to determine the backend type.
+        device: The device index for the trainer side of the NCCL group.
 
     Returns:
         VLLMWeightSyncScheme | SGLangWeightSyncScheme: A weight sync scheme
@@ -673,7 +660,7 @@ def make_weight_sync_scheme(
     backend = getattr(cfg.inference_model, "backend", "vllm")
 
     if backend == "sglang":
-        return _make_sglang_weight_sync_scheme(engine)
+        return _make_sglang_weight_sync_scheme(engine, device=device)
     else:
         return _make_vllm_weight_sync_scheme(engine)
 
@@ -700,22 +687,31 @@ def _make_vllm_weight_sync_scheme(vllm_engine) -> VLLMWeightSyncScheme:
     )
 
 
-def _make_sglang_weight_sync_scheme(sglang_engine) -> SGLangWeightSyncScheme:
+def _make_sglang_weight_sync_scheme(
+    sglang_engine, device: torch.device | str | int | None = None
+) -> SGLangWeightSyncScheme:
     """Creates an SGLang weight synchronization scheme."""
     server_url = sglang_engine.server_url
     tp_size = sglang_engine.get_tp_size()
-    dp_size = getattr(sglang_engine, "dp_size", 1)
+    dp_size = sglang_engine.get_dp_size()
     num_gpus = tp_size * dp_size
+    master_address = sglang_engine.get_master_address()
+    master_port = sglang_engine.get_master_port()
 
     torchrl_logger.info(
         f"Creating SGLangWeightSyncScheme with server_url={server_url}, "
-        f"tp_size={tp_size}, dp_size={dp_size}, num_gpus={num_gpus}"
+        f"tp_size={tp_size}, dp_size={dp_size}, num_gpus={num_gpus}, "
+        f"master_address={master_address}, master_port={master_port}, "
+        f"device={device}"
     )
 
     return SGLangWeightSyncScheme(
         server_url=server_url,
+        master_address=master_address,
+        master_port=master_port,
         num_gpus=num_gpus,
-        strategy_name="state_dict",
+        strategy="state_dict",
+        device=device if device is not None else 0,
     )
 
 
@@ -737,8 +733,8 @@ def compute_device_allocation(cfg):
 
     train_start = 0
     train_end = train_devices
-    inference_start = 0
-    inference_end = inf_devices
+    inference_start = train_end
+    inference_end = inference_start + inf_devices
 
     ref_devices = cfg.ref_model.num_devices if cfg.train.use_kl_to_ref else 0
     ray_num_gpus = train_devices + inf_devices + ref_devices
@@ -748,7 +744,7 @@ def compute_device_allocation(cfg):
 
     all_devices = sorted(set(train_model_devices + inference_model_devices))
     if cfg.train.use_kl_to_ref:
-        ref_device_start = max(all_devices) + 1 if all_devices else 0
+        ref_device_start = inference_end
         ref_devices_list = list(range(ref_device_start, ref_device_start + ref_devices))
         all_devices.extend(ref_devices_list)
     cuda_visible_devices = ",".join(map(str, all_devices))
@@ -774,28 +770,27 @@ def make_env(cfg: DictConfig, single_env: bool = False):
 
     # Setup environment
     max_steps = cfg.env.max_steps if cfg.env.reasoning else 1
+    num_envs = cfg.env.num_envs if not single_env else 1
+    common_kwargs = {
+        "repeats": cfg.env.repeats,
+        "tokenizer": train_tokenizer,
+        "num_envs": num_envs,
+        "max_steps": max_steps,
+        "device": torch.device("cpu"),
+    }
+
     if cfg.env.dataset == "gsm8k":
-        # Reward scale is 0.0 to 100
-        reward_threshold = 20
-        env = GSM8KEnv(
-            repeats=cfg.env.repeats,
-            tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs if not single_env else 1,
-            max_steps=max_steps,
-            device=torch.device("cpu"),
-            ray_backend=True,
-        )
-    elif cfg.env.dataset == "ifeval":  # ifeval
-        # Reward scale is 0.0 to 2.2
-        reward_threshold = 1.0
-        env = IFEvalEnv(
-            repeats=cfg.env.repeats,
-            tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs if not single_env else 1,
-            max_steps=max_steps,
-            device=torch.device("cpu"),
-            ray_backend=True,
-        )
+        reward_threshold = 0.1
+        env = GSM8KEnv(**common_kwargs, ray_backend=True)
+    elif cfg.env.dataset == "ifeval":
+        reward_threshold = 0.5
+        env = IFEvalEnv(**common_kwargs, ray_backend=True)
+    elif cfg.env.dataset == "math":
+        reward_threshold = 0.1
+        env = MATHEnv(**common_kwargs, ray_backend=True)
+    elif cfg.env.dataset == "countdown":
+        reward_threshold = 0.1
+        env = CountdownEnv(**common_kwargs)
     else:
         raise NotImplementedError(f"Dataset {cfg.env.dataset} not implemented")
 
@@ -909,12 +904,44 @@ def log_training_metrics(
         batch_policy_version = batch["next", "policy_version"].view(-1).min()
         batch_policy_age = collector.policy_version - batch_policy_version
 
+        # Buffer-level staleness stats
+        buffer_policy_versions = (
+            rb_content.get(("next", "policy_version")).view(-1).float()
+        )
+        current_version = collector.policy_version
+        buffer_staleness = current_version - buffer_policy_versions
+        buffer_staleness_mean = float(buffer_staleness.mean())
+        buffer_staleness_max = float(buffer_staleness.max())
+
+        elapsed = time.time() - start_time
+        optim_steps = global_step // gradient_accumulation_steps
+
         metrics = {
-            "step_count from buffer": float(step_count),
-            "reward from buffer": float(
+            # --- training/ : loss components and optimizer state ---
+            "training/loss_objective": float(loss.loss_objective),
+            "training/clip_fraction": float(loss.clip_fraction),
+            "training/ESS": float(loss.ESS),
+            "training/entropy_loss": float(loss.loss_entropy.mean()),
+            "training/kl_approx_to_inference": float(loss.kl_approx),
+            "training/kl_to_inference": float(loss.kl_to_inference.mean()),
+            "training/loss_kl_to_inference": float(loss.loss_kl_to_inference.mean()),
+            "training/grad_norm": float(grad_norm)
+            if global_step % gradient_accumulation_steps == 0
+            else 0.0,
+            "training/gradient_steps": global_step,
+            "training/optim_steps": optim_steps,
+            # --- inference/ : collection and policy version state ---
+            "inference/policy_version": collector.policy_version,
+            "inference/batch_policy_version": batch_policy_version,
+            "inference/batch_policy_age": batch_policy_age,
+            "inference/staleness_mean": buffer_staleness_mean,
+            "inference/staleness_max": buffer_staleness_max,
+            # --- buffer/ : replay buffer statistics ---
+            "buffer/write_count": int(replay_buffer.write_count),
+            "buffer/reward_mean": float(
                 torch.cat(rb_content.get(("next", "reward"), as_list=True)).mean()
             ),
-            "seq_length from buffer": float(
+            "buffer/seq_length_mean": float(
                 torch.tensor(
                     [
                         t.numel()
@@ -923,44 +950,24 @@ def log_training_metrics(
                     dtype=torch.float,
                 ).mean()
             ),
-            "ESS, from loss": float(loss.ESS),
-            "loss_objective, from loss": float(loss.loss_objective),
-            "clip_fraction, from loss": float(loss.clip_fraction),
-            "kl_approx (train to inference), from loss": float(loss.kl_approx),
-            "kl_to_inference (train to inference - differentiable), from loss": float(
-                loss.kl_to_inference.mean()
-            ),
-            "loss_kl_to_inference, from loss": float(loss.loss_kl_to_inference.mean()),
-            "entropy loss, from loss": float(loss.loss_entropy.mean()),
-            "grad_norm": float(grad_norm)
-            if global_step % gradient_accumulation_steps == 0
-            else 0.0,
-            "write_count, from buffer": int(replay_buffer.write_count),
-            # how many gradient steps per write
-            "gradient_step_throughput (gradient step per write)": float(
+            "buffer/step_count_mean": float(step_count),
+            "buffer/data_read_count": data_read_count,
+            # --- throughput/ : training speed metrics ---
+            "throughput/gradient_steps_per_second": float(global_step / elapsed),
+            "throughput/optim_steps_per_second": float(optim_steps / elapsed),
+            "throughput/gradient_steps_per_write": float(
                 global_step / replay_buffer.write_count
             ),
-            # how many optim steps per write
-            "optim_step_throughput (optim step per write)": float(
-                (global_step // gradient_accumulation_steps) / replay_buffer.write_count
-            ),
-            "data_read_count (total)": data_read_count,
-            "current_policy_version (collector)": collector.policy_version,
-            # FIXME: Assume batch is a single trajectory
-            # FIXME: The addition of the transform after the env instantiation + _shuttle creation
-            #  is messed up - we need the next data
-            "batch_policy_version (sampled batch)": batch_policy_version,
-            "batch_policy_age (sampled batch)": batch_policy_age,
-            "throughput (steps per second)": float(
-                global_step / (time.time() - start_time)
+            "throughput/optim_steps_per_write": float(
+                optim_steps / replay_buffer.write_count
             ),
         }
         if use_kl_to_ref:
-            metrics["kl_penalty (inference to ref) from buffer"] = float(
+            metrics["training/kl_to_ref"] = float(loss.kl_to_ref.mean())
+            metrics["training/loss_kl_to_ref"] = float(loss.loss_kl_to_ref.mean())
+            metrics["buffer/kl_penalty_to_ref_mean"] = float(
                 torch.cat(rb_content.get(("next", "kl_penalty"), as_list=True)).mean()
             )
-            metrics["kl_to_ref, from loss"] = float(loss.kl_to_ref.mean())
-            metrics["loss_kl_to_ref, from loss"] = float(loss.loss_kl_to_ref.mean())
 
         wandb_logger.log_metrics(metrics, step=global_step)
 
