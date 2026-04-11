@@ -203,7 +203,7 @@ Data collectors that have been started with `start()` should be shut down using
 
         rb = ReplayBuffer(
             storage=LazyTensorStorage(100_000),
-            sampler=SliceSampler(slice_len=20, end_key=("next", "done")),
+            sampler=SliceSampler(slice_len=32, end_key=("next", "done")),
             batch_size=256,
             shared=True,
         )
