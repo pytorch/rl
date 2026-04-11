@@ -56,7 +56,7 @@ def make_env_gpu(env_name="halfcheetah", device="cuda:0", num_envs=4096, compile
     """
     from mujoco_torch.zoo import ENVS
 
-    compile_kwargs = {"mode": "reduce-overhead"} if compile else None
+    compile_kwargs = {"mode": "default"} if compile else None
     env = ENVS[env_name](
         num_envs=num_envs,
         device=device,
