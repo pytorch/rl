@@ -1220,12 +1220,15 @@ but got an object of type {type(transform)}."""
         return super().rand_action(tensordict)
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        # No need to clone here because inv does it already
-        # tensordict = tensordict.clone(False)
+        if self.base_env._trust_step_output:
+            tensordict_in = self.transform.inv(tensordict)
+            next_tensordict = self.base_env._step(tensordict_in)
+            next_tensordict = self.transform._step(tensordict_in, next_tensordict)
+            return next_tensordict
+
         next_preset = tensordict.get("next", None)
         tensordict_in = self.transform.inv(tensordict)
 
-        # It could be that the step must be skipped
         partial_steps = tensordict_in.pop("_step", None)
         next_tensordict = None
         tensordict_batch_size = None
@@ -1242,12 +1245,9 @@ but got an object of type {type(transform)}."""
             else:
                 if not partial_steps.any():
                     next_tensordict = self._skip_tensordict(tensordict_in)
-                    # No need to copy anything
                     partial_steps = None
                 elif not partial_steps.all():
-                    # trust that the _step can handle this!
                     tensordict_in.set("_step", partial_steps)
-                    # The filling should be handled by the sub-env
                     partial_steps = None
                 else:
                     partial_steps = None
@@ -1257,16 +1257,10 @@ but got an object of type {type(transform)}."""
         if next_tensordict is None:
             next_tensordict = self.base_env._step(tensordict_in)
             if next_preset is not None:
-                # tensordict could already have a "next" key
-                # this could be done more efficiently by not excluding but just passing
-                # the necessary keys
                 next_tensordict.update(
                     next_preset.exclude(*next_tensordict.keys(True, True))
                 )
-            if not self.base_env._trust_step_output:
-                self.base_env._complete_done(
-                    self.base_env.full_done_spec, next_tensordict
-                )
+            self.base_env._complete_done(self.base_env.full_done_spec, next_tensordict)
             next_tensordict = self.transform._step(tensordict_in, next_tensordict)
 
         if partial_steps is not None:
