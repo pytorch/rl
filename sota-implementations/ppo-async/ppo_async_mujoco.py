@@ -74,6 +74,9 @@ class _WorkerGAEPostproc:
         self.version_counter = version_counter
 
     def __call__(self, data):
+        # Move data to the critic's device for GAE computation
+        adv_device = next(self.adv_module.parameters()).device
+        data = data.to(adv_device)
         with torch.no_grad():
             data = self.adv_module(data)
         data_flat = data.reshape(-1)

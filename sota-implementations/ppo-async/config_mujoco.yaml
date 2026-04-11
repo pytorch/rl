@@ -17,7 +17,7 @@ collector:
 # buffer
 buffer:
   size: 500_000
-  max_staleness: 20
+  max_staleness: -1  # no hard gate — let IS corrections handle arbitrary staleness
   min_fill: 65536
   sampler: staleness  # staleness | staleness_no_gate | random | no_replacement
 
