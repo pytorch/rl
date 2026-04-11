@@ -5670,7 +5670,7 @@ class Tokenizer(UnaryTransform):
             )
             kwargs["return_attention_mask"] = self.return_attention_mask
             # kwargs["return_token_type_ids"] = False
-            out = self.tokenizer.batch_encode_plus(value, return_tensors="pt", **kwargs)
+            out = self.tokenizer(value, return_tensors="pt", **kwargs)
             if self.return_attention_mask:
                 attention_mask = out["attention_mask"]
             out = out["input_ids"]
@@ -11129,7 +11129,7 @@ class LineariseRewards(Transform):
 
     def _apply_transform(self, reward: Tensor) -> TensorDictBase:
         if self.weights is None:
-            return reward.sum(dim=-1)
+            return reward.sum(dim=-1, keepdim=True)
 
         *batch_size, num_rewards = reward.shape
         num_weights = torch.numel(self.weights)
@@ -11139,7 +11139,7 @@ class LineariseRewards(Transform):
                 f"Got: {num_rewards} and {num_weights}."
             )
 
-        return (self.weights * reward).sum(dim=-1)
+        return (self.weights * reward).sum(dim=-1, keepdim=True)
 
 
 class ConditionalSkip(Transform):
