@@ -85,20 +85,27 @@ class _WorkerGAEPostproc:
         return data_flat
 
 
-def _make_eval_env(env_name, device, from_pixels, num_eval_envs):
-    """Env factory for the process-based Evaluator (batched ParallelEnv).
+def _make_eval_env(env_name, device, from_pixels, num_eval_envs, backend="gymnasium"):
+    """Env factory for the process-based Evaluator.
 
-    Always uses Gymnasium envs via ParallelEnv for eval (simpler, correct
-    break_when_all_done handling). Maps mujoco-torch names to Gymnasium names.
+    When backend is mujoco_torch, creates a compiled GPU-batched env.
+    Otherwise uses ParallelEnv + Gymnasium.
     """
-    from torchrl.envs import ParallelEnv
-    from utils_mujoco import _MUJOCO_TORCH_TO_GYM, make_env
+    if backend == "mujoco_torch":
+        from utils_mujoco import make_env_gpu
 
-    gym_name = _MUJOCO_TORCH_TO_GYM.get(env_name, env_name)
-    return ParallelEnv(
-        num_eval_envs,
-        lambda: make_env(gym_name, device=device, from_pixels=from_pixels),
-    )
+        return make_env_gpu(
+            env_name, device=device, num_envs=num_eval_envs, compile=True
+        )
+    else:
+        from torchrl.envs import ParallelEnv
+        from utils_mujoco import _MUJOCO_TORCH_TO_GYM, make_env
+
+        gym_name = _MUJOCO_TORCH_TO_GYM.get(env_name, env_name)
+        return ParallelEnv(
+            num_eval_envs,
+            lambda: make_env(gym_name, device=device, from_pixels=from_pixels),
+        )
 
 
 def _make_eval_policy(env_name, device, env):
@@ -249,10 +256,16 @@ def main(cfg: DictConfig):  # noqa: F821
 
     from torchrl.collectors import Evaluator
 
-    num_eval_envs = cfg.logger.get("num_eval_envs", 16)
+    num_eval_envs = cfg.logger.get("num_eval_envs", 4096)
+    env_backend = cfg.env.get("backend", "gymnasium")
     evaluator = Evaluator(
         env=partial(
-            _make_eval_env, cfg.env.env_name, eval_device, logger_video, num_eval_envs
+            _make_eval_env,
+            cfg.env.env_name,
+            eval_device,
+            logger_video,
+            num_eval_envs,
+            env_backend,
         ),
         policy_factory=partial(_make_eval_policy, cfg.env.env_name, eval_device),
         max_steps=10_000,
@@ -383,18 +396,23 @@ def _train_start(
 
         num_envs = cfg.env.get("num_envs", 4096)
         env_compile = cfg.env.get("compile", True)
+        # Env + policy both on collect_device (no device movement per step)
         create_env_fn = [
-            _partial(make_env_gpu, cfg.env.env_name, device, num_envs, env_compile)
+            _partial(
+                make_env_gpu, cfg.env.env_name, collect_device, num_envs, env_compile
+            )
         ]
     else:
-        create_env_fn = [make_env(cfg.env.env_name, device)] * cfg.collector.num_workers
+        create_env_fn = [
+            make_env(cfg.env.env_name, collect_device)
+        ] * cfg.collector.num_workers
 
     collector = MultiaSyncDataCollector(
         create_env_fn=create_env_fn,
         policy=collector_policy,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=total_frames,
-        device=device,
+        device=collect_device,
         storing_device=device,
         max_frames_per_traj=-1,
         replay_buffer=data_buffer,
@@ -592,18 +610,23 @@ def _train_iterate(
 
         num_envs = cfg.env.get("num_envs", 4096)
         env_compile = cfg.env.get("compile", True)
+        # Env + policy both on collect_device (no device movement per step)
         create_env_fn = [
-            _partial(make_env_gpu, cfg.env.env_name, device, num_envs, env_compile)
+            _partial(
+                make_env_gpu, cfg.env.env_name, collect_device, num_envs, env_compile
+            )
         ]
     else:
-        create_env_fn = [make_env(cfg.env.env_name, device)] * cfg.collector.num_workers
+        create_env_fn = [
+            make_env(cfg.env.env_name, collect_device)
+        ] * cfg.collector.num_workers
 
     collector = MultiaSyncDataCollector(
         create_env_fn=create_env_fn,
         policy=collector_policy,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=total_frames,
-        device=device,
+        device=collect_device,
         storing_device=device,
         max_frames_per_traj=-1,
         update_at_each_batch=True,
