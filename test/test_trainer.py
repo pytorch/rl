@@ -150,7 +150,7 @@ class TestSelectKeys:
         assert not len(sd["select_keys"])
         trainer2.load_state_dict(sd)
 
-    @pytest.mark.parametrize("backend", ["torchsnapshot", "torch"])
+    @pytest.mark.parametrize("backend", ["torchsnapshot", "torch", "memmap"])
     def test_selectkeys_save(self, backend):
         if not _has_ts and backend == "torchsnapshot":
             pytest.skip("torchsnapshot not found")
@@ -171,6 +171,8 @@ class TestSelectKeys:
                 file = path.join(tmpdirname, "file.pt")
             elif backend == "torchsnapshot":
                 file = tmpdirname
+            elif backend == "memmap":
+                file = path.join(tmpdirname, "ckpt")
             else:
                 raise NotImplementedError
             trainer = mocking_trainer(file=file)

@@ -562,7 +562,7 @@ def get_binary_env_var(key):
 class _Dynamic_CKPT_BACKEND:
     """Allows CKPT_BACKEND to be changed on-the-fly."""
 
-    backends = ["torch", "torchsnapshot"]
+    backends = ["torch", "torchsnapshot", "memmap"]
 
     def _get_backend(self):
         backend = os.environ.get("CKPT_BACKEND", "torch")

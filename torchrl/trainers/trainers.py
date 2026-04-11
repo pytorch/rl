@@ -60,6 +60,7 @@ try:
 except ImportError:
     _has_ts = False
 
+
 REPLAY_BUFFER_CLASS = {
     "prioritized": TensorDictPrioritizedReplayBuffer,
     "circular": TensorDictReplayBuffer,
@@ -504,6 +505,25 @@ class Trainer:
             Snapshot.take(app_state=self.app_state, path=self.save_trainer_file)
         elif _CKPT_BACKEND == "torch":
             torch.save(self.state_dict(), self.save_trainer_file)
+        elif _CKPT_BACKEND == "memmap":
+            import json
+
+            state = self.state_dict()
+            path = pathlib.Path(self.save_trainer_file)
+            path.mkdir(parents=True, exist_ok=True)
+            # Persist tensor state dicts (loss_module, collector, registered modules)
+            # using TensorDict memmap — no extra dependencies, no pickle.
+            for key in ("loss_module", "collector"):
+                sd = state[key]
+                if sd:
+                    TensorDict(sd, []).dumps(str(path / key))
+            for mod_key in self._modules:
+                sd = state[mod_key]
+                if sd:
+                    TensorDict(sd, []).dumps(str(path / mod_key))
+            # Persist non-tensor training counters as JSON.
+            with open(path / "state.json", "w") as f:
+                json.dump(dict(state["state"]), f)
         else:
             raise NotImplementedError(
                 f"CKPT_BACKEND should be one of {_CKPT_BACKEND.backends}, got {_CKPT_BACKEND}."
@@ -522,14 +542,36 @@ class Trainer:
         """Loads a file and its state-dict in the trainer.
 
         Keyword arguments are passed to the :func:`~torch.load` function.
+        They are ignored when ``CKPT_BACKEND=memmap``.
 
         """
         if _CKPT_BACKEND == "torchsnapshot":
             snapshot = Snapshot(path=file)
             snapshot.restore(app_state=self.app_state)
         elif _CKPT_BACKEND == "torch":
+            kwargs.setdefault("weights_only", True)
             loaded_dict: OrderedDict = torch.load(file, **kwargs)
             self.load_state_dict(loaded_dict)
+        elif _CKPT_BACKEND == "memmap":
+            import json
+
+            path = pathlib.Path(file)
+            state: dict = {}
+            for key in ("loss_module", "collector"):
+                key_path = path / key
+                if key_path.exists():
+                    state[key] = dict(TensorDict.load_memmap(str(key_path)))
+                else:
+                    state[key] = {}
+            for mod_key in self._modules:
+                mod_path = path / mod_key
+                if mod_path.exists():
+                    state[mod_key] = dict(TensorDict.load_memmap(str(mod_path)))
+                else:
+                    state[mod_key] = {}
+            with open(path / "state.json") as f:
+                state["state"] = json.load(f)
+            self.load_state_dict(state)
         return self
 
     def set_seed(self):
