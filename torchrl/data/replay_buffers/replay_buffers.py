@@ -145,6 +145,11 @@ class ReplayBuffer:
             multi-dimensional and keep consistent notions of storage-capacity
             and batch-size during sampling.
 
+            .. important:: When using a collector with ``trajs_per_batch``,
+                trajectories are written as flat 1-D sequences of variable
+                length.  Do not set ``dim_extend > 0`` or ``ndim >= 2`` in
+                this case — the storage must be 1-dimensional.
+
             .. note:: This argument has no effect on :meth:`add` and
                 therefore should be used with caution when both :meth:`add`
                 and :meth:`extend` are used in a codebase. For example:
@@ -1347,6 +1352,11 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             available, to let storages know that the data is
             multi-dimensional and keep consistent notions of storage-capacity
             and batch-size during sampling.
+
+            .. important:: When using a collector with ``trajs_per_batch``,
+                trajectories are written as flat 1-D sequences of variable
+                length.  Do not set ``dim_extend > 0`` or ``ndim >= 2`` in
+                this case — the storage must be 1-dimensional.
 
             .. note:: This argument has no effect on :meth:`add` and
                 therefore should be used with caution when both :meth:`add`

@@ -900,7 +900,9 @@ class SliceSampler(Sampler):
 
         - set ``trajs_per_batch`` on the collector so that only **complete**
           trajectories (each ending with ``done=True``) are written to the
-          buffer, or
+          buffer (use ``ndim=1`` on the storage — ``ndim >= 2`` is
+          incompatible with the variable-length flat sequences that
+          ``trajs_per_batch`` produces), or
         - set ``set_truncated=True`` on the collector so that every batch
           boundary carries a ``done`` signal (note: this introduces artificial
           truncations that value estimators must account for).

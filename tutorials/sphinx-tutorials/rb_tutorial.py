@@ -883,6 +883,15 @@ gc.collect()
 # :ref:`the dedicated collector + replay buffer section <collectors_replay_trajs>`
 # for full examples and discussion.
 #
+# .. important::
+#
+#     When using ``trajs_per_batch``, always use a **flat 1-D storage**
+#     (the default ``ndim=1``).  Although batched environments normally call
+#     for ``ndim=2``, ``trajs_per_batch`` disassembles batches and writes
+#     each trajectory as a variable-length 1-D sequence.  A storage with
+#     ``ndim >= 2`` expects a fixed second dimension that variable-length
+#     trajectories cannot fill.
+#
 
 ######################################################################
 # Conclusion

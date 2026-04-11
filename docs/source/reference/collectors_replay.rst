@@ -65,6 +65,16 @@ will work:
     >>> for data in collector:
     ...     memory.extend(data)
 
+.. important::
+
+    The ``ndim=2`` and ``ndim=3`` examples above apply to **fixed-frame
+    batches** (the default, without ``trajs_per_batch``).  When
+    ``trajs_per_batch`` is set, each trajectory is written to the buffer as a
+    **flat 1-D sequence** of variable length.  A storage with ``ndim >= 2``
+    expects a fixed second dimension that variable-length trajectories cannot
+    satisfy.  Always use the default ``ndim=1`` when combining
+    ``trajs_per_batch`` with a replay buffer.
+
 .. _collectors_replay_trajs:
 
 Complete trajectory collection with ``trajs_per_batch``
