@@ -3834,14 +3834,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 device=cpu,
                 is_shared=False)
         """
-        if tensordict.device != self.device:
-            tensordict = tensordict.to(self.device)
+        if not self._trust_step_output:
+            if tensordict.device != self.device:
+                tensordict = tensordict.to(self.device)
         tensordict = self.step(tensordict)
-        # done and truncated are in done_keys
-        # We read if any key is done.
         tensordict_ = self._step_mdp(tensordict)
-        # if self._post_step_mdp_hooks is not None:
-        # tensordict_ = self._post_step_mdp_hooks(tensordict_)
         if not self._skip_maybe_reset:
             tensordict_ = self.maybe_reset(tensordict_)
         return tensordict, tensordict_
