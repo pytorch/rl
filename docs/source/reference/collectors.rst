@@ -57,6 +57,8 @@ Key Features
 - **Device management**: Control where environments and policies execute
 - **Weight synchronization**: Keep inference policies up-to-date with training weights
 - **Replay buffer integration**: Seamless compatibility with TorchRL's replay buffers
+- **Trajectory assembly**: Collect complete trajectories with ``trajs_per_batch`` for
+  clean :class:`~torchrl.data.SliceSampler` sampling — see :ref:`collectors_replay_trajs`
 - **Batching strategies**: Multiple ways to organize collected data
 
 Quick Example
