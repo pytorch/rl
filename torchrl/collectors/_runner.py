@@ -10,7 +10,6 @@ from typing import Any
 import numpy as np
 import torch
 from tensordict import TensorDict, TensorDictBase
-
 from torchrl import logger as torchrl_logger
 from torchrl._utils import timeit, VERBOSE
 from torchrl.collectors._base import BaseCollector, ProfileConfig
@@ -21,7 +20,6 @@ from torchrl.collectors._constants import (
     DEFAULT_EXPLORATION_TYPE,
 )
 from torchrl.collectors._single import Collector
-
 from torchrl.collectors.utils import (
     _cast,
     _make_policy_factory,
@@ -32,6 +30,7 @@ from torchrl.data import ReplayBuffer
 from torchrl.envs import EnvBase, EnvCreator
 from torchrl.envs.utils import ExplorationType
 from torchrl.weight_update import WeightSyncScheme
+from torchrl.weight_update.utils import _resolve_model
 
 
 class _WorkerProfiler:
@@ -189,6 +188,7 @@ def _main_async_collector(
     worker_idx: int | None = None,
     init_random_frames: int | None = None,
     profile_config: ProfileConfig | None = None,
+    trajs_per_batch: int | None = None,
 ) -> None:
     if collector_class is None:
         collector_class = Collector
@@ -200,9 +200,9 @@ def _main_async_collector(
         _make_policy_factory,
         policy=policy,
         policy_factory=policy_factory,
-        weight_sync_scheme=weight_sync_schemes.get("policy")
-        if weight_sync_schemes
-        else None,
+        weight_sync_scheme=(
+            weight_sync_schemes.get("policy") if weight_sync_schemes else None
+        ),
         worker_idx=worker_idx,
         pipe=pipe_child,
     )
@@ -212,7 +212,10 @@ def _main_async_collector(
         init_random_frames if init_random_frames is not None else 0
     )
     try:
-        collector_class._ignore_rb = extend_buffer
+        # When trajs_per_batch is set, _iter_by_trajectories() handles RB writes
+        # (with proper padding stripping for 1-D storage). Set _ignore_rb=False so
+        # it detects the RB. When trajs_per_batch is None, keep existing behavior.
+        collector_class._ignore_rb = extend_buffer if trajs_per_batch is None else False
         inner_collector = collector_class(
             create_env_fn,
             create_env_kwargs=create_env_kwargs,
@@ -246,11 +249,21 @@ def _main_async_collector(
             # init_random_frames is passed; inner collector will use _should_use_random_frames()
             # which checks replay_buffer.write_count when replay_buffer is provided
             init_random_frames=init_random_frames,
+            trajs_per_batch=trajs_per_batch,
         )
         # Set up weight receivers for worker process using the standard register_scheme_receiver API.
         # This properly initializes the schemes on the receiver side and stores them in _receiver_schemes.
         if weight_sync_schemes:
             inner_collector.register_scheme_receiver(weight_sync_schemes)
+            # Fix stale model reference: init_on_receiver was called in _make_policy_factory
+            # with the original policy object, but _get_policy_and_device may have deepcopied
+            # the policy to a new device. Update the scheme's model ref to the actual policy
+            # used by the collector, otherwise weight updates go to the wrong (unused) object.
+            for model_id, scheme in weight_sync_schemes.items():
+                actual_model = _resolve_model(inner_collector, model_id)
+                _scheme_model = scheme.model
+                if actual_model is not None and _scheme_model is not actual_model:
+                    scheme.model = actual_model
 
         use_buffers = inner_collector._use_buffers
         if verbose:
@@ -433,7 +446,7 @@ def _main_async_collector(
                 continue
 
             if replay_buffer is not None:
-                if extend_buffer:
+                if extend_buffer and next_data is not None:
                     next_data.names = None
                     replay_buffer.extend(next_data)
 

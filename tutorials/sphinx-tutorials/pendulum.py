@@ -462,7 +462,9 @@ def make_composite_from_td(td):
 
 
 def _set_seed(self, seed: int | None) -> None:
-    rng = torch.manual_seed(seed)
+    rng = torch.Generator()
+    if seed is not None:
+        rng.manual_seed(seed)
     self.rng = rng
 
 

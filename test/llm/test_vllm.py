@@ -31,11 +31,6 @@ def sampling_params():
     )  # Use greedy decoding for reproducibility
 
 
-@pytest.mark.xfail(
-    reason="AsyncVLLM tests fail due to Ray placement group timeout. "
-    "ray.get(pg.ready(), timeout=180) times out. See LLM_TEST_ISSUES.md for details.",
-    strict=False,
-)
 class TestAsyncVLLMIntegration:
     """Integration tests for AsyncVLLM with real models."""
 
@@ -166,8 +161,8 @@ class TestAsyncVLLMIntegration:
                     self.policy = policy_ref
                     # The vLLMUpdater expects the collector to have a _collector attribute
                     # for Ray-based collectors, or a policy.model for local collectors
-                    # We'll use the local collector pattern and patch policy.model to be the Ray actor
-                    self.policy.model = vllm_service.actors[0]
+                    # Use object.__setattr__ to bypass nn.Module type checks
+                    object.__setattr__(self.policy, "model", vllm_service.actors[0])
 
                 def increment_version(self):
                     pass
