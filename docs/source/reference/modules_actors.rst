@@ -16,6 +16,7 @@ TensorDictModules and SafeModules
     :template: rl_template_noinherit.rst
 
     Actor
+    DiffusionActor
     MultiStepActorWrapper
     SafeModule
     SafeSequential

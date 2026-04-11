@@ -17,6 +17,7 @@ from torchrl.objectives import (
     KLPENPPOLoss,
     PPOLoss,
     SACLoss,
+    TD3Loss,
 )
 from torchrl.objectives.iql import DiscreteIQLLoss
 from torchrl.objectives.sac import DiscreteSACLoss
@@ -133,6 +134,42 @@ def _make_ppo_loss(*args, **kwargs) -> PPOLoss:
         return PPOLoss(*args, **kwargs)
     else:
         raise ValueError(f"Invalid loss type: {loss_type}")
+
+
+@dataclass
+class TD3LossConfig(LossConfig):
+    """A class to configure a TD3 loss."""
+
+    actor_network: Any = None
+    qvalue_network: Any = None
+    action_spec: Any = None
+    bounds: tuple[float] | None = None
+    num_qvalue_nets: int = 2
+    policy_noise: float = 0.2
+    noise_clip: float = 0.5
+    loss_function: str = "smooth_l1"
+    delay_actor: bool = True
+    delay_qvalue: bool = True
+    gamma: float | None = None
+    priority_key: str | None = None
+    separate_losses: bool = False
+    reduction: str | None = None
+    deactivate_vmap: bool = False
+    use_prioritized_weights: str | bool = "auto"
+    _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_td3_loss"
+
+
+def _make_td3_loss(*args, **kwargs) -> TD3Loss:
+    # Instantiate networks if they are config objects
+    actor_network = kwargs.get("actor_network")
+    qvalue_network = kwargs.get("qvalue_network")
+
+    if actor_network is not None and hasattr(actor_network, "_target_"):
+        kwargs["actor_network"] = actor_network()
+    if qvalue_network is not None and hasattr(qvalue_network, "_target_"):
+        kwargs["qvalue_network"] = qvalue_network()
+
+    return TD3Loss(*args, **kwargs)
 
 
 @dataclass

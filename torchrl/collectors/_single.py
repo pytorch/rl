@@ -443,17 +443,19 @@ class Collector(BaseCollector):
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
         no_cuda_sync: bool = False,
-        weight_updater: WeightUpdaterBase
-        | Callable[[], WeightUpdaterBase]
-        | None = None,
+        weight_updater: (
+            WeightUpdaterBase | Callable[[], WeightUpdaterBase] | None
+        ) = None,
         weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
         weight_recv_schemes: dict[str, WeightSyncScheme] | None = None,
         track_policy_version: bool = False,
         worker_idx: int | None = None,
+        trajs_per_batch: int | None = None,
         **kwargs,
     ):
         self.closed = True
         self.worker_idx = worker_idx
+        self.trajs_per_batch = trajs_per_batch
 
         # Note: weight_sync_schemes can be used to send weights to components
         # within the environment (e.g., RayModuleTransform), not just sub-collectors
@@ -1098,9 +1100,11 @@ class Collector(BaseCollector):
         elif (
             not make_rollout
             and hasattr(
-                self._wrapped_policy_uncompiled
-                if has_meta_params
-                else self._wrapped_policy,
+                (
+                    self._wrapped_policy_uncompiled
+                    if has_meta_params
+                    else self._wrapped_policy
+                ),
                 "out_keys",
             )
             and (
@@ -1629,11 +1633,11 @@ class Collector(BaseCollector):
                     ):
                         # TODO: This may break with exclusive / ragged lazy stacks
                         self._carrier.apply(
-                            lambda name, val: val.to(
-                                device=self.policy_device, non_blocking=True
-                            )
-                            if name in self._policy_output_keys
-                            else val,
+                            lambda name, val: (
+                                val.to(device=self.policy_device, non_blocking=True)
+                                if name in self._policy_output_keys
+                                else val
+                            ),
                             out=self._carrier,
                             named=True,
                             nested_keys=True,
@@ -1859,6 +1863,11 @@ class Collector(BaseCollector):
         """
         try:
             if not self.closed:
+                # Stop the background thread if one is running (from .start())
+                # before tearing down the env it may still be using.
+                self._stop = True
+                if hasattr(self, "_thread") and self._thread.is_alive():
+                    self._thread.join(timeout=timeout)
                 self.closed = True
                 del self._carrier
                 if self._use_buffers:

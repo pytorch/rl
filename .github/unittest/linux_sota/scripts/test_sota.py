@@ -15,6 +15,16 @@ assert (
 ), "Composite LP must be set to False. Run this test with COMPOSITE_LP_AGGREGATE=0"
 
 commands = {
+    "diffusion_bc": """python sota-implementations/diffusion_bc/diffusion_bc.py \
+  optim.gradient_steps=55 \
+  replay_buffer.dataset= \
+  replay_buffer.demo_episodes=5 \
+  env.name=Pendulum-v1 \
+  env.max_episode_steps=200 \
+  network.num_steps=5 \
+  logger.backend= \
+  logger.eval_iter=50
+""",
     "td3_bc": """python sota-implementations/td3_bc/td3_bc.py \
   optim.gradient_steps=55 \
   logger.backend=

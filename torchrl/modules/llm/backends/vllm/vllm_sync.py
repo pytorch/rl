@@ -19,7 +19,6 @@ from torchrl._utils import logger as torchrl_logger
 from torchrl.modules.llm.utils import _cuda_visible_devices
 
 from .base import RLvLLMEngine
-from .vllm_utils import stateless_init_process_group
 
 try:
     from vllm import LLM
@@ -69,49 +68,6 @@ class _vLLMWorker(Worker):
         torchrl_logger.info(f"device count {torch.cuda.device_count()}")
         super().__init__(*args, **kwargs)
 
-    def init_weight_update_group(
-        self, master_address, master_port, rank_offset, world_size
-    ):
-        from vllm.distributed.parallel_state import get_world_group
-
-        torchrl_logger.info(f"=> in {type(self).__name__}.init_weight_update_group")
-
-        # Get the local rank within the tensor parallel group
-        tp_group = get_world_group()
-        local_rank = tp_group.rank
-        torchrl_logger.info(f"Local rank in tensor parallel group: {local_rank}")
-
-        # Calculate the global rank for weight update group
-        # rank_offset is 1, so ranks will be [1, 2] for tp_size=2
-        rank = local_rank + rank_offset
-        torchrl_logger.info(
-            f"Initializing {type(self).__name__} weight update group with "
-            f"{master_address=}, {master_port=}, {rank=}, {world_size=}, device={self.device}"
-        )
-
-        self.model_update_group = stateless_init_process_group(
-            master_address,
-            master_port,
-            rank,
-            world_size,
-            self.device,
-        )
-
-        torchrl_logger.info(f"{type(self).__name__}.init_weight_update_group success")
-
-    def update_weight_broadcast(self, name, dtype, shape):
-        weight = torch.empty(shape, dtype=dtype, device="cuda")
-        self.model_update_group.broadcast(
-            weight, src=0, stream=torch.cuda.current_stream()
-        )
-
-        self.model_runner.model.load_weights(weights=[(name, weight)])
-        del weight
-
-    def update_weight(self, name, weight):
-        self.model_runner.model.load_weights(weights=[(name, weight)])
-        del weight
-
     def check_weights_changed(self):
         """Check if the weights are updated to 0."""
         # TODO: This is a test and should be treated as such
@@ -150,6 +106,24 @@ class _LLMOnDevice(LLM):
         # Let vLLM handle device placement
         super().__init__(*self.args, **self.kwargs)
         return True
+
+    def init_weight_transfer_engine(self, init_request):
+        """Initialize the native weight transfer engine on the underlying LLM engine."""
+        return self.llm_engine.init_weight_transfer_engine(init_request)
+
+    def update_weights_native(self, update_request):
+        """Update weights using the native weight transfer engine."""
+        return self.llm_engine.update_weights(update_request)
+
+    def sleep(self, level: int = 0):
+        """Put the vLLM engine to sleep to prepare for weight updates."""
+        return self.llm_engine.sleep(level=level)
+
+    def wake_up(self, tags: list[str] | None = None):
+        """Wake up the vLLM engine after weight updates."""
+        if tags is None:
+            tags = ["scheduling"]
+        return self.llm_engine.wake_up(tags=tags)
 
 
 class RayLLMWorker(RLvLLMEngine):
@@ -195,24 +169,61 @@ class RayLLMWorker(RLvLLMEngine):
         return self._master_port
 
     def init_weight_update_group(self) -> None:
-        """Initialize the weight update communication group."""
+        """Initialize the weight update communication group using vLLM's native API."""
+        from dataclasses import asdict
+
+        from vllm.distributed.weight_transfer.base import WeightTransferInitRequest
+        from vllm.distributed.weight_transfer.nccl_engine import (
+            NCCLWeightTransferEngine,
+            NCCLWeightTransferInitInfo,
+        )
+
         weight_sync_world_size = self._tensor_parallel_size + 1
+        master_address = self.get_master_address()
+        master_port = self.get_master_port()
 
         try:
+            import threading
+
             import ray
 
-            # Initialize weight update group on the Ray worker
-            ray.get(
-                self.ray_actor.collective_rpc.remote(
-                    "init_weight_update_group",
-                    args=(
-                        self.get_master_address(),
-                        self.get_master_port(),
-                        1,
-                        weight_sync_world_size,
-                    ),
-                )
+            # Start trainer NCCL group in background thread — it blocks waiting
+            # for workers to connect via TCPStore.
+            torch.cuda.set_device(0)
+            trainer_result = [None]
+            trainer_error = [None]
+
+            def _init_trainer():
+                try:
+                    trainer_result[0] = NCCLWeightTransferEngine.trainer_init(
+                        {
+                            "master_address": master_address,
+                            "master_port": int(master_port),
+                            "world_size": weight_sync_world_size,
+                        }
+                    )
+                except Exception as e:
+                    trainer_error[0] = e
+
+            trainer_thread = threading.Thread(target=_init_trainer)
+            trainer_thread.start()
+
+            # Initialize weight transfer engine on the Ray worker
+            init_info = NCCLWeightTransferInitInfo(
+                master_address=master_address,
+                master_port=int(master_port),
+                rank_offset=1,
+                world_size=weight_sync_world_size,
             )
+            init_request = WeightTransferInitRequest(init_info=asdict(init_info))
+            ref = self.ray_actor.init_weight_transfer_engine.remote(init_request)
+
+            ray.get(ref)
+            trainer_thread.join()
+            if trainer_error[0] is not None:
+                raise trainer_error[0]
+            self._trainer_nccl_group = trainer_result[0]
+
             torchrl_logger.info("Ray worker weight update group initialized")
         except ImportError:
             raise ImportError(
@@ -220,17 +231,24 @@ class RayLLMWorker(RLvLLMEngine):
             )
 
     def update_weights(self, weights: Iterator[tuple[str, torch.Tensor]]) -> None:
-        """Update model weights via the Ray worker.
+        """Update model weights via the Ray worker using vLLM's native API.
 
         Args:
             weights: Iterator yielding (parameter_name, tensor) tuples
         """
+        from dataclasses import asdict
+
+        from vllm.distributed.weight_transfer.base import WeightTransferUpdateRequest
+        from vllm.distributed.weight_transfer.nccl_engine import (
+            NCCLTrainerSendWeightsArgs,
+            NCCLWeightTransferEngine,
+            NCCLWeightTransferUpdateInfo,
+        )
+
         try:
             import ray
 
-            # Convert iterator to list for Ray serialization
             weights_list = list(weights)
-
             if not weights_list:
                 torchrl_logger.warning("No weights provided for update")
                 return
@@ -239,16 +257,43 @@ class RayLLMWorker(RLvLLMEngine):
                 f"Updating {len(weights_list)} parameters on Ray worker"
             )
 
-            # Send weights to the Ray worker
-            remotes = []
-            for name, weight in weights_list:
-                remotes.append(
-                    self.ray_actor.collective_rpc.remote(
-                        "update_weight", args=(name, weight.to("cuda"))
-                    )
-                )
+            # Put vLLM engine to sleep before weight transfer
+            ray.get(self.ray_actor.sleep.remote(level=0))
 
-            ray.get(remotes)
+            # Build metadata
+            weight_names = [name for name, _ in weights_list]
+            dtype_names = [str(t.dtype).split(".")[-1] for _, t in weights_list]
+            shapes = [list(t.shape) for _, t in weights_list]
+
+            update_info = NCCLWeightTransferUpdateInfo(
+                names=weight_names,
+                dtype_names=dtype_names,
+                shapes=shapes,
+                packed=True,
+            )
+            update_request = WeightTransferUpdateRequest(
+                update_info=asdict(update_info)
+            )
+
+            # Tell worker to start receiving
+            ref = self.ray_actor.update_weights_native.remote(update_request)
+
+            # Send from trainer side
+            gpu_weights_iter = (
+                (name, t.to("cuda:0", non_blocking=True) if not t.is_cuda else t)
+                for name, t in weights_list
+            )
+            NCCLWeightTransferEngine.trainer_send_weights(
+                iterator=gpu_weights_iter,
+                trainer_args=NCCLTrainerSendWeightsArgs(
+                    group=self._trainer_nccl_group, packed=True
+                ),
+            )
+
+            ray.get(ref)
+
+            # Wake up vLLM engine after weight transfer
+            ray.get(self.ray_actor.wake_up.remote(tags=["scheduling"]))
             torchrl_logger.info("Ray worker weight update completed")
 
         except ImportError:

@@ -18,6 +18,6 @@ conda deactivate && conda activate ./env
 
 python -c "import torch_geometric"
 
-python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestTorchGeometric --error-for-skips
+python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/libs/test_torch_geometric.py --instafail -v --durations 200 --capture no -k TestTorchGeometric --error-for-skips
 coverage combine -q
 coverage xml -i

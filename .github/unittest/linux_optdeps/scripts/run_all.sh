@@ -157,6 +157,8 @@ STDC_LOC=$(find conda/ -name "libstdc++.so.6" | head -1)
 export PYTORCH_TEST_WITH_SLOW='1'
 export LAZY_LEGACY_OP=False
 python -m torch.utils.collect_env
+
+bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
