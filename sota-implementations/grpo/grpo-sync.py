@@ -118,12 +118,18 @@ def train(
     # Set up weight sender
     torchrl_logger.info("Setting up weight synchronization scheme...")
     sender = weight_sync_scheme.create_sender()
-    sender.register_model(policy_training)
+    # Register the HuggingFace model directly (not the TransformersWrapper)
+    # so state_dict() keys match vLLM's expected format (e.g., model.layers.0.*)
+    sender.register_model(policy_training.model)
 
     # Initialize collective group
     torchrl_logger.info("Initializing collective group...")
-    metadata = get_model_metadata(policy_training)
+    metadata = get_model_metadata(policy_training.model)
     sender.init_all_workers_group(metadata, vllm_engine=inference_engine)
+
+    # Register the collector with the sender so update_weights() increments
+    # the policy version (needed for policy_version tracking in logged metrics).
+    sender.register_collector(collector)
 
     # First weight update
     with timeit("update_policy_weights"):
@@ -200,7 +206,13 @@ def train(
                 data_read_count += batch.numel()
 
                 with timeit("forward_pass"):
-                    with autocast("cuda", enabled=cfg.train.mixed_precision):
+                    # Use the model's dtype for autocast to avoid bf16→fp16 downcast
+                    autocast_dtype = getattr(torch, cfg.train_model.torch_dtype)
+                    with autocast(
+                        "cuda",
+                        enabled=cfg.train.mixed_precision,
+                        dtype=autocast_dtype,
+                    ):
                         loss = loss_fn(batch)
                         loss_val = (
                             loss.mean(reduce=True)
@@ -355,13 +367,6 @@ def main(cfg):
     torchrl_logger.info(f"Inference policy: {inference_policy}")
 
     torchrl_logger.info(f"Starting replay buffer with {replay_buffer_config=}")
-    if cfg.train.buffer_size is not None and (
-        cfg.train.buffer_size != cfg.train.dialog_turns_per_batch
-    ):
-        raise ValueError(
-            "buffer_size must be equal to dialog_turns_per_batch in sync settings."
-        )
-
     if cfg.train.optim_batch_size % cfg.train.gradient_accumulation_steps != 0:
         raise ValueError(
             "optim_batch_size must be divisible by gradient_accumulation_steps"

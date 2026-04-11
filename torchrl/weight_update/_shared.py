@@ -5,13 +5,9 @@ from typing import Any
 
 import torch
 import torch.distributed
-
 from tensordict import TensorDict, TensorDictBase
-
 from torch import multiprocessing as mp, nn
-
 from torchrl._utils import logger as torchrl_logger, WEIGHT_SYNC_TIMEOUT
-
 from torchrl.weight_update.utils import _resolve_model
 from torchrl.weight_update.weight_sync_schemes import (
     TransportBackend,
@@ -804,12 +800,13 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         if fresh_weights is None:
             return None
 
-        # Update the shared memory buffer in-place so workers see the change
+        # Update the shared memory buffer(s) in-place so workers see the change.
+        # When workers are on different devices, there are multiple unique weight
+        # buffers (one per device). We must update ALL of them, not just the first.
         if self._shared_transport is not None and self.shared_transport.unique_weights:
-            shared_weights = self.shared_transport.unique_weights[0]
-            # In-place update of shared memory buffer with fresh weights
-            shared_weights.data.update_(fresh_weights.data)
-            return shared_weights
+            for shared_weights in self.shared_transport.unique_weights:
+                shared_weights.data.update_(fresh_weights.data)
+            return self.shared_transport.unique_weights[0]
 
         # If no shared transport, just return the fresh weights
         return fresh_weights

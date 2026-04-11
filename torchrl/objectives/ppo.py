@@ -398,6 +398,7 @@ class PPOLoss(LossModule):
     default_keys = _AcceptedKeys
     tensor_keys: _AcceptedKeys
     default_value_estimator = ValueEstimators.GAE
+    _schedulable_buffers = frozenset({"entropy_coeff", "critic_coeff", "clip_value"})
 
     actor_network: ProbabilisticTensorDictModule
     critic_network: TensorDictModule
@@ -1139,6 +1140,8 @@ class ClipPPOLoss(PPOLoss):
 
     """
 
+    _schedulable_buffers = frozenset({"clip_epsilon"})
+
     actor_network: TensorDictModule
     critic_network: TensorDictModule
     actor_network_params: TensorDictParams
@@ -1430,6 +1433,8 @@ class KLPENPPOLoss(PPOLoss):
       This will work regardless of whether separate_losses is activated or not.
 
     """
+
+    _schedulable_buffers = frozenset({"beta"})
 
     actor_network: TensorDictModule
     critic_network: TensorDictModule
