@@ -27,7 +27,7 @@ network:
   num_steps: 100
   beta_start: 1.0e-4
   beta_end: 0.02
-  device: null
+  device: cpu
 
 # logging
 logger:
