@@ -1301,6 +1301,53 @@ def safe_is_current_stream_capturing():
         return False
 
 
+class _RayServiceMetaClass(type):
+    """Metaclass that enables dynamic class selection based on use_ray_service parameter.
+
+    This metaclass allows a class to dynamically return either itself or a Ray-based
+    alternative class when instantiated with use_ray_service=True.
+
+    Usage:
+        >>> class MyRayClass():
+        ...     def __init__(self, **kwargs):
+        ...         ...
+        ...
+        >>> class MyClass(metaclass=_RayServiceMetaClass):
+        ...     _RayServiceClass = MyRayClass
+        ...
+        ...     def __init__(self, use_ray_service=False, **kwargs):
+        ...         # Regular implementation
+        ...         pass
+        ...
+        >>> # Returns MyClass instance
+        >>> obj1 = MyClass(use_ray_service=False)
+        >>>
+        >>> # Returns MyRayClass instance
+        >>> obj2 = MyClass(use_ray_service=True)
+    """
+
+    def __instancecheck__(cls, instance):
+        # Standard isinstance check
+        if super().__instancecheck__(instance):
+            return True
+        # If the instance wraps a class (e.g. RayLogger), check if the
+        # wrapped class is a subclass of cls.
+        wrapped_cls = getattr(instance, "_logger_cls", None)
+        if wrapped_cls is not None:
+            return issubclass(wrapped_cls, cls)
+        return False
+
+    def __call__(cls, *args, use_ray_service=False, **kwargs):
+        if use_ray_service:
+            if not hasattr(cls, "_RayServiceClass"):
+                raise ValueError(
+                    f"Class {cls.__name__} does not have a _RayServiceClass attribute"
+                )
+            return cls._RayServiceClass(*args, **kwargs)
+        else:
+            return super().__call__(*args, **kwargs)
+
+
 @classmethod
 def as_remote(cls, remote_config: dict[str, Any] | None = None):
     """Creates an instance of a remote ray class.

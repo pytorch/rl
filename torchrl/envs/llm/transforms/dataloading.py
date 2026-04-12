@@ -13,16 +13,13 @@ from typing import Any, Literal, TypeVar
 import torch
 from tensordict import is_tensor_collection, lazy_stack, TensorDict, TensorDictBase
 
+# Import ray service components
+from torchrl._utils import _RayServiceMetaClass
+
 from torchrl.data.tensor_specs import Composite, DEVICE_TYPING, TensorSpec
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import TensorDictPrimer, Transform
-
-# Import ray service components
-from torchrl.envs.transforms.ray_service import (
-    _map_input_output_device,
-    _RayServiceMetaClass,
-    RayTransform,
-)
+from torchrl.envs.transforms.ray_service import _map_input_output_device, RayTransform
 from torchrl.envs.utils import make_composite_from_td
 
 T = TypeVar("T")
