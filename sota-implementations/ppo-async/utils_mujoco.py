@@ -227,7 +227,7 @@ class RenderFirstEnv(Transform):
         observation_spec["pixels"] = Unbounded(
             shape=(self._height, self._width, 3),
             dtype=torch.uint8,
-            device="cpu",
+            device=observation_spec.device,
         )
         return observation_spec
 
