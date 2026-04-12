@@ -69,6 +69,10 @@ def train_start(
         collector_policy = actor
         postproc = LearnerPostproc(version_counter)
 
+    # Kick off eval env creation + compilation on the evaluator thread so it
+    # runs concurrently with collector env compilation below.
+    evaluator.trigger_eval(actor, step=0)
+
     create_env_fn = [
         partial(
             make_env,
@@ -256,6 +260,10 @@ def train_iterate(
     total_network_updates,
 ):
     """Semi-async training: for data in collector, gated on collector output."""
+    # Kick off eval env creation + compilation on the evaluator thread so it
+    # runs concurrently with collector env compilation below.
+    evaluator.trigger_eval(actor, step=0)
+
     collector_policy = ActorWithCritic(actor, critic)
 
     create_env_fn = [

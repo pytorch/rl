@@ -221,6 +221,16 @@ class RenderFirstEnv(Transform):
         self._width = width
         self._height = height
 
+    def transform_observation_spec(self, observation_spec):
+        from torchrl.data import Unbounded
+
+        observation_spec["pixels"] = Unbounded(
+            shape=(self._height, self._width, 3),
+            dtype=torch.uint8,
+            device="cpu",
+        )
+        return observation_spec
+
     def _call(self, tensordict):
         return tensordict
 
