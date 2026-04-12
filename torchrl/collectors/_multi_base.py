@@ -932,11 +932,21 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                 fake_td = self.create_env_fn[0](
                     **self.create_env_kwargs[0]
                 ).fake_tensordict()
-            fake_td["collector", "traj_ids"] = torch.zeros(
-                fake_td.shape, dtype=torch.long
-            )
-            # Use extend to avoid time-related transforms to fail
-            self.replay_buffer.extend(fake_td.unsqueeze(-1))
+            if getattr(self, "_worker_trajs_per_batch", None) is not None:
+                # With trajs_per_batch, workers write flat 1-D timesteps to
+                # the buffer.  Initialise the storage as 1-D so that the
+                # shapes match when real trajectories are written.
+                fake_td = fake_td.reshape(-1)[:1]
+                fake_td["collector", "traj_ids"] = torch.zeros(
+                    fake_td.shape, dtype=torch.long
+                )
+                self.replay_buffer.extend(fake_td)
+            else:
+                fake_td["collector", "traj_ids"] = torch.zeros(
+                    fake_td.shape, dtype=torch.long
+                )
+                # Use extend to avoid time-related transforms to fail
+                self.replay_buffer.extend(fake_td.unsqueeze(-1))
             self.replay_buffer.empty()
 
     @classmethod

@@ -995,8 +995,18 @@ class TestRayTrajsPerBatch:
         yield
         ray.shutdown()
 
-    def test_ray_trajs_per_batch_replay_buffer(self):
-        """RayCollector with trajs_per_batch populates a local replay buffer."""
+    @pytest.fixture(autouse=True, scope="function")
+    def reset_process_group(self):
+        import torch.distributed as dist
+
+        try:
+            dist.destroy_process_group()
+        except Exception:
+            pass
+        yield
+
+    def test_ray_trajs_per_batch_replay_buffer_rejects_regular_rb(self):
+        """RayCollector rejects a regular ReplayBuffer (must use RayReplayBuffer)."""
         from torchrl.envs import StepCounter, TransformedEnv
 
         max_steps = 4
@@ -1018,26 +1028,18 @@ class TestRayTrajsPerBatch:
             "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
         }
         remote_configs = {"num_cpus": 1, "num_gpus": 0.0}
-        collector = RayCollector(
-            [env_fn, env_fn],
-            policy,
-            collector_class=Collector,
-            replay_buffer=rb,
-            frames_per_batch=max_steps * 4,
-            total_frames=max_steps * 16,
-            trajs_per_batch=num_trajs,
-            ray_init_config=ray_init_config,
-            remote_configs=remote_configs,
-        )
-        try:
-            for _ in collector:
-                pass
-        finally:
-            collector.shutdown()
-
-        assert len(rb) > 0, "replay buffer must be non-empty"
-        sample = rb.sample(num_trajs)
-        assert ("collector", "traj_ids") in sample.keys(True)
+        with pytest.raises(TypeError, match="RayReplayBuffer"):
+            RayCollector(
+                [env_fn, env_fn],
+                policy,
+                collector_class=Collector,
+                replay_buffer=rb,
+                frames_per_batch=max_steps * 4,
+                total_frames=max_steps * 16,
+                trajs_per_batch=num_trajs,
+                ray_init_config=ray_init_config,
+                remote_configs=remote_configs,
+            )
 
 
 if __name__ == "__main__":

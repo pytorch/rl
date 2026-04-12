@@ -255,7 +255,7 @@ def _step(tensordict):
     new_thdot = new_thdot.clamp(
         -tensordict["params", "max_speed"], tensordict["params", "max_speed"]
     )
-    new_th = th + new_thdot * dt
+    new_th = angle_normalize(th + new_thdot * dt)
     reward = -costs.view(*tensordict.shape, 1)
     done = torch.zeros_like(reward, dtype=torch.bool)
     out = TensorDict(

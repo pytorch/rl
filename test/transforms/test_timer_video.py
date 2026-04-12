@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 import torch
@@ -91,6 +93,10 @@ class TestTimer(TransformBase):
         with pytest.raises(NotImplementedError):
             t(TensorDict())
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Timer resolution on Windows causes flaky time_reset assertions",
+    )
     def test_transform_env(self):
         env = TransformedEnv(ContinuousActionVecMockEnv(), Timer())
         rollout = env.rollout(3)

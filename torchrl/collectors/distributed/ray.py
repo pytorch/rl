@@ -23,7 +23,7 @@ from torchrl.collectors._multi_sync import MultiSyncCollector
 from torchrl.collectors._single import Collector
 from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
 from torchrl.collectors.weight_update import RayWeightUpdater, WeightUpdaterBase
-from torchrl.data import ReplayBuffer
+from torchrl.data import RayReplayBuffer, ReplayBuffer
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
 from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
@@ -256,10 +256,10 @@ class RayCollector(BaseCollector):
             is turned on.
             Defaults to -1 (no forced update).
         replay_buffer (RayReplayBuffer, optional): if provided, the collector will not yield tensordicts
-            but populate the buffer instead. Defaults to ``None``.
-
-            .. note:: although it is not enfoced (to allow users to implement their own replay buffer class), a
-                :class:`~torchrl.data.RayReplayBuffer` instance should be used here.
+            but populate the buffer instead. Must be a :class:`~torchrl.data.RayReplayBuffer` instance.
+            Regular :class:`~torchrl.data.ReplayBuffer` instances cannot be shared across Ray actor
+            boundaries (workers write to serialized copies, not the main process buffer).
+            Defaults to ``None``.
         weight_updater (WeightUpdaterBase or constructor, optional): (Deprecated) An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers managed by Ray.
             If not provided, a :class:`~torchrl.collectors.RayWeightUpdater` will be used by default, leveraging
@@ -378,6 +378,14 @@ class RayCollector(BaseCollector):
         if collector_kwargs is None:
             collector_kwargs = {}
         if replay_buffer is not None:
+            if not isinstance(replay_buffer, RayReplayBuffer):
+                raise TypeError(
+                    "RayCollector requires a RayReplayBuffer instance when "
+                    "replay_buffer is provided. Regular ReplayBuffer instances "
+                    "cannot be shared across Ray actor boundaries — workers "
+                    "write to serialized copies, not the main process buffer. "
+                    "Use torchrl.data.RayReplayBuffer instead."
+                )
             if isinstance(collector_kwargs, dict):
                 collector_kwargs.setdefault("replay_buffer", replay_buffer)
             else:
@@ -955,14 +963,9 @@ class RayCollector(BaseCollector):
     def _run_collection_loop(self):
         """Runs the collection loop in a background thread."""
         try:
-            for data in self.iterator():
+            for _data in self.iterator():
                 if self._stop_event.is_set():
                     break
-                # When RayReplayBuffer is configured, sub-collectors write directly
-                # to the buffer and data will be None. Otherwise, write returned
-                # data (e.g. trajectory batches) to the local replay buffer.
-                if self.replay_buffer is not None and data is not None:
-                    self.replay_buffer.extend(data)
         except Exception as e:
             torchrl_logger.error(f"Error in collection thread: {e}")
             raise
