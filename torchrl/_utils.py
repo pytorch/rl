@@ -1326,6 +1326,17 @@ class _RayServiceMetaClass(type):
         >>> obj2 = MyClass(use_ray_service=True)
     """
 
+    def __instancecheck__(cls, instance):
+        # Standard isinstance check
+        if super().__instancecheck__(instance):
+            return True
+        # If the instance wraps a class (e.g. RayLogger), check if the
+        # wrapped class is a subclass of cls.
+        wrapped_cls = getattr(instance, "_logger_cls", None)
+        if wrapped_cls is not None:
+            return issubclass(wrapped_cls, cls)
+        return False
+
     def __call__(cls, *args, use_ray_service=False, **kwargs):
         if use_ray_service:
             if not hasattr(cls, "_RayServiceClass"):

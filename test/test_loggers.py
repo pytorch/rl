@@ -570,9 +570,15 @@ class TestRayLogger:
         pass
 
     def test_csv_logger_returns_ray_logger(self):
+        from torchrl.record.loggers.common import Logger
+
         with tempfile.TemporaryDirectory() as tmpdir:
             logger = CSVLogger(exp_name="test", log_dir=tmpdir, use_ray_service=True)
             assert isinstance(logger, RayLogger)
+            # The metaclass __instancecheck__ makes isinstance transparent
+            assert isinstance(logger, CSVLogger)
+            assert isinstance(logger, Logger)
+            assert not isinstance(logger, WandbLogger)
 
     def test_csv_logger_returns_csv_logger(self):
         with tempfile.TemporaryDirectory() as tmpdir:
