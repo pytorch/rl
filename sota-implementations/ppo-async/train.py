@@ -30,6 +30,11 @@ from utils_mujoco import (
 )
 
 
+def _make_eval_policy(env, env_name, device):
+    """Picklable policy factory for the process-based Evaluator."""
+    return make_ppo_models(env_name, device)[0]
+
+
 def train_start(
     *,
     cfg,
@@ -104,7 +109,9 @@ def train_start(
     # Async evaluator in a separate process (avoids CUDA stream contention)
     evaluator = Evaluator(
         env=partial(make_eval_env, cfg.env.env_name, eval_device, num_eval_envs),
-        policy_factory=lambda env: make_ppo_models(cfg.env.env_name, eval_device)[0],
+        policy_factory=partial(
+            _make_eval_policy, env_name=cfg.env.env_name, device=eval_device
+        ),
         max_steps=1000,
         logger=logger,
         backend="process",
@@ -307,7 +314,9 @@ def train_iterate(
     # Async evaluator in a separate process (avoids CUDA stream contention)
     evaluator = Evaluator(
         env=partial(make_eval_env, cfg.env.env_name, eval_device, num_eval_envs),
-        policy_factory=lambda env: make_ppo_models(cfg.env.env_name, eval_device)[0],
+        policy_factory=partial(
+            _make_eval_policy, env_name=cfg.env.env_name, device=eval_device
+        ),
         max_steps=1000,
         logger=logger,
         backend="process",
