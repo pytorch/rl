@@ -139,6 +139,10 @@ def train_start(
         if current_wc >= total_frames:
             break
 
+        # Check eval even when no new training data
+        if not evaluator.pending:
+            evaluator.trigger_eval(actor, step=current_wc)
+
         if current_wc <= last_trained_wc or len(data_buffer) < cfg_buffer_min_fill:
             time.sleep(0.05)
             continue
@@ -225,10 +229,6 @@ def train_start(
                 "time/wall_time": time.time() - start_time,
             }
         )
-
-        # Continuous async eval — trigger_eval auto-logs the previous result
-        if not evaluator.pending:
-            evaluator.trigger_eval(actor, step=current_wc)
 
         if logger:
             logger.log_metrics(metrics_to_log, current_wc)
