@@ -130,11 +130,14 @@ def main(cfg: DictConfig):
         raise ValueError(f"Unknown sampler type: {sampler_type}")
 
     # ── Replay buffer ───────────────────────────────────────────────────
+    # shared_init=True uses CPU-backed shared memory; storage device must
+    # match so samplers don't generate GPU indices for CPU tensors.
+    shared = async_mode == "start"
     data_buffer = TensorDictReplayBuffer(
         storage=LazyTensorStorage(
             cfg.buffer.size,
-            device=device,
-            shared_init=(async_mode == "start"),
+            device="cpu" if shared else device,
+            shared_init=shared,
         ),
         sampler=sampler,
         batch_size=cfg.loss.mini_batch_size,
