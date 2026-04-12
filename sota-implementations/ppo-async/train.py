@@ -19,7 +19,8 @@ from functools import partial
 import torch
 import tqdm
 
-from torchrl.collectors import Evaluator, MultiaSyncDataCollector
+from torchrl.collectors import MultiaSyncDataCollector
+from torchrl.envs import ExplorationType, set_exploration_type
 from torchrl.weight_update import SharedMemWeightSyncScheme
 from utils_mujoco import (
     ActorWithCritic,
@@ -29,6 +30,52 @@ from utils_mujoco import (
     make_ppo_models,
     WorkerGAEPostproc,
 )
+
+
+def _run_sync_eval(eval_env, eval_policy, actor, eval_device, max_steps=1000):
+    """Run synchronous evaluation on the main thread.
+
+    Copies weights from the training actor to the eval policy, runs a
+    rollout, and returns a metrics dict with eval/ prefix.
+    """
+    # Copy weights from training actor to eval policy
+    from tensordict import TensorDict
+
+    weights = TensorDict.from_module(actor).data.detach().clone()
+    weights.to(eval_device).to_module(eval_policy)
+    eval_policy.eval()
+
+    with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
+        rollout_td = eval_env.rollout(
+            max_steps,
+            eval_policy,
+            break_when_any_done=True,
+        )
+
+    eval_policy.train()
+
+    # Extract metrics
+    metrics = {}
+    reward_key = ("next", "reward")
+    done_key = ("next", "done")
+    if rollout_td.get(done_key).any():
+        episode_reward = rollout_td.get(("next", "episode_reward"))
+        done_mask = rollout_td.get(done_key).squeeze(-1)
+        final_rewards = episode_reward[done_mask]
+        if len(final_rewards) > 0:
+            metrics["eval/reward"] = final_rewards.mean().item()
+
+        step_count = rollout_td.get(("next", "step_count"))
+        final_steps = step_count[done_mask]
+        if len(final_steps) > 0:
+            metrics["eval/episode_length"] = final_steps.float().mean().item()
+    else:
+        # No episodes completed — report cumulative reward
+        total_reward = rollout_td.get(reward_key).sum(-2).mean().item()
+        metrics["eval/reward"] = total_reward
+        metrics["eval/episode_length"] = float(rollout_td.shape[-1])
+
+    return metrics
 
 
 def train_start(
@@ -114,18 +161,8 @@ def train_start(
 
     # Wait for eval env compilation to finish
     eval_thread.join()
-
-    # Create evaluator — no logger here; eval metrics are returned by
-    # poll() and logged by the training loop at the correct step to avoid
-    # WandB non-monotonic step warnings.
-    evaluator = Evaluator(
-        env=eval_env_result[0],
-        policy_factory=lambda env: make_ppo_models(cfg.env.env_name, eval_device)[0],
-        max_steps=1000,
-        log_prefix="eval",
-        backend="thread",
-        break_when_any_done=True,
-    )
+    eval_env = eval_env_result[0]
+    eval_policy = make_ppo_models(cfg.env.env_name, eval_device)[0]
 
     # Start collection
     collector.start()
@@ -241,39 +278,18 @@ def train_start(
             }
         )
 
+        # Synchronous eval on main thread
         if (current_wc // cfg_logger_test_interval) > (
             last_test_frames // cfg_logger_test_interval
         ):
-            if not evaluator.pending:
-                print(  # noqa: T001
-                    f"[eval] Triggering eval at wc={current_wc}, "
-                    f"pending={evaluator.pending}"
-                )
-                evaluator.trigger_eval(actor, step=current_wc)
-                last_test_frames = current_wc
-        eval_metrics = evaluator.poll()
-        if eval_metrics is not None:
-            print(  # noqa: T001
-                f"[eval] Got eval metrics: "
-                f"{', '.join(f'{k}={v}' for k, v in eval_metrics.items() if isinstance(v, (int, float)))}"
-            )
+            eval_metrics = _run_sync_eval(eval_env, eval_policy, actor, eval_device)
             metrics_to_log.update(eval_metrics)
+            last_test_frames = current_wc
 
         if logger:
             logger.log_metrics(metrics_to_log, current_wc)
 
     pbar.close()
-    # Wait for any in-flight eval before shutting down
-    if evaluator.pending:
-        print("[eval] Waiting for in-flight eval to finish...")  # noqa: T001
-        final_eval = evaluator.wait(timeout=120)
-        if final_eval is not None:
-            print(  # noqa: T001
-                f"[eval] Final eval reward: {final_eval.get('eval/reward', 'N/A')}"
-            )
-            if logger:
-                logger.log_metrics(final_eval, current_wc)
-    evaluator.shutdown()
     collector.shutdown()
 
     elapsed = time.time() - start_time
@@ -347,17 +363,8 @@ def train_iterate(
 
     # Wait for eval env compilation to finish
     eval_thread.join()
-
-    # Create evaluator — no logger here; eval metrics are returned by
-    # poll() and logged by the training loop at the correct step.
-    evaluator = Evaluator(
-        env=eval_env_result[0],
-        policy_factory=lambda env: make_ppo_models(cfg.env.env_name, eval_device)[0],
-        max_steps=1000,
-        log_prefix="eval",
-        backend="thread",
-        break_when_any_done=True,
-    )
+    eval_env = eval_env_result[0]
+    eval_policy = make_ppo_models(cfg.env.env_name, eval_device)[0]
 
     policy_version = 0
     collected_frames = 0
@@ -462,36 +469,17 @@ def train_iterate(
             }
         )
 
+        # Synchronous eval on main thread
         if ((i - 1) * frames_in_batch) // cfg_logger_test_interval < (
             i * frames_in_batch
         ) // cfg_logger_test_interval:
-            if not evaluator.pending:
-                print(  # noqa: T001
-                    f"[eval] Triggering eval at frames={collected_frames}"
-                )
-                evaluator.trigger_eval(actor, step=collected_frames)
-        eval_metrics = evaluator.poll()
-        if eval_metrics is not None:
-            print(  # noqa: T001
-                f"[eval] Got eval metrics: "
-                f"{', '.join(f'{k}={v}' for k, v in eval_metrics.items() if isinstance(v, (int, float)))}"
-            )
+            eval_metrics = _run_sync_eval(eval_env, eval_policy, actor, eval_device)
             metrics_to_log.update(eval_metrics)
 
         if logger:
             logger.log_metrics(metrics_to_log, collected_frames)
 
     pbar.close()
-    if evaluator.pending:
-        print("[eval] Waiting for in-flight eval to finish...")  # noqa: T001
-        final_eval = evaluator.wait(timeout=120)
-        if final_eval is not None:
-            print(  # noqa: T001
-                f"[eval] Final eval reward: {final_eval.get('eval/reward', 'N/A')}"
-            )
-            if logger:
-                logger.log_metrics(final_eval, collected_frames)
-    evaluator.shutdown()
     collector.shutdown()
 
     train_elapsed = time.time() - train_start_time if train_start_time else 0
