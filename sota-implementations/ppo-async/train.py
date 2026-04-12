@@ -115,12 +115,13 @@ def train_start(
     # Wait for eval env compilation to finish
     eval_thread.join()
 
-    # Create evaluator with pre-compiled env
+    # Create evaluator — no logger here; eval metrics are returned by
+    # poll() and logged by the training loop at the correct step to avoid
+    # WandB non-monotonic step warnings.
     evaluator = Evaluator(
         env=eval_env_result[0],
         policy_factory=lambda env: make_ppo_models(cfg.env.env_name, eval_device)[0],
         max_steps=10_000,
-        logger=logger,
         log_prefix="eval",
         backend="thread",
     )
@@ -328,12 +329,12 @@ def train_iterate(
     # Wait for eval env compilation to finish
     eval_thread.join()
 
-    # Create evaluator with pre-compiled env
+    # Create evaluator — no logger here; eval metrics are returned by
+    # poll() and logged by the training loop at the correct step.
     evaluator = Evaluator(
         env=eval_env_result[0],
         policy_factory=lambda env: make_ppo_models(cfg.env.env_name, eval_device)[0],
         max_steps=10_000,
-        logger=logger,
         log_prefix="eval",
         backend="thread",
     )

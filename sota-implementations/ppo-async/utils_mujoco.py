@@ -54,9 +54,11 @@ def make_env(env_name="halfcheetah", device="cpu", num_envs=4096, compile=True):
 def make_eval_env(env_name, device, num_eval_envs):
     """Env factory for the Evaluator.
 
-    Creates a compiled GPU-batched mujoco-torch env.
+    Creates an uncompiled GPU-batched mujoco-torch env. Compilation is
+    disabled because the Inductor async compile pool can be closed by the
+    time the Evaluator thread runs, causing RuntimeError.
     """
-    return make_env(env_name, device=device, num_envs=num_eval_envs, compile=True)
+    return make_env(env_name, device=device, num_envs=num_eval_envs, compile=False)
 
 
 # ── Model factories ────────────────────────────────────────────────────
