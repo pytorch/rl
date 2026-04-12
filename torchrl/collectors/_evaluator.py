@@ -351,19 +351,36 @@ class Evaluator:
         self,
         weights: TensorDictBase | nn.Module | None = None,
         step: int | None = None,
-    ) -> None:
-        """Start an async evaluation (fire-and-forget).
+    ) -> dict[str, Any] | None:
+        """Start an async evaluation, auto-logging the previous result.
 
-        If a previous evaluation is still running its result will be
-        discarded.
+        If a previous evaluation has completed, its result is finalized
+        (logged via the configured logger, video dumped, callback invoked)
+        before the new evaluation is submitted.  This means the caller
+        never needs to call :meth:`poll` explicitly — just keep calling
+        ``trigger_eval`` and previous results are logged automatically.
+
+        If a previous evaluation is still *running*, it will be discarded
+        when the new one completes (fire-and-forget).
 
         Args:
             weights: See :meth:`evaluate`.
             step: See :meth:`evaluate`.
+
+        Returns:
+            The finalized metrics dict from the *previous* evaluation if
+            one was ready, otherwise ``None``.
         """
+        # Auto-finalize the previous result if ready
+        prev = self._backend.poll(timeout=0)
+        prev_metrics = None
+        if prev is not None:
+            prev_metrics = self._finalize(prev)
+
         weights = self._prepare_weights(weights)
         step = self._next_step(step)
         self._backend.submit(weights, step)
+        return prev_metrics
 
     def poll(self, timeout: float = 0) -> dict[str, Any] | None:
         """Return the latest evaluation result if ready, else ``None``.

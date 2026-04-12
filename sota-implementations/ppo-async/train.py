@@ -106,8 +106,6 @@ def train_start(
     )
 
     # Async evaluator in a separate process (avoids CUDA stream contention)
-    # logger=None: we log eval metrics ourselves at the current training step
-    # to avoid WandB step regression (eval completes after training advances).
     evaluator = Evaluator(
         env=partial(make_eval_env, cfg.env.env_name, eval_device, num_eval_envs),
         policy_factory=partial(
@@ -116,6 +114,7 @@ def train_start(
         num_trajectories=num_eval_envs,
         max_steps=1000,
         backend="process",
+        logger=logger,
     )
 
     # Start collection and evaluation
@@ -227,24 +226,15 @@ def train_start(
             }
         )
 
-        # Continuous async eval — poll for results, re-trigger immediately
-        eval_metrics = evaluator.poll()
-        if eval_metrics is not None:
-            eval_metrics.pop("eval/step", None)
-            metrics_to_log.update(eval_metrics)
-            # Re-trigger next eval immediately with latest weights
+        # Continuous async eval — trigger_eval auto-logs the previous result
+        if not evaluator.pending:
             evaluator.trigger_eval(actor, step=current_wc)
 
         if logger:
             logger.log_metrics(metrics_to_log, current_wc)
 
     # Wait for any in-flight eval before shutdown
-    if evaluator.pending:
-        eval_metrics = evaluator.wait(timeout=120)
-        if eval_metrics is not None:
-            eval_metrics.pop("eval/step", None)
-            if logger:
-                logger.log_metrics(eval_metrics, current_wc)
+    evaluator.wait(timeout=120)
 
     pbar.close()
     evaluator.shutdown()
@@ -310,7 +300,6 @@ def train_iterate(
     )
 
     # Async evaluator in a separate process (avoids CUDA stream contention)
-    # logger=None: we log eval metrics ourselves at the current training step.
     evaluator = Evaluator(
         env=partial(make_eval_env, cfg.env.env_name, eval_device, num_eval_envs),
         policy_factory=partial(
@@ -319,6 +308,7 @@ def train_iterate(
         num_trajectories=num_eval_envs,
         max_steps=1000,
         backend="process",
+        logger=logger,
     )
 
     # Start continuous eval immediately
@@ -427,23 +417,15 @@ def train_iterate(
             }
         )
 
-        # Continuous async eval — poll for results, re-trigger immediately
-        eval_metrics = evaluator.poll()
-        if eval_metrics is not None:
-            eval_metrics.pop("eval/step", None)
-            metrics_to_log.update(eval_metrics)
+        # Continuous async eval — trigger_eval auto-logs the previous result
+        if not evaluator.pending:
             evaluator.trigger_eval(actor, step=collected_frames)
 
         if logger:
             logger.log_metrics(metrics_to_log, collected_frames)
 
     # Wait for any in-flight eval before shutdown
-    if evaluator.pending:
-        eval_metrics = evaluator.wait(timeout=120)
-        if eval_metrics is not None:
-            eval_metrics.pop("eval/step", None)
-            if logger:
-                logger.log_metrics(eval_metrics, collected_frames)
+    evaluator.wait(timeout=120)
 
     pbar.close()
     evaluator.shutdown()
