@@ -812,7 +812,16 @@ class _ThreadEvalBackend(_EvalBackend):
         self._thread.start()
 
     def _eval_loop(self) -> None:
-        self._ensure_env_and_policy()
+        try:
+            self._ensure_env_and_policy()
+        except Exception:
+            import traceback
+
+            print(  # noqa: T001
+                f"[Evaluator] _ensure_env_and_policy failed:\n"
+                f"{traceback.format_exc()}"
+            )
+            return
         while not self._shutdown_flag:
             self._eval_ready.wait(timeout=1.0)
             if self._shutdown_flag:
@@ -828,7 +837,18 @@ class _ThreadEvalBackend(_EvalBackend):
                 continue
 
             weights, step = request
-            metrics = self._run_eval(weights)
+            try:
+                metrics = self._run_eval(weights)
+            except Exception:
+                import traceback
+
+                print(  # noqa: T001
+                    f"[Evaluator] _run_eval failed at step={step}:\n"
+                    f"{traceback.format_exc()}"
+                )
+                with self._lock:
+                    self._pending.clear()
+                continue
 
             if not self._cancel.is_set():
                 metrics["_step"] = step
