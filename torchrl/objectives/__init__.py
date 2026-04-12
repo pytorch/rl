@@ -9,6 +9,7 @@ from torchrl.objectives.cql import CQLLoss, DiscreteCQLLoss
 from torchrl.objectives.crossq import CrossQLoss
 from torchrl.objectives.ddpg import DDPGLoss
 from torchrl.objectives.decision_transformer import DTLoss, OnlineDTLoss
+from torchrl.objectives.diffusion_bc import DiffusionBCLoss
 from torchrl.objectives.dqn import DistributionalDQNLoss, DQNLoss
 from torchrl.objectives.dreamer import (
     DreamerActorLoss,
@@ -41,6 +42,7 @@ from torchrl.objectives.utils import (
 __all__ = [
     "A2CLoss",
     "CQLLoss",
+    "DiffusionBCLoss",
     "ClipPPOLoss",
     "CrossQLoss",
     "DDPGLoss",

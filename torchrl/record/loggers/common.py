@@ -13,7 +13,7 @@ import torch
 from tensordict import TensorDictBase
 from torch import Tensor
 
-from torchrl._utils import implement_for
+from torchrl._utils import _RayServiceMetaClass, implement_for
 
 _has_tv = importlib.util.find_spec("torchvision") is not None
 try:
@@ -187,8 +187,33 @@ def _make_metrics_safe_tensordict(
     return out
 
 
-class Logger:
-    """A template for loggers."""
+class Logger(metaclass=_RayServiceMetaClass):
+    """A template for loggers.
+
+    Keyword Args:
+        use_ray_service (bool): If ``True``, the logger runs as a Ray actor
+            in a separate process. All method calls are delegated to the remote
+            actor via ``ray.get(actor.method.remote(...))``. CUDA tensors in
+            :meth:`log_metrics` and :meth:`log_video` are automatically moved
+            to CPU before the remote call. Requires ``ray`` to be installed.
+            Default: ``False``.
+        ray_actor_options (dict, optional): Options passed to ``ray.remote()``
+            when creating the Ray actor (e.g., ``{"num_cpus": 1}``).
+            Only used when ``use_ray_service=True``.
+    """
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        _concrete_cls = cls
+
+        def _ray_wrapper(*args, ray_actor_options=None, **kwargs):
+            from torchrl.record.loggers.ray import RayLogger
+
+            return RayLogger(
+                _concrete_cls, *args, ray_actor_options=ray_actor_options, **kwargs
+            )
+
+        cls._RayServiceClass = staticmethod(_ray_wrapper)
 
     def __init__(self, exp_name: str, log_dir: str) -> None:
         self.exp_name = exp_name
