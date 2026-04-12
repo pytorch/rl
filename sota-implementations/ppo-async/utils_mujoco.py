@@ -51,14 +51,27 @@ def make_env(env_name="halfcheetah", device="cpu", num_envs=4096, compile=True):
     return env
 
 
-def make_eval_env(env_name, device, num_eval_envs):
+def make_eval_env(env_name, device, num_eval_envs, max_steps=1000):
     """Env factory for the Evaluator.
 
-    Creates an uncompiled GPU-batched mujoco-torch env. Compilation is
-    disabled because the Inductor async compile pool can be closed by the
-    time the Evaluator thread runs, causing RuntimeError.
+    Creates an uncompiled GPU-batched mujoco-torch env. The StepCounter
+    uses max_steps so that episodes terminate — the Evaluator skips adding
+    its own max_frames_per_traj when it sees an existing step_count.
     """
-    return make_env(env_name, device=device, num_envs=num_eval_envs, compile=False)
+    compile_kwargs = None
+    env = ENVS[env_name](
+        num_envs=num_eval_envs,
+        device=device,
+        dtype=torch.float32,
+        compile_step=False,
+        compile_kwargs=compile_kwargs,
+    )
+    env = TransformedEnv(env)
+    env.append_transform(VecNormV2(in_keys=["observation"], decay=0.99999, eps=1e-2))
+    env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
+    env.append_transform(RewardSum())
+    env.append_transform(StepCounter(max_steps=max_steps))
+    return env
 
 
 # ── Model factories ────────────────────────────────────────────────────
