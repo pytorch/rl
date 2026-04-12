@@ -641,6 +641,25 @@ def _env_has_step_count(env: EnvBase) -> bool:
     return False
 
 
+def _ensure_env_step_limit(env: EnvBase, max_steps: int | None) -> bool:
+    """Ensure the env terminates episodes if it has a StepCounter.
+
+    If the env has a StepCounter without ``max_steps``, sets it to
+    *max_steps* so that trajectories are truncated after the desired
+    number of steps.  Returns ``True`` if the env has a ``step_count``
+    key (regardless of whether we modified the StepCounter).
+    """
+    from torchrl.envs import StepCounter
+    from torchrl.envs.transforms import TransformedEnv
+
+    has_step_count = _env_has_step_count(env)
+    if has_step_count and max_steps is not None and isinstance(env, TransformedEnv):
+        for t in env.transform:
+            if isinstance(t, StepCounter) and t.max_steps is None:
+                t.max_steps = max_steps
+    return has_step_count
+
+
 def _resolve_collector_cls(cls_or_name: type | str | None):
     """Resolve a collector class from a string name or return as-is."""
     if cls_or_name is None:
@@ -867,12 +886,13 @@ class _ThreadEvalBackend(_EvalBackend):
         self._ensure_env_and_policy()
         cls = _resolve_collector_cls(self._collector_cls)
         fpb = self._frames_per_batch or self._max_steps or 1000
-        # If the env already has a StepCounter (step_count in output),
-        # set max_frames_per_traj=0 to avoid conflict with the collector
-        # trying to add a second StepCounter.
-        max_frames = self._max_steps
-        if _env_has_step_count(self._env):
+        # If the env already has a StepCounter, ensure it enforces a time
+        # limit and let the env handle termination (max_frames_per_traj=0).
+        # This avoids a Collector ValueError from duplicate StepCounters.
+        if _ensure_env_step_limit(self._env, self._max_steps):
             max_frames = 0
+        else:
+            max_frames = self._max_steps
         self._collector = cls(
             create_env_fn=self._env,
             policy=self._policy,
@@ -1055,7 +1075,10 @@ def _process_eval_worker(
 
     cls = _resolve_collector_cls(collector_cls_name)
     fpb = frames_per_batch or max_steps or 1000
-    max_frames = 0 if _env_has_step_count(env) else max_steps
+    if _ensure_env_step_limit(env, max_steps):
+        max_frames = 0
+    else:
+        max_frames = max_steps
     collector = cls(
         create_env_fn=env,
         policy=policy,
