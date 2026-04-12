@@ -436,14 +436,11 @@ For async collections, it may be that one worker has not seen its
 parameters being updated for a certain time even if <code class="docutils literal notranslate"><span class="pre">update_after_each_batch</span></code>
 is turned on.
 Defaults to -1 (no forced update).</p></li>
-<li><p><strong>replay_buffer</strong> (<a class="reference internal" href="torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer" title="torchrl.data.RayReplayBuffer"><em>RayReplayBuffer</em></a><em>, </em><em>optional</em>) – <p>if provided, the collector will not yield tensordicts
-but populate the buffer instead. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>although it is not enfoced (to allow users to implement their own replay buffer class), a
-<a class="reference internal" href="torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer" title="torchrl.data.RayReplayBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">RayReplayBuffer</span></code></a> instance should be used here.</p>
-</div>
-</p></li>
+<li><p><strong>replay_buffer</strong> (<a class="reference internal" href="torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer" title="torchrl.data.RayReplayBuffer"><em>RayReplayBuffer</em></a><em>, </em><em>optional</em>) – if provided, the collector will not yield tensordicts
+but populate the buffer instead. Must be a <a class="reference internal" href="torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer" title="torchrl.data.RayReplayBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">RayReplayBuffer</span></code></a> instance.
+Regular <a class="reference internal" href="torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer" title="torchrl.data.ReplayBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBuffer</span></code></a> instances cannot be shared across Ray actor
+boundaries (workers write to serialized copies, not the main process buffer).
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>weight_updater</strong> (<a class="reference internal" href="torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase" title="torchrl.collectors.WeightUpdaterBase"><em>WeightUpdaterBase</em></a><em> or </em><em>constructor</em><em>, </em><em>optional</em>) – (Deprecated) An instance of <a class="reference internal" href="torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase" title="torchrl.collectors.WeightUpdaterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">WeightUpdaterBase</span></code></a>
 or its subclass, responsible for updating the policy weights on remote inference workers managed by Ray.
 If not provided, a <a class="reference internal" href="torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater" title="torchrl.collectors.RayWeightUpdater"><code class="xref py py-class docutils literal notranslate"><span class="pre">RayWeightUpdater</span></code></a> will be used by default, leveraging

@@ -928,6 +928,8 @@
         <span class="c1"># Note: Workers will call init_process_group in their transport&#39;s</span>
         <span class="c1"># setup_connection_and_weights_on_receiver. The init_process_group is</span>
         <span class="c1"># a collective operation, so all ranks must call it together.</span>
+        <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">destroy_process_group</span><span class="p">()</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span>
             <span class="n">backend</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="p">,</span>
             <span class="n">rank</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
@@ -1249,6 +1251,8 @@
 
         <span class="c1"># Now initialize process group on sender (rank 0)</span>
         <span class="c1"># The receiver is concurrently joining via the Ray call above</span>
+        <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">destroy_process_group</span><span class="p">()</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span>
             <span class="n">backend</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="p">,</span>
             <span class="n">rank</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
