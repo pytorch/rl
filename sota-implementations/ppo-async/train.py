@@ -55,7 +55,6 @@ def train_start(
     cfg_optim_lr,
     cfg_loss_anneal_clip_eps,
     cfg_loss_clip_epsilon,
-    cfg_logger_test_interval,
     cfg_optim_max_grad_norm,
     cfg_buffer_min_fill,
     cfg_loss_gamma,
@@ -117,8 +116,9 @@ def train_start(
         backend="process",
     )
 
-    # Start collection
+    # Start collection and evaluation
     collector.start()
+    evaluator.trigger_eval(actor, step=0)
 
     policy_version = 0
     num_network_updates = 0
@@ -126,7 +126,6 @@ def train_start(
     start_time = time.time()
     train_start_time = None
     last_write_count = 0
-    last_test_frames = 0
     last_trained_wc = 0
 
     while True:
@@ -226,17 +225,12 @@ def train_start(
             }
         )
 
-        # Async eval in separate process — trigger and poll
-        if (current_wc // cfg_logger_test_interval) > (
-            last_test_frames // cfg_logger_test_interval
-        ):
-            if not evaluator.pending:
-                evaluator.trigger_eval(actor, step=current_wc)
-            last_test_frames = current_wc
-
+        # Continuous async eval — poll for results, re-trigger immediately
         eval_metrics = evaluator.poll()
         if eval_metrics is not None:
             metrics_to_log.update(eval_metrics)
+            # Re-trigger next eval immediately with latest weights
+            evaluator.trigger_eval(actor, step=current_wc)
 
         if logger:
             logger.log_metrics(metrics_to_log, current_wc)
@@ -279,7 +273,6 @@ def train_iterate(
     cfg_optim_lr,
     cfg_loss_anneal_clip_eps,
     cfg_loss_clip_epsilon,
-    cfg_logger_test_interval,
     cfg_optim_max_grad_norm,
     cfg_buffer_min_fill,
     total_frames,
@@ -322,6 +315,9 @@ def train_iterate(
         backend="process",
     )
 
+    # Start continuous eval immediately
+    evaluator.trigger_eval(actor, step=0)
+
     policy_version = 0
     collected_frames = 0
     num_network_updates = 0
@@ -329,7 +325,7 @@ def train_iterate(
     start_time = time.time()
     train_start_time = None
 
-    for i, data in enumerate(collector):
+    for _i, data in enumerate(collector):
         if train_start_time is None:
             train_start_time = time.time()
 
@@ -425,16 +421,11 @@ def train_iterate(
             }
         )
 
-        # Async eval in separate process — trigger and poll
-        if ((i - 1) * frames_in_batch) // cfg_logger_test_interval < (
-            i * frames_in_batch
-        ) // cfg_logger_test_interval:
-            if not evaluator.pending:
-                evaluator.trigger_eval(actor, step=collected_frames)
-
+        # Continuous async eval — poll for results, re-trigger immediately
         eval_metrics = evaluator.poll()
         if eval_metrics is not None:
             metrics_to_log.update(eval_metrics)
+            evaluator.trigger_eval(actor, step=collected_frames)
 
         if logger:
             logger.log_metrics(metrics_to_log, collected_frames)
