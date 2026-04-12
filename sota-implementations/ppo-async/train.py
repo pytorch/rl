@@ -244,16 +244,34 @@ def train_start(
             last_test_frames // cfg_logger_test_interval
         ):
             if not evaluator.pending:
+                print(  # noqa: T001
+                    f"[eval] Triggering eval at wc={current_wc}, "
+                    f"pending={evaluator.pending}"
+                )
                 evaluator.trigger_eval(actor, step=current_wc)
                 last_test_frames = current_wc
         eval_metrics = evaluator.poll()
         if eval_metrics is not None:
+            print(  # noqa: T001
+                f"[eval] Got eval metrics: "
+                f"{', '.join(f'{k}={v}' for k, v in eval_metrics.items() if isinstance(v, (int, float)))}"
+            )
             metrics_to_log.update(eval_metrics)
 
         if logger:
             logger.log_metrics(metrics_to_log, current_wc)
 
     pbar.close()
+    # Wait for any in-flight eval before shutting down
+    if evaluator.pending:
+        print("[eval] Waiting for in-flight eval to finish...")  # noqa: T001
+        final_eval = evaluator.wait(timeout=120)
+        if final_eval is not None:
+            print(  # noqa: T001
+                f"[eval] Final eval reward: {final_eval.get('eval/reward', 'N/A')}"
+            )
+            if logger:
+                logger.log_metrics(final_eval, current_wc)
     evaluator.shutdown()
     collector.shutdown()
 
@@ -446,15 +464,31 @@ def train_iterate(
             i * frames_in_batch
         ) // cfg_logger_test_interval:
             if not evaluator.pending:
+                print(  # noqa: T001
+                    f"[eval] Triggering eval at frames={collected_frames}"
+                )
                 evaluator.trigger_eval(actor, step=collected_frames)
         eval_metrics = evaluator.poll()
         if eval_metrics is not None:
+            print(  # noqa: T001
+                f"[eval] Got eval metrics: "
+                f"{', '.join(f'{k}={v}' for k, v in eval_metrics.items() if isinstance(v, (int, float)))}"
+            )
             metrics_to_log.update(eval_metrics)
 
         if logger:
             logger.log_metrics(metrics_to_log, collected_frames)
 
     pbar.close()
+    if evaluator.pending:
+        print("[eval] Waiting for in-flight eval to finish...")  # noqa: T001
+        final_eval = evaluator.wait(timeout=120)
+        if final_eval is not None:
+            print(  # noqa: T001
+                f"[eval] Final eval reward: {final_eval.get('eval/reward', 'N/A')}"
+            )
+            if logger:
+                logger.log_metrics(final_eval, collected_frames)
     evaluator.shutdown()
     collector.shutdown()
 
