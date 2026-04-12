@@ -21,8 +21,10 @@ from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
 from torchrl.record.loggers.common import _has_torchcodec, _has_tv
 from torchrl.record.loggers.csv import CSVLogger
 from torchrl.record.loggers.mlflow import _has_mlflow, MLFlowLogger
+from torchrl.record.loggers.ray import RayLogger
 from torchrl.record.loggers.tensorboard import _has_tb, TensorboardLogger
 from torchrl.record.loggers.trackio import _has_trackio, TrackioLogger
+from torchrl.record.loggers.utils import get_logger
 from torchrl.record.loggers.wandb import _has_wandb, WandbLogger
 from torchrl.record.recorder import PixelRenderTransform, VideoRecorder
 
@@ -45,6 +47,7 @@ if _has_tb:
 if _has_mlflow:
     import mlflow
 
+_has_ray = importlib.util.find_spec("ray") is not None
 _has_gym = (
     importlib.util.find_spec("gym", None) is not None
     or importlib.util.find_spec("gymnasium", None) is not None
@@ -547,6 +550,143 @@ class TestTrackioLogger:
             trackio_logger.log_histogram(
                 "hist", data, step=steps[i] if steps else None, bins=10
             )
+
+
+@pytest.fixture(autouse=False)
+def ray_init_shutdown():
+    """Initialize Ray before a test and shut it down after."""
+    import ray
+
+    if not ray.is_initialized():
+        ray.init(num_cpus=2, log_to_driver=False)
+    yield
+    ray.shutdown()
+
+
+@pytest.mark.skipif(not _has_ray, reason="Ray not available")
+class TestRayLogger:
+    @pytest.fixture(autouse=True)
+    def _setup_ray(self, ray_init_shutdown):
+        pass
+
+    def test_csv_logger_returns_ray_logger(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(exp_name="test", log_dir=tmpdir, use_ray_service=True)
+            assert isinstance(logger, RayLogger)
+
+    def test_csv_logger_returns_csv_logger(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(exp_name="test", log_dir=tmpdir)
+            assert isinstance(logger, CSVLogger)
+
+    def test_log_scalar(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_scalar", log_dir=tmpdir, use_ray_service=True
+            )
+            logger.log_scalar("loss", 0.5, step=0)
+            logger.log_scalar("loss", 0.3, step=1)
+
+            scalars_dir = os.path.join(tmpdir, "test_scalar", "scalars")
+            assert os.path.isdir(scalars_dir)
+            assert os.path.isfile(os.path.join(scalars_dir, "loss.csv"))
+
+    def test_log_metrics(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_metrics", log_dir=tmpdir, use_ray_service=True
+            )
+            metrics = {"train/loss": 0.5, "train/reward": 1.0}
+            result = logger.log_metrics(metrics, step=0)
+            assert result == metrics
+
+    def test_log_metrics_with_tensors(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_tensor_metrics", log_dir=tmpdir, use_ray_service=True
+            )
+            metrics = {"loss": torch.tensor(0.5), "reward": torch.tensor(1.0)}
+            result = logger.log_metrics(metrics, step=0)
+            assert isinstance(result["loss"], float)
+            assert isinstance(result["reward"], float)
+
+    def test_log_hparams(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_hparams", log_dir=tmpdir, use_ray_service=True
+            )
+            logger.log_hparams({"lr": 0.001, "batch_size": 32})
+
+    def test_log_video(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_video",
+                log_dir=tmpdir,
+                video_format="pt",
+                use_ray_service=True,
+            )
+            video = torch.randint(0, 255, (1, 10, 3, 64, 64), dtype=torch.uint8)
+            logger.log_video("test_vid", video, step=0)
+
+            videos_dir = os.path.join(tmpdir, "test_video", "videos")
+            assert os.path.isdir(videos_dir)
+
+    def test_repr(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_repr", log_dir=tmpdir, use_ray_service=True
+            )
+            r = repr(logger)
+            assert isinstance(r, str)
+            assert "CSVLogger" in r
+
+    def test_getattr_fallback(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_getattr", log_dir=tmpdir, use_ray_service=True
+            )
+            # CSVLogger.print_log_dir() is a non-standard method
+            logger.print_log_dir()
+
+    def test_private_attr_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_private", log_dir=tmpdir, use_ray_service=True
+            )
+            assert isinstance(logger, RayLogger)
+            with pytest.raises(AttributeError):
+                logger._nonexistent
+
+    def test_ray_actor_options(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_options",
+                log_dir=tmpdir,
+                use_ray_service=True,
+                ray_actor_options={"num_cpus": 1},
+            )
+            assert isinstance(logger, RayLogger)
+            logger.log_scalar("x", 1.0, step=0)
+
+    def test_exp_name_property(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="my_experiment", log_dir=tmpdir, use_ray_service=True
+            )
+            assert logger.exp_name == "my_experiment"
+
+    def test_log_dir_property(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_logdir", log_dir=tmpdir, use_ray_service=True
+            )
+            assert logger.log_dir == tmpdir
+
+    def test_get_logger_with_ray(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = get_logger("csv", tmpdir, "test_get_logger", use_ray_service=True)
+            assert isinstance(logger, RayLogger)
+            logger.log_scalar("x", 1.0, step=0)
 
 
 if __name__ == "__main__":
