@@ -15,6 +15,15 @@ from torchrl.objectives.dreamer import (
     DreamerModelLoss,
     DreamerValueLoss,
 )
+from torchrl.objectives.dreamer_v3 import (
+    DreamerV3ActorLoss,
+    DreamerV3ModelLoss,
+    DreamerV3ValueLoss,
+    symexp,
+    symlog,
+    two_hot_decode,
+    two_hot_encode,
+)
 from torchrl.objectives.gail import GAILLoss
 from torchrl.objectives.iql import DiscreteIQLLoss, IQLLoss
 from torchrl.objectives.multiagent import QMixerLoss
@@ -52,6 +61,9 @@ __all__ = [
     "DistributionalDQNLoss",
     "DreamerActorLoss",
     "DreamerModelLoss",
+    "DreamerV3ActorLoss",
+    "DreamerV3ModelLoss",
+    "DreamerV3ValueLoss",
     "DreamerValueLoss",
     "ExponentialQuadraticCost",
     "GAILLoss",
@@ -77,4 +89,8 @@ __all__ = [
     "hold_out_net",
     "hold_out_params",
     "next_state_value",
+    "symexp",
+    "symlog",
+    "two_hot_decode",
+    "two_hot_encode",
 ]
