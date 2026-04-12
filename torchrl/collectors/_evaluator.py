@@ -812,16 +812,7 @@ class _ThreadEvalBackend(_EvalBackend):
         self._thread.start()
 
     def _eval_loop(self) -> None:
-        try:
-            self._ensure_env_and_policy()
-        except Exception:
-            import traceback
-
-            print(  # noqa: T001
-                f"[Evaluator] _ensure_env_and_policy failed:\n"
-                f"{traceback.format_exc()}"
-            )
-            return
+        self._ensure_env_and_policy()
         while not self._shutdown_flag:
             self._eval_ready.wait(timeout=1.0)
             if self._shutdown_flag:
@@ -837,18 +828,7 @@ class _ThreadEvalBackend(_EvalBackend):
                 continue
 
             weights, step = request
-            try:
-                metrics = self._run_eval(weights)
-            except Exception:
-                import traceback
-
-                print(  # noqa: T001
-                    f"[Evaluator] _run_eval failed at step={step}:\n"
-                    f"{traceback.format_exc()}"
-                )
-                with self._lock:
-                    self._pending.clear()
-                continue
+            metrics = self._run_eval(weights)
 
             if not self._cancel.is_set():
                 metrics["_step"] = step
@@ -861,35 +841,20 @@ class _ThreadEvalBackend(_EvalBackend):
                 pass
 
     def _run_eval(self, weights: TensorDictBase | None) -> dict[str, Any]:
-        import sys
-
-        print("[Evaluator] _run_eval: start", flush=True)  # noqa: T001
         # Resolve break mode (needs env batch size, so must happen after lazy init)
         break_any, break_all = _resolve_break_mode(
             self._break_when_any_done,
             self._break_when_all_done,
             self._env,
         )
-        print(  # noqa: T001
-            f"[Evaluator] break_any={break_any}, break_all={break_all}",
-            flush=True,
-        )
 
         # Apply weights
         if weights is not None:
-            print("[Evaluator] loading weights...", flush=True)  # noqa: T001
             weights.to(self._device).to_module(self._policy)
-            print("[Evaluator] weights loaded", flush=True)  # noqa: T001
 
         if isinstance(self._policy, nn.Module):
             self._policy.eval()
 
-        print(  # noqa: T001
-            f"[Evaluator] starting rollout: max_steps={self._max_steps}, "
-            f"env_batch={self._env.batch_size}",
-            flush=True,
-        )
-        sys.stdout.flush()
         with set_exploration_type(self._exploration_type), torch.no_grad():
             rollout_td = self._env.rollout(
                 self._max_steps,
@@ -898,10 +863,6 @@ class _ThreadEvalBackend(_EvalBackend):
                 break_when_any_done=break_any,
                 break_when_all_done=break_all,
             )
-        print(  # noqa: T001
-            f"[Evaluator] rollout done, shape={rollout_td.shape}",
-            flush=True,
-        )
 
         if isinstance(self._policy, nn.Module):
             self._policy.train()

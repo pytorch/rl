@@ -196,7 +196,6 @@ def main(cfg: DictConfig):
         "logger": logger,
         "eval_device": eval_device,
         "num_eval_envs": num_eval_envs,
-        "cfg_loss_ppo_epochs": cfg_loss_ppo_epochs,
         "cfg_optim_anneal_lr": cfg_optim_anneal_lr,
         "cfg_optim_lr": cfg_optim_lr,
         "cfg_loss_anneal_clip_eps": cfg_loss_anneal_clip_eps,
@@ -215,7 +214,7 @@ def main(cfg: DictConfig):
             cfg_loss_gamma=cfg_loss_gamma,
         )
     else:
-        train_iterate(**shared_kwargs)
+        train_iterate(**shared_kwargs, cfg_loss_ppo_epochs=cfg_loss_ppo_epochs)
 
 
 if __name__ == "__main__":

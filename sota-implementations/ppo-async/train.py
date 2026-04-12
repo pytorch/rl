@@ -12,15 +12,13 @@ Two modes:
 from __future__ import annotations
 
 import multiprocessing
-import threading
 import time
 from functools import partial
 
 import torch
 import tqdm
 
-from torchrl.collectors import MultiaSyncDataCollector
-from torchrl.envs import ExplorationType, set_exploration_type
+from torchrl.collectors import Evaluator, MultiaSyncDataCollector
 from torchrl.weight_update import SharedMemWeightSyncScheme
 from utils_mujoco import (
     ActorWithCritic,
@@ -30,52 +28,6 @@ from utils_mujoco import (
     make_ppo_models,
     WorkerGAEPostproc,
 )
-
-
-def _run_sync_eval(eval_env, eval_policy, actor, eval_device, max_steps=1000):
-    """Run synchronous evaluation on the main thread.
-
-    Copies weights from the training actor to the eval policy, runs a
-    rollout, and returns a metrics dict with eval/ prefix.
-    """
-    # Copy weights from training actor to eval policy
-    from tensordict import TensorDict
-
-    weights = TensorDict.from_module(actor).data.detach().clone()
-    weights.to(eval_device).to_module(eval_policy)
-    eval_policy.eval()
-
-    with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
-        rollout_td = eval_env.rollout(
-            max_steps,
-            eval_policy,
-            break_when_any_done=True,
-        )
-
-    eval_policy.train()
-
-    # Extract metrics
-    metrics = {}
-    reward_key = ("next", "reward")
-    done_key = ("next", "done")
-    if rollout_td.get(done_key).any():
-        episode_reward = rollout_td.get(("next", "episode_reward"))
-        done_mask = rollout_td.get(done_key).squeeze(-1)
-        final_rewards = episode_reward[done_mask]
-        if len(final_rewards) > 0:
-            metrics["eval/reward"] = final_rewards.mean().item()
-
-        step_count = rollout_td.get(("next", "step_count"))
-        final_steps = step_count[done_mask]
-        if len(final_steps) > 0:
-            metrics["eval/episode_length"] = final_steps.float().mean().item()
-    else:
-        # No episodes completed — report cumulative reward
-        total_reward = rollout_td.get(reward_key).sum(-2).mean().item()
-        metrics["eval/reward"] = total_reward
-        metrics["eval/episode_length"] = float(rollout_td.shape[-1])
-
-    return metrics
 
 
 def train_start(
@@ -94,7 +46,6 @@ def train_start(
     logger,
     eval_device,
     num_eval_envs,
-    cfg_loss_ppo_epochs,
     cfg_optim_anneal_lr,
     cfg_optim_lr,
     cfg_loss_anneal_clip_eps,
@@ -125,15 +76,6 @@ def train_start(
         collector_policy = actor
         postproc = LearnerPostproc(version_counter)
 
-    # ── Compile eval + collector envs concurrently ──────────────────────
-    eval_env_result = [None]
-
-    def _compile_eval_env():
-        eval_env_result[0] = make_eval_env(cfg.env.env_name, eval_device, num_eval_envs)
-
-    eval_thread = threading.Thread(target=_compile_eval_env, daemon=True)
-    eval_thread.start()
-
     create_env_fn = [
         partial(
             make_env,
@@ -159,10 +101,14 @@ def train_start(
         weight_sync_schemes=weight_sync_schemes,
     )
 
-    # Wait for eval env compilation to finish
-    eval_thread.join()
-    eval_env = eval_env_result[0]
-    eval_policy = make_ppo_models(cfg.env.env_name, eval_device)[0]
+    # Async evaluator in a separate process (avoids CUDA stream contention)
+    evaluator = Evaluator(
+        env=partial(make_eval_env, cfg.env.env_name, eval_device, num_eval_envs),
+        policy_factory=lambda env: make_ppo_models(cfg.env.env_name, eval_device)[0],
+        max_steps=1000,
+        logger=logger,
+        backend="process",
+    )
 
     # Start collection
     collector.start()
@@ -193,43 +139,38 @@ def train_start(
 
         metrics_to_log = {}
 
-        for _epoch in range(cfg_loss_ppo_epochs):
-            batch, info = data_buffer.sample(return_info=True)
-            batch = batch.to(device)
-            batch_staleness = info.get("staleness")
+        batch, info = data_buffer.sample(return_info=True)
+        batch = batch.to(device)
+        batch_staleness = info.get("staleness")
 
-            if advantage_on == "learner":
-                with torch.no_grad():
-                    state_value = critic(batch).get("state_value")
-                    next_state_value = critic(batch.get("next")).get("state_value")
-                    reward = batch.get(("next", "reward"))
-                    done = batch.get(("next", "done")).float()
-                    value_target = (
-                        reward + cfg_loss_gamma * (1 - done) * next_state_value
-                    )
-                    advantage = value_target - state_value
-                    batch.set("advantage", advantage)
-                    batch.set("value_target", value_target)
+        if advantage_on == "learner":
+            with torch.no_grad():
+                state_value = critic(batch).get("state_value")
+                next_state_value = critic(batch.get("next")).get("state_value")
+                reward = batch.get(("next", "reward"))
+                done = batch.get(("next", "done")).float()
+                value_target = reward + cfg_loss_gamma * (1 - done) * next_state_value
+                advantage = value_target - state_value
+                batch.set("advantage", advantage)
+                batch.set("value_target", value_target)
 
-            alpha = 1.0
-            if cfg_optim_anneal_lr:
-                alpha = 1 - (current_wc / total_frames)
-                for group in optim.param_groups:
-                    group["lr"] = cfg_optim_lr * alpha
-            if cfg_loss_anneal_clip_eps:
-                loss_module.clip_epsilon.copy_(cfg_loss_clip_epsilon * alpha)
+        alpha = 1.0
+        if cfg_optim_anneal_lr:
+            alpha = 1 - (current_wc / total_frames)
+            for group in optim.param_groups:
+                group["lr"] = cfg_optim_lr * alpha
+        if cfg_loss_anneal_clip_eps:
+            loss_module.clip_epsilon.copy_(cfg_loss_clip_epsilon * alpha)
 
-            optim.zero_grad(set_to_none=True)
-            loss = loss_module(batch)
-            total_loss = (
-                loss["loss_objective"] + loss["loss_entropy"] + loss["loss_critic"]
-            )
-            total_loss.backward()
-            torch.nn.utils.clip_grad_norm_(
-                loss_module.parameters(), max_norm=cfg_optim_max_grad_norm
-            )
-            optim.step()
-            num_network_updates += 1
+        optim.zero_grad(set_to_none=True)
+        loss = loss_module(batch)
+        total_loss = loss["loss_objective"] + loss["loss_entropy"] + loss["loss_critic"]
+        total_loss.backward()
+        torch.nn.utils.clip_grad_norm_(
+            loss_module.parameters(), max_norm=cfg_optim_max_grad_norm
+        )
+        optim.step()
+        num_network_updates += 1
 
         # Sync both actor and adv_module (critic) when in worker mode
         if advantage_on == "worker":
@@ -278,18 +219,29 @@ def train_start(
             }
         )
 
-        # Synchronous eval on main thread
+        # Async eval in separate process — trigger and poll
         if (current_wc // cfg_logger_test_interval) > (
             last_test_frames // cfg_logger_test_interval
         ):
-            eval_metrics = _run_sync_eval(eval_env, eval_policy, actor, eval_device)
-            metrics_to_log.update(eval_metrics)
+            if not evaluator.pending:
+                evaluator.trigger_eval(actor, step=current_wc)
             last_test_frames = current_wc
+
+        eval_metrics = evaluator.poll()
+        if eval_metrics is not None:
+            metrics_to_log.update(eval_metrics)
 
         if logger:
             logger.log_metrics(metrics_to_log, current_wc)
 
+    # Wait for any in-flight eval before shutdown
+    if evaluator.pending:
+        eval_metrics = evaluator.wait(timeout=120)
+        if eval_metrics is not None and logger:
+            logger.log_metrics(eval_metrics, current_wc)
+
     pbar.close()
+    evaluator.shutdown()
     collector.shutdown()
 
     elapsed = time.time() - start_time
@@ -329,15 +281,6 @@ def train_iterate(
     """Semi-async training: for data in collector, gated on collector output."""
     collector_policy = ActorWithCritic(actor, critic)
 
-    # ── Compile eval + collector envs concurrently ──────────────────────
-    eval_env_result = [None]
-
-    def _compile_eval_env():
-        eval_env_result[0] = make_eval_env(cfg.env.env_name, eval_device, num_eval_envs)
-
-    eval_thread = threading.Thread(target=_compile_eval_env, daemon=True)
-    eval_thread.start()
-
     create_env_fn = [
         partial(
             make_env,
@@ -361,10 +304,14 @@ def train_iterate(
         postproc=adv_module,
     )
 
-    # Wait for eval env compilation to finish
-    eval_thread.join()
-    eval_env = eval_env_result[0]
-    eval_policy = make_ppo_models(cfg.env.env_name, eval_device)[0]
+    # Async evaluator in a separate process (avoids CUDA stream contention)
+    evaluator = Evaluator(
+        env=partial(make_eval_env, cfg.env.env_name, eval_device, num_eval_envs),
+        policy_factory=lambda env: make_ppo_models(cfg.env.env_name, eval_device)[0],
+        max_steps=1000,
+        logger=logger,
+        backend="process",
+    )
 
     policy_version = 0
     collected_frames = 0
@@ -469,17 +416,28 @@ def train_iterate(
             }
         )
 
-        # Synchronous eval on main thread
+        # Async eval in separate process — trigger and poll
         if ((i - 1) * frames_in_batch) // cfg_logger_test_interval < (
             i * frames_in_batch
         ) // cfg_logger_test_interval:
-            eval_metrics = _run_sync_eval(eval_env, eval_policy, actor, eval_device)
+            if not evaluator.pending:
+                evaluator.trigger_eval(actor, step=collected_frames)
+
+        eval_metrics = evaluator.poll()
+        if eval_metrics is not None:
             metrics_to_log.update(eval_metrics)
 
         if logger:
             logger.log_metrics(metrics_to_log, collected_frames)
 
+    # Wait for any in-flight eval before shutdown
+    if evaluator.pending:
+        eval_metrics = evaluator.wait(timeout=120)
+        if eval_metrics is not None and logger:
+            logger.log_metrics(eval_metrics, collected_frames)
+
     pbar.close()
+    evaluator.shutdown()
     collector.shutdown()
 
     train_elapsed = time.time() - train_start_time if train_start_time else 0
