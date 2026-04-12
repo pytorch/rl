@@ -23,9 +23,7 @@ from torchrl.envs import (
     TransformedEnv,
     VecNormV2,
 )
-from torchrl.envs.transforms import Transform
 from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
-from torchrl.record import VideoRecorder
 
 
 # ── Environment factories ──────────────────────────────────────────────
@@ -53,25 +51,12 @@ def make_env(env_name="halfcheetah", device="cpu", num_envs=4096, compile=True):
     return env
 
 
-def make_eval_env(env_name, device, num_eval_envs, logger=None):
+def make_eval_env(env_name, device, num_eval_envs):
     """Env factory for the Evaluator.
 
-    Creates a compiled GPU-batched mujoco-torch env with optional
-    VideoRecorder (renders only env 0 via headless ray-cast).
+    Creates a compiled GPU-batched mujoco-torch env.
     """
-    env = make_env(env_name, device=device, num_envs=num_eval_envs, compile=True)
-    if logger is not None:
-        env.append_transform(RenderFirstEnv(width=256, height=256))
-        env.append_transform(
-            VideoRecorder(
-                logger=logger,
-                tag="eval/video",
-                in_keys=["pixels"],
-                make_grid=False,
-                skip=2,
-            )
-        )
-    return env
+    return make_env(env_name, device=device, num_envs=num_eval_envs, compile=True)
 
 
 # ── Model factories ────────────────────────────────────────────────────
@@ -208,47 +193,3 @@ class LearnerPostproc:
             device=data_flat.device,
         )
         return data_flat
-
-
-class RenderFirstEnv(Transform):
-    """Render only env 0 and store as pixels (avoids 4096x render)."""
-
-    def __init__(self, width=256, height=256):
-        super().__init__(
-            in_keys=[],
-            out_keys=["pixels"],
-        )
-        self._width = width
-        self._height = height
-
-    def transform_observation_spec(self, observation_spec):
-        from torchrl.data import Unbounded
-
-        observation_spec["pixels"] = Unbounded(
-            shape=(self._height, self._width, 3),
-            dtype=torch.uint8,
-            device=observation_spec.device,
-        )
-        return observation_spec
-
-    def _call(self, tensordict):
-        return tensordict
-
-    def forward(self, tensordict):
-        return tensordict
-
-    def _get_base_env(self):
-        base = self.parent
-        while hasattr(base, "base_env"):
-            base = base.base_env
-        return base
-
-    def _step(self, tensordict, next_tensordict):
-        pixels = self._get_base_env().render(width=self._width, height=self._height)
-        next_tensordict.set("pixels", torch.as_tensor(pixels, device="cpu"))
-        return next_tensordict
-
-    def _reset(self, tensordict, tensordict_reset):
-        pixels = self._get_base_env().render(width=self._width, height=self._height)
-        tensordict_reset.set("pixels", torch.as_tensor(pixels, device="cpu"))
-        return tensordict_reset

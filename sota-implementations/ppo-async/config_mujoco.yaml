@@ -28,7 +28,7 @@ logger:
   test_interval: 500_000
   num_test_episodes: 5
   num_eval_envs: 4096
-  video: true
+  video: false
 
 # Optim
 optim:

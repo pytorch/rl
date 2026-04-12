@@ -159,13 +159,9 @@ def main(cfg: DictConfig):
                 "group": cfg.logger.group_name,
             },
         )
-        logger_video = cfg.logger.video
-    else:
-        logger_video = False
 
     # ── Async evaluator ─────────────────────────────────────────────────
-    # Thread backend for mujoco-torch (GPU work releases GIL, and thread
-    # backend supports VideoRecorder dump_video).
+    # Thread backend for mujoco-torch (GPU work releases GIL).
     num_eval_envs = cfg.logger.get("num_eval_envs", 4096)
     evaluator = Evaluator(
         env=partial(
@@ -173,7 +169,6 @@ def main(cfg: DictConfig):
             cfg.env.env_name,
             eval_device,
             num_eval_envs,
-            logger if logger_video else None,
         ),
         policy_factory=lambda env: make_ppo_models(cfg.env.env_name, eval_device)[0],
         max_steps=10_000,
