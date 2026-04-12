@@ -257,11 +257,13 @@
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>logger_type</strong> (<em>str</em>) – One of tensorboard / csv / wandb / mlflow.
+<li><p><strong>logger_type</strong> (<em>str</em>) – One of tensorboard / csv / wandb / mlflow / trackio.
 If empty, <code class="docutils literal notranslate"><span class="pre">None</span></code> is returned.</p></li>
 <li><p><strong>logger_name</strong> (<em>str</em>) – Name to be used as a log_dir</p></li>
 <li><p><strong>experiment_name</strong> (<em>str</em>) – Name of the experiment</p></li>
-<li><p><strong>kwargs</strong> (<em>dict</em><em>[</em><em>str</em><em>]</em>) – might contain either <cite>wandb_kwargs</cite>, <cite>mlflow_kwargs</cite> or <cite>trackio_kwargs</cite></p></li>
+<li><p><strong>kwargs</strong> (<em>dict</em><em>[</em><em>str</em><em>]</em>) – might contain either <cite>wandb_kwargs</cite>, <cite>mlflow_kwargs</cite> or <cite>trackio_kwargs</cite>.
+Additionally supports <code class="docutils literal notranslate"><span class="pre">use_ray_service</span></code> (bool) and <code class="docutils literal notranslate"><span class="pre">ray_actor_options</span></code> (dict)
+to run the logger as a Ray actor.</p></li>
 </ul>
 </dd>
 </dl>

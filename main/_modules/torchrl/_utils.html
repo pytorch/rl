@@ -1547,6 +1547,53 @@
         <span class="k">return</span> <span class="kc">False</span>
 
 
+<span class="k">class</span> <span class="nc">_RayServiceMetaClass</span><span class="p">(</span><span class="nb">type</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Metaclass that enables dynamic class selection based on use_ray_service parameter.</span>
+
+<span class="sd">    This metaclass allows a class to dynamically return either itself or a Ray-based</span>
+<span class="sd">    alternative class when instantiated with use_ray_service=True.</span>
+
+<span class="sd">    Usage:</span>
+<span class="sd">        &gt;&gt;&gt; class MyRayClass():</span>
+<span class="sd">        ...     def __init__(self, **kwargs):</span>
+<span class="sd">        ...         ...</span>
+<span class="sd">        ...</span>
+<span class="sd">        &gt;&gt;&gt; class MyClass(metaclass=_RayServiceMetaClass):</span>
+<span class="sd">        ...     _RayServiceClass = MyRayClass</span>
+<span class="sd">        ...</span>
+<span class="sd">        ...     def __init__(self, use_ray_service=False, **kwargs):</span>
+<span class="sd">        ...         # Regular implementation</span>
+<span class="sd">        ...         pass</span>
+<span class="sd">        ...</span>
+<span class="sd">        &gt;&gt;&gt; # Returns MyClass instance</span>
+<span class="sd">        &gt;&gt;&gt; obj1 = MyClass(use_ray_service=False)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Returns MyRayClass instance</span>
+<span class="sd">        &gt;&gt;&gt; obj2 = MyClass(use_ray_service=True)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__instancecheck__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">instance</span><span class="p">):</span>
+        <span class="c1"># Standard isinstance check</span>
+        <span class="k">if</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__instancecheck__</span><span class="p">(</span><span class="n">instance</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="c1"># If the instance wraps a class (e.g. RayLogger), check if the</span>
+        <span class="c1"># wrapped class is a subclass of cls.</span>
+        <span class="n">wrapped_cls</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">instance</span><span class="p">,</span> <span class="s2">&quot;_logger_cls&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">wrapped_cls</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">wrapped_cls</span><span class="p">,</span> <span class="bp">cls</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">use_ray_service</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">use_ray_service</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="s2">&quot;_RayServiceClass&quot;</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Class </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> does not have a _RayServiceClass attribute&quot;</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_RayServiceClass</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
 <span class="nd">@classmethod</span>
 <span class="k">def</span> <span class="nf">as_remote</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">remote_config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Creates an instance of a remote ray class.</span>

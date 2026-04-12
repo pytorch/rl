@@ -253,7 +253,7 @@
 <span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDictBase</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">Tensor</span>
 
-<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">implement_for</span>
+<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">_RayServiceMetaClass</span><span class="p">,</span> <span class="n">implement_for</span>
 
 <span class="n">_has_tv</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;torchvision&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 <span class="k">try</span><span class="p">:</span>
@@ -429,8 +429,33 @@
 
 <div class="viewcode-block" id="Logger">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.record.loggers.Logger.html#torchrl.record.loggers.Logger">[docs]</a>
-<span class="k">class</span> <span class="nc">Logger</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A template for loggers.&quot;&quot;&quot;</span>
+<span class="k">class</span> <span class="nc">Logger</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">_RayServiceMetaClass</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A template for loggers.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        use_ray_service (bool): If ``True``, the logger runs as a Ray actor</span>
+<span class="sd">            in a separate process. All method calls are delegated to the remote</span>
+<span class="sd">            actor via ``ray.get(actor.method.remote(...))``. CUDA tensors in</span>
+<span class="sd">            :meth:`log_metrics` and :meth:`log_video` are automatically moved</span>
+<span class="sd">            to CPU before the remote call. Requires ``ray`` to be installed.</span>
+<span class="sd">            Default: ``False``.</span>
+<span class="sd">        ray_actor_options (dict, optional): Options passed to ``ray.remote()``</span>
+<span class="sd">            when creating the Ray actor (e.g., ``{&quot;num_cpus&quot;: 1}``).</span>
+<span class="sd">            Only used when ``use_ray_service=True``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init_subclass__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__init_subclass__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">_concrete_cls</span> <span class="o">=</span> <span class="bp">cls</span>
+
+        <span class="k">def</span> <span class="nf">_ray_wrapper</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">ray_actor_options</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="kn">from</span> <span class="nn">torchrl.record.loggers.ray</span> <span class="kn">import</span> <span class="n">RayLogger</span>
+
+            <span class="k">return</span> <span class="n">RayLogger</span><span class="p">(</span>
+                <span class="n">_concrete_cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">ray_actor_options</span><span class="o">=</span><span class="n">ray_actor_options</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="p">)</span>
+
+        <span class="bp">cls</span><span class="o">.</span><span class="n">_RayServiceClass</span> <span class="o">=</span> <span class="nb">staticmethod</span><span class="p">(</span><span class="n">_ray_wrapper</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exp_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">log_dir</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">exp_name</span> <span class="o">=</span> <span class="n">exp_name</span>
