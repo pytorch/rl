@@ -932,7 +932,7 @@ class BatchedEnvBase(EnvBase):
     def state_dict(self) -> OrderedDict:
         raise NotImplementedError
 
-    def load_state_dict(self, state_dict: OrderedDict) -> None:
+    def load_state_dict(self, state_dict: OrderedDict, **kwargs) -> None:
         raise NotImplementedError
 
     batch_size = lazy_property(EnvBase.batch_size)
@@ -1222,13 +1222,13 @@ class SerialEnv(BatchedEnvBase):
         return state_dict
 
     @_check_start
-    def load_state_dict(self, state_dict: OrderedDict) -> None:
+    def load_state_dict(self, state_dict: OrderedDict, **kwargs) -> None:
         if "worker0" not in state_dict:
             state_dict = OrderedDict(
                 **{f"worker{idx}": state_dict for idx in range(self.num_workers)}
             )
         for idx, env in enumerate(self._envs):
-            env.load_state_dict(state_dict[f"worker{idx}"])
+            env.load_state_dict(state_dict[f"worker{idx}"], **kwargs)
 
     def _shutdown_workers(self) -> None:
         if not self.is_closed:
@@ -1814,7 +1814,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         return state_dict
 
     @_check_start
-    def load_state_dict(self, state_dict: OrderedDict) -> None:
+    def load_state_dict(self, state_dict: OrderedDict, **kwargs) -> None:
         if "worker0" not in state_dict:
             state_dict = OrderedDict(
                 **{f"worker{idx}": state_dict for idx in range(self.num_workers)}

@@ -1395,12 +1395,6 @@ class SliceSampler(Sampler):
                         "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
                     )
                 done = done.squeeze()
-                if done.ndim > 1:
-                    # Multi-dimensional done signals arise when pre-assembled
-                    # trajectory data (trajs, max_len, ...) is stored in the
-                    # buffer.  Flatten to 1-D so that _find_start_stop_traj
-                    # can locate episode boundaries correctly.
-                    done = done.reshape(-1)
                 vals = self._find_start_stop_traj(
                     end=done[: len(storage)],
                     at_capacity=storage._is_full,

@@ -995,6 +995,16 @@ class TestRayTrajsPerBatch:
         yield
         ray.shutdown()
 
+    @pytest.fixture(autouse=True, scope="function")
+    def reset_process_group(self):
+        import torch.distributed as dist
+
+        try:
+            dist.destroy_process_group()
+        except Exception:
+            pass
+        yield
+
     def test_ray_trajs_per_batch_replay_buffer(self):
         """RayCollector with trajs_per_batch populates a local replay buffer."""
         from torchrl.envs import StepCounter, TransformedEnv
