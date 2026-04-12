@@ -13,9 +13,12 @@ import torch
 from tensordict import is_tensor_collection
 from tensordict.base import TensorDictBase
 
+from torchrl._utils import _RayServiceMetaClass
 from torchrl.data.tensor_specs import DEVICE_TYPING, TensorSpec
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms.transforms import Transform
+
+__all__ = ["RayTransform", "_RayServiceMetaClass"]
 
 T = TypeVar("T")
 
@@ -625,6 +628,3 @@ class RayTransform(Transform, ABC):
             except Exception:
                 # Fall back to local setting for attributes that can't be set remotely
                 super().__setattr__(name, value)
-
-
-from torchrl._utils import _RayServiceMetaClass  # noqa: F401
