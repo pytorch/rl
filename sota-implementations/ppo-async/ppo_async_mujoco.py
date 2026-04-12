@@ -36,15 +36,12 @@ Key components:
 """
 from __future__ import annotations
 
-from functools import partial
-
 import hydra
 import torch
 import torch.optim
 
 from omegaconf import DictConfig
 from torchrl._utils import get_available_device
-from torchrl.collectors import Evaluator
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import (
     RandomSampler,
@@ -55,7 +52,7 @@ from torchrl.objectives import ClipPPOLoss, group_optimizers
 from torchrl.objectives.value.advantages import GAE
 from torchrl.record.loggers import generate_exp_name, get_logger
 from train import train_iterate, train_start
-from utils_mujoco import make_eval_env, make_ppo_models
+from utils_mujoco import make_ppo_models
 
 
 @hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
@@ -160,22 +157,7 @@ def main(cfg: DictConfig):
             },
         )
 
-    # ── Async evaluator ─────────────────────────────────────────────────
-    # Thread backend for mujoco-torch (GPU work releases GIL).
     num_eval_envs = cfg.logger.get("num_eval_envs", 4096)
-    evaluator = Evaluator(
-        env=partial(
-            make_eval_env,
-            cfg.env.env_name,
-            eval_device,
-            num_eval_envs,
-        ),
-        policy_factory=lambda env: make_ppo_models(cfg.env.env_name, eval_device)[0],
-        max_steps=10_000,
-        logger=logger,
-        log_prefix="eval",
-        backend="thread",
-    )
 
     # ── Config extraction ───────────────────────────────────────────────
     cfg_loss_ppo_epochs = cfg.loss.ppo_epochs
@@ -209,7 +191,8 @@ def main(cfg: DictConfig):
         "device": device,
         "collect_device": collect_device,
         "logger": logger,
-        "evaluator": evaluator,
+        "eval_device": eval_device,
+        "num_eval_envs": num_eval_envs,
         "cfg_loss_ppo_epochs": cfg_loss_ppo_epochs,
         "cfg_optim_anneal_lr": cfg_optim_anneal_lr,
         "cfg_optim_lr": cfg_optim_lr,
@@ -230,8 +213,6 @@ def main(cfg: DictConfig):
         )
     else:
         train_iterate(**shared_kwargs)
-
-    evaluator.shutdown()
 
 
 if __name__ == "__main__":

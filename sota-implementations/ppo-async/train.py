@@ -12,15 +12,23 @@ Two modes:
 from __future__ import annotations
 
 import multiprocessing
+import threading
 import time
 from functools import partial
 
 import torch
 import tqdm
 
-from torchrl.collectors import MultiaSyncDataCollector
+from torchrl.collectors import Evaluator, MultiaSyncDataCollector
 from torchrl.weight_update import SharedMemWeightSyncScheme
-from utils_mujoco import ActorWithCritic, LearnerPostproc, make_env, WorkerGAEPostproc
+from utils_mujoco import (
+    ActorWithCritic,
+    LearnerPostproc,
+    make_env,
+    make_eval_env,
+    make_ppo_models,
+    WorkerGAEPostproc,
+)
 
 
 def train_start(
@@ -37,7 +45,8 @@ def train_start(
     device,
     collect_device,
     logger,
-    evaluator,
+    eval_device,
+    num_eval_envs,
     cfg_loss_ppo_epochs,
     cfg_optim_anneal_lr,
     cfg_optim_lr,
@@ -69,6 +78,15 @@ def train_start(
         collector_policy = actor
         postproc = LearnerPostproc(version_counter)
 
+    # ── Compile eval + collector envs concurrently ──────────────────────
+    eval_env_result = [None]
+
+    def _compile_eval_env():
+        eval_env_result[0] = make_eval_env(cfg.env.env_name, eval_device, num_eval_envs)
+
+    eval_thread = threading.Thread(target=_compile_eval_env, daemon=True)
+    eval_thread.start()
+
     create_env_fn = [
         partial(
             make_env,
@@ -79,6 +97,7 @@ def train_start(
         )
     ]
 
+    # Collector init compiles the collector env in a subprocess
     collector = MultiaSyncDataCollector(
         create_env_fn=create_env_fn,
         policy=collector_policy,
@@ -93,6 +112,20 @@ def train_start(
         weight_sync_schemes=weight_sync_schemes,
     )
 
+    # Wait for eval env compilation to finish
+    eval_thread.join()
+
+    # Create evaluator with pre-compiled env
+    evaluator = Evaluator(
+        env=eval_env_result[0],
+        policy_factory=lambda env: make_ppo_models(cfg.env.env_name, eval_device)[0],
+        max_steps=10_000,
+        logger=logger,
+        log_prefix="eval",
+        backend="thread",
+    )
+
+    # Start collection
     collector.start()
 
     policy_version = 0
@@ -220,6 +253,7 @@ def train_start(
             logger.log_metrics(metrics_to_log, current_wc)
 
     pbar.close()
+    evaluator.shutdown()
     collector.shutdown()
 
     elapsed = time.time() - start_time
@@ -243,7 +277,8 @@ def train_iterate(
     device,
     collect_device,
     logger,
-    evaluator,
+    eval_device,
+    num_eval_envs,
     cfg_loss_ppo_epochs,
     cfg_optim_anneal_lr,
     cfg_optim_lr,
@@ -258,6 +293,15 @@ def train_iterate(
     """Semi-async training: for data in collector, gated on collector output."""
     collector_policy = ActorWithCritic(actor, critic)
 
+    # ── Compile eval + collector envs concurrently ──────────────────────
+    eval_env_result = [None]
+
+    def _compile_eval_env():
+        eval_env_result[0] = make_eval_env(cfg.env.env_name, eval_device, num_eval_envs)
+
+    eval_thread = threading.Thread(target=_compile_eval_env, daemon=True)
+    eval_thread.start()
+
     create_env_fn = [
         partial(
             make_env,
@@ -268,6 +312,7 @@ def train_iterate(
         )
     ]
 
+    # Collector init compiles the collector env in a subprocess
     collector = MultiaSyncDataCollector(
         create_env_fn=create_env_fn,
         policy=collector_policy,
@@ -278,6 +323,19 @@ def train_iterate(
         max_frames_per_traj=-1,
         update_at_each_batch=True,
         postproc=adv_module,
+    )
+
+    # Wait for eval env compilation to finish
+    eval_thread.join()
+
+    # Create evaluator with pre-compiled env
+    evaluator = Evaluator(
+        env=eval_env_result[0],
+        policy_factory=lambda env: make_ppo_models(cfg.env.env_name, eval_device)[0],
+        max_steps=10_000,
+        logger=logger,
+        log_prefix="eval",
+        backend="thread",
     )
 
     policy_version = 0
@@ -396,6 +454,7 @@ def train_iterate(
             logger.log_metrics(metrics_to_log, collected_frames)
 
     pbar.close()
+    evaluator.shutdown()
     collector.shutdown()
 
     train_elapsed = time.time() - train_start_time if train_start_time else 0
