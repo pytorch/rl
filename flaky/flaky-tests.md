@@ -1,11 +1,11 @@
-# Flaky Test Report - 2026-04-11
+# Flaky Test Report - 2026-04-12
 
 ## Summary
 
-- **Flaky tests**: 31
-- **Newly flaky** (last 7 days): 31
+- **Flaky tests**: 62
+- **Newly flaky** (last 7 days): 62
 - **Resolved**: 0
-- **Total tests analyzed**: 29738
+- **Total tests analyzed**: 27072
 - **CI runs analyzed**: 15
 
 ---
@@ -14,45 +14,61 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `..._transforms.py::TestTokenizer::test_transform_no_env[str]` 🆕 | 5.7% (8/140) | 8 | 0.11 | 2026-04-09 |
-| `....py::TestTokenizer::test_transform_no_env[NonTensorStack]` 🆕 | 5.7% (8/140) | 8 | 0.11 | 2026-04-09 |
-| `...forms.py::TestTokenizer::test_single_trans_env_check[str]` 🆕 | 5.7% (8/140) | 8 | 0.11 | 2026-04-09 |
-| `...forms.py::TestTokenizer::test_serial_trans_env_check[str]` 🆕 | 5.7% (8/140) | 8 | 0.11 | 2026-04-09 |
-| `...rms.py::TestTokenizer::test_parallel_trans_env_check[str]` 🆕 | 5.7% (8/140) | 8 | 0.11 | 2026-04-09 |
-| `...forms.py::TestTokenizer::test_trans_serial_env_check[str]` 🆕 | 5.7% (8/140) | 8 | 0.11 | 2026-04-09 |
-| `...rms.py::TestTokenizer::test_trans_parallel_env_check[str]` 🆕 | 5.7% (8/140) | 8 | 0.11 | 2026-04-09 |
-| `...transforms.py::TestTokenizer::test_transform_compose[str]` 🆕 | 5.7% (8/140) | 8 | 0.11 | 2026-04-09 |
-| `...key_transforms.py::TestTokenizer::test_transform_model[3]` 🆕 | 5.7% (8/140) | 8 | 0.11 | 2026-04-09 |
-| `...key_transforms.py::TestTokenizer::test_transform_model[5]` 🆕 | 5.7% (8/140) | 8 | 0.11 | 2026-04-09 |
-| `...key_transforms.py::TestTokenizer::test_transform_model[7]` 🆕 | 5.7% (8/140) | 8 | 0.11 | 2026-04-09 |
-| `...test_key_transforms.py::TestTokenizer::test_transform_env` 🆕 | 5.7% (8/140) | 8 | 0.11 | 2026-04-09 |
-| `...sforms.py::TestTokenizer::test_transform_rb[ReplayBuffer]` 🆕 | 5.7% (8/140) | 8 | 0.11 | 2026-04-09 |
-| `...:TestTokenizer::test_transform_rb[TensorDictReplayBuffer]` 🆕 | 5.7% (8/140) | 8 | 0.11 | 2026-04-09 |
-| `..._key_transforms.py::TestTokenizer::test_transform_inverse` 🆕 | 5.7% (8/140) | 8 | 0.11 | 2026-04-09 |
-| `..._reset.py::TestNonTensorEnv::test_from_text_env_tokenizer` 🆕 | 5.3% (8/150) | 8 | 0.11 | 2026-04-09 |
-| `...:TestNonTensorEnv::test_from_text_env_tokenizer_catframes` 🆕 | 5.3% (8/150) | 8 | 0.11 | 2026-04-09 |
-| `...eset.py::TestNonTensorEnv::test_from_text_rb_slicesampler` 🆕 | 5.3% (8/150) | 8 | 0.11 | 2026-04-09 |
-| `test/test_actors.py::test_lmhead_actorvalueoperator[device0]` 🆕 | 5.3% (8/150) | 8 | 0.11 | 2026-04-09 |
-| `test/test_modules.py::TestDecisionTransformer::test_init` 🆕 | 5.3% (8/150) | 8 | 0.11 | 2026-04-09 |
+| `test/test_rb.py::TestSamplers::test_slice_sampler_errors` 🆕 | 6.7% (10/150) | 10 | 0.13 | 2026-04-11 |
+| `...plers::test_slice_sampler_prioritized[False-False-True-2]` 🆕 | 6.7% (10/150) | 10 | 0.13 | 2026-04-11 |
+| `...lers::test_slice_sampler_prioritized[False-False-False-2]` 🆕 | 6.7% (10/150) | 10 | 0.13 | 2026-04-11 |
+| `...mplers::test_slice_sampler_prioritized[False-True-True-2]` 🆕 | 6.7% (10/150) | 10 | 0.13 | 2026-04-11 |
+| `...plers::test_slice_sampler_prioritized[False-True-False-2]` 🆕 | 6.7% (10/150) | 10 | 0.13 | 2026-04-11 |
+| `...mplers::test_slice_sampler_prioritized[True-False-True-2]` 🆕 | 6.7% (10/150) | 10 | 0.13 | 2026-04-11 |
+| `...plers::test_slice_sampler_prioritized[True-False-False-2]` 🆕 | 6.7% (10/150) | 10 | 0.13 | 2026-04-11 |
+| `...amplers::test_slice_sampler_prioritized[True-True-True-2]` 🆕 | 6.7% (10/150) | 10 | 0.13 | 2026-04-11 |
+| `...mplers::test_slice_sampler_prioritized[True-True-False-2]` 🆕 | 6.7% (10/150) | 10 | 0.13 | 2026-04-11 |
+| `...::test_slice_sampler_prioritized_span[False-False-True-2]` 🆕 | 6.7% (10/150) | 10 | 0.13 | 2026-04-11 |
+| `...:test_slice_sampler_prioritized_span[False-False-False-2]` 🆕 | 6.7% (10/150) | 10 | 0.13 | 2026-04-11 |
+| `...s::test_slice_sampler_prioritized_span[False-True-True-2]` 🆕 | 6.7% (10/150) | 10 | 0.13 | 2026-04-11 |
+| `...::test_slice_sampler_prioritized_span[False-True-False-2]` 🆕 | 6.7% (10/150) | 10 | 0.13 | 2026-04-11 |
+| `...::test_slice_sampler_prioritized_span[span1-False-True-2]` 🆕 | 6.7% (10/150) | 10 | 0.13 | 2026-04-11 |
+| `...:test_slice_sampler_prioritized_span[span1-False-False-2]` 🆕 | 6.7% (10/150) | 10 | 0.13 | 2026-04-11 |
+| `...s::test_slice_sampler_prioritized_span[span1-True-True-2]` 🆕 | 6.7% (10/150) | 10 | 0.13 | 2026-04-11 |
+| `...::test_slice_sampler_prioritized_span[span1-True-False-2]` 🆕 | 6.7% (10/150) | 10 | 0.13 | 2026-04-11 |
+| `...::test_slice_sampler_prioritized_span[span2-False-True-2]` 🆕 | 6.7% (10/150) | 10 | 0.13 | 2026-04-11 |
+| `...:test_slice_sampler_prioritized_span[span2-False-False-2]` 🆕 | 6.7% (10/150) | 10 | 0.13 | 2026-04-11 |
+| `...s::test_slice_sampler_prioritized_span[span2-True-True-2]` 🆕 | 6.7% (10/150) | 10 | 0.13 | 2026-04-11 |
 
 
 ### Newly Flaky Tests
 
-- `test/transforms/test_key_transforms.py::TestTokenizer::test_transform_no_env[str]`
-- `test/transforms/test_key_transforms.py::TestTokenizer::test_transform_no_env[NonTensorStack]`
-- `test/transforms/test_key_transforms.py::TestTokenizer::test_single_trans_env_check[str]`
-- `test/transforms/test_key_transforms.py::TestTokenizer::test_serial_trans_env_check[str]`
-- `test/transforms/test_key_transforms.py::TestTokenizer::test_parallel_trans_env_check[str]`
-- `test/transforms/test_key_transforms.py::TestTokenizer::test_trans_serial_env_check[str]`
-- `test/transforms/test_key_transforms.py::TestTokenizer::test_trans_parallel_env_check[str]`
-- `test/transforms/test_key_transforms.py::TestTokenizer::test_transform_compose[str]`
-- `test/transforms/test_key_transforms.py::TestTokenizer::test_transform_model[3]`
-- `test/transforms/test_key_transforms.py::TestTokenizer::test_transform_model[5]`
-- `test/transforms/test_key_transforms.py::TestTokenizer::test_transform_model[7]`
-- `test/transforms/test_key_transforms.py::TestTokenizer::test_transform_env`
-- `test/transforms/test_key_transforms.py::TestTokenizer::test_transform_rb[ReplayBuffer]`
-- `test/transforms/test_key_transforms.py::TestTokenizer::test_transform_rb[TensorDictReplayBuffer]`
-- `test/transforms/test_key_transforms.py::TestTokenizer::test_transform_inverse`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_errors`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized[False-False-True-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized[False-False-False-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized[False-True-True-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized[False-True-False-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized[True-False-True-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized[True-False-False-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized[True-True-True-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized[True-True-False-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[False-False-True-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[False-False-False-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[False-True-True-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[False-True-False-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span1-False-True-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span1-False-False-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span1-True-True-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span1-True-False-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span2-False-True-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span2-False-False-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span2-True-True-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span2-True-False-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[3-False-True-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[3-False-False-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[3-True-True-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[3-True-False-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span4-False-True-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span4-False-False-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span4-True-True-2]`
+- `test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span4-True-False-2]`
+- `test/test_rb.py::TestRBMultidim::test_done_slicesampler[True]`
+- `test/test_rb.py::TestRBMultidim::test_done_slicesampler[False]`
 - `test/envs/test_auto_reset.py::TestNonTensorEnv::test_from_text_env_tokenizer`
 - `test/envs/test_auto_reset.py::TestNonTensorEnv::test_from_text_env_tokenizer_catframes`
 - `test/envs/test_auto_reset.py::TestNonTensorEnv::test_from_text_rb_slicesampler`
@@ -69,6 +85,21 @@
 - `test/test_modules.py::TestDecisionTransformer::test_onlinedtactor[batch_dims2]`
 - `test/test_tensordictmodules.py::TestDecisionTransformerInferenceWrapper::test_dt_inference_wrapper[True]`
 - `test/test_tensordictmodules.py::TestDecisionTransformerInferenceWrapper::test_dt_inference_wrapper[False]`
+- `test/transforms/test_key_transforms.py::TestTokenizer::test_transform_no_env[str]`
+- `test/transforms/test_key_transforms.py::TestTokenizer::test_transform_no_env[NonTensorStack]`
+- `test/transforms/test_key_transforms.py::TestTokenizer::test_single_trans_env_check[str]`
+- `test/transforms/test_key_transforms.py::TestTokenizer::test_serial_trans_env_check[str]`
+- `test/transforms/test_key_transforms.py::TestTokenizer::test_parallel_trans_env_check[str]`
+- `test/transforms/test_key_transforms.py::TestTokenizer::test_trans_serial_env_check[str]`
+- `test/transforms/test_key_transforms.py::TestTokenizer::test_trans_parallel_env_check[str]`
+- `test/transforms/test_key_transforms.py::TestTokenizer::test_transform_compose[str]`
+- `test/transforms/test_key_transforms.py::TestTokenizer::test_transform_model[3]`
+- `test/transforms/test_key_transforms.py::TestTokenizer::test_transform_model[5]`
+- `test/transforms/test_key_transforms.py::TestTokenizer::test_transform_model[7]`
+- `test/transforms/test_key_transforms.py::TestTokenizer::test_transform_env`
+- `test/transforms/test_key_transforms.py::TestTokenizer::test_transform_rb[ReplayBuffer]`
+- `test/transforms/test_key_transforms.py::TestTokenizer::test_transform_rb[TensorDictReplayBuffer]`
+- `test/transforms/test_key_transforms.py::TestTokenizer::test_transform_inverse`
 
 ---
 
@@ -81,4 +112,4 @@
 
 ---
 
-*Generated at 2026-04-11T06:30:39.379356+00:00*
+*Generated at 2026-04-12T06:39:48.189768+00:00*
