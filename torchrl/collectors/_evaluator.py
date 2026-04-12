@@ -170,7 +170,29 @@ class Evaluator:
             policy.  Required for the ``"process"`` and ``"ray"`` backends.
             For ``"thread"``, if both *env* (callable) and *policy_factory*
             are provided, construction is deferred to the worker thread.
-        max_steps (int): Maximum environment steps per rollout.
+        num_trajectories (int or None): Number of complete episodes to
+            collect per evaluation round.  When set, a
+            :class:`~torchrl.collectors.Collector` is used internally
+            with ``trajs_per_batch=num_trajectories`` instead of
+            ``env.rollout()``.  The collector pre-allocates buffers and
+            writes in-place — O(1) GPU allocations vs O(n) — yielding
+            significant speedups for batched eval envs.  Default: ``None``
+            (uses ``env.rollout()`` for backward compatibility).
+        max_steps (int): Maximum environment steps per episode.  When
+            *num_trajectories* is set, this is passed as
+            ``max_frames_per_traj`` to the internal collector.
+        frames_per_batch (int or None): Internal collection batch size
+            (env steps per collector iteration).  Only used when
+            *num_trajectories* is set.  If ``None``, defaults to
+            ``max_steps``.  This is purely internal — output granularity
+            is controlled by *num_trajectories*.
+        collector_cls: Which collector class to use.  Accepts a class or a
+            string name resolved from :mod:`torchrl.collectors` (e.g.
+            ``"Collector"``).  Only used when *num_trajectories* is set.
+            Default: ``None`` (uses :class:`~torchrl.collectors.Collector`).
+        collector_kwargs (dict or None): Extra keyword arguments forwarded
+            to the collector constructor.  Only used when *num_trajectories*
+            is set.
         logger: Optional :class:`~torchrl.record.loggers.Logger` for
             automatic metric / video logging.
         log_prefix (str): Prefix prepended to all logged metric names.
@@ -188,11 +210,12 @@ class Evaluator:
         break_when_any_done (bool or None): Stop the rollout as soon as
             any sub-environment reports done.  ``None`` (default) means
             *auto*: ``True`` for unbatched envs, ``False`` for batched
-            envs (so every env runs for *max_steps*).
+            envs (so every env runs for *max_steps*).  Only used when
+            *num_trajectories* is ``None`` (rollout mode).
         break_when_all_done (bool): Stop the rollout when **all**
-            sub-environments have reported done at least once.  Requires
-            the env to support partial steps.  Mutually exclusive with
-            ``break_when_any_done=True``.  Default: ``False``.
+            sub-environments have reported done at least once.  Only used
+            when *num_trajectories* is ``None`` (rollout mode).
+            Default: ``False``.
         auto_cast_to_device (bool): Auto-cast tensordicts to policy device.
             Default: ``True``.
         dump_video (bool): Call ``dump()`` on :class:`VideoRecorder`
@@ -218,7 +241,11 @@ class Evaluator:
         policy: TensorDictModuleBase | Callable | None = None,
         *,
         policy_factory: Callable[..., Callable] | None = None,
+        num_trajectories: int | None = None,
         max_steps: int,
+        frames_per_batch: int | None = None,
+        collector_cls: type | str | None = None,
+        collector_kwargs: dict | None = None,
         logger=None,
         log_prefix: str = "eval",
         reward_keys: NestedKey = ("next", "reward"),
@@ -255,7 +282,11 @@ class Evaluator:
                 env=env,
                 policy=policy,
                 policy_factory=policy_factory,
+                num_trajectories=num_trajectories,
                 max_steps=max_steps,
+                frames_per_batch=frames_per_batch,
+                collector_cls=collector_cls,
+                collector_kwargs=collector_kwargs,
                 device=device,
                 exploration_type=exploration_type,
                 reward_keys=reward_keys,
@@ -282,7 +313,11 @@ class Evaluator:
             self._backend = _ProcessEvalBackend(
                 env_factory=env,
                 policy_factory=policy_factory,
+                num_trajectories=num_trajectories,
                 max_steps=max_steps,
+                frames_per_batch=frames_per_batch,
+                collector_cls=collector_cls,
+                collector_kwargs=collector_kwargs,
                 exploration_type=exploration_type,
                 reward_keys=reward_keys,
                 done_keys=done_keys,
@@ -628,6 +663,95 @@ def _extract_metrics(
     return metrics
 
 
+def _extract_metrics_from_trajectories(
+    traj_batch: TensorDictBase,
+    reward_keys: NestedKey,
+    done_keys: NestedKey,
+    metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
+) -> dict[str, Any]:
+    """Extract evaluation metrics from a trajectory batch produced by a collector.
+
+    *traj_batch* has shape ``(num_trajectories, max_traj_len)`` with a
+    ``("collector", "mask")`` boolean field marking valid timesteps.
+    """
+    mask = traj_batch.get(("collector", "mask"))  # [N, T]
+    num_trajectories = traj_batch.shape[0]
+
+    # For each trajectory, find the last valid step (where done=True)
+    episode_rewards = []
+    episode_lengths = []
+
+    ep_reward_key = ("next", "episode_reward")
+    step_count_key = ("next", "step_count")
+
+    ep_reward_td = traj_batch.get(ep_reward_key, None)
+    step_count_td = traj_batch.get(step_count_key, None)
+
+    for i in range(num_trajectories):
+        traj_mask = mask[i]  # [T]
+        if traj_mask.ndim > 1:
+            traj_mask = traj_mask.squeeze(-1)
+        valid_len = traj_mask.sum().item()
+        if valid_len == 0:
+            continue
+
+        # Last valid index
+        last_idx = int(valid_len) - 1
+
+        if ep_reward_td is not None:
+            r = ep_reward_td[i, last_idx]
+            if r.ndim > 0:
+                r = r.squeeze(-1)
+            episode_rewards.append(r.item())
+
+        if step_count_td is not None:
+            ep_len = step_count_td[i, last_idx]
+            if ep_len.ndim > 0:
+                ep_len = ep_len.squeeze(-1)
+            episode_lengths.append(ep_len.item())
+        else:
+            episode_lengths.append(float(valid_len))
+
+    num_episodes = len(episode_rewards)
+
+    if num_episodes > 0:
+        rewards_t = torch.tensor(episode_rewards)
+        mean_reward = rewards_t.mean().item()
+        std_reward = rewards_t.std().item() if num_episodes > 1 else 0.0
+        mean_length = sum(episode_lengths) / len(episode_lengths)
+    else:
+        mean_reward = float("nan")
+        std_reward = float("nan")
+        mean_length = float("nan")
+
+    metrics: dict[str, Any] = {
+        "reward": mean_reward,
+        "reward_std": std_reward,
+        "num_episodes": num_episodes,
+        "episode_length": mean_length,
+    }
+
+    if metrics_fn is not None:
+        custom = metrics_fn(traj_batch)
+        for k, v in custom.items():
+            metrics[f"custom/{k}"] = v
+
+    return metrics
+
+
+def _resolve_collector_cls(cls_or_name: type | str | None):
+    """Resolve a collector class from a string name or return as-is."""
+    if cls_or_name is None:
+        from torchrl.collectors import Collector
+
+        return Collector
+    if isinstance(cls_or_name, str):
+        import torchrl.collectors as mod
+
+        return getattr(mod, cls_or_name)
+    return cls_or_name
+
+
 # ======================================================================
 # Thread backend
 # ======================================================================
@@ -648,7 +772,11 @@ class _ThreadEvalBackend(_EvalBackend):
         env: EnvBase | Callable[[], EnvBase],
         policy: TensorDictModuleBase | Callable | None,
         policy_factory: Callable[..., Callable] | None,
+        num_trajectories: int | None,
         max_steps: int,
+        frames_per_batch: int | None,
+        collector_cls: type | str | None,
+        collector_kwargs: dict | None,
         device: torch.device | str | None,
         exploration_type: ExplorationType,
         reward_keys: NestedKey,
@@ -692,12 +820,16 @@ class _ThreadEvalBackend(_EvalBackend):
         elif self._policy is not None:
             try:
                 self._device = next(self._policy.parameters()).device
-            except StopIteration:
+            except (StopIteration, AttributeError):
                 self._device = torch.device("cpu")
         else:
             self._device: torch.device | None = None
 
+        self._num_trajectories = num_trajectories
         self._max_steps = max_steps
+        self._frames_per_batch = frames_per_batch
+        self._collector_cls = collector_cls
+        self._collector_kwargs = collector_kwargs
         self._exploration_type = exploration_type
         self._reward_keys = reward_keys
         self._done_keys = done_keys
@@ -705,6 +837,9 @@ class _ThreadEvalBackend(_EvalBackend):
         self._break_when_all_done = break_when_all_done
         self._auto_cast_to_device = auto_cast_to_device
         self._metrics_fn = metrics_fn
+
+        # Collector (created lazily when num_trajectories is set)
+        self._collector = None
 
         # Threading state
         self._lock = threading.Lock()
@@ -720,7 +855,10 @@ class _ThreadEvalBackend(_EvalBackend):
     # ---- sync ----
 
     def run_sync(self, weights: TensorDictBase | None, step: int) -> dict[str, Any]:
-        self._ensure_env_and_policy()
+        if self._num_trajectories is not None:
+            self._ensure_collector()
+        else:
+            self._ensure_env_and_policy()
         metrics = self._run_eval(weights)
         metrics["_step"] = step
         return metrics
@@ -767,7 +905,9 @@ class _ThreadEvalBackend(_EvalBackend):
         if self._thread is not None and self._thread.is_alive():
             self._thread.join(timeout=timeout)
         self._pending.clear()
-        if self._env is not None and not self._env.is_closed:
+        if self._collector is not None:
+            self._collector.shutdown()
+        elif self._env is not None and not self._env.is_closed:
             self._env.close()
 
     # ---- internals ----
@@ -790,7 +930,7 @@ class _ThreadEvalBackend(_EvalBackend):
         if self._device is None:
             try:
                 self._device = next(self._policy.parameters()).device
-            except StopIteration:
+            except (StopIteration, AttributeError):
                 self._device = torch.device("cpu")
 
     def _ensure_thread(self) -> None:
@@ -801,7 +941,10 @@ class _ThreadEvalBackend(_EvalBackend):
         self._thread.start()
 
     def _eval_loop(self) -> None:
-        self._ensure_env_and_policy()
+        if self._num_trajectories is not None:
+            self._ensure_collector()
+        else:
+            self._ensure_env_and_policy()
         while not self._shutdown_flag:
             self._eval_ready.wait(timeout=1.0)
             if self._shutdown_flag:
@@ -829,7 +972,60 @@ class _ThreadEvalBackend(_EvalBackend):
                 # (submit() will re-set it for the new request)
                 pass
 
+    def _ensure_collector(self) -> None:
+        """Create the collector lazily (inside the worker thread)."""
+        if self._collector is not None:
+            return
+        self._ensure_env_and_policy()
+        cls = _resolve_collector_cls(self._collector_cls)
+        fpb = self._frames_per_batch or self._max_steps or 1000
+        self._collector = cls(
+            create_env_fn=self._env,
+            policy=self._policy,
+            frames_per_batch=fpb,
+            total_frames=-1,
+            max_frames_per_traj=self._max_steps,
+            trajs_per_batch=self._num_trajectories,
+            exploration_type=self._exploration_type,
+            **(self._collector_kwargs or {}),
+        )
+
     def _run_eval(self, weights: TensorDictBase | None) -> dict[str, Any]:
+        if self._num_trajectories is not None:
+            return self._run_eval_collector(weights)
+        return self._run_eval_rollout(weights)
+
+    def _run_eval_collector(self, weights: TensorDictBase | None) -> dict[str, Any]:
+        """Run evaluation using a collector with trajs_per_batch."""
+        self._ensure_collector()
+
+        # Apply weights
+        if weights is not None:
+            weights.to(self._device).to_module(self._policy)
+
+        if isinstance(self._policy, nn.Module):
+            self._policy.eval()
+
+        # Reset collector for clean episode boundaries
+        self._collector.reset()
+
+        with set_exploration_type(self._exploration_type), torch.no_grad():
+            # Each yield gives exactly num_trajectories complete,
+            # zero-padded episodes with ("collector", "mask").
+            traj_batch = next(iter(self._collector))
+
+        if isinstance(self._policy, nn.Module):
+            self._policy.train()
+
+        return _extract_metrics_from_trajectories(
+            traj_batch,
+            self._reward_keys,
+            self._done_keys,
+            self._metrics_fn,
+        )
+
+    def _run_eval_rollout(self, weights: TensorDictBase | None) -> dict[str, Any]:
+        """Run evaluation using env.rollout() (legacy path)."""
         # Resolve break mode (needs env batch size, so must happen after lazy init)
         break_any, break_all = _resolve_break_mode(
             self._break_when_any_done,
@@ -990,7 +1186,11 @@ def _process_eval_worker(
     policy_factory: Callable,
     request_queue: mp.Queue,
     result_queue: mp.Queue,
+    num_trajectories: int | None,
     max_steps: int,
+    frames_per_batch: int | None,
+    collector_cls_name: str | None,
+    collector_kwargs: dict | None,
     exploration_type: ExplorationType,
     reward_keys: NestedKey,
     done_keys: NestedKey,
@@ -1013,9 +1213,25 @@ def _process_eval_worker(
     except StopIteration:
         device = torch.device("cpu")
 
-    break_any, break_all = _resolve_break_mode(
-        break_when_any_done, break_when_all_done, env
-    )
+    # Create collector if num_trajectories is set
+    collector = None
+    if num_trajectories is not None:
+        cls = _resolve_collector_cls(collector_cls_name)
+        fpb = frames_per_batch or max_steps or 1000
+        collector = cls(
+            create_env_fn=env,
+            policy=policy,
+            frames_per_batch=fpb,
+            total_frames=-1,
+            max_frames_per_traj=max_steps,
+            trajs_per_batch=num_trajectories,
+            exploration_type=exploration_type,
+            **(collector_kwargs or {}),
+        )
+    else:
+        break_any, break_all = _resolve_break_mode(
+            break_when_any_done, break_when_all_done, env
+        )
 
     while True:
         request = request_queue.get()
@@ -1031,23 +1247,35 @@ def _process_eval_worker(
         if isinstance(policy, nn.Module):
             policy.eval()
 
-        with set_exploration_type(exploration_type), torch.no_grad():
-            rollout_td = env.rollout(
-                max_steps,
-                policy,
-                auto_cast_to_device=auto_cast_to_device,
-                break_when_any_done=break_any,
-                break_when_all_done=break_all,
+        if collector is not None:
+            # Collector-based path
+            collector.reset()
+            with set_exploration_type(exploration_type), torch.no_grad():
+                traj_batch = next(iter(collector))
+            metrics = _extract_metrics_from_trajectories(
+                traj_batch, reward_keys, done_keys, metrics_fn
             )
+        else:
+            # Legacy rollout path
+            with set_exploration_type(exploration_type), torch.no_grad():
+                rollout_td = env.rollout(
+                    max_steps,
+                    policy,
+                    auto_cast_to_device=auto_cast_to_device,
+                    break_when_any_done=break_any,
+                    break_when_all_done=break_all,
+                )
+            metrics = _extract_metrics(rollout_td, reward_keys, done_keys, metrics_fn)
 
         if isinstance(policy, nn.Module):
             policy.train()
 
-        metrics = _extract_metrics(rollout_td, reward_keys, done_keys, metrics_fn)
         metrics["_step"] = step
         result_queue.put(metrics)
 
-    if not env.is_closed:
+    if collector is not None:
+        collector.shutdown()
+    elif not env.is_closed:
         env.close()
 
 
@@ -1067,7 +1295,11 @@ class _ProcessEvalBackend(_EvalBackend):
         self,
         env_factory: Callable[[], EnvBase],
         policy_factory: Callable[..., Callable],
+        num_trajectories: int | None,
         max_steps: int,
+        frames_per_batch: int | None,
+        collector_cls: type | str | None,
+        collector_kwargs: dict | None,
         exploration_type: ExplorationType,
         reward_keys: NestedKey,
         done_keys: NestedKey,
@@ -1076,6 +1308,16 @@ class _ProcessEvalBackend(_EvalBackend):
         auto_cast_to_device: bool,
         metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
     ) -> None:
+        # Serialise collector_cls as string for pickling
+        if collector_cls is not None and not isinstance(collector_cls, str):
+            collector_cls_name = (
+                collector_cls.__name__
+                if hasattr(collector_cls, "__name__")
+                else str(collector_cls)
+            )
+        else:
+            collector_cls_name = collector_cls
+
         ctx = mp.get_context("spawn")
         self._request_queue: mp.Queue = ctx.Queue(maxsize=1)
         self._result_queue: mp.Queue = ctx.Queue(maxsize=1)
@@ -1089,7 +1331,11 @@ class _ProcessEvalBackend(_EvalBackend):
                 "policy_factory": policy_factory,
                 "request_queue": self._request_queue,
                 "result_queue": self._result_queue,
+                "num_trajectories": num_trajectories,
                 "max_steps": max_steps,
+                "frames_per_batch": frames_per_batch,
+                "collector_cls_name": collector_cls_name,
+                "collector_kwargs": collector_kwargs,
                 "exploration_type": exploration_type,
                 "reward_keys": reward_keys,
                 "done_keys": done_keys,
