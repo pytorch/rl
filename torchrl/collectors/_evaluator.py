@@ -1085,6 +1085,8 @@ def _process_eval_worker(
         **(collector_kwargs or {}),
     )
 
+    import time as _time
+
     while True:
         request = request_queue.get()
         if request is None:
@@ -1099,10 +1101,18 @@ def _process_eval_worker(
             policy.eval()
 
         collector.reset()
+        _t0 = _time.perf_counter()
         with set_exploration_type(exploration_type), torch.no_grad():
             traj_batch = next(iter(collector))
+        _t1 = _time.perf_counter()
         metrics = _extract_metrics_from_trajectories(
             traj_batch, reward_keys, done_keys, metrics_fn
+        )
+        logger.info(
+            "Eval collection took %.2fs (step=%s, shape=%s)",
+            _t1 - _t0,
+            step,
+            traj_batch.shape,
         )
 
         if isinstance(policy, nn.Module):

@@ -54,17 +54,16 @@ def make_env(env_name="halfcheetah", device="cpu", num_envs=4096, compile=True):
 def make_eval_env(env_name, device, num_eval_envs, max_steps=1000):
     """Env factory for the Evaluator.
 
-    Creates an uncompiled GPU-batched mujoco-torch env. The StepCounter
+    Creates a compiled GPU-batched mujoco-torch env. The StepCounter
     uses max_steps so that episodes terminate — the Evaluator skips adding
     its own max_frames_per_traj when it sees an existing step_count.
     """
-    compile_kwargs = None
     env = ENVS[env_name](
         num_envs=num_eval_envs,
         device=device,
         dtype=torch.float32,
-        compile_step=False,
-        compile_kwargs=compile_kwargs,
+        compile_step=True,
+        compile_kwargs={"mode": "default"},
     )
     env = TransformedEnv(env)
     env.append_transform(VecNormV2(in_keys=["observation"], decay=0.99999, eps=1e-2))
