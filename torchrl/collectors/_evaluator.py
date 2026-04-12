@@ -371,14 +371,18 @@ class Evaluator:
             The finalized metrics dict from the *previous* evaluation if
             one was ready, otherwise ``None``.
         """
-        # Auto-finalize the previous result if ready
+        # Auto-finalize the previous result if ready.
+        # Use the *current* step for logging so that the eval metrics
+        # appear at the point in training where they became available,
+        # avoiding WandB's monotonic-step rejection.
         prev = self._backend.poll(timeout=0)
         prev_metrics = None
-        if prev is not None:
-            prev_metrics = self._finalize(prev)
-
         weights = self._prepare_weights(weights)
         step = self._next_step(step)
+        if prev is not None:
+            prev["_step"] = step
+            prev_metrics = self._finalize(prev)
+
         self._backend.submit(weights, step)
         return prev_metrics
 
