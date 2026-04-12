@@ -641,30 +641,6 @@ def _env_has_step_count(env: EnvBase) -> bool:
     return False
 
 
-def _remove_step_counter(env: EnvBase) -> bool:
-    """Remove any StepCounter transforms from the env.
-
-    Returns ``True`` if a StepCounter was found and removed.  This allows
-    the collector to add its own StepCounter via ``max_frames_per_traj``
-    without conflicting with an existing one.
-    """
-    from torchrl.envs import StepCounter
-    from torchrl.envs.transforms import TransformedEnv
-
-    if not isinstance(env, TransformedEnv):
-        return False
-    removed = False
-    keep = []
-    for t in env.transform:
-        if isinstance(t, StepCounter):
-            removed = True
-        else:
-            keep.append(t)
-    if removed:
-        env.transform.transforms = torch.nn.ModuleList(keep)
-    return removed
-
-
 def _resolve_collector_cls(cls_or_name: type | str | None):
     """Resolve a collector class from a string name or return as-is."""
     if cls_or_name is None:
@@ -891,10 +867,12 @@ class _ThreadEvalBackend(_EvalBackend):
         self._ensure_env_and_policy()
         cls = _resolve_collector_cls(self._collector_cls)
         fpb = self._frames_per_batch or self._max_steps or 1000
-        # Remove any existing StepCounter to avoid Collector ValueError
-        # when setting max_frames_per_traj.  The collector adds its own.
-        _remove_step_counter(self._env)
+        # If the env already has a StepCounter (step_count in output),
+        # set max_frames_per_traj=0 to avoid conflict with the collector
+        # trying to add a second StepCounter.
         max_frames = self._max_steps
+        if _env_has_step_count(self._env):
+            max_frames = 0
         self._collector = cls(
             create_env_fn=self._env,
             policy=self._policy,
@@ -1077,10 +1055,7 @@ def _process_eval_worker(
 
     cls = _resolve_collector_cls(collector_cls_name)
     fpb = frames_per_batch or max_steps or 1000
-    # Remove any existing StepCounter to avoid Collector ValueError
-    # when setting max_frames_per_traj.  The collector adds its own.
-    _remove_step_counter(env)
-    max_frames = max_steps
+    max_frames = 0 if _env_has_step_count(env) else max_steps
     collector = cls(
         create_env_fn=env,
         policy=policy,
@@ -1180,7 +1155,7 @@ class _ProcessEvalBackend(_EvalBackend):
                 "done_keys": done_keys,
                 "metrics_fn": metrics_fn,
             },
-            daemon=False,
+            daemon=True,
         )
         self._process.start()
 
