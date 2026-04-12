@@ -121,9 +121,10 @@ def train_start(
     evaluator = Evaluator(
         env=eval_env_result[0],
         policy_factory=lambda env: make_ppo_models(cfg.env.env_name, eval_device)[0],
-        max_steps=10_000,
+        max_steps=1000,
         log_prefix="eval",
         backend="thread",
+        break_when_any_done=True,
     )
 
     # Start collection
@@ -352,9 +353,10 @@ def train_iterate(
     evaluator = Evaluator(
         env=eval_env_result[0],
         policy_factory=lambda env: make_ppo_models(cfg.env.env_name, eval_device)[0],
-        max_steps=10_000,
+        max_steps=1000,
         log_prefix="eval",
         backend="thread",
+        break_when_any_done=True,
     )
 
     policy_version = 0
