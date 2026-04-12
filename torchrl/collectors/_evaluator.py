@@ -806,7 +806,8 @@ class _ThreadEvalBackend(_EvalBackend):
 
     @property
     def pending(self) -> bool:
-        return self._pending.is_set()
+        # pending means eval is actually running (submitted but no result yet)
+        return self._pending.is_set() and not self._result_ready.is_set()
 
     def shutdown(self, timeout: float) -> None:
         self._shutdown_flag = True
@@ -1210,7 +1211,9 @@ class _ProcessEvalBackend(_EvalBackend):
 
     @property
     def pending(self) -> bool:
-        return self._pending_flag
+        # pending means eval is actually running — once the result is in
+        # the queue, the eval is done even if the result hasn't been consumed
+        return self._pending_flag and self._result_queue.empty()
 
     def shutdown(self, timeout: float) -> None:
         self._pending_flag = False
