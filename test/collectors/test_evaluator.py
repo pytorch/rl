@@ -14,8 +14,9 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.collectors import Evaluator
-from torchrl.collectors._evaluator import _freeze_vecnorm
+from torchrl.collectors._evaluator import _freeze_vecnorm, _wrap_env_factory_frozen
 from torchrl.envs import SerialEnv, TransformedEnv
+from torchrl.envs.env_creator import EnvCreator
 from torchrl.envs.transforms import RewardSum, StepCounter, VecNormV2
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 from torchrl.weight_update import WeightStrategy
@@ -1034,6 +1035,34 @@ class TestEvaluatorVecNormFreeze:
             assert evaluator._backend._env.transform.frozen
         finally:
             evaluator.shutdown()
+
+    def test_wrap_env_creator_frozen(self):
+        """_wrap_env_factory_frozen preserves EnvCreator type + meta_data."""
+        creator = EnvCreator(_make_vecnorm_env, share_memory=False)
+        assert isinstance(creator, EnvCreator)
+
+        frozen_creator = _wrap_env_factory_frozen(creator)
+        # Should still be an EnvCreator (subclass)
+        assert isinstance(frozen_creator, EnvCreator)
+        # meta_data should be preserved from the original
+        assert frozen_creator.meta_data is not None
+
+        # Env created from the frozen creator should have VecNormV2 frozen
+        env = frozen_creator()
+        assert isinstance(env, TransformedEnv)
+        assert env.transform.frozen
+        env.close()
+
+    def test_wrap_plain_callable_frozen(self):
+        """_wrap_env_factory_frozen works with plain callables."""
+        frozen_factory = _wrap_env_factory_frozen(_make_vecnorm_env)
+        # Not an EnvCreator
+        assert not isinstance(frozen_factory, EnvCreator)
+
+        env = frozen_factory()
+        assert isinstance(env, TransformedEnv)
+        assert env.transform.frozen
+        env.close()
 
     def test_frozen_vecnorm_stats_not_updated(self):
         """Frozen VecNormV2 should not update running stats during eval."""

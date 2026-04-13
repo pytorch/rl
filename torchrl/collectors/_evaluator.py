@@ -744,9 +744,33 @@ def _freeze_vecnorm(env: EnvBase) -> EnvBase:
 
 
 def _wrap_env_factory_frozen(
-    env_factory: Callable[[], EnvBase]
+    env_factory: Callable[[], EnvBase],
 ) -> Callable[[], EnvBase]:
-    """Wrap an env factory to freeze VecNorm transforms after creation."""
+    """Wrap an env factory to freeze VecNorm transforms after creation.
+
+    If *env_factory* is an :class:`~torchrl.envs.EnvCreator`, the returned
+    object is also an ``EnvCreator`` (preserving pre-computed ``meta_data``
+    and shared-memory state dicts) whose ``__call__`` freezes VecNorm
+    transforms on the newly-created environment.
+    """
+    from torchrl.envs.env_creator import EnvCreator
+
+    if isinstance(env_factory, EnvCreator):
+
+        class _FrozenEnvCreator(EnvCreator):
+            """Thin ``EnvCreator`` wrapper that freezes VecNorm after creation."""
+
+            def __init__(self, original: EnvCreator):
+                # Skip parent __init__ (avoids recreating shadow env).
+                # Copy all state from the original instead.
+                self.__dict__.update(original.__dict__)
+                self._original = original
+
+            def __call__(self, **kwargs) -> EnvBase:
+                env = self._original(**kwargs)
+                return _freeze_vecnorm(env)
+
+        return _FrozenEnvCreator(env_factory)
 
     def wrapper():
         env = env_factory()
