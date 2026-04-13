@@ -32,7 +32,7 @@ logger:
 
 # Optim
 optim:
-  lr: 3e-4
+  lr: 5e-5
   weight_decay: 0.0
   anneal_lr: True
   max_grad_norm: 1.0

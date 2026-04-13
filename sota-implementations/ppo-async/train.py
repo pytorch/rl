@@ -11,6 +11,7 @@ Two modes:
 """
 from __future__ import annotations
 
+import logging
 import multiprocessing
 import time
 from functools import partial
@@ -29,6 +30,19 @@ from utils_mujoco import (
     make_shared_vecnorm_data,
     WorkerGAEPostproc,
 )
+
+log = logging.getLogger(__name__)
+
+
+def _assert_finite(tensor, name, step):
+    """Raise RuntimeError if *tensor* contains any non-finite value."""
+    if not torch.isfinite(tensor).all():
+        n_bad = (~torch.isfinite(tensor)).sum().item()
+        raise RuntimeError(
+            f"Non-finite values in {name} at step {step}: "
+            f"{n_bad}/{tensor.numel()} elements "
+            f"(inf={tensor.isinf().sum().item()}, nan={tensor.isnan().sum().item()})"
+        )
 
 
 def _make_eval_policy(env, env_name, device):
@@ -185,6 +199,13 @@ def train_start(
                 batch.set("advantage", advantage)
                 batch.set("value_target", value_target)
 
+        # Guard: check inputs to policy are finite
+        _assert_finite(batch["observation"], "batch/observation", current_wc)
+        _assert_finite(batch["sample_log_prob"], "batch/sample_log_prob", current_wc)
+        adv = batch.get("advantage", None)
+        if adv is not None:
+            _assert_finite(adv, "batch/advantage", current_wc)
+
         alpha = 1.0
         if cfg_optim_anneal_lr:
             alpha = 1 - (current_wc / total_frames)
@@ -196,8 +217,12 @@ def train_start(
         optim.zero_grad(set_to_none=True)
         loss = loss_module(batch)
         total_loss = loss["loss_objective"] + loss["loss_entropy"] + loss["loss_critic"]
+
+        # Guard: check loss outputs are finite
+        _assert_finite(total_loss, "loss/total", current_wc)
+
         total_loss.backward()
-        torch.nn.utils.clip_grad_norm_(
+        grad_norm = torch.nn.utils.clip_grad_norm_(
             loss_module.parameters(), max_norm=cfg_optim_max_grad_norm
         )
         optim.step()
@@ -226,6 +251,7 @@ def train_start(
                 "train/loss_objective": loss["loss_objective"].item(),
                 "train/loss_critic": loss["loss_critic"].item(),
                 "train/loss_entropy": loss["loss_entropy"].item(),
+                "train/grad_norm": grad_norm.item(),
                 "train/lr": alpha * cfg_optim_lr.item(),
                 "train/clip_epsilon": (alpha * cfg_loss_clip_epsilon)
                 if cfg_loss_anneal_clip_eps
@@ -412,6 +438,15 @@ def train_iterate(
             batch = batch.to(device)
             batch_staleness = info.get("staleness")
 
+            # Guard: check inputs to policy are finite
+            _assert_finite(batch["observation"], "batch/observation", collected_frames)
+            _assert_finite(
+                batch["sample_log_prob"], "batch/sample_log_prob", collected_frames
+            )
+            adv = batch.get("advantage", None)
+            if adv is not None:
+                _assert_finite(adv, "batch/advantage", collected_frames)
+
             alpha = 1.0
             if cfg_optim_anneal_lr:
                 alpha = 1 - (num_network_updates / total_network_updates)
@@ -425,8 +460,12 @@ def train_iterate(
             total_loss = (
                 loss["loss_objective"] + loss["loss_entropy"] + loss["loss_critic"]
             )
+
+            # Guard: check loss outputs are finite
+            _assert_finite(total_loss, "loss/total", collected_frames)
+
             total_loss.backward()
-            torch.nn.utils.clip_grad_norm_(
+            grad_norm = torch.nn.utils.clip_grad_norm_(
                 loss_module.parameters(), max_norm=cfg_optim_max_grad_norm
             )
             optim.step()
@@ -448,6 +487,7 @@ def train_iterate(
                 "train/loss_objective": loss["loss_objective"].item(),
                 "train/loss_critic": loss["loss_critic"].item(),
                 "train/loss_entropy": loss["loss_entropy"].item(),
+                "train/grad_norm": grad_norm.item(),
                 "train/lr": alpha * cfg_optim_lr.item(),
                 "train/clip_epsilon": (alpha * cfg_loss_clip_epsilon)
                 if cfg_loss_anneal_clip_eps
