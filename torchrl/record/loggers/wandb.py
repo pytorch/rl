@@ -77,6 +77,9 @@ class WandbLogger(Logger):
         self.id = id
         self.project = project
         self.video_fps = video_fps
+        self._step_registry: dict[str, int] = {}
+        self._defined_step_metrics: set[str] = set()
+        self._defined_metrics: set[str] = set()
         self._wandb_kwargs = {
             "name": exp_name,
             "dir": save_dir,
@@ -109,7 +112,13 @@ class WandbLogger(Logger):
         return wandb.init(**self._wandb_kwargs)
 
     def log_scalar(
-        self, name: str, value: float, step: int | None = None, commit: bool = False
+        self,
+        name: str,
+        value: float,
+        step: int | None = None,
+        commit: bool = False,
+        *,
+        override_global_step: bool = False,
     ) -> None:
         """Logs a scalar value to wandb.
 
@@ -120,8 +129,16 @@ class WandbLogger(Logger):
                 Defaults to None.
             commit: If true, data for current step is assumed to be final (and
                 no further data for this step should be logged).
+            override_global_step (bool, optional): If ``True``, bypasses
+                per-group step injection and forwards ``step`` to wandb's
+                global ``step`` argument. Defaults to ``False``.
         """
-        self.experiment.log({name: value}, step=step, commit=commit)
+        self._log_payload(
+            {name: value},
+            step=step,
+            commit=commit,
+            override_global_step=override_global_step,
+        )
 
     def log_video(self, name: str, video: Tensor, **kwargs) -> None:
         """Log videos inputs to wandb.
@@ -147,8 +164,10 @@ class WandbLogger(Logger):
 
         fps = kwargs.pop("fps", self.video_fps)
         format = kwargs.pop("format", "mp4")
-        self.experiment.log(
+        self._log_payload(
             {name: wandb.Video(video, fps=fps, format=format)},
+            step=kwargs.pop("step", None),
+            override_global_step=kwargs.pop("override_global_step", False),
             **kwargs,
         )
 
@@ -189,14 +208,21 @@ class WandbLogger(Logger):
 
         num_bins = kwargs.pop("bins", None)
         step = kwargs.pop("step", None)
-        extra_kwargs = {}
-        if step is not None:
-            extra_kwargs["trainer/step"] = step
-        self.experiment.log(
-            {name: wandb.Histogram(data, num_bins=num_bins), **extra_kwargs}
+        self._log_payload(
+            {name: wandb.Histogram(data, num_bins=num_bins)},
+            step=step,
+            override_global_step=kwargs.pop("override_global_step", False),
+            **kwargs,
         )
 
-    def log_str(self, name: str, value: str, step: int | None = None) -> None:
+    def log_str(
+        self,
+        name: str,
+        value: str,
+        step: int | None = None,
+        *,
+        override_global_step: bool = False,
+    ) -> None:
         """Logs a string value to wandb using a table format for better visualization.
 
         Args:
@@ -204,16 +230,19 @@ class WandbLogger(Logger):
             value (str): The string value to log.
             step (int, optional): The step at which the string is logged.
                 Defaults to None.
+            override_global_step (bool, optional): If ``True``, bypasses
+                per-group step injection and forwards ``step`` to wandb's
+                global ``step`` argument. Defaults to ``False``.
         """
         import wandb
 
         # Create a table with a single row
         table = wandb.Table(columns=["text"], data=[[value]])
-
-        if step is not None:
-            self.experiment.log({name: value}, step=step)
-        else:
-            self.experiment.log({name: table})
+        self._log_payload(
+            {name: value if step is not None else table},
+            step=step,
+            override_global_step=override_global_step,
+        )
 
     def log_metrics(
         self,
@@ -221,6 +250,7 @@ class WandbLogger(Logger):
         step: int | None = None,
         *,
         keys_sep: str = "/",
+        override_global_step: bool = False,
     ) -> dict[str, Any]:
         """Log multiple scalar metrics at once to wandb.
 
@@ -240,5 +270,81 @@ class WandbLogger(Logger):
             The converted metrics dictionary (with tensors converted to Python types).
         """
         safe_metrics = _make_metrics_safe(metrics, keys_sep=keys_sep)
-        self.experiment.log(safe_metrics, step=step)
+        self._log_payload(
+            safe_metrics, step=step, override_global_step=override_global_step
+        )
         return safe_metrics
+
+    @staticmethod
+    def _is_step_key(name: str) -> bool:
+        return name == "step" or name.endswith("/step")
+
+    @staticmethod
+    def _step_key(name: str) -> str:
+        if WandbLogger._is_step_key(name):
+            return name
+        prefix, sep, _ = name.rpartition("/")
+        return f"{prefix}{sep}step" if sep else "step"
+
+    def _consume_step(self, step_key: str, step: int | None) -> int:
+        last_step = self._step_registry.get(step_key, -1)
+        if step is None:
+            step = last_step + 1
+        self._step_registry[step_key] = max(last_step, step)
+        return step
+
+    def _define_metric(self, name: str, *, step_metric: str | None = None) -> None:
+        if step_metric is None:
+            if name in self._defined_step_metrics:
+                return
+            self._defined_step_metrics.add(name)
+            self.experiment.define_metric(name)
+            return
+
+        if name in self._defined_metrics:
+            return
+        self._defined_metrics.add(name)
+        self.experiment.define_metric(name, step_metric=step_metric)
+
+    def _prepare_payload(
+        self, payload: dict[str, Any], step: int | None
+    ) -> dict[str, Any]:
+        prepared = dict(payload)
+
+        for key, value in list(prepared.items()):
+            if self._is_step_key(key):
+                self._consume_step(key, value)
+
+        for key in list(prepared):
+            if self._is_step_key(key):
+                continue
+            step_key = self._step_key(key)
+            if step_key not in prepared:
+                prepared[step_key] = self._consume_step(step_key, step)
+
+        return prepared
+
+    def _register_metrics(self, payload: dict[str, Any]) -> None:
+        for key in payload:
+            if self._is_step_key(key):
+                self._define_metric(key)
+        for key in payload:
+            if self._is_step_key(key):
+                continue
+            self._define_metric(key, step_metric=self._step_key(key))
+
+    def _log_payload(
+        self,
+        payload: dict[str, Any],
+        *,
+        step: int | None = None,
+        override_global_step: bool = False,
+        **kwargs,
+    ) -> None:
+        if override_global_step:
+            self.experiment.log(payload, step=step, **kwargs)
+            return
+
+        payload = self._prepare_payload(payload, step)
+        self._register_metrics(payload)
+        self.experiment.log(payload, **kwargs)

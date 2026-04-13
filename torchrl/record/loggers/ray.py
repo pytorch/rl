@@ -108,6 +108,7 @@ class RayLogger:
         step: int | None = None,
         *,
         keys_sep: str = "/",
+        override_global_step: bool = False,
     ) -> dict[str, Any]:
         """Log multiple scalar metrics at once.
 
@@ -119,7 +120,12 @@ class RayLogger:
 
         safe_metrics = _make_metrics_safe(metrics, keys_sep=keys_sep)
         self._ray.get(
-            self._actor.log_metrics.remote(safe_metrics, step=step, keys_sep=keys_sep)
+            self._actor.log_metrics.remote(
+                safe_metrics,
+                step=step,
+                keys_sep=keys_sep,
+                override_global_step=override_global_step,
+            )
         )
         return safe_metrics
 
