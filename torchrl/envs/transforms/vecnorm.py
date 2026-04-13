@@ -256,7 +256,7 @@ class VecNormV2(Transform):
         self._cast_int_to_float = False
         if self.stateful:
             self.register_buffer("initialized", torch.zeros((), dtype=torch.bool))
-            if shared_data:
+            if shared_data is not None:
                 self._loc = shared_data["loc"]
                 self._var = shared_data["var"]
                 self._count = shared_data["count"]
@@ -266,7 +266,7 @@ class VecNormV2(Transform):
                 self._count = None
         else:
             self.initialized = False
-            if shared_data:
+            if shared_data is not None:
                 # FIXME
                 raise NotImplementedError
         if reduce_batch_dims and not stateful:
