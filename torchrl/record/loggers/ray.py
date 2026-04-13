@@ -108,6 +108,7 @@ class RayLogger:
         step: int | None = None,
         *,
         keys_sep: str = "/",
+        override_global_step: bool = False,
     ) -> dict[str, Any]:
         """Log multiple scalar metrics at once.
 
@@ -118,9 +119,10 @@ class RayLogger:
         from torchrl.record.loggers.common import _make_metrics_safe
 
         safe_metrics = _make_metrics_safe(metrics, keys_sep=keys_sep)
-        self._ray.get(
-            self._actor.log_metrics.remote(safe_metrics, step=step, keys_sep=keys_sep)
-        )
+        remote_kwargs = {"step": step, "keys_sep": keys_sep}
+        if override_global_step:
+            remote_kwargs["override_global_step"] = True
+        self._ray.get(self._actor.log_metrics.remote(safe_metrics, **remote_kwargs))
         return safe_metrics
 
     def __repr__(self) -> str:
