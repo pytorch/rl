@@ -572,7 +572,15 @@ class VecNormV2(Transform):
         return data_update
 
     def _stateful_norm(self, data):
-        return self._norm(data, self._loc, self._var, self._count)
+        loc = self._loc
+        var = self._var
+        count = self._count
+        # Handle cross-device: shared-memory stats live on CPU, data may be on GPU
+        if loc.device != data.device:
+            loc = loc.to(data.device)
+            var = var.to(data.device)
+            count = count.to(data.device)
+        return self._norm(data, loc, var, count)
 
     def _stateful_update(self, data):
         if self.frozen:
@@ -610,8 +618,9 @@ class VecNormV2(Transform):
                 weight = 1 - self.decay
             else:
                 weight = 1 / count
-        loc.lerp_(end=data_mean, weight=weight)
-        var.lerp_(end=data2, weight=weight)
+        # Handle cross-device: shared-memory stats on CPU, data on GPU
+        loc.lerp_(end=data_mean.to(loc.device), weight=weight)
+        var.lerp_(end=data2.to(loc.device), weight=weight)
 
     def _maybe_stateless_init(self, data):
         if not self.initialized or f"{self.prefix}_loc" not in data.keys():
