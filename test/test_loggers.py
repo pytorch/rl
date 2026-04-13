@@ -25,7 +25,7 @@ from torchrl.record.loggers.ray import RayLogger
 from torchrl.record.loggers.tensorboard import _has_tb, TensorboardLogger
 from torchrl.record.loggers.trackio import _has_trackio, TrackioLogger
 from torchrl.record.loggers.utils import get_logger
-from torchrl.record.loggers.wandb import _has_wandb, WandbLogger
+from torchrl.record.loggers.wandb import _has_moviepy, _has_wandb, WandbLogger
 from torchrl.record.recorder import PixelRenderTransform, VideoRecorder
 
 if _has_tv:
@@ -274,34 +274,70 @@ class TestCSVLogger:
 
 @pytest.fixture(scope="class")
 def wandb_logger(tmp_path_factory):
+    import wandb
+
+    wandb.finish()
     tmpdir1 = tmp_path_factory.mktemp("tmpdir1")
     exp_name = "ramala"
     logger = WandbLogger(log_dir=tmpdir1, exp_name=exp_name, offline=True)
     yield logger
     logger.experiment.finish()
+    wandb.finish()
+    del logger
+
+
+@pytest.fixture
+def wandb_tmp_logger(tmp_path):
+    import wandb
+
+    wandb.finish()
+    logger = WandbLogger(log_dir=tmp_path, exp_name="ramala", offline=True)
+    yield logger
+    logger.experiment.finish()
+    wandb.finish()
     del logger
 
 
 @pytest.mark.skipif(not _has_wandb, reason="Wandb not installed")
 class TestWandbLogger:
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
-    def test_log_scalar(self, steps, wandb_logger):
+    def test_log_scalar(self, steps, wandb_tmp_logger, monkeypatch):
         torch.manual_seed(0)
+
+        logged = []
+        defined = []
+
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "log",
+            lambda payload, **kwargs: logged.append((payload, kwargs)),
+        )
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "define_metric",
+            lambda name, step_metric=None: defined.append((name, step_metric)),
+        )
 
         values = torch.rand(3)
         for i in range(3):
             scalar_name = "foo"
             scalar_value = values[i].item()
-            wandb_logger.log_scalar(
+            wandb_tmp_logger.log_scalar(
                 value=scalar_value,
                 name=scalar_name,
                 step=steps[i] if steps else None,
                 commit=True,
             )
 
-        assert wandb_logger.experiment.summary["foo"] == values[-1].item()
-        assert wandb_logger.experiment.summary["_step"] == i if not steps else steps[i]
+        assert len(logged) == 3
+        assert defined == [("step", None), ("foo", "step")]
 
+        for i, (payload, kwargs) in enumerate(logged):
+            expected_step = i if not steps else steps[i]
+            assert payload == {"foo": values[i].item(), "step": expected_step}
+            assert kwargs == {"commit": True}
+
+    @pytest.mark.skipif(not _has_moviepy, reason="moviepy not installed")
     def test_log_video(self, wandb_logger):
         torch.manual_seed(0)
 
@@ -357,6 +393,168 @@ class TestWandbLogger:
         # test with np
         data = torch.randn(10).numpy()
         wandb_logger.log_histogram("hist", data, step=1, bins=2)
+
+    def test_log_metrics_infers_nested_steps(self, wandb_tmp_logger, monkeypatch):
+        logged = []
+        defined = []
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "log",
+            lambda payload, **kwargs: logged.append((payload, kwargs)),
+        )
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "define_metric",
+            lambda name, step_metric=None: defined.append((name, step_metric)),
+        )
+
+        metrics = {"eval/reward": 1.0, "eval/other/something": 2.0}
+        result = wandb_tmp_logger.log_metrics(metrics, step=7)
+
+        assert result == metrics
+        assert logged == [
+            (
+                {
+                    "eval/reward": 1.0,
+                    "eval/other/something": 2.0,
+                    "eval/step": 7,
+                    "eval/other/step": 7,
+                },
+                {},
+            )
+        ]
+        assert defined == [
+            ("eval/step", None),
+            ("eval/other/step", None),
+            ("eval/reward", "eval/step"),
+            ("eval/other/something", "eval/other/step"),
+        ]
+
+    def test_log_metrics_preserves_explicit_step_keys(
+        self, wandb_tmp_logger, monkeypatch
+    ):
+        logged = []
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "log",
+            lambda payload, **kwargs: logged.append((payload, kwargs)),
+        )
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment, "define_metric", lambda *args, **kwargs: None
+        )
+
+        wandb_tmp_logger.log_metrics({"eval/reward": 1.0, "eval/step": 4}, step=99)
+        wandb_tmp_logger.log_metrics({"eval/reward": 2.0})
+
+        assert logged[0][0]["eval/step"] == 4
+        assert logged[1][0]["eval/step"] == 5
+
+    def test_log_metrics_auto_increments_per_group(self, wandb_tmp_logger, monkeypatch):
+        logged = []
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "log",
+            lambda payload, **kwargs: logged.append((payload, kwargs)),
+        )
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment, "define_metric", lambda *args, **kwargs: None
+        )
+
+        wandb_tmp_logger.log_metrics({"eval/reward": 1.0})
+        wandb_tmp_logger.log_metrics({"train/loss": 0.5})
+        wandb_tmp_logger.log_metrics({"eval/reward": 2.0})
+
+        assert logged[0][0]["eval/step"] == 0
+        assert logged[1][0]["train/step"] == 0
+        assert logged[2][0]["eval/step"] == 1
+
+    def test_override_global_step_uses_legacy_wandb_step(
+        self, wandb_tmp_logger, monkeypatch
+    ):
+        logged = []
+        defined = []
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "log",
+            lambda payload, **kwargs: logged.append((payload, kwargs)),
+        )
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "define_metric",
+            lambda name, step_metric=None: defined.append((name, step_metric)),
+        )
+
+        wandb_tmp_logger.log_metrics(
+            {"eval/reward": 1.0}, step=123, override_global_step=True
+        )
+
+        assert logged == [({"eval/reward": 1.0}, {"step": 123})]
+        assert defined == []
+
+    @pytest.mark.skipif(not _has_moviepy, reason="moviepy not installed")
+    def test_log_video_uses_inferred_step(self, wandb_tmp_logger, monkeypatch):
+        logged = []
+        defined = []
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "log",
+            lambda payload, **kwargs: logged.append((payload, kwargs)),
+        )
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "define_metric",
+            lambda name, step_metric=None: defined.append((name, step_metric)),
+        )
+
+        video = torch.randint(0, 255, (1, 4, 3, 8, 8), dtype=torch.uint8)
+        wandb_tmp_logger.log_video("eval/video", video, step=11)
+
+        payload, kwargs = logged[0]
+        assert payload["eval/step"] == 11
+        assert "eval/video" in payload
+        assert kwargs == {}
+        assert defined == [("eval/step", None), ("eval/video", "eval/step")]
+
+    def test_log_histogram_uses_inferred_step(self, wandb_tmp_logger, monkeypatch):
+        logged = []
+        defined = []
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "log",
+            lambda payload, **kwargs: logged.append((payload, kwargs)),
+        )
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "define_metric",
+            lambda name, step_metric=None: defined.append((name, step_metric)),
+        )
+
+        wandb_tmp_logger.log_histogram("eval/hist", torch.randn(10), step=3, bins=4)
+
+        payload, kwargs = logged[0]
+        assert payload["eval/step"] == 3
+        assert "eval/hist" in payload
+        assert kwargs == {}
+        assert defined == [("eval/step", None), ("eval/hist", "eval/step")]
+
+    def test_log_str_uses_inferred_step(self, wandb_tmp_logger, monkeypatch):
+        logged = []
+        defined = []
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "log",
+            lambda payload, **kwargs: logged.append((payload, kwargs)),
+        )
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "define_metric",
+            lambda name, step_metric=None: defined.append((name, step_metric)),
+        )
+
+        wandb_tmp_logger.log_str("eval/text", "hello", step=9)
+
+        assert logged == [({"eval/text": "hello", "eval/step": 9}, {})]
+        assert defined == [("eval/step", None), ("eval/text", "eval/step")]
 
 
 @pytest.fixture
@@ -561,6 +759,47 @@ def ray_init_shutdown():
         ray.init(num_cpus=2, log_to_driver=False)
     yield
     ray.shutdown()
+
+
+def test_ray_logger_log_metrics_forwards_override_global_step():
+    class _FakeRemoteMethod:
+        def __init__(self):
+            self.calls = []
+
+        def remote(self, *args, **kwargs):
+            self.calls.append((args, kwargs))
+            return self.calls[-1]
+
+    class _FakeActor:
+        def __init__(self):
+            self.log_metrics = _FakeRemoteMethod()
+
+    class _FakeRay:
+        @staticmethod
+        def get(value):
+            return value
+
+    logger = RayLogger.__new__(RayLogger)
+    logger._actor = _FakeActor()
+    logger._ray = _FakeRay()
+
+    result = logger.log_metrics(
+        {"loss": torch.tensor(0.5)},
+        step=12,
+        override_global_step=True,
+    )
+
+    assert result == {"loss": 0.5}
+    assert logger._actor.log_metrics.calls == [
+        (
+            ({"loss": 0.5},),
+            {
+                "step": 12,
+                "keys_sep": "/",
+                "override_global_step": True,
+            },
+        )
+    ]
 
 
 @pytest.mark.skipif(not _has_ray, reason="Ray not available")
