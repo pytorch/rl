@@ -10,10 +10,13 @@ used by the training loops.
 """
 from __future__ import annotations
 
+import logging
+
 import torch
 import torch.nn
 
 from mujoco_torch.zoo import ENVS
+from tensordict.base import TensorDictBase
 from tensordict.nn import AddStateIndependentNormalScale, TensorDictModule
 from torchrl.envs import (
     ClipTransform,
@@ -23,7 +26,67 @@ from torchrl.envs import (
     TransformedEnv,
     VecNormV2,
 )
+from torchrl.envs.transforms import Transform
 from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
+
+log = logging.getLogger(__name__)
+
+
+# ── NaN diagnostic guard ──────────────────────────────────────────────
+
+
+class NanDumpTransform(Transform):
+    """Detect non-finite raw env observations and dump the full step context.
+
+    Inserted *before* VecNormV2 so it sees the raw physics output.
+    On first NaN detection it saves the TensorDict (action + resulting
+    observation for all envs) to ``dump_path`` and raises RuntimeError.
+    """
+
+    def __init__(self, dump_path: str = "/root/nan_dump.pt"):
+        super().__init__()
+        self.dump_path = dump_path
+        self._dumped = False
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        obs = next_tensordict.get("observation", None)
+        if obs is not None and not self._dumped and not torch.isfinite(obs).all():
+            self._dumped = True
+            non_finite = ~torch.isfinite(obs)
+            bad_envs = non_finite.flatten(1).any(dim=-1)  # [num_envs]
+            n_bad_vals = non_finite.sum().item()
+            n_bad_envs = bad_envs.sum().item()
+
+            # Build dump: input td (has action) + output td (has obs)
+            dump = tensordict.detach().cpu().clone()
+            dump["next"] = next_tensordict.detach().cpu().clone()
+            dump["_nan_env_mask"] = bad_envs.detach().cpu()
+            torch.save(dump, self.dump_path)
+            log.error(
+                "NaN in raw env observation: %d/%d values across %d/%d envs. "
+                "Dumped to %s",
+                n_bad_vals,
+                obs.numel(),
+                n_bad_envs,
+                obs.shape[0],
+                self.dump_path,
+            )
+            raise RuntimeError(
+                f"NaN in raw env observation: {n_bad_vals}/{obs.numel()} values "
+                f"across {n_bad_envs}/{obs.shape[0]} envs. "
+                f"Dumped to {self.dump_path}"
+            )
+        return next_tensordict
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return tensordict_reset
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict
 
 
 # ── Environment factories ──────────────────────────────────────────────
@@ -80,6 +143,8 @@ def make_env(
         compile_kwargs=compile_kwargs,
     )
     env = TransformedEnv(env)
+    # NaN guard on raw physics output — before VecNormV2 so we see un-normalised obs
+    env.append_transform(NanDumpTransform(dump_path="/root/nan_dump.pt"))
     env.append_transform(
         VecNormV2(
             in_keys=["observation"],
