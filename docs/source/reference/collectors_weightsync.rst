@@ -610,14 +610,29 @@ registered buffers), but **are** captured by both:
   ``get_extra_state()`` and stores the result under a special
   ``"__extra_state__"`` key in the TensorDict.
 
-This means no special handling is needed — just register a scheme for
-the VecNormV2 transform and include it in ``weights_dict``:
+This means no special handling is needed for the *transfer* — just
+register a scheme for the VecNormV2 transform and include it in
+``weights_dict``.
+
+**Freezing worker-side VecNormV2**: when collector workers receive
+stats from the trainer, they should **not** update those stats with
+their own data.  Freeze VecNormV2 in the worker env factory so that
+only the training process accumulates statistics:
 
 .. code-block:: python
 
+    from torchrl.collectors import MultiSyncCollector
     from torchrl.weight_update import MultiProcessWeightSyncScheme
 
-    # VecNormV2 is the first transform on the env
+    def make_worker_env():
+        """Worker env: VecNormV2 is frozen so stats come from the trainer."""
+        env = make_base_env()  # includes VecNormV2 transform
+        # Freeze so the worker doesn't update running stats locally
+        for t in env.transform:
+            if hasattr(t, "freeze"):
+                t.freeze()
+        return env
+
     weight_sync_schemes = {
         "policy": MultiProcessWeightSyncScheme(strategy="tensordict"),
         "env.transform[0]": MultiProcessWeightSyncScheme(
@@ -626,7 +641,7 @@ the VecNormV2 transform and include it in ``weights_dict``:
     }
 
     collector = MultiSyncCollector(
-        create_env_fn=[make_env, make_env],
+        create_env_fn=[make_worker_env, make_worker_env],
         policy_factory=policy_factory,
         frames_per_batch=200,
         total_frames=10000,
@@ -634,9 +649,9 @@ the VecNormV2 transform and include it in ``weights_dict``:
     )
 
     for data in collector:
-        # ... training step ...
+        # ... training step (updates train_env VecNormV2 stats) ...
 
-        # Sync policy weights + VecNormV2 running stats
+        # Push trainer's stats to frozen worker VecNormV2 instances
         collector.update_policy_weights_(
             weights_dict={
                 "policy": train_policy,
@@ -651,6 +666,12 @@ the VecNormV2 transform and include it in ``weights_dict``:
     **any** module that defines it, not just VecNormV2.  If you have
     custom modules with stateful buffers exposed via this PyTorch
     protocol, they will be synchronized automatically.
+
+.. note::
+    The :class:`~torchrl.collectors.Evaluator` **automatically freezes**
+    VecNormV2 transforms in the eval env (see :ref:`evaluator-vecnorm`
+    below).  For regular collectors, you must freeze explicitly in the
+    env factory as shown above.
 
 Evaluator Weight Sync
 ---------------------
@@ -726,6 +747,8 @@ transfer:
 
     result = evaluator.poll()
 
+.. _evaluator-vecnorm:
+
 VecNormV2 Running Stats
 ~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -759,6 +782,30 @@ handling is needed:
         },
         step=step,
     )
+
+.. important::
+    The evaluator **automatically freezes** all
+    :class:`~torchrl.envs.transforms.VecNormV2` (and
+    :class:`~torchrl.envs.transforms.VecNorm`) transforms in the eval
+    environment — whether the env is passed directly or created from a
+    factory.  This means the eval environment uses the training
+    statistics as-is and does not update them with eval data.
+
+    You do **not** need to call ``.freeze()`` or use ``frozen_copy()``
+    in your eval env factory — the evaluator handles this.
+
+    For **regular collectors** (not the evaluator), workers that
+    receive VecNormV2 stats via ``weight_sync_schemes`` should be
+    frozen explicitly in the env factory:
+
+    .. code-block:: python
+
+        def make_worker_env():
+            env = make_base_env()
+            for t in env.transform:
+                if hasattr(t, "freeze"):
+                    t.freeze()
+            return env
 
 Transports
 ----------

@@ -14,8 +14,9 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.collectors import Evaluator
+from torchrl.collectors._evaluator import _freeze_vecnorm
 from torchrl.envs import SerialEnv, TransformedEnv
-from torchrl.envs.transforms import RewardSum, StepCounter
+from torchrl.envs.transforms import RewardSum, StepCounter, VecNormV2
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 from torchrl.weight_update import WeightStrategy
 
@@ -959,6 +960,106 @@ class TestEvaluatorProcessBackendAsMultiCollector:
                 max_steps=50,
                 backend="process",
             )
+
+
+def _make_vecnorm_env():
+    """Create an env with VecNormV2 transform."""
+    base = ContinuousActionVecMockEnv()
+    return TransformedEnv(
+        base,
+        VecNormV2(
+            in_keys=["observation"],
+            out_keys=["observation"],
+        ),
+    )
+
+
+class TestEvaluatorVecNormFreeze:
+    """Tests that VecNormV2 transforms are frozen in eval environments."""
+
+    def test_freeze_vecnorm_utility(self):
+        """_freeze_vecnorm freezes VecNormV2 transforms."""
+        env = _make_vecnorm_env()
+        assert not env.transform.frozen
+        _freeze_vecnorm(env)
+        assert env.transform.frozen
+
+    def test_freeze_vecnorm_nested(self):
+        """_freeze_vecnorm handles nested Compose transforms."""
+        from torchrl.envs.transforms import Compose
+
+        base = ContinuousActionVecMockEnv()
+        vecnorm = VecNormV2(in_keys=["observation"], out_keys=["observation"])
+        env = TransformedEnv(base, Compose(StepCounter(), vecnorm))
+        assert not vecnorm.frozen
+        _freeze_vecnorm(env)
+        assert vecnorm.frozen
+
+    def test_evaluator_freezes_eager_env(self):
+        """Evaluator freezes VecNormV2 when env is passed directly."""
+        env = _make_vecnorm_env()
+        policy = _make_policy(env)
+        assert not env.transform.frozen
+
+        evaluator = Evaluator(env, policy, max_steps=50)
+        try:
+            # VecNormV2 should be frozen after construction
+            assert env.transform.frozen
+            metrics = evaluator.evaluate(step=0)
+            assert "eval/reward" in metrics
+        finally:
+            evaluator.shutdown()
+
+    def test_evaluator_freezes_factory_env(self):
+        """Evaluator freezes VecNormV2 when env is a factory."""
+        frozen_flags = []
+
+        def tracked_env_factory():
+            env = _make_vecnorm_env()
+            # Not frozen at creation
+            frozen_flags.append(env.transform.frozen)
+            return env
+
+        evaluator = Evaluator(
+            tracked_env_factory,
+            policy_factory=_make_policy,
+            max_steps=50,
+        )
+        try:
+            metrics = evaluator.evaluate(step=0)
+            assert "eval/reward" in metrics
+            # Factory created env unfrozen, but evaluator froze it
+            assert frozen_flags[0] is False
+            # The env inside the evaluator should now be frozen
+            assert evaluator._backend._env.transform.frozen
+        finally:
+            evaluator.shutdown()
+
+    def test_frozen_vecnorm_stats_not_updated(self):
+        """Frozen VecNormV2 should not update running stats during eval."""
+        env = _make_vecnorm_env()
+        policy = _make_policy(env)
+
+        evaluator = Evaluator(env, policy, max_steps=50)
+        try:
+            # Initialize the VecNormV2 with one step so stats exist
+            td = env.reset()
+            env.transform.frozen = False  # temporarily unfreeze to init
+            env.step(policy(td))
+            env.transform.freeze()  # re-freeze
+
+            # Record count before eval
+            count_before = env.transform._count.clone()
+
+            # Run eval — should NOT update the count
+            evaluator.evaluate(step=0)
+
+            count_after = env.transform._count.clone()
+            assert (
+                count_before == count_after
+            ).all(), "VecNormV2 count was updated during eval"
+        finally:
+            evaluator.shutdown()
 
 
 if __name__ == "__main__":

@@ -713,6 +713,48 @@ def _resolve_collector_cls(cls_or_name: type | str | None):
     return cls_or_name
 
 
+def _freeze_vecnorm(env: EnvBase) -> EnvBase:
+    """Freeze all VecNorm / VecNormV2 transforms in the env.
+
+    Evaluation environments should not update running statistics —
+    they receive stats from the training process via weight sync and
+    use them as-is.
+    """
+    from torchrl.envs.transforms import Compose, TransformedEnv
+    from torchrl.envs.transforms.vecnorm import VecNormV2
+
+    # Also handle the legacy VecNorm
+    try:
+        from torchrl.envs.transforms.transforms import VecNorm
+    except ImportError:
+        VecNorm = None  # noqa: N806
+
+    def _freeze_transforms(transform):
+        if isinstance(transform, VecNormV2):
+            transform.freeze()
+        elif VecNorm is not None and isinstance(transform, VecNorm):
+            transform.freeze()
+        elif isinstance(transform, Compose):
+            for t in transform:
+                _freeze_transforms(t)
+
+    if isinstance(env, TransformedEnv):
+        _freeze_transforms(env.transform)
+    return env
+
+
+def _wrap_env_factory_frozen(
+    env_factory: Callable[[], EnvBase]
+) -> Callable[[], EnvBase]:
+    """Wrap an env factory to freeze VecNorm transforms after creation."""
+
+    def wrapper():
+        env = env_factory()
+        return _freeze_vecnorm(env)
+
+    return wrapper
+
+
 # ======================================================================
 # Thread backend
 # ======================================================================
@@ -767,8 +809,9 @@ class _ThreadEvalBackend(_EvalBackend):
         env_is_callable = callable(env) and not isinstance(env, EnvBase)
 
         if self._use_multi_collector:
-            # MultiSyncCollector path: always defer construction
-            self._env_factory = env
+            # MultiSyncCollector path: always defer construction.
+            # Wrap the factory to freeze VecNorm transforms in the worker.
+            self._env_factory = _wrap_env_factory_frozen(env)
             self._policy_factory = policy_factory
             self._env: EnvBase | None = None
             self._policy = None
@@ -782,6 +825,8 @@ class _ThreadEvalBackend(_EvalBackend):
             # Eager path (existing behaviour)
             if env_is_callable:
                 env = env()
+            # Freeze VecNorm transforms so eval doesn't update running stats
+            _freeze_vecnorm(env)
             self._env = env
 
             if policy_factory is not None:
@@ -897,6 +942,8 @@ class _ThreadEvalBackend(_EvalBackend):
                 "this should not happen."
             )
         self._env = self._env_factory()
+        # Freeze VecNorm transforms so eval doesn't update running stats
+        _freeze_vecnorm(self._env)
         self._policy = self._policy_factory(self._env)
         # Free the factories
         self._env_factory = None
