@@ -513,9 +513,9 @@ class Evaluator:
                 if k != f"{self._log_prefix}/video" and k != step_key
             }
             if scalars:
-                self._logger.log_metrics(scalars, step=step)
+                self._logger.log_metrics(scalars)
             if video is not None:
-                self._logger.log_video(f"{self._log_prefix}/video", video, step=step)
+                self._logger.log_video(f"{self._log_prefix}/video", video)
 
 
 # ======================================================================

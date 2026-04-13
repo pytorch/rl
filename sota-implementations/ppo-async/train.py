@@ -231,7 +231,7 @@ def train_start(
         )
 
         if logger:
-            logger.log_metrics(metrics_to_log, current_wc)
+            logger.log_metrics(metrics_to_log)
 
     # Wait for any in-flight eval before shutdown
     evaluator.wait(timeout=120)
@@ -350,7 +350,7 @@ def train_iterate(
         if len(data_buffer) < cfg_buffer_min_fill:
             if logger:
                 metrics_to_log["buffer/size"] = len(data_buffer)
-                logger.log_metrics(metrics_to_log, collected_frames)
+                logger.log_metrics(metrics_to_log)
             continue
 
         for _epoch in range(cfg_loss_ppo_epochs):
@@ -422,7 +422,7 @@ def train_iterate(
             evaluator.trigger_eval(actor, step=collected_frames)
 
         if logger:
-            logger.log_metrics(metrics_to_log, collected_frames)
+            logger.log_metrics(metrics_to_log)
 
     # Wait for any in-flight eval before shutdown
     evaluator.wait(timeout=120)
