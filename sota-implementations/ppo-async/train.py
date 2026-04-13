@@ -111,6 +111,8 @@ def train_start(
     )
 
     # Async evaluator in a separate process (avoids CUDA stream contention)
+    # logger=None: we log eval metrics ourselves in the training loop so that
+    # eval and training metrics land in the same WandB row.
     evaluator = Evaluator(
         env=partial(
             make_eval_env,
@@ -125,7 +127,6 @@ def train_start(
         num_trajectories=num_eval_envs,
         max_steps=1000,
         backend="process",
-        logger=logger,
     )
 
     # Start collection and evaluation
@@ -139,6 +140,7 @@ def train_start(
     train_start_time = None
     last_write_count = 0
     last_trained_wc = 0
+    pending_eval_metrics = None
 
     while True:
         current_wc = data_buffer.write_count
@@ -150,9 +152,11 @@ def train_start(
         if current_wc >= total_frames:
             break
 
-        # Check eval even when no new training data
+        # Trigger next eval; capture previous result for logging
         if not evaluator.pending:
-            evaluator.trigger_eval(actor, step=current_wc)
+            prev_eval = evaluator.trigger_eval(actor, step=current_wc)
+            if prev_eval is not None:
+                pending_eval_metrics = prev_eval
 
         if current_wc <= last_trained_wc or len(data_buffer) < cfg_buffer_min_fill:
             time.sleep(0.05)
@@ -252,11 +256,23 @@ def train_start(
             }
         )
 
+        # Merge any pending eval metrics into this log step
+        if pending_eval_metrics is not None:
+            metrics_to_log.update(pending_eval_metrics)
+            pending_eval_metrics = None
+        else:
+            # Poll in case result arrived since last trigger_eval
+            eval_result = evaluator.poll(0)
+            if eval_result is not None:
+                metrics_to_log.update(eval_result)
+
         if logger:
             logger.log_metrics(metrics_to_log, current_wc)
 
-    # Wait for any in-flight eval before shutdown
-    evaluator.wait(timeout=120)
+    # Log any final eval result
+    final_eval = evaluator.wait(timeout=120)
+    if final_eval is not None and logger:
+        logger.log_metrics(final_eval, last_write_count)
 
     pbar.close()
     evaluator.shutdown()
@@ -326,6 +342,8 @@ def train_iterate(
     )
 
     # Async evaluator in a separate process (avoids CUDA stream contention)
+    # logger=None: we log eval metrics ourselves in the training loop so that
+    # eval and training metrics land in the same WandB row.
     evaluator = Evaluator(
         env=partial(
             make_eval_env,
@@ -340,7 +358,6 @@ def train_iterate(
         num_trajectories=num_eval_envs,
         max_steps=1000,
         backend="process",
-        logger=logger,
     )
 
     # Start continuous eval immediately
@@ -460,15 +477,24 @@ def train_iterate(
             }
         )
 
-        # Continuous async eval — trigger_eval auto-logs the previous result
+        # Trigger next eval and merge previous result into this log step
         if not evaluator.pending:
-            evaluator.trigger_eval(actor, step=collected_frames)
+            prev_eval = evaluator.trigger_eval(actor, step=collected_frames)
+            if prev_eval is not None:
+                metrics_to_log.update(prev_eval)
+        else:
+            # Poll in case result arrived since last trigger_eval
+            eval_result = evaluator.poll(0)
+            if eval_result is not None:
+                metrics_to_log.update(eval_result)
 
         if logger:
             logger.log_metrics(metrics_to_log, collected_frames)
 
-    # Wait for any in-flight eval before shutdown
-    evaluator.wait(timeout=120)
+    # Log any final eval result
+    final_eval = evaluator.wait(timeout=120)
+    if final_eval is not None and logger:
+        logger.log_metrics(final_eval, collected_frames)
 
     pbar.close()
     evaluator.shutdown()
