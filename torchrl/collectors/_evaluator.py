@@ -1051,6 +1051,7 @@ def _process_eval_worker(
     policy_factory: Callable,
     request_queue: mp.Queue,
     result_queue: mp.Queue,
+    shared_weights_queue: mp.Queue,
     num_trajectories: int,
     max_steps: int,
     frames_per_batch: int | None,
@@ -1064,8 +1065,9 @@ def _process_eval_worker(
     """Entry point for the evaluator child process.
 
     Creates env, policy, and collector inside the process, then loops
-    waiting for ``(weights, step)`` requests on *request_queue* and puts
-    result dicts on *result_queue*.  A ``None`` sentinel terminates the loop.
+    waiting for step requests on *request_queue* and puts result dicts
+    on *result_queue*.  Weights are synced via shared memory (not queues).
+    A ``None`` sentinel terminates the loop.
     """
     env = env_factory()
     policy = policy_factory(env)
@@ -1074,6 +1076,12 @@ def _process_eval_worker(
         device = next(policy.parameters()).device
     except (StopIteration, AttributeError):
         device = torch.device("cpu")
+
+    # Create shared-memory weight buffer on CPU and send reference to parent.
+    # Both parent and worker access this buffer — parent writes new weights,
+    # worker reads and moves to device before each eval.
+    shared_weights = TensorDict.from_module(policy).data.cpu().clone().share_memory_()
+    shared_weights_queue.put(shared_weights)
 
     cls = _resolve_collector_cls(collector_cls_name)
     fpb = frames_per_batch or max_steps or 1000
@@ -1096,10 +1104,10 @@ def _process_eval_worker(
         if request is None:
             break
 
-        weights, step = request
+        step = request
 
-        if weights is not None:
-            weights.to(device).to_module(policy)
+        # Apply latest weights from shared memory
+        shared_weights.to(device).to_module(policy)
 
         if isinstance(policy, nn.Module):
             policy.eval()
@@ -1167,8 +1175,10 @@ class _ProcessEvalBackend(_EvalBackend):
         ctx = mp.get_context("spawn")
         self._request_queue: mp.Queue = ctx.Queue(maxsize=1)
         self._result_queue: mp.Queue = ctx.Queue(maxsize=1)
+        self._shared_weights_queue: mp.Queue = ctx.Queue(maxsize=1)
         self._pending_flag = False
         self._last_step: int | None = None
+        self._shared_weights: TensorDictBase | None = None
 
         self._process = ctx.Process(
             target=_process_eval_worker,
@@ -1177,6 +1187,7 @@ class _ProcessEvalBackend(_EvalBackend):
                 "policy_factory": policy_factory,
                 "request_queue": self._request_queue,
                 "result_queue": self._result_queue,
+                "shared_weights_queue": self._shared_weights_queue,
                 "num_trajectories": num_trajectories,
                 "max_steps": max_steps,
                 "frames_per_batch": frames_per_batch,
@@ -1191,20 +1202,33 @@ class _ProcessEvalBackend(_EvalBackend):
         )
         self._process.start()
 
+    def _ensure_shared_weights(self) -> None:
+        """Block until the worker has sent its shared-memory weight buffer."""
+        if self._shared_weights is None:
+            self._shared_weights = self._shared_weights_queue.get()
+
     # ---- sync ----
 
     def run_sync(self, weights: TensorDictBase | None, step: int) -> dict[str, Any]:
-        self._request_queue.put((weights, step))
+        self._ensure_shared_weights()
+        if weights is not None:
+            self._shared_weights.update_(weights)
+        self._request_queue.put(step)
         return self._result_queue.get()
 
     # ---- async ----
 
     def submit(self, weights: TensorDictBase | None, step: int) -> None:
+        self._ensure_shared_weights()
+        # Copy new weights into shared memory (no serialization)
+        if weights is not None:
+            self._shared_weights.update_(weights)
         # Drain any stale result from a previous (possibly cancelled) eval
         self._drain_result_queue()
         self._last_step = step
         self._pending_flag = True
-        self._request_queue.put((weights, step))
+        # Only send the step — weights are already in shared memory
+        self._request_queue.put(step)
 
     def poll(self, timeout: float) -> dict[str, Any] | None:
         try:
