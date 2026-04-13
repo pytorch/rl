@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import threading
 import time
+from collections import OrderedDict
 
 import pytest
 import torch
@@ -16,6 +17,7 @@ from torchrl.collectors import Evaluator
 from torchrl.envs import SerialEnv, TransformedEnv
 from torchrl.envs.transforms import RewardSum, StepCounter
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
+from torchrl.weight_update import WeightStrategy
 
 
 def _make_env():
@@ -711,6 +713,252 @@ class TestEvaluatorErrors:
     def test_invalid_backend_raises(self):
         with pytest.raises(ValueError, match="Unknown backend"):
             Evaluator(_make_env, policy=_make_policy(), max_steps=50, backend="invalid")
+
+
+class TestEvaluatorWeightsDict:
+    """Tests for the new weights_dict multi-model weight sync API."""
+
+    def test_weights_dict_policy_only(self):
+        """weights_dict={"policy": module} should work same as weights=module."""
+        env = _make_env()
+        policy = _make_policy(env)
+        train_policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=50)
+        try:
+            metrics = evaluator.evaluate(weights_dict={"policy": train_policy}, step=0)
+            assert "eval/reward" in metrics
+        finally:
+            evaluator.shutdown()
+
+    def test_weights_backward_compat(self):
+        """Old weights=module API still works alongside new weights_dict."""
+        env = _make_env()
+        policy = _make_policy(env)
+        train_policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=50)
+        try:
+            metrics = evaluator.evaluate(weights=train_policy, step=0)
+            assert "eval/reward" in metrics
+        finally:
+            evaluator.shutdown()
+
+    def test_weights_and_weights_dict_merged(self):
+        """weights goes to 'policy' key if not already in weights_dict."""
+        env = _make_env()
+        policy = _make_policy(env)
+        train_policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=50)
+        try:
+            # weights_dict doesn't have "policy", so weights fills it
+            metrics = evaluator.evaluate(weights=train_policy, weights_dict={}, step=0)
+            assert "eval/reward" in metrics
+        finally:
+            evaluator.shutdown()
+
+    def test_async_weights_dict(self):
+        """trigger_eval accepts weights_dict."""
+        env = _make_env()
+        policy = _make_policy(env)
+        train_policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=50)
+        try:
+            evaluator.trigger_eval(weights_dict={"policy": train_policy}, step=0)
+            result = evaluator.wait(timeout=30)
+            assert result is not None
+            assert "eval/reward" in result
+        finally:
+            evaluator.shutdown()
+
+
+class _ModuleWithExtraState(nn.Module):
+    """Test module that defines get_extra_state/set_extra_state."""
+
+    def __init__(self, dim: int = 4):
+        super().__init__()
+        self.linear = nn.Linear(dim, dim)
+        self.running_mean = torch.zeros(dim)
+        self.running_var = torch.ones(dim)
+        self.count = torch.tensor(0)
+
+    def forward(self, x):
+        return self.linear(x)
+
+    def get_extra_state(self) -> OrderedDict:
+        return OrderedDict(
+            running_mean=self.running_mean.clone(),
+            running_var=self.running_var.clone(),
+            count=self.count.clone(),
+        )
+
+    def set_extra_state(self, state: OrderedDict) -> None:
+        self.running_mean = state["running_mean"]
+        self.running_var = state["running_var"]
+        self.count = state["count"]
+
+
+class TestWeightStrategyExtraState:
+    """Tests for WeightStrategy tensordict mode capturing get_extra_state."""
+
+    def test_extract_captures_extra_state(self):
+        """extract_weights with tensordict mode captures get_extra_state."""
+        module = _ModuleWithExtraState(dim=4)
+        module.running_mean.fill_(42.0)
+        module.count.fill_(100)
+
+        strategy = WeightStrategy(extract_as="tensordict")
+        weights = strategy.extract_weights(module)
+        assert "__extra_state__" in weights.keys()
+        extra = weights["__extra_state__"]
+        assert torch.allclose(extra["running_mean"], torch.tensor(42.0).expand(4))
+        assert extra["count"].item() == 100
+
+    def test_extract_no_extra_state(self):
+        """Modules without get_extra_state should not have __extra_state__."""
+        module = nn.Linear(4, 4)
+        strategy = WeightStrategy(extract_as="tensordict")
+        weights = strategy.extract_weights(module)
+        assert "__extra_state__" not in weights.keys()
+
+    def test_apply_restores_extra_state(self):
+        """apply_weights with __extra_state__ calls set_extra_state."""
+        src = _ModuleWithExtraState(dim=4)
+        src.running_mean.fill_(99.0)
+        src.running_var.fill_(2.0)
+        src.count.fill_(50)
+
+        dst = _ModuleWithExtraState(dim=4)
+        assert dst.running_mean.sum().item() == 0.0
+
+        strategy = WeightStrategy(extract_as="tensordict")
+        weights = strategy.extract_weights(src)
+        strategy.apply_weights(dst, weights, inplace=True)
+
+        assert torch.allclose(dst.running_mean, torch.tensor(99.0).expand(4))
+        assert torch.allclose(dst.running_var, torch.tensor(2.0).expand(4))
+        assert dst.count.item() == 50
+
+    def test_apply_extra_state_outofplace(self):
+        """apply_weights out-of-place also restores extra_state."""
+        src = _ModuleWithExtraState(dim=4)
+        src.running_mean.fill_(7.0)
+        src.count.fill_(3)
+
+        dst = _ModuleWithExtraState(dim=4)
+
+        strategy = WeightStrategy(extract_as="tensordict")
+        weights = strategy.extract_weights(src)
+        strategy.apply_weights(dst, weights, inplace=False)
+
+        assert torch.allclose(dst.running_mean, torch.tensor(7.0).expand(4))
+        assert dst.count.item() == 3
+
+    def test_state_dict_mode_already_captures_extra(self):
+        """state_dict mode should already capture extra_state via PyTorch."""
+        module = _ModuleWithExtraState(dim=4)
+        module.running_mean.fill_(5.0)
+
+        strategy = WeightStrategy(extract_as="state_dict")
+        weights = strategy.extract_weights(module)
+        # state_dict() includes extra_state under a special key
+        assert isinstance(weights, dict)
+
+    def test_roundtrip_preserves_params_and_extra(self):
+        """Full roundtrip: extract -> apply preserves both params and extra."""
+        src = _ModuleWithExtraState(dim=4)
+        nn.init.constant_(src.linear.weight, 3.0)
+        nn.init.constant_(src.linear.bias, 1.0)
+        src.running_mean.fill_(10.0)
+        src.count.fill_(25)
+
+        dst = _ModuleWithExtraState(dim=4)
+        nn.init.constant_(dst.linear.weight, 0.0)
+        nn.init.constant_(dst.linear.bias, 0.0)
+
+        strategy = WeightStrategy(extract_as="tensordict")
+        weights = strategy.extract_weights(src)
+        strategy.apply_weights(dst, weights, inplace=True)
+
+        # Check params were updated
+        assert torch.allclose(
+            dst.linear.weight, torch.tensor(3.0).expand_as(dst.linear.weight)
+        )
+        assert torch.allclose(
+            dst.linear.bias, torch.tensor(1.0).expand_as(dst.linear.bias)
+        )
+        # Check extra_state was updated
+        assert torch.allclose(dst.running_mean, torch.tensor(10.0).expand(4))
+        assert dst.count.item() == 25
+
+
+class TestEvaluatorProcessBackendAsMultiCollector:
+    """Tests that backend='process' uses MultiSyncCollector internally."""
+
+    def test_process_backend_sync_eval(self):
+        """Process backend sync eval works via MultiSyncCollector."""
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            metrics = evaluator.evaluate(step=0)
+            assert "eval/reward" in metrics
+            assert "eval/episode_length" in metrics
+        finally:
+            evaluator.shutdown()
+
+    def test_process_backend_async_eval(self):
+        """Process backend async eval works via MultiSyncCollector."""
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            evaluator.trigger_eval(step=0)
+            result = evaluator.wait(timeout=30)
+            assert result is not None
+            assert "eval/reward" in result
+        finally:
+            evaluator.shutdown()
+
+    def test_process_backend_with_weights(self):
+        """Process backend with weight transfer works."""
+        train_policy = _make_policy()
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            metrics = evaluator.evaluate(weights=train_policy, step=0)
+            assert "eval/reward" in metrics
+        finally:
+            evaluator.shutdown()
+
+    def test_process_backend_requires_callable(self):
+        """Process backend requires env to be a callable."""
+        env = _make_env()
+        with pytest.raises(ValueError, match="callable"):
+            Evaluator(
+                env,
+                policy_factory=_make_policy,
+                max_steps=50,
+                backend="process",
+            )
+
+    def test_process_backend_requires_policy_factory(self):
+        """Process backend requires policy_factory."""
+        with pytest.raises(ValueError, match="policy_factory"):
+            Evaluator(
+                _make_env,
+                policy=_make_policy(),
+                max_steps=50,
+                backend="process",
+            )
 
 
 if __name__ == "__main__":
