@@ -201,7 +201,7 @@ def train_start(
 
         # Guard: check inputs to policy are finite
         _assert_finite(batch["observation"], "batch/observation", current_wc)
-        _assert_finite(batch["sample_log_prob"], "batch/sample_log_prob", current_wc)
+        _assert_finite(batch["action_log_prob"], "batch/action_log_prob", current_wc)
         adv = batch.get("advantage", None)
         if adv is not None:
             _assert_finite(adv, "batch/advantage", current_wc)
@@ -441,7 +441,7 @@ def train_iterate(
             # Guard: check inputs to policy are finite
             _assert_finite(batch["observation"], "batch/observation", collected_frames)
             _assert_finite(
-                batch["sample_log_prob"], "batch/sample_log_prob", collected_frames
+                batch["action_log_prob"], "batch/action_log_prob", collected_frames
             )
             adv = batch.get("advantage", None)
             if adv is not None:
