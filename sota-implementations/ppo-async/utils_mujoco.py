@@ -42,7 +42,11 @@ def make_shared_vecnorm_data(env_name):
         num_envs=1, device="cpu", dtype=torch.float32, compile_step=False
     )
     proof = TransformedEnv(proof)
-    proof.append_transform(VecNormV2(in_keys=["observation"], decay=0.99999, eps=1e-2))
+    proof.append_transform(
+        VecNormV2(
+            in_keys=["observation"], decay=0.99999, eps=1e-2, reduce_batch_dims=True
+        )
+    )
     # Reset triggers VecNormV2 lazy init (shapes come from data)
     proof.reset()
     vecnorm = proof.transform[0]
@@ -82,6 +86,7 @@ def make_env(
             decay=0.99999,
             eps=1e-2,
             shared_data=shared_vecnorm,
+            reduce_batch_dims=True,
         )
     )
     env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
@@ -113,6 +118,7 @@ def make_eval_env(env_name, device, num_eval_envs, max_steps=1000, shared_vecnor
         decay=0.99999,
         eps=1e-2,
         shared_data=shared_vecnorm,
+        reduce_batch_dims=True,
     )
     if shared_vecnorm is not None:
         vecnorm.freeze()
