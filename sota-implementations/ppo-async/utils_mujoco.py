@@ -29,7 +29,39 @@ from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 # ── Environment factories ──────────────────────────────────────────────
 
 
-def make_env(env_name="halfcheetah", device="cpu", num_envs=4096, compile=True):
+def make_shared_vecnorm_data(env_name):
+    """Create shared-memory VecNormV2 state for cross-process sharing.
+
+    Returns a TensorDict with {loc, var, count} in shared memory.
+    Both the training collector and evaluator should reference this so
+    they share identical observation normalization statistics.
+    """
+    from tensordict import TensorDict
+
+    proof = ENVS[env_name](
+        num_envs=1, device="cpu", dtype=torch.float32, compile_step=False
+    )
+    proof = TransformedEnv(proof)
+    proof.append_transform(VecNormV2(in_keys=["observation"], decay=0.99999, eps=1e-2))
+    # Reset triggers VecNormV2 lazy init (shapes come from data)
+    proof.reset()
+    vecnorm = proof.transform[0]
+    shared = TensorDict(
+        loc=vecnorm._loc.clone(),
+        var=vecnorm._var.clone(),
+        count=vecnorm._count.clone(),
+    ).share_memory_()
+    del proof
+    return shared
+
+
+def make_env(
+    env_name="halfcheetah",
+    device="cpu",
+    num_envs=4096,
+    compile=True,
+    shared_vecnorm=None,
+):
     """Create a batched MuJoCo env using mujoco-torch.
 
     Returns a single env with batch_size=[num_envs], where all envs run
@@ -44,19 +76,29 @@ def make_env(env_name="halfcheetah", device="cpu", num_envs=4096, compile=True):
         compile_kwargs=compile_kwargs,
     )
     env = TransformedEnv(env)
-    env.append_transform(VecNormV2(in_keys=["observation"], decay=0.99999, eps=1e-2))
+    env.append_transform(
+        VecNormV2(
+            in_keys=["observation"],
+            decay=0.99999,
+            eps=1e-2,
+            shared_data=shared_vecnorm,
+        )
+    )
     env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
     return env
 
 
-def make_eval_env(env_name, device, num_eval_envs, max_steps=1000):
+def make_eval_env(env_name, device, num_eval_envs, max_steps=1000, shared_vecnorm=None):
     """Env factory for the Evaluator.
 
     Creates a compiled GPU-batched mujoco-torch env. The StepCounter
     uses max_steps so that episodes terminate — the Evaluator skips adding
     its own max_frames_per_traj when it sees an existing step_count.
+
+    When shared_vecnorm is provided, the VecNormV2 is frozen — it reads
+    the training collector's normalization stats without updating them.
     """
     env = ENVS[env_name](
         num_envs=num_eval_envs,
@@ -66,7 +108,15 @@ def make_eval_env(env_name, device, num_eval_envs, max_steps=1000):
         compile_kwargs={"mode": "default"},
     )
     env = TransformedEnv(env)
-    env.append_transform(VecNormV2(in_keys=["observation"], decay=0.99999, eps=1e-2))
+    vecnorm = VecNormV2(
+        in_keys=["observation"],
+        decay=0.99999,
+        eps=1e-2,
+        shared_data=shared_vecnorm,
+    )
+    if shared_vecnorm is not None:
+        vecnorm.freeze()
+    env.append_transform(vecnorm)
     env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
     env.append_transform(RewardSum())
     env.append_transform(StepCounter(max_steps=max_steps))
