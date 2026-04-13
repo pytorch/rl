@@ -77,6 +77,41 @@ TYPE_DESCR = {float: "4.4f", int: ""}
 REWARD_KEY = ("next", "reward")
 
 
+def _serialize_for_json(obj):
+    """Recursively convert a state-dict to a JSON-serializable form.
+
+    Tensors are encoded as ``{"__tensor__": true, "data": [...], "dtype":
+    "<dtype>", "shape": [...]}`` so they can be faithfully restored.
+    """
+    if isinstance(obj, torch.Tensor):
+        return {
+            "__tensor__": True,
+            "data": obj.tolist(),
+            "dtype": str(obj.dtype),
+            "shape": list(obj.shape),
+        }
+    if isinstance(obj, dict):
+        return {k: _serialize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        serialized = [_serialize_for_json(v) for v in obj]
+        return serialized if isinstance(obj, list) else serialized
+    return obj
+
+
+def _deserialize_from_json(obj):
+    """Inverse of :func:`_serialize_for_json`."""
+    if isinstance(obj, dict):
+        if obj.get("__tensor__"):
+            t = torch.tensor(
+                obj["data"], dtype=getattr(torch, obj["dtype"].split(".")[-1])
+            )
+            return t.reshape(obj["shape"]) if obj["shape"] else t.squeeze()
+        return {k: _deserialize_from_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_deserialize_from_json(v) for v in obj]
+    return obj
+
+
 class TrainerHookBase:
     """An abstract hooking class for torchrl Trainer class."""
 
@@ -511,16 +546,20 @@ class Trainer:
             state = self.state_dict()
             path = pathlib.Path(self.save_trainer_file)
             path.mkdir(parents=True, exist_ok=True)
-            # Persist tensor state dicts (loss_module, collector, registered modules)
-            # using TensorDict memmap — no extra dependencies, no pickle.
+            # Persist nn.Module tensor state dicts (loss_module, collector)
+            # using TensorDict memmap — pickle-free, no extra dependencies.
             for key in ("loss_module", "collector"):
                 sd = state[key]
                 if sd:
                     TensorDict(sd, []).dumps(str(path / key))
+            # Persist registered hook-module state dicts as JSON.
+            # These can contain mixed types (scalars, bools, tensors), so
+            # tensors are stored as {"__tensor__": true, ...} objects.
+            hooks_state = {}
             for mod_key in self._modules:
-                sd = state[mod_key]
-                if sd:
-                    TensorDict(sd, []).dumps(str(path / mod_key))
+                hooks_state[mod_key] = _serialize_for_json(state[mod_key])
+            with open(path / "hooks.json", "w") as f:
+                json.dump(hooks_state, f)
             # Persist non-tensor training counters as JSON.
             with open(path / "state.json", "w") as f:
                 json.dump(dict(state["state"]), f)
@@ -563,11 +602,17 @@ class Trainer:
                     state[key] = dict(TensorDict.load_memmap(str(key_path)))
                 else:
                     state[key] = {}
-            for mod_key in self._modules:
-                mod_path = path / mod_key
-                if mod_path.exists():
-                    state[mod_key] = dict(TensorDict.load_memmap(str(mod_path)))
-                else:
+            # Restore hook-module state dicts from JSON.
+            hooks_path = path / "hooks.json"
+            if hooks_path.exists():
+                with open(hooks_path) as f:
+                    hooks_state = json.load(f)
+                for mod_key in self._modules:
+                    state[mod_key] = _deserialize_from_json(
+                        hooks_state.get(mod_key, {})
+                    )
+            else:
+                for mod_key in self._modules:
                     state[mod_key] = {}
             with open(path / "state.json") as f:
                 state["state"] = json.load(f)

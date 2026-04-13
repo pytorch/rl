@@ -197,8 +197,7 @@ class TestSelectKeys:
 
             trainer2.load_from_file(file)
             assert state_dict_has_been_called[0]
-            if backend == "torch":
-                assert load_state_dict_has_been_called[0]
+            assert load_state_dict_has_been_called[0]
 
         SelectKeys.state_dict = SelectKeys_state_dict
         SelectKeys.load_state_dict = SelectKeys_load_state_dict
@@ -722,6 +721,7 @@ class TestRewardNorm:
         [
             "torchsnapshot",
             "torch",
+            "memmap",
         ],
     )
     def test_reward_norm_save(self, backend):
@@ -748,6 +748,8 @@ class TestRewardNorm:
                 file = path.join(tmpdirname, "file.pt")
             elif backend == "torchsnapshot":
                 file = tmpdirname
+            elif backend == "memmap":
+                file = path.join(tmpdirname, "ckpt")
             else:
                 raise NotImplementedError
             trainer = mocking_trainer(file)
@@ -765,6 +767,8 @@ class TestRewardNorm:
             reward_normalizer2 = RewardNormalizer()
             reward_normalizer2.register(trainer2)
             trainer2.load_from_file(file)
+            assert state_dict_has_been_called[0]
+            assert load_state_dict_has_been_called[0]
 
         RewardNormalizer.state_dict = RewardNormalizer_state_dict
         RewardNormalizer.load_state_dict = RewardNormalizer_load_state_dict
@@ -924,6 +928,7 @@ class TestRecorder:
         [
             "torchsnapshot",
             "torch",
+            "memmap",
         ],
     )
     def test_recorder_load(self, backend, N=8):
@@ -948,6 +953,8 @@ class TestRecorder:
                 file = path.join(tmpdirname, "file.pt")
             elif backend == "torchsnapshot":
                 file = tmpdirname
+            elif backend == "memmap":
+                file = path.join(tmpdirname, "ckpt")
             else:
                 raise NotImplementedError
             trainer = mocking_trainer(file)
@@ -1022,6 +1029,7 @@ class TestCountFrames:
         [
             "torchsnapshot",
             "torch",
+            "memmap",
         ],
     )
     def test_countframes_load(self, backend):
@@ -1046,6 +1054,8 @@ class TestCountFrames:
                 file = path.join(tmpdirname, "file.pt")
             elif backend == "torchsnapshot":
                 file = tmpdirname
+            elif backend == "memmap":
+                file = path.join(tmpdirname, "ckpt")
             else:
                 raise NotImplementedError
             trainer = mocking_trainer(file)
