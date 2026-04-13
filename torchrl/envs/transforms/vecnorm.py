@@ -260,6 +260,7 @@ class VecNormV2(Transform):
                 self._loc = shared_data["loc"]
                 self._var = shared_data["var"]
                 self._count = shared_data["count"]
+                self.initialized.fill_(True)
             else:
                 self._loc = None
                 self._var = None
