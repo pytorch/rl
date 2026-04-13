@@ -150,6 +150,11 @@ def train_start(
 
         metrics_to_log = {}
 
+        # Log buffer reward stats
+        buf_reward = data_buffer[:]["next", "reward"]
+        metrics_to_log["buffer/reward_mean"] = buf_reward.mean().item()
+        metrics_to_log["buffer/reward_std"] = buf_reward.std().item()
+
         batch, info = data_buffer.sample(return_info=True)
         batch = batch.to(device)
         batch_staleness = info.get("staleness")
@@ -195,6 +200,12 @@ def train_start(
         if hasattr(sampler, "consumer_version"):
             sampler.consumer_version = policy_version
 
+        # Batch reward stats (if reward is present, e.g. from worker GAE)
+        batch_reward = batch.get(("next", "reward"), None)
+        if batch_reward is not None:
+            metrics_to_log["train/batch_reward_mean"] = batch_reward.mean().item()
+            metrics_to_log["train/batch_reward_std"] = batch_reward.std().item()
+
         metrics_to_log.update(
             {
                 "train/loss_objective": loss["loss_objective"].item(),
@@ -231,7 +242,7 @@ def train_start(
         )
 
         if logger:
-            logger.log_metrics(metrics_to_log)
+            logger.log_metrics(metrics_to_log, current_wc)
 
     # Wait for any in-flight eval before shutdown
     evaluator.wait(timeout=120)
@@ -350,8 +361,13 @@ def train_iterate(
         if len(data_buffer) < cfg_buffer_min_fill:
             if logger:
                 metrics_to_log["buffer/size"] = len(data_buffer)
-                logger.log_metrics(metrics_to_log)
+                logger.log_metrics(metrics_to_log, collected_frames)
             continue
+
+        # Log buffer reward stats
+        buf_reward = data_buffer[:]["next", "reward"]
+        metrics_to_log["buffer/reward_mean"] = buf_reward.mean().item()
+        metrics_to_log["buffer/reward_std"] = buf_reward.std().item()
 
         for _epoch in range(cfg_loss_ppo_epochs):
             batch, info = data_buffer.sample(return_info=True)
@@ -382,6 +398,12 @@ def train_iterate(
         policy_version += 1
         if hasattr(sampler, "consumer_version"):
             sampler.consumer_version = policy_version
+
+        # Batch reward stats (from last epoch's batch)
+        batch_reward = batch.get(("next", "reward"), None)
+        if batch_reward is not None:
+            metrics_to_log["train/batch_reward_mean"] = batch_reward.mean().item()
+            metrics_to_log["train/batch_reward_std"] = batch_reward.std().item()
 
         metrics_to_log.update(
             {
@@ -422,7 +444,7 @@ def train_iterate(
             evaluator.trigger_eval(actor, step=collected_frames)
 
         if logger:
-            logger.log_metrics(metrics_to_log)
+            logger.log_metrics(metrics_to_log, collected_frames)
 
     # Wait for any in-flight eval before shutdown
     evaluator.wait(timeout=120)
