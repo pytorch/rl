@@ -129,17 +129,30 @@ class RandomTruncationTransform(Transform):
     ``prob`` a random horizon from ``Uniform(min_horizon, max_horizon)``
     is assigned; otherwise the full ``max_horizon`` is used.
 
+    ``first_episode_prob`` controls the truncation probability for each
+    env's first episode (i.e. the first time it resets after the initial
+    spread).  Setting this to 1.0 (default) ensures every env goes
+    through a second short-horizon episode before settling to ``prob``,
+    which accelerates decorrelation when batch sizes are large relative
+    to ``max_horizon``.
+
     Must be placed **after** ``StepCounter`` in the transform chain.
     """
 
     def __init__(
-        self, prob: float = 0.5, min_horizon: int = 500, max_horizon: int = 1000
+        self,
+        prob: float = 0.5,
+        min_horizon: int = 500,
+        max_horizon: int = 1000,
+        first_episode_prob: float = 1.0,
     ):
         super().__init__()
         self.prob = prob
+        self.first_episode_prob = first_episode_prob
         self.min_horizon = min_horizon
         self.max_horizon = max_horizon
         self._horizons: torch.Tensor | None = None
+        self._first_episode: torch.Tensor | None = None
         self._initialized = False
 
     def _step(
@@ -174,6 +187,9 @@ class RandomTruncationTransform(Transform):
                 step_count.shape,
                 device=step_count.device,
             )
+            self._first_episode = torch.ones(
+                step_count.shape, dtype=torch.bool, device=step_count.device
+            )
             self._initialized = True
             return tensordict_reset
 
@@ -189,10 +205,19 @@ class RandomTruncationTransform(Transform):
                     (n,),
                     device=self._horizons.device,
                 )
-                # With probability (1 - prob), keep the full episode length
-                keep_full = torch.rand(n, device=self._horizons.device) > self.prob
+                # Use first_episode_prob for envs still in their first
+                # episode, prob for all subsequent episodes
+                first_ep = self._first_episode[mask]
+                effective_prob = torch.where(
+                    first_ep,
+                    torch.tensor(self.first_episode_prob, device=self._horizons.device),
+                    torch.tensor(self.prob, device=self._horizons.device),
+                )
+                keep_full = torch.rand(n, device=self._horizons.device) > effective_prob
                 new_h[keep_full] = self.max_horizon
                 self._horizons[mask] = new_h.view_as(self._horizons[mask])
+                # First episode is over for these envs
+                self._first_episode[mask] = False
         return tensordict_reset
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -269,7 +294,9 @@ def make_env(
     env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
-    env.append_transform(RandomTruncationTransform(prob=0.05, max_horizon=1000))
+    env.append_transform(
+        RandomTruncationTransform(prob=0.05, max_horizon=1000, first_episode_prob=1.0)
+    )
     return env
 
 
