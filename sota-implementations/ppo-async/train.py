@@ -34,15 +34,22 @@ from utils_mujoco import (
 log = logging.getLogger(__name__)
 
 
-def _assert_finite(tensor, name, step):
-    """Raise RuntimeError if *tensor* contains any non-finite value."""
-    if not torch.isfinite(tensor).all():
-        n_bad = (~torch.isfinite(tensor)).sum().item()
-        raise RuntimeError(
-            f"Non-finite values in {name} at step {step}: "
-            f"{n_bad}/{tensor.numel()} elements "
-            f"(inf={tensor.isinf().sum().item()}, nan={tensor.isnan().sum().item()})"
-        )
+def _check_finite(tensor, name, step):
+    """Return True if *tensor* is all finite, log warning otherwise."""
+    if torch.isfinite(tensor).all():
+        return True
+    n_bad = (~torch.isfinite(tensor)).sum().item()
+    log.warning(
+        "Non-finite values in %s at step %d: %d/%d elements "
+        "(inf=%d, nan=%d) — skipping batch",
+        name,
+        step,
+        n_bad,
+        tensor.numel(),
+        tensor.isinf().sum().item(),
+        tensor.isnan().sum().item(),
+    )
+    return False
 
 
 def _make_eval_policy(env, env_name, device):
@@ -207,12 +214,17 @@ def train_start(
                 batch.set("advantage", advantage)
                 batch.set("value_target", value_target)
 
-        # Guard: check inputs to policy are finite
-        _assert_finite(batch["observation"], "batch/observation", current_wc)
-        _assert_finite(batch["action_log_prob"], "batch/action_log_prob", current_wc)
+        # Guard: check inputs to policy are finite — skip corrupted batches
+        batch_ok = _check_finite(
+            batch["observation"], "batch/observation", current_wc
+        ) and _check_finite(
+            batch["action_log_prob"], "batch/action_log_prob", current_wc
+        )
         adv = batch.get("advantage", None)
         if adv is not None:
-            _assert_finite(adv, "batch/advantage", current_wc)
+            batch_ok = batch_ok and _check_finite(adv, "batch/advantage", current_wc)
+        if not batch_ok:
+            continue
 
         alpha = 1.0
         if cfg_optim_anneal_lr:
@@ -226,8 +238,9 @@ def train_start(
         loss = loss_module(batch)
         total_loss = loss["loss_objective"] + loss["loss_entropy"] + loss["loss_critic"]
 
-        # Guard: check loss outputs are finite
-        _assert_finite(total_loss, "loss/total", current_wc)
+        # Guard: check loss outputs are finite — skip if loss is NaN
+        if not _check_finite(total_loss, "loss/total", current_wc):
+            continue
 
         total_loss.backward()
         grad_norm = torch.nn.utils.clip_grad_norm_(
@@ -471,14 +484,21 @@ def train_iterate(
             batch = batch.to(device)
             batch_staleness = info.get("staleness")
 
-            # Guard: check inputs to policy are finite
-            _assert_finite(batch["observation"], "batch/observation", collected_frames)
-            _assert_finite(
-                batch["action_log_prob"], "batch/action_log_prob", collected_frames
+            # Guard: check inputs to policy are finite — skip corrupted batches
+            batch_ok = _check_finite(
+                batch["observation"], "batch/observation", collected_frames
+            ) and _check_finite(
+                batch["action_log_prob"],
+                "batch/action_log_prob",
+                collected_frames,
             )
             adv = batch.get("advantage", None)
             if adv is not None:
-                _assert_finite(adv, "batch/advantage", collected_frames)
+                batch_ok = batch_ok and _check_finite(
+                    adv, "batch/advantage", collected_frames
+                )
+            if not batch_ok:
+                continue
 
             alpha = 1.0
             if cfg_optim_anneal_lr:
@@ -494,8 +514,9 @@ def train_iterate(
                 loss["loss_objective"] + loss["loss_entropy"] + loss["loss_critic"]
             )
 
-            # Guard: check loss outputs are finite
-            _assert_finite(total_loss, "loss/total", collected_frames)
+            # Guard: check loss outputs are finite — skip if loss is NaN
+            if not _check_finite(total_loss, "loss/total", collected_frames):
+                continue
 
             total_loss.backward()
             grad_norm = torch.nn.utils.clip_grad_norm_(

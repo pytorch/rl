@@ -115,6 +115,19 @@ class NanGuardTransform(Transform):
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
+        obs = tensordict_reset.get("observation", None)
+        if obs is not None and not torch.isfinite(obs).all():
+            self._nan_count += 1
+            if self._nan_count % 100 == 0:
+                n_bad = (~torch.isfinite(obs)).sum().item()
+                log.warning(
+                    "NaN in reset observation: %d/%d values (total NaN events: %d)",
+                    n_bad,
+                    obs.numel(),
+                    self._nan_count,
+                )
+            obs = torch.where(torch.isfinite(obs), obs, torch.zeros_like(obs))
+            tensordict_reset.set("observation", obs)
         return tensordict_reset
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
