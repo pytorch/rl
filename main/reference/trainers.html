@@ -253,7 +253,7 @@ loop the optimization steps.</p>
 <h2>Key Features<a class="headerlink" href="#key-features" title="Link to this heading">¶</a></h2>
 <ul class="simple">
 <li><p><strong>Modular hook system</strong>: Customize training at 10 different points in the loop</p></li>
-<li><p><strong>Checkpointing support</strong>: Save and restore training state with torch or torchsnapshot</p></li>
+<li><p><strong>Checkpointing support</strong>: Save and restore training state with <code class="docutils literal notranslate"><span class="pre">torch</span></code>, <code class="docutils literal notranslate"><span class="pre">torchsnapshot</span></code>, or <code class="docutils literal notranslate"><span class="pre">memmap</span></code> (set via the <code class="docutils literal notranslate"><span class="pre">CKPT_BACKEND</span></code> environment variable)</p></li>
 <li><p><strong>Algorithm trainers</strong>: High-level trainers for PPO, SAC, DQN, DDPG, IQL, CQL with Hydra configuration</p></li>
 <li><p><strong>Builder helpers</strong>: Utilities for constructing collectors, losses, and replay buffers</p></li>
 </ul>

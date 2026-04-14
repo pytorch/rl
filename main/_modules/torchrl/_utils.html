@@ -802,7 +802,7 @@
 <span class="k">class</span> <span class="nc">_Dynamic_CKPT_BACKEND</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Allows CKPT_BACKEND to be changed on-the-fly.&quot;&quot;&quot;</span>
 
-    <span class="n">backends</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="s2">&quot;torchsnapshot&quot;</span><span class="p">]</span>
+    <span class="n">backends</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="s2">&quot;torchsnapshot&quot;</span><span class="p">,</span> <span class="s2">&quot;memmap&quot;</span><span class="p">]</span>
 
     <span class="k">def</span> <span class="nf">_get_backend</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">backend</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;CKPT_BACKEND&quot;</span><span class="p">,</span> <span class="s2">&quot;torch&quot;</span><span class="p">)</span>
