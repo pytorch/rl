@@ -161,6 +161,8 @@ def train_start(
     last_fps_wc = 0
     eval_trigger_time = time.time()
     last_eval_wc = 0  # frames at which we last triggered eval
+    cumulative_trajectories = 0
+    last_traj_wc = 0  # write_count at last trajectory snapshot
 
     while True:
         current_wc = data_buffer.write_count
@@ -194,7 +196,15 @@ def train_start(
         metrics_to_log["buffer/reward_std"] = buf_reward.std().item()
         buf_done = buf_data.get(("next", "done"), None)
         if buf_done is not None:
-            metrics_to_log["buffer/num_trajectories"] = buf_done.any(-1).sum().item()
+            buf_trajs = buf_done.any(-1).sum().item()
+            metrics_to_log["buffer/num_trajectories"] = buf_trajs
+            # Estimate new trajectories from frames written since last check
+            new_frames = current_wc - last_traj_wc
+            if new_frames > 0 and len(data_buffer) > 0:
+                done_rate = buf_trajs / len(data_buffer)
+                cumulative_trajectories += int(done_rate * new_frames)
+                last_traj_wc = current_wc
+            metrics_to_log["buffer/cumulative_trajectories"] = cumulative_trajectories
 
         batch, info = data_buffer.sample(return_info=True)
         batch = batch.to(device)
@@ -430,6 +440,7 @@ def train_iterate(
     last_fps_frames = 0
     eval_trigger_time = time.time()
     last_eval_frames = 0  # frames at which we last triggered eval
+    cumulative_trajectories = 0
 
     for _i, data in enumerate(collector):
         if train_start_time is None:
@@ -471,6 +482,11 @@ def train_iterate(
         buf_done = buf_data.get(("next", "done"), None)
         if buf_done is not None:
             metrics_to_log["buffer/num_trajectories"] = buf_done.any(-1).sum().item()
+        # Count done states in the incoming batch for cumulative total
+        batch_done = data.get(("next", "done"), None)
+        if batch_done is not None:
+            cumulative_trajectories += batch_done.any(-1).sum().item()
+        metrics_to_log["buffer/cumulative_trajectories"] = cumulative_trajectories
 
         for _epoch in range(cfg_loss_ppo_epochs):
             batch, info = data_buffer.sample(return_info=True)
