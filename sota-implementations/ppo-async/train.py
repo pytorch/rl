@@ -73,6 +73,7 @@ def train_start(
     cfg_optim_max_grad_norm,
     cfg_buffer_min_fill,
     cfg_loss_gamma,
+    test_interval,
     total_frames,
     total_network_updates,
 ):
@@ -159,6 +160,7 @@ def train_start(
     last_fps_time = time.time()
     last_fps_wc = 0
     eval_trigger_time = time.time()
+    last_eval_wc = 0  # frames at which we last triggered eval
 
     while True:
         current_wc = data_buffer.write_count
@@ -171,11 +173,12 @@ def train_start(
             break
 
         # Trigger next eval; capture previous result for logging
-        if not evaluator.pending:
+        if not evaluator.pending and (current_wc - last_eval_wc >= test_interval):
             prev_eval = evaluator.trigger_eval(actor, step=current_wc)
             if prev_eval is not None:
                 pending_eval_metrics = prev_eval
             eval_trigger_time = time.time()
+            last_eval_wc = current_wc
 
         if current_wc <= last_trained_wc or len(data_buffer) < cfg_buffer_min_fill:
             time.sleep(0.05)
@@ -358,6 +361,7 @@ def train_iterate(
     cfg_loss_clip_epsilon,
     cfg_optim_max_grad_norm,
     cfg_buffer_min_fill,
+    test_interval,
     total_frames,
     total_network_updates,
 ):
@@ -423,6 +427,7 @@ def train_iterate(
     last_fps_time = time.time()
     last_fps_frames = 0
     eval_trigger_time = time.time()
+    last_eval_frames = 0  # frames at which we last triggered eval
 
     for _i, data in enumerate(collector):
         if train_start_time is None:
@@ -557,7 +562,9 @@ def train_iterate(
         last_fps_frames = collected_frames
 
         # Trigger next eval and merge previous result into this log step
-        if not evaluator.pending:
+        if not evaluator.pending and (
+            collected_frames - last_eval_frames >= test_interval
+        ):
             prev_eval = evaluator.trigger_eval(actor, step=collected_frames)
             if prev_eval is not None:
                 eval_dt = time.time() - eval_trigger_time
@@ -566,6 +573,7 @@ def train_iterate(
                     prev_eval["eval/fps"] = eval_frames / eval_dt
                 metrics_to_log.update(prev_eval)
             eval_trigger_time = time.time()
+            last_eval_frames = collected_frames
         else:
             # Poll in case result arrived since last trigger_eval
             eval_result = evaluator.poll(0)

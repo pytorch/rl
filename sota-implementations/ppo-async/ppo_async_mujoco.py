@@ -201,6 +201,7 @@ def main(cfg: DictConfig):
         "cfg_loss_clip_epsilon": cfg_loss_clip_epsilon,
         "cfg_optim_max_grad_norm": cfg_optim_max_grad_norm,
         "cfg_buffer_min_fill": cfg_buffer_min_fill,
+        "test_interval": cfg.logger.test_interval,
         "total_frames": total_frames,
         "total_network_updates": total_network_updates,
     }
