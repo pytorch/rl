@@ -188,9 +188,13 @@ def train_start(
         metrics_to_log = {}
 
         # Log buffer reward stats
-        buf_reward = data_buffer[:]["next", "reward"]
+        buf_data = data_buffer[:]
+        buf_reward = buf_data["next", "reward"]
         metrics_to_log["buffer/reward_mean"] = buf_reward.mean().item()
         metrics_to_log["buffer/reward_std"] = buf_reward.std().item()
+        buf_done = buf_data.get(("next", "done"), None)
+        if buf_done is not None:
+            metrics_to_log["buffer/num_trajectories"] = buf_done.any(-1).sum().item()
 
         batch, info = data_buffer.sample(return_info=True)
         batch = batch.to(device)
@@ -460,9 +464,13 @@ def train_iterate(
             continue
 
         # Log buffer reward stats
-        buf_reward = data_buffer[:]["next", "reward"]
+        buf_data = data_buffer[:]
+        buf_reward = buf_data["next", "reward"]
         metrics_to_log["buffer/reward_mean"] = buf_reward.mean().item()
         metrics_to_log["buffer/reward_std"] = buf_reward.std().item()
+        buf_done = buf_data.get(("next", "done"), None)
+        if buf_done is not None:
+            metrics_to_log["buffer/num_trajectories"] = buf_done.any(-1).sum().item()
 
         for _epoch in range(cfg_loss_ppo_epochs):
             batch, info = data_buffer.sample(return_info=True)
