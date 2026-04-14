@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import abc
 import itertools
+import json
 import pathlib
 import time
 import warnings
@@ -18,7 +19,7 @@ from typing import Any, Literal
 
 import numpy as np
 import torch.nn
-from tensordict import NestedKey, pad, TensorDict, TensorDictBase
+from tensordict import NestedKey, NonTensorData, pad, TensorDict, TensorDictBase
 from tensordict._tensorcollection import TensorCollection
 from tensordict.nn import TensorDictModule
 from tensordict.utils import expand_right
@@ -84,8 +85,6 @@ def _state_dict_to_td(sd: dict) -> TensorDict:
     :class:`~tensordict.NonTensorData` so that :meth:`~tensordict.TensorDict.dumps`
     can persist the whole state without pickle dependencies.
     """
-    from tensordict import NonTensorData
-
     return TensorDict(
         {
             k: v if isinstance(v, torch.Tensor) else NonTensorData(v)
@@ -101,8 +100,6 @@ def _td_to_state_dict(td: TensorDict) -> dict:
     Unwraps :class:`~tensordict.NonTensorData` back to plain Python values and
     leaves tensors (including :class:`~tensordict.MemoryMappedTensor`) as-is.
     """
-    from tensordict import NonTensorData
-
     return {k: v.data if isinstance(v, NonTensorData) else v for k, v in td.items()}
 
 
@@ -535,8 +532,6 @@ class Trainer:
         elif _CKPT_BACKEND == "torch":
             torch.save(self.state_dict(), self.save_trainer_file)
         elif _CKPT_BACKEND == "memmap":
-            import json
-
             state = self.state_dict()
             path = pathlib.Path(self.save_trainer_file)
             path.mkdir(parents=True, exist_ok=True)
@@ -571,6 +566,12 @@ class Trainer:
         Keyword arguments are passed to the :func:`~torch.load` function.
         They are ignored when ``CKPT_BACKEND=memmap``.
 
+        .. note::
+            When ``CKPT_BACKEND=torch``, ``weights_only=True`` is set by
+            default for safer deserialization. Pass ``weights_only=False``
+            explicitly only if you have custom (non-stdlib) objects in your
+            state dict.
+
         """
         if _CKPT_BACKEND == "torchsnapshot":
             snapshot = Snapshot(path=file)
@@ -580,8 +581,6 @@ class Trainer:
             loaded_dict: OrderedDict = torch.load(file, **kwargs)
             self.load_state_dict(loaded_dict)
         elif _CKPT_BACKEND == "memmap":
-            import json
-
             path = pathlib.Path(file)
             state: dict = {}
             for key in ("loss_module", "collector", *self._modules):
