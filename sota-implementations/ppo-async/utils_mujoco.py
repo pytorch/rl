@@ -35,49 +35,81 @@ log = logging.getLogger(__name__)
 # ── NaN diagnostic guard ──────────────────────────────────────────────
 
 
-class NanDumpTransform(Transform):
-    """Detect non-finite raw env observations and dump the full step context.
+class NanGuardTransform(Transform):
+    """Detect non-finite raw env observations and force-reset bad envs.
 
     Inserted *before* VecNormV2 so it sees the raw physics output.
-    On first NaN detection it saves the TensorDict (action + resulting
-    observation for all envs) to ``dump_path`` and raises RuntimeError.
+    When NaN is detected, the bad envs' observations are zeroed out and
+    done/truncated flags are set so those envs get reset on the next step.
+    This prevents NaN from poisoning VecNormV2 running stats while keeping
+    the run alive.
+
+    On first detection, dumps full step context to ``dump_path``.
     """
 
     def __init__(self, dump_path: str = "/root/nan_dump.pt"):
         super().__init__()
         self.dump_path = dump_path
         self._dumped = False
+        self._nan_count = 0
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
         obs = next_tensordict.get("observation", None)
-        if obs is not None and not self._dumped and not torch.isfinite(obs).all():
-            self._dumped = True
-            non_finite = ~torch.isfinite(obs)
-            bad_envs = non_finite.flatten(1).any(dim=-1)  # [num_envs]
-            n_bad_vals = non_finite.sum().item()
-            n_bad_envs = bad_envs.sum().item()
+        if obs is None or torch.isfinite(obs).all():
+            return next_tensordict
 
-            # Build dump: input td (has action) + output td (has obs)
+        non_finite = ~torch.isfinite(obs)
+        bad_envs = non_finite.flatten(1).any(dim=-1)  # [num_envs]
+        n_bad_envs = bad_envs.sum().item()
+        self._nan_count += 1
+
+        # Dump once for diagnosis
+        if not self._dumped:
+            self._dumped = True
+            n_bad_vals = non_finite.sum().item()
             dump = tensordict.detach().cpu().clone()
             dump["next"] = next_tensordict.detach().cpu().clone()
             dump["_nan_env_mask"] = bad_envs.detach().cpu()
             torch.save(dump, self.dump_path)
-            log.error(
+            log.warning(
                 "NaN in raw env observation: %d/%d values across %d/%d envs. "
-                "Dumped to %s",
+                "Dumped to %s. Zeroing bad obs and forcing reset.",
                 n_bad_vals,
                 obs.numel(),
                 n_bad_envs,
                 obs.shape[0],
                 self.dump_path,
             )
-            raise RuntimeError(
-                f"NaN in raw env observation: {n_bad_vals}/{obs.numel()} values "
-                f"across {n_bad_envs}/{obs.shape[0]} envs. "
-                f"Dumped to {self.dump_path}"
+
+        if self._nan_count % 100 == 0:
+            log.warning(
+                "NaN guard triggered %d times total (%d bad envs this step)",
+                self._nan_count,
+                n_bad_envs,
             )
+
+        # Zero out NaN observations so VecNormV2 stats stay clean
+        obs = torch.where(torch.isfinite(obs), obs, torch.zeros_like(obs))
+        next_tensordict.set("observation", obs)
+
+        # Force done+truncated on bad envs so they get reset
+        bad_mask = bad_envs.view_as(
+            next_tensordict.get("done", torch.zeros((), device=obs.device))
+        )
+        done = next_tensordict.get("done", torch.zeros_like(bad_mask))
+        truncated = next_tensordict.get("truncated", torch.zeros_like(bad_mask))
+        next_tensordict.set("done", done | bad_mask)
+        next_tensordict.set("truncated", truncated | bad_mask)
+        # Zero reward for NaN envs to avoid corrupted values
+        reward = next_tensordict.get("reward", None)
+        if reward is not None:
+            reward_mask = bad_envs.view_as(reward)
+            next_tensordict.set(
+                "reward", torch.where(reward_mask, torch.zeros_like(reward), reward)
+            )
+
         return next_tensordict
 
     def _reset(
@@ -231,7 +263,7 @@ def make_env(
     )
     env = TransformedEnv(env)
     # NaN guard on raw physics output — before VecNormV2 so we see un-normalised obs
-    env.append_transform(NanDumpTransform(dump_path="/root/nan_dump.pt"))
+    env.append_transform(NanGuardTransform(dump_path="/root/nan_dump.pt"))
     env.append_transform(
         VecNormV2(
             in_keys=["observation"],
