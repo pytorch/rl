@@ -8558,9 +8558,9 @@
                 <span class="k">else</span><span class="p">:</span>
                     <span class="c1"># It may be the case that reset did not provide a done state, in which case</span>
                     <span class="c1"># we fall back on the spec</span>
-                    <span class="n">done</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">output_spec_unbatched</span><span class="p">[</span>
-                        <span class="s2">&quot;full_done_spec&quot;</span><span class="p">,</span> <span class="n">entry_name</span>
-                    <span class="p">]</span><span class="o">.</span><span class="n">zero</span><span class="p">(</span><span class="n">tensordict_reset</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                    <span class="n">done</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">full_done_spec_unbatched</span><span class="p">[</span><span class="n">entry_name</span><span class="p">]</span><span class="o">.</span><span class="n">zero</span><span class="p">(</span>
+                        <span class="n">tensordict_reset</span><span class="o">.</span><span class="n">shape</span>
+                    <span class="p">)</span>
                 <span class="n">reset</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">done</span><span class="p">)</span>
 
             <span class="n">step_count</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">step_count_key</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
