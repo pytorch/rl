@@ -155,6 +155,10 @@ def train_start(
     last_write_count = 0
     last_trained_wc = 0
     pending_eval_metrics = None
+    # FPS tracking
+    last_fps_time = time.time()
+    last_fps_wc = 0
+    eval_trigger_time = time.time()
 
     while True:
         current_wc = data_buffer.write_count
@@ -171,6 +175,7 @@ def train_start(
             prev_eval = evaluator.trigger_eval(actor, step=current_wc)
             if prev_eval is not None:
                 pending_eval_metrics = prev_eval
+            eval_trigger_time = time.time()
 
         if current_wc <= last_trained_wc or len(data_buffer) < cfg_buffer_min_fill:
             time.sleep(0.05)
@@ -282,14 +287,33 @@ def train_start(
             }
         )
 
+        # Collector FPS
+        now = time.time()
+        dt = now - last_fps_time
+        if dt > 0:
+            metrics_to_log["collector/fps"] = (current_wc - last_fps_wc) / dt
+        wall = now - start_time
+        if wall > 0:
+            metrics_to_log["collector/fps_cumulative"] = current_wc / wall
+        last_fps_time = now
+        last_fps_wc = current_wc
+
         # Merge any pending eval metrics into this log step
         if pending_eval_metrics is not None:
+            eval_dt = time.time() - eval_trigger_time
+            if eval_dt > 0:
+                eval_frames = num_eval_envs * 1000
+                pending_eval_metrics["eval/fps"] = eval_frames / eval_dt
             metrics_to_log.update(pending_eval_metrics)
             pending_eval_metrics = None
         else:
             # Poll in case result arrived since last trigger_eval
             eval_result = evaluator.poll(0)
             if eval_result is not None:
+                eval_dt = time.time() - eval_trigger_time
+                if eval_dt > 0:
+                    eval_frames = num_eval_envs * 1000
+                    eval_result["eval/fps"] = eval_frames / eval_dt
                 metrics_to_log.update(eval_result)
 
         if logger:
@@ -395,6 +419,10 @@ def train_iterate(
     pbar = tqdm.tqdm(total=total_frames)
     start_time = time.time()
     train_start_time = None
+    # FPS tracking
+    last_fps_time = time.time()
+    last_fps_frames = 0
+    eval_trigger_time = time.time()
 
     for _i, data in enumerate(collector):
         if train_start_time is None:
@@ -517,15 +545,35 @@ def train_iterate(
             }
         )
 
+        # Collector FPS
+        now = time.time()
+        dt = now - last_fps_time
+        if dt > 0:
+            metrics_to_log["collector/fps"] = (collected_frames - last_fps_frames) / dt
+        wall = now - start_time
+        if wall > 0:
+            metrics_to_log["collector/fps_cumulative"] = collected_frames / wall
+        last_fps_time = now
+        last_fps_frames = collected_frames
+
         # Trigger next eval and merge previous result into this log step
         if not evaluator.pending:
             prev_eval = evaluator.trigger_eval(actor, step=collected_frames)
             if prev_eval is not None:
+                eval_dt = time.time() - eval_trigger_time
+                if eval_dt > 0:
+                    eval_frames = num_eval_envs * 1000
+                    prev_eval["eval/fps"] = eval_frames / eval_dt
                 metrics_to_log.update(prev_eval)
+            eval_trigger_time = time.time()
         else:
             # Poll in case result arrived since last trigger_eval
             eval_result = evaluator.poll(0)
             if eval_result is not None:
+                eval_dt = time.time() - eval_trigger_time
+                if eval_dt > 0:
+                    eval_frames = num_eval_envs * 1000
+                    eval_result["eval/fps"] = eval_frames / eval_dt
                 metrics_to_log.update(eval_result)
 
         if logger:

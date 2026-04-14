@@ -89,6 +89,93 @@ class NanDumpTransform(Transform):
         return tensordict
 
 
+# ── Episode decorrelation ─────────────────────────────────────────────
+
+
+class RandomTruncationTransform(Transform):
+    """Randomly truncate episodes to decorrelate synchronized batched envs.
+
+    With 4096 batched envs sharing ``max_episode_steps``, all envs hit
+    truncation at nearly the same step, flooding the buffer with
+    low-reward start-of-episode data in waves.  This transform breaks
+    that synchronisation.
+
+    On the **first reset** every env receives a horizon drawn from
+    ``Uniform(1, max_horizon)`` so they immediately spread across
+    different phases.  On **subsequent resets**, with probability
+    ``prob`` a random horizon from ``Uniform(min_horizon, max_horizon)``
+    is assigned; otherwise the full ``max_horizon`` is used.
+
+    Must be placed **after** ``StepCounter`` in the transform chain.
+    """
+
+    def __init__(
+        self, prob: float = 0.5, min_horizon: int = 500, max_horizon: int = 1000
+    ):
+        super().__init__()
+        self.prob = prob
+        self.min_horizon = min_horizon
+        self.max_horizon = max_horizon
+        self._horizons: torch.Tensor | None = None
+        self._initialized = False
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        step_count = next_tensordict.get("step_count", None)
+        if step_count is None or self._horizons is None:
+            return next_tensordict
+
+        should_truncate = step_count >= self._horizons
+        if should_truncate.any():
+            truncated = next_tensordict.get(
+                "truncated", torch.zeros_like(should_truncate)
+            )
+            done = next_tensordict.get("done", torch.zeros_like(should_truncate))
+            next_tensordict.set("truncated", truncated | should_truncate)
+            next_tensordict.set("done", done | should_truncate)
+        return next_tensordict
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        step_count = tensordict_reset.get("step_count", None)
+        if step_count is None:
+            return tensordict_reset
+
+        if not self._initialized:
+            # First reset: uniform spread for immediate decorrelation
+            self._horizons = torch.randint(
+                1,
+                self.max_horizon + 1,
+                step_count.shape,
+                device=step_count.device,
+            )
+            self._initialized = True
+            return tensordict_reset
+
+        # Resample horizons for envs that just reset
+        reset_mask = tensordict.get("_reset", None)
+        if reset_mask is not None:
+            mask = reset_mask.view_as(self._horizons).bool()
+            if mask.any():
+                n = int(mask.sum())
+                new_h = torch.randint(
+                    self.min_horizon,
+                    self.max_horizon + 1,
+                    (n,),
+                    device=self._horizons.device,
+                )
+                # With probability (1 - prob), keep the full episode length
+                keep_full = torch.rand(n, device=self._horizons.device) > self.prob
+                new_h[keep_full] = self.max_horizon
+                self._horizons[mask] = new_h.view_as(self._horizons[mask])
+        return tensordict_reset
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict
+
+
 # ── Environment factories ──────────────────────────────────────────────
 
 
@@ -157,6 +244,7 @@ def make_env(
     env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
+    env.append_transform(RandomTruncationTransform(prob=0.5, max_horizon=1000))
     return env
 
 
