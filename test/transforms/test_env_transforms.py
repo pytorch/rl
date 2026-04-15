@@ -25,6 +25,7 @@ from torchrl.envs import (
     InitTracker,
     NoopResetEnv,
     ParallelEnv,
+    RandomTruncationTransform,
     RenameTransform,
     SerialEnv,
     StepCounter,
@@ -432,6 +433,225 @@ class TestStepCounter(TransformBase):
         assert not root_done[
             : max_steps - 1
         ].any(), "Root done should be False before max_steps"
+
+
+class TestRandomTruncationTransform(TransformBase):
+    def _make_transform(self):
+        return Compose(
+            StepCounter(),
+            RandomTruncationTransform(prob=1.0, min_horizon=3, max_horizon=5),
+        )
+
+    def test_single_trans_env_check(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), self._make_transform())
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), self._make_transform())
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self, maybe_fork_ParallelEnv):
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), self._make_transform())
+
+        env = maybe_fork_ParallelEnv(2, make_env)
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(
+            SerialEnv(2, ContinuousActionVecMockEnv), self._make_transform()
+        )
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
+        env = TransformedEnv(
+            maybe_fork_ParallelEnv(2, ContinuousActionVecMockEnv),
+            self._make_transform(),
+        )
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_transform_no_env(self):
+        transform = RandomTruncationTransform(prob=1.0, min_horizon=3, max_horizon=5)
+        td = TensorDict(
+            {
+                "step_count": torch.tensor([[3]]),
+                ("next", "step_count"): torch.tensor([[4]]),
+                ("next", "done"): torch.tensor([[False]]),
+                ("next", "truncated"): torch.tensor([[False]]),
+            },
+            [],
+        )
+        # Without initialization, _step is a no-op
+        result = transform._step(td, td["next"])
+        assert not result["done"].any()
+
+    def test_transform_compose(self):
+        transform = RandomTruncationTransform(prob=1.0, min_horizon=3, max_horizon=5)
+        td = TensorDict(
+            {
+                "step_count": torch.zeros(4, 1, dtype=torch.int64),
+                "done": torch.zeros(4, 1, dtype=torch.bool),
+                ("next", "step_count"): torch.ones(4, 1, dtype=torch.int64),
+                ("next", "done"): torch.zeros(4, 1, dtype=torch.bool),
+                ("next", "truncated"): torch.zeros(4, 1, dtype=torch.bool),
+            },
+            [4],
+        )
+        result = transform._step(td, td["next"])
+        assert "truncated" in result.keys()
+
+    def test_transform_env(self):
+        torch.manual_seed(0)
+        max_horizon = 5
+        env = TransformedEnv(
+            CountingEnv(max_steps=100),
+            Compose(
+                StepCounter(),
+                RandomTruncationTransform(
+                    prob=1.0, min_horizon=1, max_horizon=max_horizon
+                ),
+            ),
+        )
+        rollout = env.rollout(200)
+        step_counts = rollout["next", "step_count"]
+        assert step_counts.max() <= max_horizon
+
+    def test_transform_model(self):
+        # RandomTruncationTransform doesn't modify observations, so a model
+        # reading obs is unaffected.
+        env = TransformedEnv(ContinuousActionVecMockEnv(), self._make_transform())
+        td = env.reset()
+        obs_dim = td["observation"].shape[-1]
+        model = nn.Linear(obs_dim, 1)
+        model(td["observation"])
+
+    def test_transform_rb(self):
+        transform = RandomTruncationTransform(prob=1.0, min_horizon=3, max_horizon=5)
+        rb = ReplayBuffer(storage=LazyTensorStorage(20))
+        td = TensorDict({"a": torch.randn(10)}, [10])
+        rb.extend(td)
+        rb.append_transform(transform)
+        with pytest.raises(NotImplementedError):
+            rb.sample(5)
+
+    def test_transform_inverse(self):
+        # RandomTruncationTransform is not invertible — nothing to test
+        pass
+
+    def test_basic_truncation(self):
+        """Episodes are truncated before max_steps of the underlying env."""
+        torch.manual_seed(0)
+        max_horizon = 5
+        env = TransformedEnv(
+            CountingEnv(max_steps=100),
+            Compose(
+                StepCounter(),
+                RandomTruncationTransform(
+                    prob=1.0, min_horizon=1, max_horizon=max_horizon
+                ),
+            ),
+        )
+        rollout = env.rollout(200)
+        step_counts = rollout["next", "step_count"]
+        assert step_counts.max() <= max_horizon
+
+    def test_first_reset_spreads_horizons(self):
+        """First reset assigns diverse horizons to decorrelate envs."""
+        torch.manual_seed(42)
+        max_horizon = 100
+        transform = RandomTruncationTransform(
+            prob=0.0, min_horizon=50, max_horizon=max_horizon
+        )
+        n_envs = 64
+        env = TransformedEnv(
+            CountingBatchedEnv(
+                max_steps=torch.full((n_envs,), 200), batch_size=[n_envs]
+            ),
+            Compose(StepCounter(), transform),
+        )
+        env.reset()
+        assert transform._initialized
+        assert transform._horizons is not None
+        assert transform._horizons.shape == (n_envs, 1)
+        assert transform._horizons.unique().numel() > 1
+        assert (transform._horizons >= 1).all()
+        assert (transform._horizons <= max_horizon).all()
+
+    def test_first_episode_prob(self):
+        """first_episode_prob=1.0 ensures first_episode flag is set after initial reset."""
+        torch.manual_seed(0)
+        transform = RandomTruncationTransform(
+            prob=0.0,
+            min_horizon=5,
+            max_horizon=10,
+            first_episode_prob=1.0,
+        )
+        n_envs = 32
+        env = TransformedEnv(
+            CountingBatchedEnv(
+                max_steps=torch.full((n_envs,), 200), batch_size=[n_envs]
+            ),
+            Compose(StepCounter(), transform),
+        )
+        env.reset()
+        assert transform._first_episode.all()
+
+    def test_prob_zero_uses_max_horizon(self):
+        """With prob=0 and first_episode_prob=0, subsequent resets use max_horizon."""
+        torch.manual_seed(0)
+        max_horizon = 10
+        transform = RandomTruncationTransform(
+            prob=0.0,
+            min_horizon=1,
+            max_horizon=max_horizon,
+            first_episode_prob=0.0,
+        )
+        n_envs = 8
+        env = TransformedEnv(
+            CountingBatchedEnv(
+                max_steps=torch.full((n_envs,), 200), batch_size=[n_envs]
+            ),
+            Compose(StepCounter(), transform),
+        )
+        # Roll out past the max_horizon so some envs reset
+        policy = CountingEnvCountPolicy(
+            action_spec=env.full_action_spec[env.action_key],
+            action_key=env.action_key,
+        )
+        rollout = env.rollout(max_horizon + 5, policy=policy, break_when_any_done=False)
+        # After first episode resets, horizons should be max_horizon
+        # (prob=0 and first_episode_prob=0 both mean "keep full")
+        reset_envs = ~transform._first_episode.squeeze(-1)
+        if reset_envs.any():
+            assert (transform._horizons[reset_envs] == max_horizon).all()
+
+    def test_validation(self):
+        """Invalid parameters raise ValueError."""
+        with pytest.raises(ValueError, match="prob must be in"):
+            RandomTruncationTransform(prob=-0.1)
+        with pytest.raises(ValueError, match="prob must be in"):
+            RandomTruncationTransform(prob=1.5)
+        with pytest.raises(ValueError, match="first_episode_prob must be in"):
+            RandomTruncationTransform(first_episode_prob=-0.1)
+        with pytest.raises(ValueError, match="min_horizon.*must be <= max_horizon"):
+            RandomTruncationTransform(min_horizon=100, max_horizon=50)
+        with pytest.raises(ValueError, match="max_horizon must be >= 1"):
+            RandomTruncationTransform(min_horizon=0, max_horizon=0)
 
 
 class TestTrajCounter(TransformBase):
