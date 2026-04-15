@@ -1216,7 +1216,7 @@ class ClipPPOLoss(PPOLoss):
                 keys.append("loss_critic")
             if self.clip_value:
                 keys.append("value_clip_fraction")
-            keys.append("ESS")
+            keys.extend(["ESS", "kl_approx", "max_ratio", "mean_ratio"])
             self._out_keys = keys
         return self._out_keys
 
@@ -1299,6 +1299,10 @@ class ClipPPOLoss(PPOLoss):
                 td_out.set("explained_variance", explained_variance)
 
         td_out.set("ESS", _reduce(ess, self.reduction) / batch)
+        with torch.no_grad():
+            ratio = log_weight.exp()
+            td_out.set("max_ratio", ratio.max())
+            td_out.set("mean_ratio", ratio.mean())
         td_out = td_out.named_apply(
             lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
             if name.startswith("loss_")

@@ -45,6 +45,7 @@ from .transforms import (
     PermuteTransform,
     PinMemoryTransform,
     RandomCropTensorDict,
+    RandomTruncationTransform,
     RemoveEmptySpecs,
     RenameTransform,
     Resize,
@@ -74,6 +75,15 @@ from .transforms import (
 from .vc1 import VC1Transform
 from .vecnorm import VecNormV2
 from .vip import VIPRewardTransform, VIPTransform
+
+
+def __getattr__(name):
+    if name == "PolicyVersion":
+        from torchrl.envs.llm.transforms.policy_version import PolicyVersion
+
+        return PolicyVersion
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "ActionDiscretizer",
@@ -113,8 +123,10 @@ __all__ = [
     "ObservationTransform",
     "PermuteTransform",
     "PinMemoryTransform",
+    "PolicyVersion",
     "R3MTransform",
     "RandomCropTensorDict",
+    "RandomTruncationTransform",
     "RayTransform",
     "RemoveEmptySpecs",
     "RenameTransform",
