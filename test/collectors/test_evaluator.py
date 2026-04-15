@@ -9,7 +9,7 @@ import time
 
 import pytest
 import torch
-from tensordict import TensorDict
+from tensordict import assert_allclose_td, TensorDict
 from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.collectors import Evaluator
@@ -547,6 +547,31 @@ class TestEvaluatorProcess:
         try:
             metrics = evaluator.evaluate(step=456)
             assert metrics["eval/step"] == 456
+        finally:
+            evaluator.shutdown()
+
+    def test_weight_updates_refresh_worker_buffer(self):
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            backend = evaluator._backend
+            backend._ensure_weights_buffer()
+            positive_weights = backend._weights_buffer.clone().apply(
+                lambda x: torch.full_like(x, 0.25)
+            )
+            negative_weights = backend._weights_buffer.clone().apply(
+                lambda x: torch.full_like(x, -0.5)
+            )
+
+            evaluator.evaluate(weights=positive_weights, step=1)
+            assert_allclose_td(backend._weights_buffer, positive_weights)
+
+            evaluator.evaluate(weights=negative_weights, step=2)
+            assert_allclose_td(backend._weights_buffer, negative_weights)
         finally:
             evaluator.shutdown()
 

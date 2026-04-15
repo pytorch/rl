@@ -616,10 +616,9 @@ class TestRandomTruncationTransform(TransformBase):
         torch.manual_seed(0)
         max_horizon = 10
         transform = RandomTruncationTransform(
-            prob=0.0,
             min_horizon=1,
             max_horizon=max_horizon,
-            first_episode_prob=0.0,
+            prob=0.0,
         )
         n_envs = 8
         env = TransformedEnv(
@@ -640,18 +639,29 @@ class TestRandomTruncationTransform(TransformBase):
         if reset_envs.any():
             assert (transform._horizons[reset_envs] == max_horizon).all()
 
+    def test_requires_step_counter(self):
+        with pytest.raises(RuntimeError, match="requires a StepCounter"):
+            TransformedEnv(
+                CountingEnv(max_steps=100),
+                RandomTruncationTransform(min_horizon=1, max_horizon=5),
+            )
+
     def test_validation(self):
         """Invalid parameters raise ValueError."""
         with pytest.raises(ValueError, match="prob must be in"):
-            RandomTruncationTransform(prob=-0.1)
+            RandomTruncationTransform(min_horizon=1, max_horizon=5, prob=-0.1)
         with pytest.raises(ValueError, match="prob must be in"):
-            RandomTruncationTransform(prob=1.5)
+            RandomTruncationTransform(min_horizon=1, max_horizon=5, prob=1.5)
         with pytest.raises(ValueError, match="first_episode_prob must be in"):
-            RandomTruncationTransform(first_episode_prob=-0.1)
+            RandomTruncationTransform(
+                min_horizon=1, max_horizon=5, first_episode_prob=-0.1
+            )
+        with pytest.raises(ValueError, match="min_horizon must be >= 1"):
+            RandomTruncationTransform(min_horizon=0, max_horizon=5)
         with pytest.raises(ValueError, match="min_horizon.*must be <= max_horizon"):
             RandomTruncationTransform(min_horizon=100, max_horizon=50)
         with pytest.raises(ValueError, match="max_horizon must be >= 1"):
-            RandomTruncationTransform(min_horizon=0, max_horizon=0)
+            RandomTruncationTransform(min_horizon=1, max_horizon=0)
 
 
 class TestTrajCounter(TransformBase):
