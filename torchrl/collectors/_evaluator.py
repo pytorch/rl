@@ -72,7 +72,6 @@ from __future__ import annotations
 import abc
 import importlib
 import logging
-import multiprocessing as mp
 import threading
 from collections.abc import Callable
 from typing import Any
@@ -209,7 +208,30 @@ class Evaluator:
         logger_lock: A :class:`threading.Lock` shared with the training
             loop to serialise logger access.  If ``None`` a private lock
             is created.
+        weight_sync_schemes (dict or None): A dict mapping model IDs to
+            :class:`~torchrl.weight_update.WeightSyncScheme` instances.
+            When provided, a :class:`~torchrl.collectors.MultiSyncCollector`
+            with a single worker is used for process-level CUDA isolation
+            and scheme-based weight transfer.  Model IDs follow the
+            collector convention: ``"policy"`` for the main policy,
+            ``"env.transform[0]"`` for env transforms, etc.
+            Example::
+
+                from torchrl.weight_update import MultiProcessedWeightSyncScheme
+                evaluator = Evaluator(
+                    env=make_eval_env,
+                    policy_factory=make_eval_policy,
+                    weight_sync_schemes={
+                        "policy": MultiProcessedWeightSyncScheme(),
+                        "env.transform[0]": MultiProcessedWeightSyncScheme(),
+                    },
+                    max_steps=1000,
+                )
         backend (str): ``"thread"`` (default), ``"process"``, or ``"ray"``.
+            The ``"process"`` backend is implemented as a thread backend
+            with a :class:`~torchrl.collectors.MultiSyncCollector` (1
+            worker) running in a child process.  This provides full CUDA
+            context isolation without custom queue management.
         init_fn: (*Ray only*) Callable invoked at the start of the actor
             process, before any ``torch`` import.
         num_gpus (int): (*Ray only*) GPUs requested for the actor.
@@ -229,6 +251,7 @@ class Evaluator:
         frames_per_batch: int | None = None,
         collector_cls: type | str | None = None,
         collector_kwargs: dict | None = None,
+        weight_sync_schemes: dict[str, Any] | None = None,
         logger=None,
         log_prefix: str = "eval",
         reward_keys: NestedKey = ("next", "reward"),
@@ -257,7 +280,31 @@ class Evaluator:
         self._step_counter = 0
         self._dump_video = dump_video
 
-        if backend == "thread":
+        if backend in ("thread", "process"):
+            # The process backend is implemented as a thread backend
+            # with a MultiSyncCollector (1 worker) running in a child
+            # process.  This eliminates custom process management and
+            # uses the weight_sync_schemes infrastructure for weight
+            # transfer.
+            use_multi_collector = (
+                backend == "process" or weight_sync_schemes is not None
+            )
+            if use_multi_collector:
+                env_is_callable = callable(env) and not isinstance(env, EnvBase)
+                if not env_is_callable:
+                    raise ValueError(
+                        f"The {backend!r} backend with weight_sync_schemes "
+                        "(or backend='process') requires `env` to be a callable "
+                        "(factory function) because the env is created inside "
+                        "a child process."
+                    )
+                if policy_factory is None:
+                    raise ValueError(
+                        f"The {backend!r} backend with weight_sync_schemes "
+                        "(or backend='process') requires `policy_factory` "
+                        "(a callable `(env) -> policy`) because the policy is "
+                        "created inside a child process."
+                    )
             self._backend: _EvalBackend = _ThreadEvalBackend(
                 env=env,
                 policy=policy,
@@ -272,33 +319,8 @@ class Evaluator:
                 reward_keys=reward_keys,
                 done_keys=done_keys,
                 metrics_fn=metrics_fn,
-            )
-        elif backend == "process":
-            env_is_callable = callable(env) and not isinstance(env, EnvBase)
-            if not env_is_callable:
-                raise ValueError(
-                    "The 'process' backend requires `env` to be a callable "
-                    "(factory function) because the env is created inside "
-                    "the child process."
-                )
-            if policy_factory is None:
-                raise ValueError(
-                    "The 'process' backend requires `policy_factory` (a "
-                    "callable `(env) -> policy`) because the policy is "
-                    "created inside the child process."
-                )
-            self._backend = _ProcessEvalBackend(
-                env_factory=env,
-                policy_factory=policy_factory,
-                num_trajectories=num_trajectories,
-                max_steps=max_steps,
-                frames_per_batch=frames_per_batch,
-                collector_cls=collector_cls,
-                collector_kwargs=collector_kwargs,
-                exploration_type=exploration_type,
-                reward_keys=reward_keys,
-                done_keys=done_keys,
-                metrics_fn=metrics_fn,
+                weight_sync_schemes=weight_sync_schemes,
+                use_multi_collector=use_multi_collector,
             )
         elif backend == "ray":
             self._backend = _RayEvalBackend(
@@ -323,6 +345,8 @@ class Evaluator:
         self,
         weights: TensorDictBase | nn.Module | None = None,
         step: int | None = None,
+        *,
+        weights_dict: dict[str, TensorDictBase | nn.Module] | None = None,
     ) -> dict[str, Any]:
         """Run a blocking evaluation rollout.
 
@@ -334,13 +358,21 @@ class Evaluator:
                 If ``None`` the current policy weights are used.
             step: Logging step.  If ``None`` an internal counter is used.
 
+        Keyword Args:
+            weights_dict: A dict mapping ``model_id`` strings to weight
+                sources (``nn.Module`` or ``TensorDictBase``).  Use this
+                to sync multiple models (e.g. policy + env transforms).
+                When provided, *weights* is treated as
+                ``weights_dict["policy"]`` if ``"policy"`` is not already
+                in the dict.
+
         Returns:
             dict with at least ``"<prefix>/reward"`` and
             ``"<prefix>/episode_length"`` keys.
         """
-        weights = self._prepare_weights(weights)
+        prepared = self._prepare_weights_dict(weights, weights_dict)
         step = self._next_step(step)
-        raw = self._backend.run_sync(weights, step)
+        raw = self._backend.run_sync(prepared, step)
         return self._finalize(raw)
 
     # ------------------------------------------------------------------
@@ -351,6 +383,8 @@ class Evaluator:
         self,
         weights: TensorDictBase | nn.Module | None = None,
         step: int | None = None,
+        *,
+        weights_dict: dict[str, TensorDictBase | nn.Module] | None = None,
     ) -> None:
         """Start an async evaluation (fire-and-forget).
 
@@ -358,12 +392,13 @@ class Evaluator:
         discarded.
 
         Args:
-            weights: See :meth:`evaluate`.
-            step: See :meth:`evaluate`.
+            weights: Policy weights to load.  See :meth:`evaluate`.
+            step: Logging step.  See :meth:`evaluate`.
+            weights_dict: Multi-model weights dict.  See :meth:`evaluate`.
         """
-        weights = self._prepare_weights(weights)
+        prepared = self._prepare_weights_dict(weights, weights_dict)
         step = self._next_step(step)
-        self._backend.submit(weights, step)
+        self._backend.submit(prepared, step)
 
     def poll(self, timeout: float = 0) -> dict[str, Any] | None:
         """Return the latest evaluation result if ready, else ``None``.
@@ -429,14 +464,31 @@ class Evaluator:
         """
         return TensorDict.from_module(policy).data.detach().clone().cpu()
 
-    def _prepare_weights(
-        self, weights: TensorDictBase | nn.Module | None
-    ) -> TensorDictBase | None:
-        if weights is None:
-            return None
+    @staticmethod
+    def _prepare_single(weights: TensorDictBase | nn.Module) -> TensorDictBase:
+        """Prepare a single weight source for cross-thread transfer."""
         if isinstance(weights, nn.Module):
-            return self.extract_weights(weights)
+            return Evaluator.extract_weights(weights)
         return weights.detach().clone().cpu()
+
+    def _prepare_weights_dict(
+        self,
+        weights: TensorDictBase | nn.Module | None,
+        weights_dict: dict[str, TensorDictBase | nn.Module] | None,
+    ) -> dict[str, TensorDictBase] | None:
+        """Build a ``{model_id: TensorDictBase}`` dict from user inputs.
+
+        When *weights_dict* is ``None`` and *weights* is provided, the
+        result is ``{"policy": prepared_weights}`` for backward
+        compatibility.  When both are ``None``, returns ``None``.
+        """
+        result: dict[str, TensorDictBase] = {}
+        if weights_dict:
+            for k, v in weights_dict.items():
+                result[k] = self._prepare_single(v)
+        if weights is not None and "policy" not in result:
+            result["policy"] = self._prepare_single(weights)
+        return result or None
 
     def _next_step(self, step: int | None) -> int:
         if step is not None:
@@ -503,15 +555,22 @@ class Evaluator:
 
 
 class _EvalBackend(abc.ABC):
-    """Internal contract that each backend implements."""
+    """Internal contract that each backend implements.
+
+    All weight arguments are now ``dict[str, TensorDictBase] | None``
+    mapping model IDs to prepared weight tensordicts.  For backward
+    compatibility, the ``"policy"`` key holds the main policy weights.
+    """
 
     @abc.abstractmethod
-    def run_sync(self, weights: TensorDictBase | None, step: int) -> dict[str, Any]:
+    def run_sync(
+        self, weights_dict: dict[str, TensorDictBase] | None, step: int
+    ) -> dict[str, Any]:
         """Run a blocking evaluation and return raw results."""
         ...
 
     @abc.abstractmethod
-    def submit(self, weights: TensorDictBase | None, step: int) -> None:
+    def submit(self, weights_dict: dict[str, TensorDictBase] | None, step: int) -> None:
         """Start an async evaluation (fire-and-forget)."""
         ...
 
@@ -654,6 +713,72 @@ def _resolve_collector_cls(cls_or_name: type | str | None):
     return cls_or_name
 
 
+def _freeze_vecnorm(env: EnvBase) -> EnvBase:
+    """Freeze all VecNorm / VecNormV2 transforms in the env.
+
+    Evaluation environments should not update running statistics —
+    they receive stats from the training process via weight sync and
+    use them as-is.
+    """
+    from torchrl.envs.transforms import Compose, TransformedEnv
+    from torchrl.envs.transforms.vecnorm import VecNormV2
+
+    # Also handle the legacy VecNorm
+    try:
+        from torchrl.envs.transforms.transforms import VecNorm
+    except ImportError:
+        VecNorm = None  # noqa: N806
+
+    def _freeze_transforms(transform):
+        if isinstance(transform, VecNormV2):
+            transform.freeze()
+        elif VecNorm is not None and isinstance(transform, VecNorm):
+            transform.freeze()
+        elif isinstance(transform, Compose):
+            for t in transform:
+                _freeze_transforms(t)
+
+    if isinstance(env, TransformedEnv):
+        _freeze_transforms(env.transform)
+    return env
+
+
+def _wrap_env_factory_frozen(
+    env_factory: Callable[[], EnvBase],
+) -> Callable[[], EnvBase]:
+    """Wrap an env factory to freeze VecNorm transforms after creation.
+
+    If *env_factory* is an :class:`~torchrl.envs.EnvCreator`, the returned
+    object is also an ``EnvCreator`` (preserving pre-computed ``meta_data``
+    and shared-memory state dicts) whose ``__call__`` freezes VecNorm
+    transforms on the newly-created environment.
+    """
+    from torchrl.envs.env_creator import EnvCreator
+
+    if isinstance(env_factory, EnvCreator):
+
+        class _FrozenEnvCreator(EnvCreator):
+            """Thin ``EnvCreator`` wrapper that freezes VecNorm after creation."""
+
+            def __init__(self, original: EnvCreator):
+                # Skip parent __init__ (avoids recreating shadow env).
+                # Copy all state from the original instead.
+                self.__dict__.update(original.__dict__)
+                self._original = original
+
+            def __call__(self, **kwargs) -> EnvBase:
+                env = self._original(**kwargs)
+                return _freeze_vecnorm(env)
+
+        return _FrozenEnvCreator(env_factory)
+
+    def wrapper():
+        env = env_factory()
+        return _freeze_vecnorm(env)
+
+    return wrapper
+
+
 # ======================================================================
 # Thread backend
 # ======================================================================
@@ -667,6 +792,14 @@ class _ThreadEvalBackend(_EvalBackend):
     call.  For async evaluation this means construction happens inside the
     worker thread, which is critical for multi-device setups where the
     eval environment lives on a dedicated GPU.
+
+    When *weight_sync_schemes* is provided (or *use_multi_collector* is
+    ``True``), a :class:`~torchrl.collectors.MultiSyncCollector` with a
+    single worker is used instead of a plain
+    :class:`~torchrl.collectors.Collector`.  This provides process-level
+    CUDA isolation and uses the weight-sync-scheme infrastructure for
+    cross-process weight transfer — replacing the old
+    ``_ProcessEvalBackend``.
     """
 
     def __init__(
@@ -684,25 +817,40 @@ class _ThreadEvalBackend(_EvalBackend):
         reward_keys: NestedKey,
         done_keys: NestedKey,
         metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
+        weight_sync_schemes: dict[str, Any] | None = None,
+        use_multi_collector: bool = False,
     ) -> None:
         if policy is not None and policy_factory is not None:
             raise ValueError("Provide either `policy` or `policy_factory`, not both.")
 
         self._env_factory: Callable[[], EnvBase] | None = None
         self._policy_factory: Callable[..., Callable] | None = None
+        self._use_multi_collector = use_multi_collector or (
+            weight_sync_schemes is not None
+        )
+        self._weight_sync_schemes = weight_sync_schemes
 
         env_is_callable = callable(env) and not isinstance(env, EnvBase)
 
-        # Lazy path: defer both env and policy creation to the worker thread
-        if policy_factory is not None and env_is_callable:
-            self._env_factory = env
+        if self._use_multi_collector:
+            # MultiSyncCollector path: always defer construction.
+            # Wrap the factory to freeze VecNorm transforms in the worker.
+            self._env_factory = _wrap_env_factory_frozen(env)
             self._policy_factory = policy_factory
             self._env: EnvBase | None = None
+            self._policy = None
+        elif policy_factory is not None and env_is_callable:
+            # Lazy path: defer both env and policy creation to the worker thread
+            self._env_factory = env
+            self._policy_factory = policy_factory
+            self._env = None
             self._policy = None
         else:
             # Eager path (existing behaviour)
             if env_is_callable:
                 env = env()
+            # Freeze VecNorm transforms so eval doesn't update running stats
+            _freeze_vecnorm(env)
             self._env = env
 
             if policy_factory is not None:
@@ -736,6 +884,7 @@ class _ThreadEvalBackend(_EvalBackend):
 
         # Collector (created lazily)
         self._collector = None
+        self._collector_iter = None  # persistent iterator for multi-collector
 
         # Threading state
         self._lock = threading.Lock()
@@ -743,25 +892,29 @@ class _ThreadEvalBackend(_EvalBackend):
         self._eval_ready = threading.Event()
         self._result_ready = threading.Event()
         self._pending = threading.Event()  # set while an eval is in-flight
-        self._pending_request: tuple[TensorDictBase | None, int] | None = None
+        self._pending_request: tuple[
+            dict[str, TensorDictBase] | None, int
+        ] | None = None
         self._result: dict[str, Any] | None = None
         self._shutdown_flag = False
         self._thread: threading.Thread | None = None
 
     # ---- sync ----
 
-    def run_sync(self, weights: TensorDictBase | None, step: int) -> dict[str, Any]:
+    def run_sync(
+        self, weights_dict: dict[str, TensorDictBase] | None, step: int
+    ) -> dict[str, Any]:
         self._ensure_collector()
-        metrics = self._run_eval(weights)
+        metrics = self._run_eval(weights_dict)
         metrics["_step"] = step
         return metrics
 
     # ---- async ----
 
-    def submit(self, weights: TensorDictBase | None, step: int) -> None:
+    def submit(self, weights_dict: dict[str, TensorDictBase] | None, step: int) -> None:
         with self._lock:
             self._cancel.set()  # discard any in-progress result
-            self._pending_request = (weights, step)
+            self._pending_request = (weights_dict, step)
             self._result = None
             self._result_ready.clear()
             self._pending.set()
@@ -813,6 +966,8 @@ class _ThreadEvalBackend(_EvalBackend):
                 "this should not happen."
             )
         self._env = self._env_factory()
+        # Freeze VecNorm transforms so eval doesn't update running stats
+        _freeze_vecnorm(self._env)
         self._policy = self._policy_factory(self._env)
         # Free the factories
         self._env_factory = None
@@ -847,8 +1002,8 @@ class _ThreadEvalBackend(_EvalBackend):
             if request is None:
                 continue
 
-            weights, step = request
-            metrics = self._run_eval(weights)
+            weights_dict, step = request
+            metrics = self._run_eval(weights_dict)
 
             if not self._cancel.is_set():
                 metrics["_step"] = step
@@ -864,45 +1019,85 @@ class _ThreadEvalBackend(_EvalBackend):
         """Create the collector lazily (inside the worker thread)."""
         if self._collector is not None:
             return
-        self._ensure_env_and_policy()
-        cls = _resolve_collector_cls(self._collector_cls)
-        fpb = self._frames_per_batch or self._max_steps or 1000
-        # If the env already has a StepCounter (step_count in output),
-        # set max_frames_per_traj=0 to avoid conflict with the collector
-        # trying to add a second StepCounter.
-        max_frames = self._max_steps
-        if _env_has_step_count(self._env):
-            max_frames = 0
-        self._collector = cls(
-            create_env_fn=self._env,
-            policy=self._policy,
-            frames_per_batch=fpb,
-            total_frames=-1,
-            max_frames_per_traj=max_frames,
-            trajs_per_batch=self._num_trajectories,
-            exploration_type=self._exploration_type,
-            **(self._collector_kwargs or {}),
-        )
 
-    def _run_eval(self, weights: TensorDictBase | None) -> dict[str, Any]:
+        fpb = self._frames_per_batch or self._max_steps or 1000
+        kwargs = dict(self._collector_kwargs or {})
+
+        if self._use_multi_collector:
+            # Process isolation via MultiSyncCollector (1 worker).
+            # The env and policy are created inside the child process
+            # by the collector, so we pass factories — not instances.
+            from torchrl.collectors import MultiSyncCollector
+
+            self._collector = MultiSyncCollector(
+                create_env_fn=[self._env_factory],
+                policy_factory=self._policy_factory,
+                frames_per_batch=fpb,
+                total_frames=-1,
+                max_frames_per_traj=self._max_steps,
+                trajs_per_batch=self._num_trajectories,
+                exploration_type=self._exploration_type,
+                weight_sync_schemes=self._weight_sync_schemes,
+                **kwargs,
+            )
+        else:
+            self._ensure_env_and_policy()
+            cls = _resolve_collector_cls(self._collector_cls)
+            # If the env already has a StepCounter (step_count in output),
+            # set max_frames_per_traj=0 to avoid conflict with the collector
+            # trying to add a second StepCounter.
+            max_frames = self._max_steps
+            if _env_has_step_count(self._env):
+                max_frames = 0
+            self._collector = cls(
+                create_env_fn=self._env,
+                policy=self._policy,
+                frames_per_batch=fpb,
+                total_frames=-1,
+                max_frames_per_traj=max_frames,
+                trajs_per_batch=self._num_trajectories,
+                exploration_type=self._exploration_type,
+                **kwargs,
+            )
+
+    def _run_eval(
+        self, weights_dict: dict[str, TensorDictBase] | None
+    ) -> dict[str, Any]:
         """Run evaluation using the internal collector."""
         self._ensure_collector()
 
-        if weights is not None:
-            weights.to(self._device).to_module(self._policy)
+        if weights_dict:
+            if self._use_multi_collector:
+                # Multi-process: use scheme-based sync via the collector
+                self._collector.update_policy_weights_(weights_dict=weights_dict)
+            else:
+                # Same process: apply weights directly
+                for model_id, w in weights_dict.items():
+                    if model_id == "policy":
+                        w.to(self._device).to_module(self._policy)
+                    else:
+                        from torchrl.weight_update.utils import _resolve_model
 
-        if isinstance(self._policy, nn.Module):
+                        target = _resolve_model(self._collector, model_id)
+                        w.to(self._device).to_module(target)
+
+        if not self._use_multi_collector and isinstance(self._policy, nn.Module):
             self._policy.eval()
 
-        # Reset collector for clean episode boundaries
-        self._collector.reset()
-
         with set_exploration_type(self._exploration_type), torch.no_grad():
-            # Each yield gives exactly num_trajectories complete,
-            # zero-padded episodes with ("collector", "mask").
-            traj_batch = next(iter(self._collector))
+            if self._use_multi_collector:
+                # MultiSyncCollector: use a persistent iterator because
+                # re-creating the iterator (next(iter(...))) after the first
+                # batch causes data loss from the queue/pipe based workers.
+                if self._collector_iter is None:
+                    self._collector_iter = iter(self._collector)
+                traj_batch = next(self._collector_iter)
+            else:
+                # Single-process Collector: reset and use fresh iterator
+                self._collector.reset()
+                traj_batch = next(iter(self._collector))
 
-        if isinstance(self._policy, nn.Module):
+        if not self._use_multi_collector and isinstance(self._policy, nn.Module):
             self._policy.train()
 
         return _extract_metrics_from_trajectories(
@@ -975,7 +1170,10 @@ class _RayEvalBackend(_EvalBackend):
         self._last_step: int | None = None
         self._pending_flag = False
 
-    def run_sync(self, weights: TensorDictBase | None, step: int) -> dict[str, Any]:
+    def run_sync(
+        self, weights_dict: dict[str, TensorDictBase] | None, step: int
+    ) -> dict[str, Any]:
+        weights = weights_dict.get("policy") if weights_dict else None
         self._worker.submit(
             weights,
             self._max_steps,
@@ -986,7 +1184,8 @@ class _RayEvalBackend(_EvalBackend):
         result.setdefault("episode_length", self._max_steps)
         return result
 
-    def submit(self, weights: TensorDictBase | None, step: int) -> None:
+    def submit(self, weights_dict: dict[str, TensorDictBase] | None, step: int) -> None:
+        weights = weights_dict.get("policy") if weights_dict else None
         self._last_step = step
         self._pending_flag = True
         self._worker.submit(
@@ -1017,199 +1216,3 @@ class _RayEvalBackend(_EvalBackend):
             self._worker.shutdown()
         except Exception:
             logger.warning("RayEvalBackend: error during shutdown", exc_info=True)
-
-
-# ======================================================================
-# Process backend
-# ======================================================================
-
-
-def _process_eval_worker(
-    env_factory: Callable[[], EnvBase],
-    policy_factory: Callable,
-    request_queue: mp.Queue,
-    result_queue: mp.Queue,
-    num_trajectories: int,
-    max_steps: int,
-    frames_per_batch: int | None,
-    collector_cls_name: str | None,
-    collector_kwargs: dict | None,
-    exploration_type: ExplorationType,
-    reward_keys: NestedKey,
-    done_keys: NestedKey,
-    metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
-) -> None:
-    """Entry point for the evaluator child process.
-
-    Creates env, policy, and collector inside the process, then loops
-    waiting for ``(weights, step)`` requests on *request_queue* and puts
-    result dicts on *result_queue*.  A ``None`` sentinel terminates the loop.
-    """
-    env = env_factory()
-    policy = policy_factory(env)
-
-    try:
-        device = next(policy.parameters()).device
-    except (StopIteration, AttributeError):
-        device = torch.device("cpu")
-
-    cls = _resolve_collector_cls(collector_cls_name)
-    fpb = frames_per_batch or max_steps or 1000
-    max_frames = 0 if _env_has_step_count(env) else max_steps
-    collector = cls(
-        create_env_fn=env,
-        policy=policy,
-        frames_per_batch=fpb,
-        total_frames=-1,
-        max_frames_per_traj=max_frames,
-        trajs_per_batch=num_trajectories,
-        exploration_type=exploration_type,
-        **(collector_kwargs or {}),
-    )
-
-    while True:
-        request = request_queue.get()
-        if request is None:
-            break
-
-        weights, step = request
-
-        if weights is not None:
-            weights.to(device).to_module(policy)
-
-        if isinstance(policy, nn.Module):
-            policy.eval()
-
-        collector.reset()
-        with set_exploration_type(exploration_type), torch.no_grad():
-            traj_batch = next(iter(collector))
-        metrics = _extract_metrics_from_trajectories(
-            traj_batch, reward_keys, done_keys, metrics_fn
-        )
-
-        if isinstance(policy, nn.Module):
-            policy.train()
-
-        metrics["_step"] = step
-        result_queue.put(metrics)
-
-    collector.shutdown()
-
-
-class _ProcessEvalBackend(_EvalBackend):
-    """Runs evaluation in a child process.
-
-    The environment and policy are created **inside** the child process
-    from the provided factories, which means they live in an entirely
-    separate address space.  This avoids GIL contention for CPU-bound
-    work and gives clean CUDA context isolation for multi-GPU setups.
-
-    Like the thread backend, only the most-recently-triggered evaluation
-    produces a result (fire-and-forget).
-    """
-
-    def __init__(
-        self,
-        env_factory: Callable[[], EnvBase],
-        policy_factory: Callable[..., Callable],
-        num_trajectories: int,
-        max_steps: int,
-        frames_per_batch: int | None,
-        collector_cls: type | str | None,
-        collector_kwargs: dict | None,
-        exploration_type: ExplorationType,
-        reward_keys: NestedKey,
-        done_keys: NestedKey,
-        metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
-    ) -> None:
-        # Serialise collector_cls as string for pickling
-        if collector_cls is not None and not isinstance(collector_cls, str):
-            collector_cls_name = (
-                collector_cls.__name__
-                if hasattr(collector_cls, "__name__")
-                else str(collector_cls)
-            )
-        else:
-            collector_cls_name = collector_cls
-
-        ctx = mp.get_context("spawn")
-        self._request_queue: mp.Queue = ctx.Queue(maxsize=1)
-        self._result_queue: mp.Queue = ctx.Queue(maxsize=1)
-        self._pending_flag = False
-        self._last_step: int | None = None
-
-        self._process = ctx.Process(
-            target=_process_eval_worker,
-            kwargs={
-                "env_factory": env_factory,
-                "policy_factory": policy_factory,
-                "request_queue": self._request_queue,
-                "result_queue": self._result_queue,
-                "num_trajectories": num_trajectories,
-                "max_steps": max_steps,
-                "frames_per_batch": frames_per_batch,
-                "collector_cls_name": collector_cls_name,
-                "collector_kwargs": collector_kwargs,
-                "exploration_type": exploration_type,
-                "reward_keys": reward_keys,
-                "done_keys": done_keys,
-                "metrics_fn": metrics_fn,
-            },
-            daemon=True,
-        )
-        self._process.start()
-
-    # ---- sync ----
-
-    def run_sync(self, weights: TensorDictBase | None, step: int) -> dict[str, Any]:
-        self._request_queue.put((weights, step))
-        return self._result_queue.get()
-
-    # ---- async ----
-
-    def submit(self, weights: TensorDictBase | None, step: int) -> None:
-        # Drain any stale result from a previous (possibly cancelled) eval
-        self._drain_result_queue()
-        self._last_step = step
-        self._pending_flag = True
-        self._request_queue.put((weights, step))
-
-    def poll(self, timeout: float) -> dict[str, Any] | None:
-        try:
-            result = self._result_queue.get(timeout=timeout if timeout > 0 else 0.001)
-            self._pending_flag = False
-            return result
-        except Exception:
-            # queue.Empty
-            return None
-
-    def wait(self, timeout: float | None) -> dict[str, Any] | None:
-        try:
-            result = self._result_queue.get(timeout=timeout)
-            self._pending_flag = False
-            return result
-        except Exception:
-            return None
-
-    @property
-    def pending(self) -> bool:
-        return self._pending_flag
-
-    def shutdown(self, timeout: float) -> None:
-        self._pending_flag = False
-        try:
-            self._request_queue.put_nowait(None)  # sentinel
-        except Exception:
-            pass
-        if self._process.is_alive():
-            self._process.join(timeout=timeout)
-            if self._process.is_alive():
-                self._process.terminate()
-
-    def _drain_result_queue(self) -> None:
-        """Remove any stale result left in the queue."""
-        while not self._result_queue.empty():
-            try:
-                self._result_queue.get_nowait()
-            except Exception:
-                break
