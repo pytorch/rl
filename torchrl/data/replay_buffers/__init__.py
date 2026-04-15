@@ -31,6 +31,7 @@ from .samplers import (
     SamplerWithoutReplacement,
     SliceSampler,
     SliceSamplerWithoutReplacement,
+    StalenessAwareSampler,
 )
 from .storages import (
     CompressedListStorage,
@@ -78,6 +79,7 @@ __all__ = [
     "SamplerWithoutReplacement",
     "SliceSampler",
     "SliceSamplerWithoutReplacement",
+    "StalenessAwareSampler",
     "LazyMemmapStorage",
     "LazyStackStorage",
     "LazyTensorStorage",
