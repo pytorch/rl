@@ -596,7 +596,7 @@ class VecNormV2(Transform):
                 {"loc": loc, "var": var, "count": count},
                 batch_size=[],
                 device=loc.device,
-            ).to(data.device, non_blocking=True)
+            ).to(data.device)
             loc = stats["loc"]
             var = stats["var"]
             count = stats["count"]
@@ -643,7 +643,7 @@ class VecNormV2(Transform):
                 {"mean": data_mean, "var": data2},
                 batch_size=[],
                 device=data_mean.device,
-            ).to(loc.device, non_blocking=True)
+            ).to(loc.device)
             data_mean = data_stats["mean"]
             data2 = data_stats["var"]
         loc.lerp_(end=data_mean, weight=weight)
