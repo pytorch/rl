@@ -633,11 +633,16 @@ class TestVecNormV2:
     )
     def test_shared_stats_stay_shared_on_device_move(self, device):
         shared = TensorDict(
-            loc=TensorDict({"observation": torch.zeros(3)}, []),
-            var=TensorDict({"observation": torch.zeros(3)}, []),
-            count=TensorDict({"observation": torch.zeros((), dtype=torch.int64)}, []),
+            loc=TensorDict({"observation": torch.zeros(3, device="cpu")}, []),
+            var=TensorDict({"observation": torch.zeros(3, device="cpu")}, []),
+            count=TensorDict(
+                {"observation": torch.zeros((), dtype=torch.int64, device="cpu")}, []
+            ),
             batch_size=[],
         ).share_memory_()
+        assert shared["loc", "observation"].device.type == "cpu"
+        assert shared["var", "observation"].device.type == "cpu"
+        assert shared["count", "observation"].device.type == "cpu"
 
         transform = VecNormV2(
             in_keys=["observation"],
