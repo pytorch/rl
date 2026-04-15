@@ -74,6 +74,7 @@ import importlib
 import logging
 import multiprocessing as mp
 import threading
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -1051,7 +1052,8 @@ def _process_eval_worker(
     policy_factory: Callable,
     request_queue: mp.Queue,
     result_queue: mp.Queue,
-    shared_weights_queue: mp.Queue,
+    weights_buffer: TensorDictBase,
+    weights_buffer_ready: mp.Event,
     num_trajectories: int,
     max_steps: int,
     frames_per_batch: int | None,
@@ -1066,7 +1068,7 @@ def _process_eval_worker(
 
     Creates env, policy, and collector inside the process, then loops
     waiting for step requests on *request_queue* and puts result dicts
-    on *result_queue*.  Weights are synced via shared memory (not queues).
+    on *result_queue*. Weights are synced through a shared CPU buffer.
     A ``None`` sentinel terminates the loop.
     """
     env = env_factory()
@@ -1077,11 +1079,8 @@ def _process_eval_worker(
     except (StopIteration, AttributeError):
         device = torch.device("cpu")
 
-    # Create shared-memory weight buffer on CPU and send reference to parent.
-    # Both parent and worker access this buffer — parent writes new weights,
-    # worker reads and moves to device before each eval.
-    shared_weights = TensorDict.from_module(policy).data.cpu().clone().share_memory_()
-    shared_weights_queue.put(shared_weights)
+    weights_buffer.update_(TensorDict.from_module(policy).data.detach().cpu())
+    weights_buffer_ready.set()
 
     cls = _resolve_collector_cls(collector_cls_name)
     fpb = frames_per_batch or max_steps or 1000
@@ -1097,8 +1096,6 @@ def _process_eval_worker(
         **(collector_kwargs or {}),
     )
 
-    import time as _time
-
     while True:
         request = request_queue.get()
         if request is None:
@@ -1106,17 +1103,19 @@ def _process_eval_worker(
 
         step = request
 
-        # Apply latest weights from shared memory
-        shared_weights.to(device).to_module(policy)
+        weights = weights_buffer
+        if weights.device != device:
+            weights = weights.to(device, non_blocking=True)
+        weights.to_module(policy)
 
         if isinstance(policy, nn.Module):
             policy.eval()
 
         collector.reset()
-        _t0 = _time.perf_counter()
+        _t0 = time.perf_counter()
         with set_exploration_type(exploration_type), torch.no_grad():
             traj_batch = next(iter(collector))
-        _t1 = _time.perf_counter()
+        _t1 = time.perf_counter()
         metrics = _extract_metrics_from_trajectories(
             traj_batch, reward_keys, done_keys, metrics_fn
         )
@@ -1175,10 +1174,19 @@ class _ProcessEvalBackend(_EvalBackend):
         ctx = mp.get_context("spawn")
         self._request_queue: mp.Queue = ctx.Queue(maxsize=1)
         self._result_queue: mp.Queue = ctx.Queue(maxsize=1)
-        self._shared_weights_queue: mp.Queue = ctx.Queue(maxsize=1)
+        self._weights_buffer_ready: mp.Event = ctx.Event()
         self._pending_flag = False
         self._last_step: int | None = None
-        self._shared_weights: TensorDictBase | None = None
+        setup_env = env_factory()
+        try:
+            setup_policy = policy_factory(setup_env)
+            self._weights_buffer = (
+                TensorDict.from_module(setup_policy).data.detach().cpu().clone()
+            ).share_memory_()
+        finally:
+            close = getattr(setup_env, "close", None)
+            if close is not None:
+                close()
 
         self._process = ctx.Process(
             target=_process_eval_worker,
@@ -1187,7 +1195,8 @@ class _ProcessEvalBackend(_EvalBackend):
                 "policy_factory": policy_factory,
                 "request_queue": self._request_queue,
                 "result_queue": self._result_queue,
-                "shared_weights_queue": self._shared_weights_queue,
+                "weights_buffer": self._weights_buffer,
+                "weights_buffer_ready": self._weights_buffer_ready,
                 "num_trajectories": num_trajectories,
                 "max_steps": max_steps,
                 "frames_per_batch": frames_per_batch,
@@ -1202,27 +1211,26 @@ class _ProcessEvalBackend(_EvalBackend):
         )
         self._process.start()
 
-    def _ensure_shared_weights(self) -> None:
-        """Block until the worker has sent its shared-memory weight buffer."""
-        if self._shared_weights is None:
-            self._shared_weights = self._shared_weights_queue.get()
+    def _ensure_weights_buffer(self) -> None:
+        """Block until the worker has materialized the CPU weight buffer."""
+        self._weights_buffer_ready.wait()
 
     # ---- sync ----
 
     def run_sync(self, weights: TensorDictBase | None, step: int) -> dict[str, Any]:
-        self._ensure_shared_weights()
+        self._ensure_weights_buffer()
         if weights is not None:
-            self._shared_weights.update_(weights)
+            self._weights_buffer.update_(weights)
         self._request_queue.put(step)
         return self._result_queue.get()
 
     # ---- async ----
 
     def submit(self, weights: TensorDictBase | None, step: int) -> None:
-        self._ensure_shared_weights()
-        # Copy new weights into shared memory (no serialization)
+        self._ensure_weights_buffer()
+        # Copy new weights into the shared CPU buffer without serializing them.
         if weights is not None:
-            self._shared_weights.update_(weights)
+            self._weights_buffer.update_(weights)
         # Drain any stale result from a previous (possibly cancelled) eval
         self._drain_result_queue()
         self._last_step = step
