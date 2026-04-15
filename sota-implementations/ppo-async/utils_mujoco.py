@@ -43,15 +43,20 @@ def compute_obs_norm_stats(env_name):
     Returns (loc, scale) tensors on CPU.  These are passed into make_env
     and make_eval_env so that the (potentially compiled, high-batch-size)
     production envs never need to run init_stats themselves.
+
+    Computes stats manually (not via init_stats) because mujoco-torch with
+    num_envs=1 produces shape [1, T, obs_dim] where reduce_dim=0 only has
+    1 sample, causing std() to return nan.
     """
     proof = ENVS[env_name](
         num_envs=1, device="cpu", dtype=torch.float32, compile_step=False
     )
     proof = TransformedEnv(proof)
-    obs_norm = ObservationNorm(in_keys=["observation"], standard_normal=True)
-    proof.append_transform(obs_norm)
-    obs_norm.init_stats(_OBS_NORM_INIT_STEPS)
-    loc, scale = obs_norm.loc.clone(), obs_norm.scale.clone()
+    td = proof.rollout(max_steps=_OBS_NORM_INIT_STEPS)
+    obs = td.get(("next", "observation"))
+    obs = obs.reshape(-1, obs.shape[-1])  # flatten to [N, obs_dim]
+    loc = obs.mean(0)
+    scale = obs.std(0).clamp_min(1e-6)
     del proof
     return loc, scale
 
