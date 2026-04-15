@@ -20,11 +20,11 @@ from tensordict.nn import AddStateIndependentNormalScale, TensorDictModule
 from torchrl.envs import (
     ClipTransform,
     ExplorationType,
+    ObservationNorm,
     RandomTruncationTransform,
     RewardSum,
     StepCounter,
     TransformedEnv,
-    VecNormV2,
 )
 from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 
@@ -33,35 +33,9 @@ log = logging.getLogger(__name__)
 
 # ── Environment factories ──────────────────────────────────────────────
 
-
-def make_shared_vecnorm_data(env_name):
-    """Create shared-memory VecNormV2 state for cross-process sharing.
-
-    Returns a TensorDict with {loc, var, count} in shared memory.
-    Both the training collector and evaluator should reference this so
-    they share identical observation normalization statistics.
-    """
-    from tensordict import TensorDict
-
-    proof = ENVS[env_name](
-        num_envs=1, device="cpu", dtype=torch.float32, compile_step=False
-    )
-    proof = TransformedEnv(proof)
-    proof.append_transform(
-        VecNormV2(
-            in_keys=["observation"], decay=0.99999, eps=1e-2, reduce_batch_dims=True
-        )
-    )
-    # Reset triggers VecNormV2 lazy init (shapes come from data)
-    proof.reset()
-    vecnorm = proof.transform[0]
-    shared = TensorDict(
-        loc=vecnorm._loc.clone(),
-        var=vecnorm._var.clone(),
-        count=vecnorm._count.clone(),
-    ).share_memory_()
-    del proof
-    return shared
+# Number of random rollout steps used by ObservationNorm.init_stats to
+# compute the mean/std of observations.
+_OBS_NORM_INIT_STEPS = 1000
 
 
 def make_env(
@@ -69,12 +43,14 @@ def make_env(
     device="cpu",
     num_envs=4096,
     compile=True,
-    shared_vecnorm=None,
 ):
     """Create a batched MuJoCo env using mujoco-torch.
 
     Returns a single env with batch_size=[num_envs], where all envs run
     in parallel via torch.vmap (GPU) or sequential (CPU).
+
+    ObservationNorm is initialized with fixed loc/scale computed from
+    random rollouts (standard_normal=True).
     """
     compile_kwargs = {"mode": "default"} if compile else None
     env = ENVS[env_name](
@@ -85,15 +61,8 @@ def make_env(
         compile_kwargs=compile_kwargs,
     )
     env = TransformedEnv(env)
-    env.append_transform(
-        VecNormV2(
-            in_keys=["observation"],
-            decay=0.99999,
-            eps=1e-2,
-            shared_data=shared_vecnorm,
-            reduce_batch_dims=True,
-        )
-    )
+    env.append_transform(ObservationNorm(in_keys=["observation"], standard_normal=True))
+    env.transform[-1].init_stats(_OBS_NORM_INIT_STEPS)
     env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
@@ -103,15 +72,15 @@ def make_env(
     return env
 
 
-def make_eval_env(env_name, device, num_eval_envs, max_steps=1000, shared_vecnorm=None):
+def make_eval_env(env_name, device, num_eval_envs, max_steps=1000):
     """Env factory for the Evaluator.
 
     Creates a compiled GPU-batched mujoco-torch env. The StepCounter
     uses max_steps so that episodes terminate — the Evaluator skips adding
     its own max_frames_per_traj when it sees an existing step_count.
 
-    When shared_vecnorm is provided, the VecNormV2 is frozen — it reads
-    the training collector's normalization stats without updating them.
+    ObservationNorm uses the same fixed loc/scale as the training env
+    (both computed from random rollouts of the same env).
     """
     env = ENVS[env_name](
         num_envs=num_eval_envs,
@@ -121,16 +90,8 @@ def make_eval_env(env_name, device, num_eval_envs, max_steps=1000, shared_vecnor
         compile_kwargs={"mode": "default"},
     )
     env = TransformedEnv(env)
-    vecnorm = VecNormV2(
-        in_keys=["observation"],
-        decay=0.99999,
-        eps=1e-2,
-        shared_data=shared_vecnorm,
-        reduce_batch_dims=True,
-    )
-    if shared_vecnorm is not None:
-        vecnorm.freeze()
-    env.append_transform(vecnorm)
+    env.append_transform(ObservationNorm(in_keys=["observation"], standard_normal=True))
+    env.transform[-1].init_stats(_OBS_NORM_INIT_STEPS)
     env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
     env.append_transform(RewardSum())
     env.append_transform(StepCounter(max_steps=max_steps))

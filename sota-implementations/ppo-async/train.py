@@ -27,7 +27,6 @@ from utils_mujoco import (
     make_env,
     make_eval_env,
     make_ppo_models,
-    make_shared_vecnorm_data,
     WorkerGAEPostproc,
 )
 
@@ -78,9 +77,6 @@ def train_start(
     total_network_updates,
 ):
     """Fully async training: collector.start() fills buffer independently."""
-    # Shared VecNormV2 state so collector and evaluator use the same stats
-    shared_vecnorm = make_shared_vecnorm_data(cfg.env.env_name)
-
     # Shared version counter (readable by workers via postproc)
     version_counter = multiprocessing.Value("i", 0)
 
@@ -106,7 +102,6 @@ def train_start(
             collect_device,
             cfg.env.num_envs,
             cfg.env.compile,
-            shared_vecnorm=shared_vecnorm,
         )
     ]
 
@@ -134,7 +129,6 @@ def train_start(
             cfg.env.env_name,
             eval_device,
             num_eval_envs,
-            shared_vecnorm=shared_vecnorm,
         ),
         policy_factory=partial(
             _make_eval_policy, env_name=cfg.env.env_name, device=eval_device
@@ -378,9 +372,6 @@ def train_iterate(
     total_network_updates,
 ):
     """Semi-async training: for data in collector, gated on collector output."""
-    # Shared VecNormV2 state so collector and evaluator use the same stats
-    shared_vecnorm = make_shared_vecnorm_data(cfg.env.env_name)
-
     collector_policy = ActorWithCritic(actor, critic)
 
     create_env_fn = [
@@ -390,7 +381,6 @@ def train_iterate(
             collect_device,
             cfg.env.num_envs,
             cfg.env.compile,
-            shared_vecnorm=shared_vecnorm,
         )
     ]
 
@@ -416,7 +406,6 @@ def train_iterate(
             cfg.env.env_name,
             eval_device,
             num_eval_envs,
-            shared_vecnorm=shared_vecnorm,
         ),
         policy_factory=partial(
             _make_eval_policy, env_name=cfg.env.env_name, device=eval_device
