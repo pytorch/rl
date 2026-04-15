@@ -256,17 +256,18 @@ class VecNormV2(Transform):
         self._cast_int_to_float = False
         if self.stateful:
             self.register_buffer("initialized", torch.zeros((), dtype=torch.bool))
-            if shared_data:
+            if shared_data is not None:
                 self._loc = shared_data["loc"]
                 self._var = shared_data["var"]
                 self._count = shared_data["count"]
+                self.initialized.fill_(True)
             else:
                 self._loc = None
                 self._var = None
                 self._count = None
         else:
             self.initialized = False
-            if shared_data:
+            if shared_data is not None:
                 # FIXME
                 raise NotImplementedError
         if reduce_batch_dims and not stateful:
@@ -356,6 +357,18 @@ class VecNormV2(Transform):
                 other._count = self._count.clone()
         return other
 
+    def _stats_are_shared(self) -> bool:
+        if not self.stateful or self._loc is None:
+            return False
+
+        shared = [leaf.is_shared() for leaf in self._loc.values(True, True)]
+        shared.extend(leaf.is_shared() for leaf in self._var.values(True, True))
+        if isinstance(self._count, TensorDictBase):
+            shared.extend(leaf.is_shared() for leaf in self._count.values(True, True))
+        else:
+            shared.append(self._count.is_shared())
+        return all(shared)
+
     def _apply(self, fn, recurse=True):
         """Apply device/dtype transformation to the module and its TensorDict state.
 
@@ -366,6 +379,10 @@ class VecNormV2(Transform):
         super()._apply(fn, recurse=recurse)
 
         if self.stateful and self._loc is not None:
+            if self._stats_are_shared():
+                # Shared stats must stay on CPU-backed shared memory so other
+                # processes can keep observing live updates.
+                return self
             self._loc = self._loc.apply(fn)
             self._var = self._var.apply(fn)
             # Move _count to same device as _loc, but preserve its int dtype.
@@ -571,7 +588,19 @@ class VecNormV2(Transform):
         return data_update
 
     def _stateful_norm(self, data):
-        return self._norm(data, self._loc, self._var, self._count)
+        loc = self._loc
+        var = self._var
+        count = self._count
+        if loc.device != data.device:
+            stats = TensorDict(
+                {"loc": loc, "var": var, "count": count},
+                batch_size=[],
+                device=loc.device,
+            ).to(data.device)
+            loc = stats["loc"]
+            var = stats["var"]
+            count = stats["count"]
+        return self._norm(data, loc, var, count)
 
     def _stateful_update(self, data):
         if self.frozen:
@@ -609,6 +638,14 @@ class VecNormV2(Transform):
                 weight = 1 - self.decay
             else:
                 weight = 1 / count
+        if data_mean.device != loc.device:
+            data_stats = TensorDict(
+                {"mean": data_mean, "var": data2},
+                batch_size=[],
+                device=data_mean.device,
+            ).to(loc.device)
+            data_mean = data_stats["mean"]
+            data2 = data_stats["var"]
         loc.lerp_(end=data_mean, weight=weight)
         var.lerp_(end=data2, weight=weight)
 

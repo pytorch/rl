@@ -631,6 +631,67 @@ class TestVecNormV2:
             ),
         ],
     )
+    def test_shared_stats_stay_shared_on_device_move(self, device):
+        shared = TensorDict(
+            loc=TensorDict({"observation": torch.zeros(3, device="cpu")}, []),
+            var=TensorDict({"observation": torch.zeros(3, device="cpu")}, []),
+            count=TensorDict(
+                {"observation": torch.zeros((), dtype=torch.int64, device="cpu")}, []
+            ),
+            batch_size=[],
+        ).share_memory_()
+        assert shared["loc", "observation"].device.type == "cpu"
+        assert shared["var", "observation"].device.type == "cpu"
+        assert shared["count", "observation"].device.type == "cpu"
+
+        transform = VecNormV2(
+            in_keys=["observation"],
+            decay=0.9,
+            shared_data=shared,
+            reduce_batch_dims=True,
+        ).freeze()
+        ptr_before = transform._loc["observation"].data_ptr()
+
+        transform = transform.to(device)
+
+        assert transform._loc["observation"].device.type == "cpu"
+        assert transform._loc["observation"].data_ptr() == ptr_before
+        assert transform._stats_are_shared()
+
+        updater = VecNormV2(
+            in_keys=["observation"],
+            decay=0.9,
+            shared_data=shared,
+            reduce_batch_dims=True,
+        )
+        updater._stateful_update(TensorDict({"observation": torch.ones(4, 3)}, [4]))
+        batch = TensorDict(
+            {"observation": torch.ones(4, 3, device=device)}, [4], device=device
+        )
+        normalized = transform._stateful_norm(batch)
+
+        torch.testing.assert_close(
+            transform._loc["observation"], updater._loc["observation"]
+        )
+        assert torch.isfinite(normalized["observation"]).all()
+
+    @pytest.mark.parametrize(
+        "device",
+        [
+            pytest.param(
+                "cuda",
+                marks=pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="CUDA not available"
+                ),
+            ),
+            pytest.param(
+                "mps",
+                marks=pytest.mark.skipif(
+                    not torch.backends.mps.is_available(), reason="MPS not available"
+                ),
+            ),
+        ],
+    )
     @pytest.mark.skipif(not _has_gym, reason="gym not available")
     def test_vecnorm_gpu_device_handling(self, device):
         """Test that VecNorm(new_api=True) properly handles device movement to GPU/MPS.
