@@ -6,7 +6,7 @@
 
 This module provides :class:`Evaluator`, a single entry-point for running
 evaluation rollouts either synchronously (blocking) or asynchronously
-(fire-and-forget) during RL training.
+(in the background) during RL training.
 
 Internally, the evaluator uses a :class:`~torchrl.collectors.Collector` with
 ``trajs_per_batch`` to collect complete trajectories.  The collector
@@ -22,7 +22,10 @@ Typical usage -- **thread backend** (default)::
         make_eval_env,
         eval_policy,
         max_steps=1000,
-        logger=logger,
+        on_result=lambda result: logger.log_metrics(
+            {k: v.item() for k, v in result.items() if k != "eval/step"},
+            step=result["eval/step"].item(),
+        ),
     )
 
     # Non-blocking: trigger and poll later
@@ -40,7 +43,6 @@ Typical usage -- **process backend** (dedicated eval device)::
         lambda: make_eval_env(device="cuda:7"),
         policy_factory=lambda env: make_eval_policy(env).to("cuda:7"),
         max_steps=1000,
-        logger=logger,
         backend="process",
     )
 
@@ -57,7 +59,6 @@ Typical usage -- **Ray backend**::
         make_eval_env,
         policy_factory=make_eval_policy,
         max_steps=1000,
-        logger=logger,
         backend="ray",
         init_fn=my_init_fn,
         num_gpus=1,
@@ -73,6 +74,7 @@ import abc
 import importlib
 import logging
 import threading
+from collections import deque
 from collections.abc import Callable
 from typing import Any
 
@@ -103,8 +105,8 @@ class Evaluator:
     * **Asynchronous** -- call :meth:`trigger_eval` to kick off an evaluation
       in the background, then :meth:`poll` (non-blocking) or :meth:`wait`
       (blocking) to retrieve the result.  Use the :attr:`pending` property
-      to check whether an evaluation is currently in progress.
-      Results are also auto-logged if a *logger* is provided.
+      to check whether an evaluation is currently in progress. Results can
+      also be consumed via an ``on_result`` callback.
 
     Internally, a :class:`~torchrl.collectors.Collector` is used with
     ``trajs_per_batch=num_trajectories`` to collect complete episodes.  The
@@ -127,20 +129,18 @@ class Evaluator:
       Requires *env* to be a callable and *policy_factory* to be provided.
 
     **Backpressure / overlap policy**: calling :meth:`trigger_eval` while a
-    previous evaluation is still running **drops** the in-progress result
-    (fire-and-forget).  The new evaluation starts as soon as the background
-    worker finishes the current collection — there is no queue, no
-    coalescing, and no error.  Only the most-recently-triggered evaluation
-    will produce a result.  Use :attr:`pending` to conditionally skip
+    previous evaluation is still running either raises immediately
+    (``busy_policy="error"``; default) or queues the new request
+    (``busy_policy="queue"``). Use :attr:`pending` to conditionally skip
     trigger calls::
 
         if not evaluator.pending:
             evaluator.trigger_eval(weights, step=step)
 
-    **Logging thread-safety**: all logger writes (scalar metrics, video
-    encoding) happen on the **caller thread** inside :meth:`poll`,
-    :meth:`wait`, or :meth:`evaluate`.  The background worker only computes
-    plain metrics and returns them; it never touches the logger.
+    **Callback thread-safety**: when ``on_result`` is provided, it is
+    invoked from the evaluator's async coordination thread after the
+    rollout completes. If the callback writes to a logger, the callback is
+    responsible for any locking it needs.
 
     **Dedicated eval device** (multi-GPU example)::
 
@@ -186,8 +186,6 @@ class Evaluator:
             Default: ``None`` (uses :class:`~torchrl.collectors.Collector`).
         collector_kwargs (dict or None): Extra keyword arguments forwarded
             to the collector constructor.
-        logger: Optional :class:`~torchrl.record.loggers.Logger` for
-            automatic metric / video logging.
         log_prefix (str): Prefix prepended to all logged metric names.
             Default: ``"eval"``.
         reward_keys: Nested key(s) for reading the reward from the
@@ -203,11 +201,14 @@ class Evaluator:
         dump_video (bool): Call ``dump()`` on :class:`VideoRecorder`
             transforms after each evaluation (thread backend only).
             Default: ``True``.
-        callback: Optional ``(dict, int) -> None`` invoked with
-            ``(metrics, step)`` after each completed evaluation.
-        logger_lock: A :class:`threading.Lock` shared with the training
-            loop to serialise logger access.  If ``None`` a private lock
-            is created.
+        on_result: Optional ``(TensorDictBase) -> None`` invoked after each
+            completed evaluation. The callback receives a flat tensordict
+            with the same prefixed metric names returned by
+            :meth:`evaluate`, :meth:`poll`, and :meth:`wait`.
+        busy_policy (str): Behaviour when :meth:`trigger_eval` is called
+            while another async evaluation is still pending. ``"error"``
+            raises immediately. ``"queue"`` enqueues the new request and
+            runs it when earlier evaluations finish. Default: ``"error"``.
         weight_sync_schemes (dict or None): A dict mapping model IDs to
             :class:`~torchrl.weight_update.WeightSyncScheme` instances.
             When provided, a :class:`~torchrl.collectors.MultiSyncCollector`
@@ -252,7 +253,6 @@ class Evaluator:
         collector_cls: type | str | None = None,
         collector_kwargs: dict | None = None,
         weight_sync_schemes: dict[str, Any] | None = None,
-        logger=None,
         log_prefix: str = "eval",
         reward_keys: NestedKey = ("next", "reward"),
         done_keys: NestedKey = ("next", "done"),
@@ -260,8 +260,8 @@ class Evaluator:
         exploration_type: ExplorationType = ExplorationType.DETERMINISTIC,
         metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None = None,
         dump_video: bool = True,
-        callback: Callable[[dict, int], None] | None = None,
-        logger_lock: threading.Lock | None = None,
+        on_result: Callable[[TensorDictBase], None] | None = None,
+        busy_policy: str = "error",
         # Backend selection
         backend: str = "thread",
         # Ray-specific
@@ -269,16 +269,28 @@ class Evaluator:
         num_gpus: int = 1,
         ray_kwargs: dict | None = None,
     ) -> None:
-        self._logger = logger
         self._log_prefix = log_prefix
         self._reward_keys = reward_keys
         self._done_keys = done_keys
         self._exploration_type = exploration_type
         self._metrics_fn = metrics_fn
-        self._callback = callback
-        self._logger_lock = logger_lock or threading.Lock()
+        self._on_result = on_result
         self._step_counter = 0
         self._dump_video = dump_video
+        if busy_policy not in {"error", "queue"}:
+            raise ValueError(
+                f"Unknown busy_policy {busy_policy!r}. Choose 'error' or 'queue'."
+            )
+        self._busy_policy = busy_policy
+        self._async_lock = threading.Lock()
+        self._async_trigger = threading.Event()
+        self._ready_result = threading.Event()
+        self._async_requests: deque[
+            tuple[dict[str, TensorDictBase] | None, int]
+        ] = deque()
+        self._ready_results: deque[dict[str, Any]] = deque()
+        self._async_shutdown = False
+        self._async_thread: threading.Thread | None = None
 
         if backend in ("thread", "process"):
             # The process backend is implemented as a thread backend
@@ -373,7 +385,9 @@ class Evaluator:
         prepared = self._prepare_weights_dict(weights, weights_dict)
         step = self._next_step(step)
         raw = self._backend.run_sync(prepared, step)
-        return self._finalize(raw)
+        result = self._finalize(raw)
+        self._invoke_on_result(result)
+        return result
 
     # ------------------------------------------------------------------
     # Asynchronous API
@@ -386,10 +400,7 @@ class Evaluator:
         *,
         weights_dict: dict[str, TensorDictBase | nn.Module] | None = None,
     ) -> None:
-        """Start an async evaluation (fire-and-forget).
-
-        If a previous evaluation is still running its result will be
-        discarded.
+        """Start an async evaluation.
 
         Args:
             weights: Policy weights to load.  See :meth:`evaluate`.
@@ -398,7 +409,17 @@ class Evaluator:
         """
         prepared = self._prepare_weights_dict(weights, weights_dict)
         step = self._next_step(step)
-        self._backend.submit(prepared, step)
+        with self._async_lock:
+            if self._busy_policy == "error" and (
+                self._backend.pending or self._async_requests
+            ):
+                raise RuntimeError(
+                    "Evaluation already pending. Wait for completion or set "
+                    "busy_policy='queue'."
+                )
+            self._async_requests.append((prepared, step))
+            self._async_trigger.set()
+        self._ensure_async_thread()
 
     def poll(self, timeout: float = 0) -> dict[str, Any] | None:
         """Return the latest evaluation result if ready, else ``None``.
@@ -406,10 +427,9 @@ class Evaluator:
         Args:
             timeout: Seconds to wait.  ``0`` means non-blocking.
         """
-        raw = self._backend.poll(timeout)
-        if raw is None:
-            return None
-        return self._finalize(raw)
+        if timeout > 0:
+            self._ready_result.wait(timeout=timeout)
+        return self._pop_ready_result()
 
     def wait(self, timeout: float | None = None) -> dict[str, Any] | None:
         """Block until the current evaluation finishes.
@@ -417,10 +437,8 @@ class Evaluator:
         Args:
             timeout: Max seconds to wait.  ``None`` waits forever.
         """
-        raw = self._backend.wait(timeout)
-        if raw is None:
-            return None
-        return self._finalize(raw)
+        self._ready_result.wait(timeout=timeout)
+        return self._pop_ready_result()
 
     # ------------------------------------------------------------------
     # Status
@@ -435,7 +453,8 @@ class Evaluator:
             if not evaluator.pending:
                 evaluator.trigger_eval(weights, step=step)
         """
-        return self._backend.pending
+        with self._async_lock:
+            return self._backend.pending or bool(self._async_requests)
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -443,6 +462,10 @@ class Evaluator:
 
     def shutdown(self, timeout: float = 5.0) -> None:
         """Cancel any running evaluation, clean up resources."""
+        self._async_shutdown = True
+        self._async_trigger.set()
+        if self._async_thread is not None and self._async_thread.is_alive():
+            self._async_thread.join(timeout=timeout)
         self._backend.shutdown(timeout)
 
     def __del__(self):
@@ -497,22 +520,67 @@ class Evaluator:
         self._step_counter += 1
         return s
 
-    def _finalize(self, raw: dict[str, Any]) -> dict[str, Any]:
-        """Format metrics, dump video, log, and invoke callback.
+    def _ensure_async_thread(self) -> None:
+        if self._async_thread is not None and self._async_thread.is_alive():
+            return
+        self._async_shutdown = False
+        self._async_thread = threading.Thread(
+            target=self._async_loop,
+            name="evaluator-async",
+            daemon=True,
+        )
+        self._async_thread.start()
 
-        All heavy I/O (video dump, logger writes) happens here on the
-        **caller thread**, never inside the background eval thread.
-        """
+    def _async_loop(self) -> None:
+        while not self._async_shutdown:
+            request = None
+            with self._async_lock:
+                if not self._backend.pending and self._async_requests:
+                    request = self._async_requests.popleft()
+                else:
+                    self._async_trigger.clear()
+            if request is not None:
+                self._backend.submit(*request)
+                continue
+
+            raw = self._backend.poll(timeout=0.1)
+            if raw is not None:
+                result = self._finalize(raw)
+                with self._async_lock:
+                    self._ready_results.append(result)
+                    self._ready_result.set()
+                    has_more_requests = bool(self._async_requests)
+                self._invoke_on_result(result)
+                if has_more_requests:
+                    self._async_trigger.set()
+                continue
+
+            self._async_trigger.wait(timeout=0.1)
+
+    def _pop_ready_result(self) -> dict[str, Any] | None:
+        with self._async_lock:
+            if not self._ready_results:
+                self._ready_result.clear()
+                return None
+            result = self._ready_results.popleft()
+            if not self._ready_results:
+                self._ready_result.clear()
+            return result
+
+    def _invoke_on_result(self, result: dict[str, Any]) -> None:
+        if self._on_result is None:
+            return
+        try:
+            self._on_result(self._to_callback_tensordict(result))
+        except Exception:
+            logger.warning("Evaluator on_result callback failed", exc_info=True)
+
+    def _finalize(self, raw: dict[str, Any]) -> dict[str, Any]:
+        """Format metrics and dump video on the caller or coordinator thread."""
         step = raw.get("_step")
         metrics = self._format_metrics(raw)
-
-        # Video dump -- on the caller thread so logger writes are safe
         if self._dump_video:
             self._backend.dump_video(step=step)
-
-        self._auto_log(metrics, step)
-        if self._callback is not None:
-            self._callback(metrics, step)
         return metrics
 
     def _format_metrics(self, raw: dict[str, Any]) -> dict[str, Any]:
@@ -531,22 +599,19 @@ class Evaluator:
                 out[f"{prefix}/{k[7:]}"] = v
         return out
 
-    def _auto_log(self, metrics: dict[str, Any], step: int | None) -> None:
-        if self._logger is None:
-            return
-        with self._logger_lock:
-            # Separate non-scalar entries from scalar metrics for logging
-            video = metrics.get(f"{self._log_prefix}/video")
-            step_key = f"{self._log_prefix}/step"
-            scalars = {
-                k: v
-                for k, v in metrics.items()
-                if k != f"{self._log_prefix}/video" and k != step_key
-            }
-            if scalars:
-                self._logger.log_metrics(scalars, step=step)
-            if video is not None:
-                self._logger.log_video(f"{self._log_prefix}/video", video, step=step)
+    @staticmethod
+    def _to_result_tensor(value: Any) -> torch.Tensor:
+        if isinstance(value, torch.Tensor):
+            return value.detach().cpu()
+        return torch.as_tensor(value)
+
+    def _to_callback_tensordict(self, metrics: dict[str, Any]) -> TensorDictBase:
+        data = {
+            key: self._to_result_tensor(value)
+            for key, value in metrics.items()
+            if value is not None
+        }
+        return TensorDict(data, batch_size=[])
 
 
 # ======================================================================
@@ -571,7 +636,7 @@ class _EvalBackend(abc.ABC):
 
     @abc.abstractmethod
     def submit(self, weights_dict: dict[str, TensorDictBase] | None, step: int) -> None:
-        """Start an async evaluation (fire-and-forget)."""
+        """Start an async evaluation."""
         ...
 
     @abc.abstractmethod
@@ -888,10 +953,9 @@ class _ThreadEvalBackend(_EvalBackend):
 
         # Threading state
         self._lock = threading.Lock()
-        self._cancel = threading.Event()
         self._eval_ready = threading.Event()
         self._result_ready = threading.Event()
-        self._pending = threading.Event()  # set while an eval is in-flight
+        self._pending = threading.Event()
         self._pending_request: tuple[
             dict[str, TensorDictBase] | None, int
         ] | None = None
@@ -913,10 +977,9 @@ class _ThreadEvalBackend(_EvalBackend):
 
     def submit(self, weights_dict: dict[str, TensorDictBase] | None, step: int) -> None:
         with self._lock:
-            self._cancel.set()  # discard any in-progress result
+            if self._pending.is_set():
+                raise RuntimeError("Evaluation already pending.")
             self._pending_request = (weights_dict, step)
-            self._result = None
-            self._result_ready.clear()
             self._pending.set()
         self._eval_ready.set()
         self._ensure_thread()
@@ -946,7 +1009,6 @@ class _ThreadEvalBackend(_EvalBackend):
 
     def shutdown(self, timeout: float) -> None:
         self._shutdown_flag = True
-        self._cancel.set()
         self._eval_ready.set()  # wake thread so it can exit
         if self._thread is not None and self._thread.is_alive():
             self._thread.join(timeout=timeout)
@@ -997,23 +1059,17 @@ class _ThreadEvalBackend(_EvalBackend):
             with self._lock:
                 request = self._pending_request
                 self._pending_request = None
-                self._cancel.clear()
 
             if request is None:
                 continue
 
             weights_dict, step = request
             metrics = self._run_eval(weights_dict)
-
-            if not self._cancel.is_set():
-                metrics["_step"] = step
-                with self._lock:
-                    self._result = metrics
-                self._result_ready.set()
-            else:
-                # Cancelled -- clear pending since the result was discarded
-                # (submit() will re-set it for the new request)
-                pass
+            metrics["_step"] = step
+            with self._lock:
+                self._result = metrics
+                self._pending.clear()
+            self._result_ready.set()
 
     def _ensure_collector(self) -> None:
         """Create the collector lazily (inside the worker thread)."""
