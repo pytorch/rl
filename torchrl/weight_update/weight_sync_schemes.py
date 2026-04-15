@@ -144,7 +144,16 @@ class WeightStrategy:
         if self.extract_as == "tensordict":
             # Extract as TensorDict
             if isinstance(source, nn.Module):
-                return TensorDict.from_module(source)
+                td = TensorDict.from_module(source)
+                # Also capture extra_state (e.g., VecNormV2 running stats)
+                # which is not included in TensorDict.from_module()
+                try:
+                    extra = source.get_extra_state()
+                except RuntimeError:
+                    extra = None
+                if extra:
+                    td["__extra_state__"] = TensorDict(extra)
+                return td
             elif isinstance(source, TensorDictBase):
                 return source
             elif isinstance(source, dict):
@@ -203,10 +212,20 @@ class WeightStrategy:
             weights = TensorDict(weights)
             if any("." in key for key in weights.keys()):
                 weights = weights.unflatten_keys(".")
+
+        # Pop extra_state before applying parameter weights
+        extra_state = None
+        if isinstance(weights, TensorDictBase) and "__extra_state__" in weights.keys():
+            extra_state = weights.pop("__extra_state__").flatten_keys(".").to_dict()
+
+        destination_module = None
         if isinstance(destination, nn.Module):
+            destination_module = destination
             # Do not update in-place
             if not inplace:
                 weights.to_module(destination)
+                if extra_state is not None:
+                    destination_module.set_extra_state(extra_state)
                 return
             else:
                 destination = TensorDict.from_module(destination)
@@ -226,6 +245,8 @@ class WeightStrategy:
                 raise ValueError(
                     "Non-empty weights are associated with a non-dict, non-td, non-Module destination."
                 )
+            if extra_state is not None and destination_module is not None:
+                destination_module.set_extra_state(extra_state)
             return
 
         try:
@@ -237,6 +258,9 @@ class WeightStrategy:
             raise KeyError(
                 f"Error updating destination. Destination keys: {destination.keys(True, True)}, weights keys: {weights.keys(True, True)}"
             ) from e
+
+        if extra_state is not None and destination_module is not None:
+            destination_module.set_extra_state(extra_state)
         return
 
 

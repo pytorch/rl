@@ -10,16 +10,25 @@ import tensordict.tensordict
 import torch
 
 from _transforms_common import _has_ale, _has_gymnasium, TransformBase
-from tensordict import TensorDict
+from tensordict import TensorDict, TensorDictBase
 from torch import nn
 
 from torchrl.collectors import MultiSyncCollector
-from torchrl.data import LazyTensorStorage, ReplayBuffer, TensorDictReplayBuffer
+from torchrl.data import (
+    Binary,
+    Categorical,
+    Composite,
+    LazyTensorStorage,
+    ReplayBuffer,
+    TensorDictReplayBuffer,
+    Unbounded,
+)
 from torchrl.envs import (
     BurnInTransform,
     Compose,
     DMControlEnv,
     EndOfLifeTransform,
+    EnvBase,
     EnvCreator,
     FrameSkipTransform,
     InitTracker,
@@ -378,6 +387,57 @@ class TestStepCounter(TransformBase):
         transformed_env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(50))
         check_env_specs(transformed_env)
         transformed_env.close()
+
+    def test_stepcounter_reset_heterogeneous_observation_spec(self):
+        class HeterogeneousEnv(EnvBase):
+            def __init__(self) -> None:
+                super().__init__(batch_size=torch.Size([2]))
+                self.observation_spec = Composite(
+                    {
+                        "shaped_obs": Unbounded(shape=torch.Size([2, 5, 5])),
+                        "binary_obs": Binary(n=2, shape=torch.Size([2])),
+                    },
+                    shape=torch.Size([2]),
+                )
+                self.action_spec = Categorical(2, shape=torch.Size([2, 1]))
+                self.reward_spec = Unbounded(shape=torch.Size([2, 1]))
+                self.done_spec = Composite(
+                    {
+                        "done": Categorical(
+                            2, shape=torch.Size([2, 1]), dtype=torch.bool
+                        ),
+                        "terminated": Categorical(
+                            2, shape=torch.Size([2, 1]), dtype=torch.bool
+                        ),
+                        "truncated": Categorical(
+                            2, shape=torch.Size([2, 1]), dtype=torch.bool
+                        ),
+                    },
+                    shape=torch.Size([2]),
+                )
+
+            def _reset(
+                self, tensordict: TensorDictBase | None = None, **kwargs
+            ) -> TensorDictBase:
+                return TensorDict(
+                    {
+                        "shaped_obs": torch.zeros(2, 5, 5),
+                        "binary_obs": torch.zeros(2, dtype=torch.int8),
+                    },
+                    batch_size=[2],
+                )
+
+            def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+                raise NotImplementedError
+
+            def _set_seed(self, seed: int | None) -> None:
+                return None
+
+        env = TransformedEnv(HeterogeneousEnv(), StepCounter(max_steps=10))
+        td = env.reset()
+
+        assert td["step_count"].shape == torch.Size([2, 1])
+        assert td["step_count"].eq(0).all()
 
     def test_stepcounter_nested(self):
         # checks that step_count_keys are only created at root level when both exist
