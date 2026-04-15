@@ -403,7 +403,16 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">extract_as</span> <span class="o">==</span> <span class="s2">&quot;tensordict&quot;</span><span class="p">:</span>
             <span class="c1"># Extract as TensorDict</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-                <span class="k">return</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
+                <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
+                <span class="c1"># Also capture extra_state (e.g., VecNormV2 running stats)</span>
+                <span class="c1"># which is not included in TensorDict.from_module()</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">extra</span> <span class="o">=</span> <span class="n">source</span><span class="o">.</span><span class="n">get_extra_state</span><span class="p">()</span>
+                <span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
+                    <span class="n">extra</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="k">if</span> <span class="n">extra</span><span class="p">:</span>
+                    <span class="n">td</span><span class="p">[</span><span class="s2">&quot;__extra_state__&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">extra</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">td</span>
             <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">):</span>
                 <span class="k">return</span> <span class="n">source</span>
             <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
@@ -465,10 +474,20 @@
             <span class="n">weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
             <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="s2">&quot;.&quot;</span> <span class="ow">in</span> <span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">weights</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
                 <span class="n">weights</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">unflatten_keys</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Pop extra_state before applying parameter weights</span>
+        <span class="n">extra_state</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">&quot;__extra_state__&quot;</span> <span class="ow">in</span> <span class="n">weights</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">extra_state</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;__extra_state__&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">flatten_keys</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
+
+        <span class="n">destination_module</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+            <span class="n">destination_module</span> <span class="o">=</span> <span class="n">destination</span>
             <span class="c1"># Do not update in-place</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">inplace</span><span class="p">:</span>
                 <span class="n">weights</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">destination</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">extra_state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">destination_module</span><span class="o">.</span><span class="n">set_extra_state</span><span class="p">(</span><span class="n">extra_state</span><span class="p">)</span>
                 <span class="k">return</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">destination</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">destination</span><span class="p">)</span>
@@ -488,6 +507,8 @@
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="s2">&quot;Non-empty weights are associated with a non-dict, non-td, non-Module destination.&quot;</span>
                 <span class="p">)</span>
+            <span class="k">if</span> <span class="n">extra_state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">destination_module</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">destination_module</span><span class="o">.</span><span class="n">set_extra_state</span><span class="p">(</span><span class="n">extra_state</span><span class="p">)</span>
             <span class="k">return</span>
 
         <span class="k">try</span><span class="p">:</span>
@@ -499,6 +520,9 @@
             <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Error updating destination. Destination keys: </span><span class="si">{</span><span class="n">destination</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span><span class="w"> </span><span class="kc">True</span><span class="p">)</span><span class="si">}</span><span class="s2">, weights keys: </span><span class="si">{</span><span class="n">weights</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span><span class="w"> </span><span class="kc">True</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
+
+        <span class="k">if</span> <span class="n">extra_state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">destination_module</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">destination_module</span><span class="o">.</span><span class="n">set_extra_state</span><span class="p">(</span><span class="n">extra_state</span><span class="p">)</span>
         <span class="k">return</span></div>
 </div>
 
