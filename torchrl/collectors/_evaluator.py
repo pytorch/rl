@@ -74,6 +74,7 @@ import importlib
 import logging
 import multiprocessing as mp
 import threading
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -351,19 +352,40 @@ class Evaluator:
         self,
         weights: TensorDictBase | nn.Module | None = None,
         step: int | None = None,
-    ) -> None:
-        """Start an async evaluation (fire-and-forget).
+    ) -> dict[str, Any] | None:
+        """Start an async evaluation, auto-logging the previous result.
 
-        If a previous evaluation is still running its result will be
-        discarded.
+        If a previous evaluation has completed, its result is finalized
+        (logged via the configured logger, video dumped, callback invoked)
+        before the new evaluation is submitted.  This means the caller
+        never needs to call :meth:`poll` explicitly — just keep calling
+        ``trigger_eval`` and previous results are logged automatically.
+
+        If a previous evaluation is still *running*, it will be discarded
+        when the new one completes (fire-and-forget).
 
         Args:
             weights: See :meth:`evaluate`.
             step: See :meth:`evaluate`.
+
+        Returns:
+            The finalized metrics dict from the *previous* evaluation if
+            one was ready, otherwise ``None``.
         """
+        # Auto-finalize the previous result if ready.
+        # Use the *current* step for logging so that the eval metrics
+        # appear at the point in training where they became available,
+        # avoiding WandB's monotonic-step rejection.
+        prev = self._backend.poll(timeout=0)
+        prev_metrics = None
         weights = self._prepare_weights(weights)
         step = self._next_step(step)
+        if prev is not None:
+            prev["_step"] = step
+            prev_metrics = self._finalize(prev)
+
         self._backend.submit(weights, step)
+        return prev_metrics
 
     def poll(self, timeout: float = 0) -> dict[str, Any] | None:
         """Return the latest evaluation result if ready, else ``None``.
@@ -789,7 +811,8 @@ class _ThreadEvalBackend(_EvalBackend):
 
     @property
     def pending(self) -> bool:
-        return self._pending.is_set()
+        # pending means eval is actually running (submitted but no result yet)
+        return self._pending.is_set() and not self._result_ready.is_set()
 
     def shutdown(self, timeout: float) -> None:
         self._shutdown_flag = True
@@ -1029,6 +1052,8 @@ def _process_eval_worker(
     policy_factory: Callable,
     request_queue: mp.Queue,
     result_queue: mp.Queue,
+    weights_buffer: TensorDictBase,
+    weights_buffer_ready: mp.Event,
     num_trajectories: int,
     max_steps: int,
     frames_per_batch: int | None,
@@ -1042,8 +1067,9 @@ def _process_eval_worker(
     """Entry point for the evaluator child process.
 
     Creates env, policy, and collector inside the process, then loops
-    waiting for ``(weights, step)`` requests on *request_queue* and puts
-    result dicts on *result_queue*.  A ``None`` sentinel terminates the loop.
+    waiting for step requests on *request_queue* and puts result dicts
+    on *result_queue*. Weights are synced through a shared CPU buffer.
+    A ``None`` sentinel terminates the loop.
     """
     env = env_factory()
     policy = policy_factory(env)
@@ -1052,6 +1078,9 @@ def _process_eval_worker(
         device = next(policy.parameters()).device
     except (StopIteration, AttributeError):
         device = torch.device("cpu")
+
+    weights_buffer.update_(TensorDict.from_module(policy).data.detach().cpu())
+    weights_buffer_ready.set()
 
     cls = _resolve_collector_cls(collector_cls_name)
     fpb = frames_per_batch or max_steps or 1000
@@ -1072,19 +1101,29 @@ def _process_eval_worker(
         if request is None:
             break
 
-        weights, step = request
+        step = request
 
-        if weights is not None:
-            weights.to(device).to_module(policy)
+        weights = weights_buffer
+        if weights.device != device:
+            weights = weights.to(device, non_blocking=True)
+        weights.to_module(policy)
 
         if isinstance(policy, nn.Module):
             policy.eval()
 
         collector.reset()
+        _t0 = time.perf_counter()
         with set_exploration_type(exploration_type), torch.no_grad():
             traj_batch = next(iter(collector))
+        _t1 = time.perf_counter()
         metrics = _extract_metrics_from_trajectories(
             traj_batch, reward_keys, done_keys, metrics_fn
+        )
+        logger.info(
+            "Eval collection took %.2fs (step=%s, shape=%s)",
+            _t1 - _t0,
+            step,
+            traj_batch.shape,
         )
 
         if isinstance(policy, nn.Module):
@@ -1135,8 +1174,19 @@ class _ProcessEvalBackend(_EvalBackend):
         ctx = mp.get_context("spawn")
         self._request_queue: mp.Queue = ctx.Queue(maxsize=1)
         self._result_queue: mp.Queue = ctx.Queue(maxsize=1)
+        self._weights_buffer_ready: mp.Event = ctx.Event()
         self._pending_flag = False
         self._last_step: int | None = None
+        setup_env = env_factory()
+        try:
+            setup_policy = policy_factory(setup_env)
+            self._weights_buffer = (
+                TensorDict.from_module(setup_policy).data.detach().cpu().clone()
+            ).share_memory_()
+        finally:
+            close = getattr(setup_env, "close", None)
+            if close is not None:
+                close()
 
         self._process = ctx.Process(
             target=_process_eval_worker,
@@ -1145,6 +1195,8 @@ class _ProcessEvalBackend(_EvalBackend):
                 "policy_factory": policy_factory,
                 "request_queue": self._request_queue,
                 "result_queue": self._result_queue,
+                "weights_buffer": self._weights_buffer,
+                "weights_buffer_ready": self._weights_buffer_ready,
                 "num_trajectories": num_trajectories,
                 "max_steps": max_steps,
                 "frames_per_batch": frames_per_batch,
@@ -1159,20 +1211,32 @@ class _ProcessEvalBackend(_EvalBackend):
         )
         self._process.start()
 
+    def _ensure_weights_buffer(self) -> None:
+        """Block until the worker has materialized the CPU weight buffer."""
+        self._weights_buffer_ready.wait()
+
     # ---- sync ----
 
     def run_sync(self, weights: TensorDictBase | None, step: int) -> dict[str, Any]:
-        self._request_queue.put((weights, step))
+        self._ensure_weights_buffer()
+        if weights is not None:
+            self._weights_buffer.update_(weights)
+        self._request_queue.put(step)
         return self._result_queue.get()
 
     # ---- async ----
 
     def submit(self, weights: TensorDictBase | None, step: int) -> None:
+        self._ensure_weights_buffer()
+        # Copy new weights into the shared CPU buffer without serializing them.
+        if weights is not None:
+            self._weights_buffer.update_(weights)
         # Drain any stale result from a previous (possibly cancelled) eval
         self._drain_result_queue()
         self._last_step = step
         self._pending_flag = True
-        self._request_queue.put((weights, step))
+        # Only send the step — weights are already in shared memory
+        self._request_queue.put(step)
 
     def poll(self, timeout: float) -> dict[str, Any] | None:
         try:
@@ -1193,7 +1257,9 @@ class _ProcessEvalBackend(_EvalBackend):
 
     @property
     def pending(self) -> bool:
-        return self._pending_flag
+        # pending means eval is actually running — once the result is in
+        # the queue, the eval is done even if the result hasn't been consumed
+        return self._pending_flag and self._result_queue.empty()
 
     def shutdown(self, timeout: float) -> None:
         self._pending_flag = False
