@@ -372,19 +372,35 @@ class StalenessAwareSampler(Sampler):
     def max_staleness(self, v: int):
         self._max_staleness = v
 
+    def _get_versions(self, storage: Storage, n: int):
+        if isinstance(storage, TensorStorage):
+            backing_storage = getattr(storage, "_storage", None)
+            if backing_storage is not None:
+                versions = backing_storage.get(self._version_key, None)
+                if versions is not None:
+                    if storage.ndim > 1:
+                        versions = versions[: storage._len_along_dim0].flatten(
+                            0, storage.ndim - 1
+                        )
+                    elif n != storage.max_size:
+                        versions = versions[:n]
+                    return versions
+
+        all_data = storage[:n]
+        return all_data.get(self._version_key, None)
+
     def sample(self, storage: Storage, batch_size: int) -> tuple[torch.Tensor, dict]:
         n = len(storage)
         if n == 0:
             raise RuntimeError(_EMPTY_STORAGE_ERROR)
 
-        # Read policy versions from all valid storage entries
-        all_data = storage[:n]
-        versions = all_data.get(self._version_key, None)
+        versions = self._get_versions(storage, n)
         if versions is None:
             raise KeyError(
                 f"Could not find key {self._version_key!r} in the replay buffer "
                 f"storage. Make sure data written to the buffer contains this key "
-                f"(e.g., by using the PolicyVersion transform on the collector)."
+                "(e.g., by adding the PolicyVersion transform to the environment "
+                "or enabling policy-version tracking on the collector)."
             )
         versions = versions.view(-1).float()
 

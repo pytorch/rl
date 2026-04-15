@@ -591,11 +591,15 @@ class VecNormV2(Transform):
         loc = self._loc
         var = self._var
         count = self._count
-        # Handle cross-device: shared-memory stats live on CPU, data may be on GPU
         if loc.device != data.device:
-            loc = loc.to(data.device)
-            var = var.to(data.device)
-            count = count.to(data.device)
+            stats = TensorDict(
+                {"loc": loc, "var": var, "count": count},
+                batch_size=[],
+                device=loc.device,
+            ).to(data.device, non_blocking=True)
+            loc = stats["loc"]
+            var = stats["var"]
+            count = stats["count"]
         return self._norm(data, loc, var, count)
 
     def _stateful_update(self, data):
@@ -634,9 +638,16 @@ class VecNormV2(Transform):
                 weight = 1 - self.decay
             else:
                 weight = 1 / count
-        # Handle cross-device: shared-memory stats on CPU, data on GPU
-        loc.lerp_(end=data_mean.to(loc.device), weight=weight)
-        var.lerp_(end=data2.to(loc.device), weight=weight)
+        if data_mean.device != loc.device:
+            data_stats = TensorDict(
+                {"mean": data_mean, "var": data2},
+                batch_size=[],
+                device=data_mean.device,
+            ).to(loc.device, non_blocking=True)
+            data_mean = data_stats["mean"]
+            data2 = data_stats["var"]
+        loc.lerp_(end=data_mean, weight=weight)
+        var.lerp_(end=data2, weight=weight)
 
     def _maybe_stateless_init(self, data):
         if not self.initialized or f"{self.prefix}_loc" not in data.keys():
