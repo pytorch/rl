@@ -7842,9 +7842,9 @@ class StepCounter(Transform):
                 else:
                     # It may be the case that reset did not provide a done state, in which case
                     # we fall back on the spec
-                    done = self.parent.output_spec_unbatched[
-                        "full_done_spec", entry_name
-                    ].zero(tensordict_reset.shape)
+                    done = self.parent.full_done_spec_unbatched[entry_name].zero(
+                        tensordict_reset.shape
+                    )
                 reset = torch.ones_like(done)
 
             step_count = tensordict.get(step_count_key, default=None)
