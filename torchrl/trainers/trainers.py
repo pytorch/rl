@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import abc
 import itertools
+import json
 import pathlib
 import time
 import warnings
@@ -18,7 +19,7 @@ from typing import Any, Literal
 
 import numpy as np
 import torch.nn
-from tensordict import NestedKey, pad, TensorDict, TensorDictBase
+from tensordict import NestedKey, NonTensorData, pad, TensorDict, TensorDictBase
 from tensordict._tensorcollection import TensorCollection
 from tensordict.nn import TensorDictModule
 from tensordict.utils import expand_right
@@ -60,6 +61,7 @@ try:
 except ImportError:
     _has_ts = False
 
+
 REPLAY_BUFFER_CLASS = {
     "prioritized": TensorDictPrioritizedReplayBuffer,
     "circular": TensorDictReplayBuffer,
@@ -74,6 +76,31 @@ LOGGER_METHODS = {
 # Format strings for different data types in progress bar display
 TYPE_DESCR = {float: "4.4f", int: ""}
 REWARD_KEY = ("next", "reward")
+
+
+def _state_dict_to_td(sd: dict) -> TensorDict:
+    """Convert a state dict to a :class:`~tensordict.TensorDict`.
+
+    Tensor values are stored directly; everything else is wrapped in
+    :class:`~tensordict.NonTensorData` so that :meth:`~tensordict.TensorDict.dumps`
+    can persist the whole state without pickle dependencies.
+    """
+    return TensorDict(
+        {
+            k: v if isinstance(v, torch.Tensor) else NonTensorData(v)
+            for k, v in sd.items()
+        },
+        [],
+    )
+
+
+def _td_to_state_dict(td: TensorDict) -> dict:
+    """Inverse of :func:`_state_dict_to_td`.
+
+    Unwraps :class:`~tensordict.NonTensorData` back to plain Python values and
+    leaves tensors (including :class:`~tensordict.MemoryMappedTensor`) as-is.
+    """
+    return {k: v.data if isinstance(v, NonTensorData) else v for k, v in td.items()}
 
 
 class TrainerHookBase:
@@ -504,6 +531,21 @@ class Trainer:
             Snapshot.take(app_state=self.app_state, path=self.save_trainer_file)
         elif _CKPT_BACKEND == "torch":
             torch.save(self.state_dict(), self.save_trainer_file)
+        elif _CKPT_BACKEND == "memmap":
+            state = self.state_dict()
+            path = pathlib.Path(self.save_trainer_file)
+            path.mkdir(parents=True, exist_ok=True)
+            # Persist all module state dicts using TensorDict memmap.
+            # Non-tensor values (scalars, bools, nested dicts) are wrapped in
+            # NonTensorData automatically by _state_dict_to_td, so no pickle
+            # dependency is needed.
+            for key in ("loss_module", "collector", *self._modules):
+                sd = state[key]
+                if sd:
+                    _state_dict_to_td(sd).dumps(str(path / key))
+            # Persist non-tensor training counters as JSON.
+            with open(path / "state.json", "w") as f:
+                json.dump(dict(state["state"]), f)
         else:
             raise NotImplementedError(
                 f"CKPT_BACKEND should be one of {_CKPT_BACKEND.backends}, got {_CKPT_BACKEND}."
@@ -522,14 +564,36 @@ class Trainer:
         """Loads a file and its state-dict in the trainer.
 
         Keyword arguments are passed to the :func:`~torch.load` function.
+        They are ignored when ``CKPT_BACKEND=memmap``.
+
+        .. note::
+            When ``CKPT_BACKEND=torch``, ``weights_only=True`` is set by
+            default for safer deserialization. Pass ``weights_only=False``
+            explicitly only if you have custom (non-stdlib) objects in your
+            state dict.
 
         """
         if _CKPT_BACKEND == "torchsnapshot":
             snapshot = Snapshot(path=file)
             snapshot.restore(app_state=self.app_state)
         elif _CKPT_BACKEND == "torch":
+            kwargs.setdefault("weights_only", True)
             loaded_dict: OrderedDict = torch.load(file, **kwargs)
             self.load_state_dict(loaded_dict)
+        elif _CKPT_BACKEND == "memmap":
+            path = pathlib.Path(file)
+            state: dict = {}
+            for key in ("loss_module", "collector", *self._modules):
+                key_path = path / key
+                if key_path.exists():
+                    state[key] = _td_to_state_dict(
+                        TensorDict.load_memmap(str(key_path))
+                    )
+                else:
+                    state[key] = {}
+            with open(path / "state.json") as f:
+                state["state"] = json.load(f)
+            self.load_state_dict(state)
         return self
 
     def set_seed(self):
