@@ -149,14 +149,21 @@ def make_eval_env(
 # ── Model factories ────────────────────────────────────────────────────
 
 
-def make_ppo_models(env_name, device, num_envs=1):
+def make_ppo_models(
+    env_name, device, num_envs=1, obs_norm_loc=None, obs_norm_scale=None
+):
     """Build PPO actor and critic networks.
 
     Uses a small mujoco-torch env as a proof environment to read
     observation/action specs. The proof env is discarded after construction.
     """
     proof_environment = make_env(
-        env_name, device="cpu", num_envs=num_envs, compile=False
+        env_name,
+        device="cpu",
+        num_envs=num_envs,
+        compile=False,
+        obs_norm_loc=obs_norm_loc,
+        obs_norm_scale=obs_norm_scale,
     )
     actor, critic = _make_ppo_models_state(proof_environment, device=device)
     del proof_environment

@@ -23,7 +23,6 @@ from torchrl.collectors import Evaluator, MultiaSyncDataCollector
 from torchrl.weight_update import SharedMemWeightSyncScheme
 from utils_mujoco import (
     ActorWithCritic,
-    compute_obs_norm_stats,
     LearnerPostproc,
     make_env,
     make_eval_env,
@@ -45,9 +44,11 @@ def _assert_finite(tensor, name, step):
     )
 
 
-def _make_eval_policy(env, env_name, device):
+def _make_eval_policy(env, env_name, device, obs_norm_loc=None, obs_norm_scale=None):
     """Picklable policy factory for the process-based Evaluator."""
-    return make_ppo_models(env_name, device)[0]
+    return make_ppo_models(
+        env_name, device, obs_norm_loc=obs_norm_loc, obs_norm_scale=obs_norm_scale
+    )[0]
 
 
 def train_start(
@@ -76,12 +77,10 @@ def train_start(
     test_interval,
     total_frames,
     total_network_updates,
+    obs_norm_loc,
+    obs_norm_scale,
 ):
     """Fully async training: collector.start() fills buffer independently."""
-    # Compute obs norm stats once on a small CPU env (avoids expensive
-    # init_stats on compiled 64K-env production envs).
-    obs_norm_loc, obs_norm_scale = compute_obs_norm_stats(cfg.env.env_name)
-
     # Shared version counter (readable by workers via postproc)
     version_counter = multiprocessing.Value("i", 0)
 
@@ -140,7 +139,11 @@ def train_start(
             obs_norm_scale=obs_norm_scale,
         ),
         policy_factory=partial(
-            _make_eval_policy, env_name=cfg.env.env_name, device=eval_device
+            _make_eval_policy,
+            env_name=cfg.env.env_name,
+            device=eval_device,
+            obs_norm_loc=obs_norm_loc,
+            obs_norm_scale=obs_norm_scale,
         ),
         num_trajectories=num_eval_envs,
         max_steps=1000,
@@ -379,11 +382,10 @@ def train_iterate(
     test_interval,
     total_frames,
     total_network_updates,
+    obs_norm_loc,
+    obs_norm_scale,
 ):
     """Semi-async training: for data in collector, gated on collector output."""
-    # Compute obs norm stats once on a small CPU env
-    obs_norm_loc, obs_norm_scale = compute_obs_norm_stats(cfg.env.env_name)
-
     collector_policy = ActorWithCritic(actor, critic)
 
     create_env_fn = [
@@ -424,7 +426,11 @@ def train_iterate(
             obs_norm_scale=obs_norm_scale,
         ),
         policy_factory=partial(
-            _make_eval_policy, env_name=cfg.env.env_name, device=eval_device
+            _make_eval_policy,
+            env_name=cfg.env.env_name,
+            device=eval_device,
+            obs_norm_loc=obs_norm_loc,
+            obs_norm_scale=obs_norm_scale,
         ),
         num_trajectories=num_eval_envs,
         max_steps=1000,

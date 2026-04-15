@@ -52,7 +52,7 @@ from torchrl.objectives import ClipPPOLoss, group_optimizers
 from torchrl.objectives.value.advantages import GAE
 from torchrl.record.loggers import generate_exp_name, get_logger
 from train import train_iterate, train_start
-from utils_mujoco import make_ppo_models
+from utils_mujoco import compute_obs_norm_stats, make_ppo_models
 
 
 @hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
@@ -78,8 +78,16 @@ def main(cfg: DictConfig):
     if async_mode == "iterate":
         advantage_on = "learner"  # always learner in iterate mode
 
+    # ── Precompute ObservationNorm stats on a small CPU proof env ──────
+    obs_norm_loc, obs_norm_scale = compute_obs_norm_stats(cfg.env.env_name)
+
     # ── Models ──────────────────────────────────────────────────────────
-    actor, critic = make_ppo_models(cfg.env.env_name, device=device)
+    actor, critic = make_ppo_models(
+        cfg.env.env_name,
+        device=device,
+        obs_norm_loc=obs_norm_loc,
+        obs_norm_scale=obs_norm_scale,
+    )
 
     # ── Loss & advantage ────────────────────────────────────────────────
     adv_module = GAE(
@@ -204,6 +212,8 @@ def main(cfg: DictConfig):
         "test_interval": cfg.logger.test_interval,
         "total_frames": total_frames,
         "total_network_updates": total_network_updates,
+        "obs_norm_loc": obs_norm_loc,
+        "obs_norm_scale": obs_norm_scale,
     }
 
     if async_mode == "start":
