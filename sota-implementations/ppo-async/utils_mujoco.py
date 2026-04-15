@@ -32,86 +32,6 @@ from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 log = logging.getLogger(__name__)
 
 
-# ── NaN diagnostic guard ──────────────────────────────────────────────
-
-
-class NanFailFastTransform(Transform):
-    """Detect NaN in raw env observations, dump repro data, and crash.
-
-    Inserted *before* VecNormV2 so it sees the raw physics output.
-    On NaN detection, saves a comprehensive dump containing:
-      - input/output tensordicts (action, obs, reward, done)
-      - per-env NaN mask
-      - mujoco-torch internal state (qpos, qvel, ctrl, qacc via _dx)
-      - metadata (env_name, num_envs, step count)
-    Then raises RuntimeError so the issue is fixed at the source.
-    """
-
-    def __init__(
-        self, dump_path: str = "/root/nan_repro.pt", env_name: str = "halfcheetah"
-    ):
-        super().__init__()
-        self.dump_path = dump_path
-        self.env_name = env_name
-
-    def _step(
-        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
-    ) -> TensorDictBase:
-        obs = next_tensordict.get("observation", None)
-        if obs is None or torch.isfinite(obs).all():
-            return next_tensordict
-
-        non_finite = ~torch.isfinite(obs)
-        bad_envs = non_finite.flatten(1).any(dim=-1)
-        n_bad_envs = bad_envs.sum().item()
-        n_nan_vals = non_finite.sum().item()
-
-        dump = {
-            "input": tensordict.detach().cpu().clone(),
-            "output": next_tensordict.detach().cpu().clone(),
-            "nan_env_mask": bad_envs.detach().cpu(),
-            "env_name": self.env_name,
-            "n_bad_envs": n_bad_envs,
-            "n_nan_values": n_nan_vals,
-            "total_values": obs.numel(),
-            "num_envs": obs.shape[0],
-            "obs_dim": obs.shape[-1],
-        }
-
-        # Grab mujoco-torch internal state for standalone repro
-        try:
-            base_env = self.parent.base_env
-            dx = getattr(base_env, "_dx", None)
-            if dx is not None:
-                dump["env_state"] = dx.detach().cpu().clone()
-        except Exception as e:
-            dump["env_state_error"] = str(e)
-
-        torch.save(dump, self.dump_path)
-        log.error(
-            "NaN in raw env observation: %d/%d values across %d/%d envs. "
-            "Repro data saved to %s. Crashing for diagnosis.",
-            n_nan_vals,
-            obs.numel(),
-            n_bad_envs,
-            obs.shape[0],
-            self.dump_path,
-        )
-        raise RuntimeError(
-            f"NaN in raw env observation: {n_nan_vals}/{obs.numel()} values "
-            f"across {n_bad_envs}/{obs.shape[0]} envs. "
-            f"Repro data saved to {self.dump_path}"
-        )
-
-    def _reset(
-        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
-    ) -> TensorDictBase:
-        return tensordict_reset
-
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        return tensordict
-
-
 # ── Episode decorrelation ─────────────────────────────────────────────
 
 
@@ -278,10 +198,6 @@ def make_env(
         compile_kwargs=compile_kwargs,
     )
     env = TransformedEnv(env)
-    # NaN detector: dump repro data and crash on first NaN
-    env.append_transform(
-        NanFailFastTransform(dump_path="/root/nan_repro.pt", env_name=env_name)
-    )
     env.append_transform(
         VecNormV2(
             in_keys=["observation"],

@@ -26,7 +26,6 @@ logger:
   group_name: null
   exp_name: Mujoco_Async_GPU
   test_interval: 500_000
-  num_test_episodes: 5
   num_eval_envs: 64
   video: false
 

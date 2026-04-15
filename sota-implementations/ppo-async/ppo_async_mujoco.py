@@ -10,7 +10,7 @@ This script demonstrates async PPO where the collector runs continuously in
 the background, feeding data into a replay buffer, while the trainer samples
 from the buffer and trains. Because the collector's policy may be several
 gradient steps behind the trainer, importance sampling corrections are applied
-automatically by ClipPPOLoss (via the stored sample_log_prob).
+automatically by ClipPPOLoss (via the stored action_log_prob).
 
 Supports three collection/advantage modes (configured via YAML):
 
