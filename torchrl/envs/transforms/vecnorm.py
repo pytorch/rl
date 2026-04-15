@@ -256,17 +256,18 @@ class VecNormV2(Transform):
         self._cast_int_to_float = False
         if self.stateful:
             self.register_buffer("initialized", torch.zeros((), dtype=torch.bool))
-            if shared_data:
+            if shared_data is not None:
                 self._loc = shared_data["loc"]
                 self._var = shared_data["var"]
                 self._count = shared_data["count"]
+                self.initialized.fill_(True)
             else:
                 self._loc = None
                 self._var = None
                 self._count = None
         else:
             self.initialized = False
-            if shared_data:
+            if shared_data is not None:
                 # FIXME
                 raise NotImplementedError
         if reduce_batch_dims and not stateful:
@@ -571,7 +572,15 @@ class VecNormV2(Transform):
         return data_update
 
     def _stateful_norm(self, data):
-        return self._norm(data, self._loc, self._var, self._count)
+        loc = self._loc
+        var = self._var
+        count = self._count
+        # Handle cross-device: shared-memory stats live on CPU, data may be on GPU
+        if loc.device != data.device:
+            loc = loc.to(data.device)
+            var = var.to(data.device)
+            count = count.to(data.device)
+        return self._norm(data, loc, var, count)
 
     def _stateful_update(self, data):
         if self.frozen:
@@ -609,8 +618,9 @@ class VecNormV2(Transform):
                 weight = 1 - self.decay
             else:
                 weight = 1 / count
-        loc.lerp_(end=data_mean, weight=weight)
-        var.lerp_(end=data2, weight=weight)
+        # Handle cross-device: shared-memory stats on CPU, data on GPU
+        loc.lerp_(end=data_mean.to(loc.device), weight=weight)
+        var.lerp_(end=data2.to(loc.device), weight=weight)
 
     def _maybe_stateless_init(self, data):
         if not self.initialized or f"{self.prefix}_loc" not in data.keys():
