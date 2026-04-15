@@ -428,13 +428,13 @@ class MultiSyncCollector(MultiCollector):
 
             self._frames += n_collected
 
-            if self.postprocs:
-                self.postprocs = (
-                    self.postprocs.to(out.device)
-                    if hasattr(self.postprocs, "to")
-                    else self.postprocs
+            if self.postproc:
+                self.postproc = (
+                    self.postproc.to(out.device)
+                    if hasattr(self.postproc, "to")
+                    else self.postproc
                 )
-                out = self.postprocs(out)
+                out = self.postproc(out)
             if self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
                 if excluded_keys:
