@@ -33,9 +33,27 @@ log = logging.getLogger(__name__)
 
 # ── Environment factories ──────────────────────────────────────────────
 
-# Number of random rollout steps used by ObservationNorm.init_stats to
-# compute the mean/std of observations.
+# Number of random rollout steps used to compute ObservationNorm stats.
 _OBS_NORM_INIT_STEPS = 1000
+
+
+def compute_obs_norm_stats(env_name):
+    """Compute ObservationNorm loc/scale from a small proof env.
+
+    Returns (loc, scale) tensors on CPU.  These are passed into make_env
+    and make_eval_env so that the (potentially compiled, high-batch-size)
+    production envs never need to run init_stats themselves.
+    """
+    proof = ENVS[env_name](
+        num_envs=1, device="cpu", dtype=torch.float32, compile_step=False
+    )
+    proof = TransformedEnv(proof)
+    obs_norm = ObservationNorm(in_keys=["observation"], standard_normal=True)
+    proof.append_transform(obs_norm)
+    obs_norm.init_stats(_OBS_NORM_INIT_STEPS)
+    loc, scale = obs_norm.loc.clone(), obs_norm.scale.clone()
+    del proof
+    return loc, scale
 
 
 def make_env(
@@ -43,14 +61,16 @@ def make_env(
     device="cpu",
     num_envs=4096,
     compile=True,
+    obs_norm_loc=None,
+    obs_norm_scale=None,
 ):
     """Create a batched MuJoCo env using mujoco-torch.
 
     Returns a single env with batch_size=[num_envs], where all envs run
     in parallel via torch.vmap (GPU) or sequential (CPU).
 
-    ObservationNorm is initialized with fixed loc/scale computed from
-    random rollouts (standard_normal=True).
+    When obs_norm_loc/scale are provided, ObservationNorm uses those fixed
+    stats (avoids running init_stats on the production env).
     """
     compile_kwargs = {"mode": "default"} if compile else None
     env = ENVS[env_name](
@@ -61,8 +81,20 @@ def make_env(
         compile_kwargs=compile_kwargs,
     )
     env = TransformedEnv(env)
-    env.append_transform(ObservationNorm(in_keys=["observation"], standard_normal=True))
-    env.transform[-1].init_stats(_OBS_NORM_INIT_STEPS)
+    if obs_norm_loc is not None and obs_norm_scale is not None:
+        env.append_transform(
+            ObservationNorm(
+                loc=obs_norm_loc,
+                scale=obs_norm_scale,
+                in_keys=["observation"],
+                standard_normal=True,
+            )
+        )
+    else:
+        env.append_transform(
+            ObservationNorm(in_keys=["observation"], standard_normal=True)
+        )
+        env.transform[-1].init_stats(_OBS_NORM_INIT_STEPS)
     env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
@@ -72,15 +104,19 @@ def make_env(
     return env
 
 
-def make_eval_env(env_name, device, num_eval_envs, max_steps=1000):
+def make_eval_env(
+    env_name,
+    device,
+    num_eval_envs,
+    max_steps=1000,
+    obs_norm_loc=None,
+    obs_norm_scale=None,
+):
     """Env factory for the Evaluator.
 
     Creates a compiled GPU-batched mujoco-torch env. The StepCounter
     uses max_steps so that episodes terminate — the Evaluator skips adding
     its own max_frames_per_traj when it sees an existing step_count.
-
-    ObservationNorm uses the same fixed loc/scale as the training env
-    (both computed from random rollouts of the same env).
     """
     env = ENVS[env_name](
         num_envs=num_eval_envs,
@@ -90,8 +126,20 @@ def make_eval_env(env_name, device, num_eval_envs, max_steps=1000):
         compile_kwargs={"mode": "default"},
     )
     env = TransformedEnv(env)
-    env.append_transform(ObservationNorm(in_keys=["observation"], standard_normal=True))
-    env.transform[-1].init_stats(_OBS_NORM_INIT_STEPS)
+    if obs_norm_loc is not None and obs_norm_scale is not None:
+        env.append_transform(
+            ObservationNorm(
+                loc=obs_norm_loc,
+                scale=obs_norm_scale,
+                in_keys=["observation"],
+                standard_normal=True,
+            )
+        )
+    else:
+        env.append_transform(
+            ObservationNorm(in_keys=["observation"], standard_normal=True)
+        )
+        env.transform[-1].init_stats(_OBS_NORM_INIT_STEPS)
     env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
     env.append_transform(RewardSum())
     env.append_transform(StepCounter(max_steps=max_steps))

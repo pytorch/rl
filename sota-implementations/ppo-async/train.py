@@ -23,6 +23,7 @@ from torchrl.collectors import Evaluator, MultiaSyncDataCollector
 from torchrl.weight_update import SharedMemWeightSyncScheme
 from utils_mujoco import (
     ActorWithCritic,
+    compute_obs_norm_stats,
     LearnerPostproc,
     make_env,
     make_eval_env,
@@ -77,6 +78,10 @@ def train_start(
     total_network_updates,
 ):
     """Fully async training: collector.start() fills buffer independently."""
+    # Compute obs norm stats once on a small CPU env (avoids expensive
+    # init_stats on compiled 64K-env production envs).
+    obs_norm_loc, obs_norm_scale = compute_obs_norm_stats(cfg.env.env_name)
+
     # Shared version counter (readable by workers via postproc)
     version_counter = multiprocessing.Value("i", 0)
 
@@ -102,6 +107,8 @@ def train_start(
             collect_device,
             cfg.env.num_envs,
             cfg.env.compile,
+            obs_norm_loc=obs_norm_loc,
+            obs_norm_scale=obs_norm_scale,
         )
     ]
 
@@ -129,6 +136,8 @@ def train_start(
             cfg.env.env_name,
             eval_device,
             num_eval_envs,
+            obs_norm_loc=obs_norm_loc,
+            obs_norm_scale=obs_norm_scale,
         ),
         policy_factory=partial(
             _make_eval_policy, env_name=cfg.env.env_name, device=eval_device
@@ -372,6 +381,9 @@ def train_iterate(
     total_network_updates,
 ):
     """Semi-async training: for data in collector, gated on collector output."""
+    # Compute obs norm stats once on a small CPU env
+    obs_norm_loc, obs_norm_scale = compute_obs_norm_stats(cfg.env.env_name)
+
     collector_policy = ActorWithCritic(actor, critic)
 
     create_env_fn = [
@@ -381,6 +393,8 @@ def train_iterate(
             collect_device,
             cfg.env.num_envs,
             cfg.env.compile,
+            obs_norm_loc=obs_norm_loc,
+            obs_norm_scale=obs_norm_scale,
         )
     ]
 
@@ -406,6 +420,8 @@ def train_iterate(
             cfg.env.env_name,
             eval_device,
             num_eval_envs,
+            obs_norm_loc=obs_norm_loc,
+            obs_norm_scale=obs_norm_scale,
         ),
         policy_factory=partial(
             _make_eval_policy, env_name=cfg.env.env_name, device=eval_device
