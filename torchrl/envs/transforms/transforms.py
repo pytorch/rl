@@ -8100,25 +8100,26 @@ class RandomTruncationTransform(Transform):
     otherwise the full ``max_horizon`` is used.
 
     ``first_episode_prob`` controls the truncation probability for each
-    environment's first episode after the initial spread.  Setting it to 1.0
-    (default) ensures every environment goes through a second short-horizon
-    episode before settling to ``prob``, which accelerates decorrelation when
-    batch sizes are large relative to ``max_horizon``.
+    environment's first episode after the initial spread. By default it matches
+    ``prob`` so that ``prob=0.0`` disables all subsequent random truncation
+    after the initial spread. Setting it higher than ``prob`` can accelerate
+    decorrelation when batch sizes are large relative to ``max_horizon``.
 
     .. note:: This transform must be placed **after** :class:`~torchrl.envs.StepCounter`
         in the transform chain, as it relies on the ``"step_count"`` key.
 
     Args:
+        min_horizon (int): minimum horizon for random truncation
+            (inclusive).
+        max_horizon (int): maximum horizon for random truncation
+            (inclusive). Also used as the full-length horizon when no random
+            truncation is applied. In practice, this should usually match the
+            environment horizon.
         prob (float, optional): probability of sampling a random horizon on
-            each subsequent reset.  Defaults to ``0.5``.
-        min_horizon (int, optional): minimum horizon for random truncation
-            (inclusive).  Defaults to ``500``.
-        max_horizon (int, optional): maximum horizon for random truncation
-            (inclusive).  Also used as the full-length horizon when no random
-            truncation is applied.  Defaults to ``1000``.
+            each subsequent reset. Defaults to ``0.0``.
         first_episode_prob (float, optional): truncation probability for each
-            environment's first episode after the initial spread.  Defaults to
-            ``1.0``.
+            environment's first episode after the initial spread. Defaults to
+            ``prob`` when omitted.
 
     Examples:
         >>> from torchrl.envs import GymEnv, TransformedEnv, StepCounter
@@ -8142,24 +8143,28 @@ class RandomTruncationTransform(Transform):
 
     def __init__(
         self,
-        prob: float = 0.5,
-        min_horizon: int = 500,
-        max_horizon: int = 1000,
-        first_episode_prob: float = 1.0,
+        min_horizon: int,
+        max_horizon: int,
+        prob: float = 0.0,
+        first_episode_prob: float | None = None,
     ):
         super().__init__()
+        if first_episode_prob is None:
+            first_episode_prob = prob
         if not 0.0 <= prob <= 1.0:
             raise ValueError(f"prob must be in [0, 1], got {prob}")
         if not 0.0 <= first_episode_prob <= 1.0:
             raise ValueError(
                 f"first_episode_prob must be in [0, 1], got {first_episode_prob}"
             )
+        if min_horizon < 1:
+            raise ValueError(f"min_horizon must be >= 1, got {min_horizon}")
+        if max_horizon < 1:
+            raise ValueError(f"max_horizon must be >= 1, got {max_horizon}")
         if min_horizon > max_horizon:
             raise ValueError(
                 f"min_horizon ({min_horizon}) must be <= max_horizon ({max_horizon})"
             )
-        if max_horizon < 1:
-            raise ValueError(f"max_horizon must be >= 1, got {max_horizon}")
         self.prob = prob
         self.first_episode_prob = first_episode_prob
         self.min_horizon = min_horizon
@@ -8167,6 +8172,28 @@ class RandomTruncationTransform(Transform):
         self._horizons: torch.Tensor | None = None
         self._first_episode: torch.Tensor | None = None
         self._initialized = False
+
+    def set_container(self, container: Transform | EnvBase) -> None:
+        super().set_container(container)
+        self._validate_step_counter_registration()
+
+    def _validate_step_counter_registration(self) -> None:
+        parent = self.parent
+        if parent is None:
+            return
+        observation_spec = getattr(parent, "observation_spec", None)
+        if observation_spec is None:
+            return
+        keys = observation_spec.keys(True, True)
+        has_step_count = any(
+            key == "step_count" or (isinstance(key, tuple) and key[-1] == "step_count")
+            for key in keys
+        )
+        if not has_step_count:
+            raise RuntimeError(
+                "RandomTruncationTransform requires a StepCounter earlier in the "
+                "transform chain."
+            )
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
@@ -8216,6 +8243,10 @@ class RandomTruncationTransform(Transform):
         if reset_mask is not None:
             mask = reset_mask.view_as(self._horizons).bool()
             if mask.any():
+                if self.prob == 0.0 and self.first_episode_prob == 0.0:
+                    self._horizons[mask] = self.max_horizon
+                    self._first_episode[mask] = False
+                    return tensordict_reset
                 n = int(mask.sum())
                 new_h = torch.randint(
                     self.min_horizon,
