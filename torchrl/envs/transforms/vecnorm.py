@@ -357,6 +357,18 @@ class VecNormV2(Transform):
                 other._count = self._count.clone()
         return other
 
+    def _stats_are_shared(self) -> bool:
+        if not self.stateful or self._loc is None:
+            return False
+
+        shared = [leaf.is_shared() for leaf in self._loc.values(True, True)]
+        shared.extend(leaf.is_shared() for leaf in self._var.values(True, True))
+        if isinstance(self._count, TensorDictBase):
+            shared.extend(leaf.is_shared() for leaf in self._count.values(True, True))
+        else:
+            shared.append(self._count.is_shared())
+        return all(shared)
+
     def _apply(self, fn, recurse=True):
         """Apply device/dtype transformation to the module and its TensorDict state.
 
@@ -367,6 +379,10 @@ class VecNormV2(Transform):
         super()._apply(fn, recurse=recurse)
 
         if self.stateful and self._loc is not None:
+            if self._stats_are_shared():
+                # Shared stats must stay on CPU-backed shared memory so other
+                # processes can keep observing live updates.
+                return self
             self._loc = self._loc.apply(fn)
             self._var = self._var.apply(fn)
             # Move _count to same device as _loc, but preserve its int dtype.
