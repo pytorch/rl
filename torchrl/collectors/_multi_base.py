@@ -503,7 +503,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             total_frames, total_frames_per_batch, frames_per_batch
         )
         self.reset_at_each_iter = reset_at_each_iter
-        self.postprocs = postproc
+        self.postproc = postproc
         self.max_frames_per_traj = (
             int(max_frames_per_traj) if max_frames_per_traj is not None else 0
         )
@@ -538,6 +538,27 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
 
         # Validate cat_results
         self._validate_cat_results(cat_results)
+
+    @property
+    def postprocs(self):
+        """Deprecated: use :attr:`postproc` instead. Will be removed in v0.14."""
+        warnings.warn(
+            "MultiCollector.postprocs is deprecated, use .postproc instead. "
+            "This will be removed in v0.14.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        return self.postproc
+
+    @postprocs.setter
+    def postprocs(self, value):
+        warnings.warn(
+            "MultiCollector.postprocs is deprecated, use .postproc instead. "
+            "This will be removed in v0.14.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        self.postproc = value
 
     def _setup_workers_and_env_fns(
         self,
@@ -1221,7 +1242,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "no_cuda_sync": self.no_cuda_sync,
                     "collector_class": self.collector_class,
                     "postproc": (
-                        self.postprocs if self.replay_buffer is not None else None
+                        self.postproc if self.replay_buffer is not None else None
                     ),
                     "weight_sync_schemes": self._weight_sync_schemes,
                     "worker_idx": i,  # Worker index for queue-based weight distribution
