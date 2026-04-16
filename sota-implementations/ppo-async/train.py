@@ -71,6 +71,8 @@ def train_start(
     cfg_optim_lr,
     cfg_loss_anneal_clip_eps,
     cfg_loss_clip_epsilon,
+    cfg_loss_anneal_entropy,
+    cfg_loss_entropy_coeff,
     cfg_optim_max_grad_norm,
     cfg_buffer_min_fill,
     cfg_loss_gamma,
@@ -240,6 +242,8 @@ def train_start(
                 group["lr"] = cfg_optim_lr * alpha
         if cfg_loss_anneal_clip_eps:
             loss_module.clip_epsilon.copy_(cfg_loss_clip_epsilon * alpha)
+        if cfg_loss_anneal_entropy:
+            loss_module.entropy_coeff.copy_(cfg_loss_entropy_coeff * alpha)
 
         optim.zero_grad(set_to_none=True)
         loss = loss_module(batch)
@@ -282,6 +286,9 @@ def train_start(
                 "train/clip_epsilon": (alpha * cfg_loss_clip_epsilon)
                 if cfg_loss_anneal_clip_eps
                 else cfg_loss_clip_epsilon,
+                "train/entropy_coeff": (alpha * cfg_loss_entropy_coeff)
+                if cfg_loss_anneal_entropy
+                else cfg_loss_entropy_coeff,
                 "train/ESS": loss["ESS"].item(),
                 "train/clip_fraction": loss["clip_fraction"].item(),
                 "train/kl_approx": loss["kl_approx"].item(),
@@ -377,6 +384,8 @@ def train_iterate(
     cfg_optim_lr,
     cfg_loss_anneal_clip_eps,
     cfg_loss_clip_epsilon,
+    cfg_loss_anneal_entropy,
+    cfg_loss_entropy_coeff,
     cfg_optim_max_grad_norm,
     cfg_buffer_min_fill,
     test_interval,
@@ -519,6 +528,8 @@ def train_iterate(
                     group["lr"] = cfg_optim_lr * alpha
             if cfg_loss_anneal_clip_eps:
                 loss_module.clip_epsilon.copy_(cfg_loss_clip_epsilon * alpha)
+            if cfg_loss_anneal_entropy:
+                loss_module.entropy_coeff.copy_(cfg_loss_entropy_coeff * alpha)
 
             optim.zero_grad(set_to_none=True)
             loss = loss_module(batch)
@@ -556,6 +567,9 @@ def train_iterate(
                 "train/clip_epsilon": (alpha * cfg_loss_clip_epsilon)
                 if cfg_loss_anneal_clip_eps
                 else cfg_loss_clip_epsilon,
+                "train/entropy_coeff": (alpha * cfg_loss_entropy_coeff)
+                if cfg_loss_anneal_entropy
+                else cfg_loss_entropy_coeff,
                 "train/ESS": loss["ESS"].item(),
                 "train/clip_fraction": loss["clip_fraction"].item(),
                 "train/kl_approx": loss["kl_approx"].item(),

@@ -176,6 +176,8 @@ def main(cfg: DictConfig):
     cfg_optim_lr = torch.tensor(cfg.optim.lr, device=device)
     cfg_loss_anneal_clip_eps = cfg.loss.anneal_clip_epsilon
     cfg_loss_clip_epsilon = cfg.loss.clip_epsilon
+    cfg_loss_anneal_entropy = cfg.loss.anneal_entropy_coeff
+    cfg_loss_entropy_coeff = cfg.loss.entropy_coeff
     cfg_optim_max_grad_norm = cfg.optim.max_grad_norm
     cfg_buffer_min_fill = cfg.buffer.min_fill
     cfg_loss_gamma = cfg.loss.gamma
@@ -207,6 +209,8 @@ def main(cfg: DictConfig):
         "cfg_optim_lr": cfg_optim_lr,
         "cfg_loss_anneal_clip_eps": cfg_loss_anneal_clip_eps,
         "cfg_loss_clip_epsilon": cfg_loss_clip_epsilon,
+        "cfg_loss_anneal_entropy": cfg_loss_anneal_entropy,
+        "cfg_loss_entropy_coeff": cfg_loss_entropy_coeff,
         "cfg_optim_max_grad_norm": cfg_optim_max_grad_norm,
         "cfg_buffer_min_fill": cfg_buffer_min_fill,
         "test_interval": cfg.logger.test_interval,
