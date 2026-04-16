@@ -47,6 +47,7 @@ class TestEvaluatorSync:
             metrics = evaluator.evaluate(step=0)
             assert "eval/reward" in metrics
             assert "eval/episode_length" in metrics
+            assert "eval/fps" in metrics
             assert isinstance(metrics["eval/reward"], float)
         finally:
             evaluator.shutdown()
@@ -166,6 +167,7 @@ class TestEvaluatorAsync:
             result = evaluator.wait(timeout=30)
             assert result is not None
             assert "eval/reward" in result
+            assert "eval/fps" in result
         finally:
             evaluator.shutdown()
 

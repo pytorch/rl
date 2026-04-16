@@ -57,7 +57,7 @@ Quick example
         # Optionally check for results
         result = evaluator.poll()
         if result is not None:
-            print(result)  # {"eval/reward": ..., "eval/episode_length": ...}
+            print(result)  # {"eval/reward": ..., "eval/episode_length": ..., "eval/fps": ...}
 
     evaluator.shutdown()
 
@@ -70,7 +70,7 @@ scripts), use :meth:`~Evaluator.evaluate`:
 .. code-block:: python
 
     metrics = evaluator.evaluate(weights=train_policy, step=step)
-    # metrics == {"eval/reward": -123.4, "eval/episode_length": 1000}
+    # metrics == {"eval/reward": -123.4, "eval/episode_length": 1000, "eval/fps": ...}
 
 Asynchronous usage
 ------------------

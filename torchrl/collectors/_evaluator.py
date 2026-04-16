@@ -74,6 +74,7 @@ import abc
 import importlib
 import logging
 import threading
+import time
 from collections import deque
 from collections.abc import Callable
 from typing import Any
@@ -586,7 +587,7 @@ class Evaluator:
     def _format_metrics(self, raw: dict[str, Any]) -> dict[str, Any]:
         prefix = self._log_prefix
         out: dict[str, Any] = {}
-        for key in ("reward", "reward_std", "num_episodes", "episode_length"):
+        for key in ("reward", "reward_std", "num_episodes", "episode_length", "fps"):
             if key in raw:
                 out[f"{prefix}/{key}"] = raw[key]
         if "frames" in raw and raw["frames"] is not None:
@@ -680,6 +681,7 @@ def _extract_metrics_from_trajectories(
     reward_keys: NestedKey,
     done_keys: NestedKey,
     metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
+    eval_time: float | None = None,
 ) -> dict[str, Any]:
     """Extract evaluation metrics from a trajectory batch produced by a collector.
 
@@ -691,6 +693,7 @@ def _extract_metrics_from_trajectories(
 
     episode_rewards = []
     episode_lengths = []
+    total_frames = 0
 
     ep_reward_td = traj_batch.get(_EPISODE_REWARD_KEY, None)
     step_count_td = traj_batch.get(("next", "step_count"), None)
@@ -703,6 +706,7 @@ def _extract_metrics_from_trajectories(
         valid_len = traj_mask.sum().item()
         if valid_len == 0:
             continue
+        total_frames += int(valid_len)
 
         # Last valid index
         last_idx = int(valid_len) - 1
@@ -746,6 +750,9 @@ def _extract_metrics_from_trajectories(
         "num_episodes": num_episodes,
         "episode_length": mean_length,
     }
+    if eval_time is not None and eval_time > 0:
+        metrics["fps"] = total_frames / eval_time
+    metrics["frame_count"] = total_frames
 
     if metrics_fn is not None:
         custom = metrics_fn(traj_batch)
@@ -1140,6 +1147,7 @@ class _ThreadEvalBackend(_EvalBackend):
         if not self._use_multi_collector and isinstance(self._policy, nn.Module):
             self._policy.eval()
 
+        eval_start = time.perf_counter()
         with set_exploration_type(self._exploration_type), torch.no_grad():
             if self._use_multi_collector:
                 # MultiSyncCollector: use a persistent iterator because
@@ -1161,6 +1169,7 @@ class _ThreadEvalBackend(_EvalBackend):
             self._reward_keys,
             self._done_keys,
             self._metrics_fn,
+            eval_time=time.perf_counter() - eval_start,
         )
 
     def dump_video(self, step: int | None = None) -> None:

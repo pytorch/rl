@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import logging
 import multiprocessing
-import threading
 import time
 from functools import partial
 
@@ -50,36 +49,19 @@ def _make_eval_policy(env, env_name, device):
     return make_ppo_models(env_name, device)[0]
 
 
-def _result_to_log_dict(result):
-    metrics = {}
-    for key, value in result.items():
-        if isinstance(value, torch.Tensor) and value.numel() == 1:
-            metrics[key] = value.item()
-        else:
-            metrics[key] = value
-    return metrics
-
-
-def _make_eval_result_handler(logger, logger_lock, num_eval_envs):
-    pending_eval_start: dict[int, float] = {}
-
-    def mark_eval_trigger(step: int) -> None:
-        pending_eval_start[step] = time.time()
-
-    def on_result(result) -> None:
-        if logger is None:
-            return
-        metrics = _result_to_log_dict(result)
-        step = int(metrics["eval/step"])
-        started_at = pending_eval_start.pop(step, None)
-        if started_at is not None:
-            dt = time.time() - started_at
-            if dt > 0:
-                metrics["eval/fps"] = (num_eval_envs * 1000) / dt
-        with logger_lock:
-            logger.log_metrics(metrics, step)
-
-    return mark_eval_trigger, on_result
+def _log_eval_result(logger, result):
+    if logger is None:
+        return
+    step = int(result["eval/step"].item())
+    logger.log_metrics(
+        {
+            key: value.item()
+            if isinstance(value, torch.Tensor) and value.numel() == 1
+            else value
+            for key, value in result.items()
+        },
+        step,
+    )
 
 
 def train_start(
@@ -153,11 +135,6 @@ def train_start(
         weight_sync_schemes=weight_sync_schemes,
     )
 
-    logger_lock = threading.Lock()
-    mark_eval_trigger, on_eval_result = _make_eval_result_handler(
-        logger, logger_lock, num_eval_envs
-    )
-
     # Async evaluator in a separate process (avoids CUDA stream contention)
     evaluator = Evaluator(
         env=partial(
@@ -172,12 +149,11 @@ def train_start(
         num_trajectories=num_eval_envs,
         max_steps=1000,
         backend="process",
-        on_result=on_eval_result,
+        on_result=partial(_log_eval_result, logger),
     )
 
     # Start collection and evaluation
     collector.start()
-    mark_eval_trigger(0)
     evaluator.trigger_eval(actor, step=0)
 
     policy_version = 0
@@ -206,7 +182,6 @@ def train_start(
 
         # Trigger the next eval once the previous one has completed.
         if not evaluator.pending and (current_wc - last_eval_wc >= test_interval):
-            mark_eval_trigger(current_wc)
             evaluator.trigger_eval(actor, step=current_wc)
             last_eval_wc = current_wc
 
@@ -342,8 +317,7 @@ def train_start(
         last_fps_wc = current_wc
 
         if logger:
-            with logger_lock:
-                logger.log_metrics(metrics_to_log, current_wc)
+            logger.log_metrics(metrics_to_log, current_wc)
 
     # Log any final eval result
     evaluator.wait(timeout=120)
@@ -412,11 +386,6 @@ def train_iterate(
         postproc=adv_module,
     )
 
-    logger_lock = threading.Lock()
-    mark_eval_trigger, on_eval_result = _make_eval_result_handler(
-        logger, logger_lock, num_eval_envs
-    )
-
     # Async evaluator in a separate process (avoids CUDA stream contention)
     evaluator = Evaluator(
         env=partial(
@@ -431,11 +400,10 @@ def train_iterate(
         num_trajectories=num_eval_envs,
         max_steps=1000,
         backend="process",
-        on_result=on_eval_result,
+        on_result=partial(_log_eval_result, logger),
     )
 
     # Start continuous eval immediately
-    mark_eval_trigger(0)
     evaluator.trigger_eval(actor, step=0)
 
     policy_version = 0
@@ -593,13 +561,11 @@ def train_iterate(
         if not evaluator.pending and (
             collected_frames - last_eval_frames >= test_interval
         ):
-            mark_eval_trigger(collected_frames)
             evaluator.trigger_eval(actor, step=collected_frames)
             last_eval_frames = collected_frames
 
         if logger:
-            with logger_lock:
-                logger.log_metrics(metrics_to_log, collected_frames)
+            logger.log_metrics(metrics_to_log, collected_frames)
 
     # Log any final eval result
     evaluator.wait(timeout=120)
