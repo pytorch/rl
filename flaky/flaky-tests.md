@@ -1,11 +1,11 @@
-# Flaky Test Report - 2026-04-15
+# Flaky Test Report - 2026-04-16
 
 ## Summary
 
 - **Flaky tests**: 32
 - **Newly flaky** (last 7 days): 32
 - **Resolved**: 0
-- **Total tests analyzed**: 27153
+- **Total tests analyzed**: 27175
 - **CI runs analyzed**: 15
 
 ---
@@ -14,7 +14,7 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...ffer::test_trajs_per_batch_multi_collector_batched_env_rb` 🆕 | 25.0% (20/80) | 20 | 0.50 | 2026-04-12 |
+| `...ffer::test_trajs_per_batch_multi_collector_batched_env_rb` 🆕 | 22.2% (20/90) | 20 | 0.44 | 2026-04-12 |
 | `test/test_rb.py::TestSamplers::test_slice_sampler_errors` 🆕 | 13.3% (20/150) | 20 | 0.27 | 2026-04-12 |
 | `...plers::test_slice_sampler_prioritized[False-False-True-2]` 🆕 | 13.3% (20/150) | 20 | 0.27 | 2026-04-12 |
 | `...lers::test_slice_sampler_prioritized[False-False-False-2]` 🆕 | 13.3% (20/150) | 20 | 0.27 | 2026-04-12 |
@@ -82,4 +82,4 @@
 
 ---
 
-*Generated at 2026-04-15T06:45:43.319466+00:00*
+*Generated at 2026-04-16T06:47:26.307612+00:00*

@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-04-15T06:45:43.319466+00:00",
+  "generated_at": "2026-04-16T06:47:26.307612+00:00",
   "analysis_period": {
-    "start": "2026-04-09",
-    "end": "2026-04-14",
+    "start": "2026-04-10",
+    "end": "2026-04-15",
     "runs_analyzed": 15
   },
   "summary": {
-    "total_tests": 27153,
+    "total_tests": 27175,
     "flaky_count": 32,
     "new_flaky_count": 32,
     "resolved_count": 0
@@ -14,15 +14,15 @@
   "flaky_tests": [
     {
       "nodeid": "test/test_collectors.py::TestTrajsPerBatchReplayBuffer::test_trajs_per_batch_multi_collector_batched_env_rb",
-      "executions": 80,
+      "executions": 90,
       "failures": 20,
-      "failure_rate": 0.25,
-      "flaky_score": 0.5,
-      "passed": 60,
+      "failure_rate": 0.2222,
+      "flaky_score": 0.4444,
+      "passed": 70,
       "failed": 20,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 1.37,
+      "avg_duration": 1.42,
       "recent_failures": [
         "2026-04-12T17:02:09Z",
         "2026-04-12T17:02:09Z",
@@ -190,7 +190,7 @@
       "failed": 20,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 0.066,
+      "avg_duration": 0.065,
       "recent_failures": [
         "2026-04-12T17:02:09Z",
         "2026-04-12T17:02:09Z",
@@ -316,7 +316,7 @@
       "failed": 20,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 0.598,
+      "avg_duration": 0.597,
       "recent_failures": [
         "2026-04-12T17:02:09Z",
         "2026-04-12T17:02:09Z",
@@ -484,7 +484,7 @@
       "failed": 20,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 0.685,
+      "avg_duration": 0.684,
       "recent_failures": [
         "2026-04-12T17:02:09Z",
         "2026-04-12T17:02:09Z",
@@ -505,7 +505,7 @@
       "failed": 20,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 0.685,
+      "avg_duration": 0.684,
       "recent_failures": [
         "2026-04-12T17:02:09Z",
         "2026-04-12T17:02:09Z",
@@ -631,7 +631,7 @@
       "failed": 20,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 0.686,
+      "avg_duration": 0.685,
       "recent_failures": [
         "2026-04-12T17:02:09Z",
         "2026-04-12T17:02:09Z",
@@ -652,7 +652,7 @@
       "failed": 20,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 1.615,
+      "avg_duration": 1.614,
       "recent_failures": [
         "2026-04-12T17:02:09Z",
         "2026-04-12T17:02:09Z",
@@ -673,7 +673,7 @@
       "failed": 20,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 1.614,
+      "avg_duration": 1.613,
       "recent_failures": [
         "2026-04-12T17:02:09Z",
         "2026-04-12T17:02:09Z",
