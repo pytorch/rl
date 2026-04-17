@@ -6,6 +6,7 @@
 
 from torchrl.modules.tensordict_module.common import DistributionalDQNnet
 
+from .act import ACTModel
 from .batchrenorm import BatchRenorm1d
 
 from .decision_transformer import DecisionTransformer
@@ -51,6 +52,7 @@ from .rbf_controller import RBFController
 from .utils import Squeeze2dLayer, SqueezeLayer
 
 __all__ = [
+    "ACTModel",
     "BatchRenorm1d",
     "ConsistentDropout",
     "ConsistentDropoutModule",
