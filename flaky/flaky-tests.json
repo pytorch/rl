@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-18T06:32:22.956799+00:00",
+  "generated_at": "2026-04-19T06:42:10.676756+00:00",
   "analysis_period": {
     "start": "2026-04-10",
     "end": "2026-04-15",
@@ -8,7 +8,7 @@
   "summary": {
     "total_tests": 27175,
     "flaky_count": 32,
-    "new_flaky_count": 32,
+    "new_flaky_count": 0,
     "resolved_count": 0
   },
   "flaky_tests": [
@@ -31,7 +31,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_errors",
@@ -52,7 +52,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized[False-False-True-2]",
@@ -73,7 +73,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized[False-False-False-2]",
@@ -94,7 +94,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized[False-True-True-2]",
@@ -115,7 +115,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized[False-True-False-2]",
@@ -136,7 +136,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized[True-False-True-2]",
@@ -157,7 +157,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized[True-False-False-2]",
@@ -178,7 +178,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized[True-True-True-2]",
@@ -199,7 +199,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized[True-True-False-2]",
@@ -220,7 +220,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[False-False-True-2]",
@@ -241,7 +241,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[False-False-False-2]",
@@ -262,7 +262,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[False-True-True-2]",
@@ -283,7 +283,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[False-True-False-2]",
@@ -304,7 +304,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span1-False-True-2]",
@@ -325,7 +325,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span1-False-False-2]",
@@ -346,7 +346,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span1-True-True-2]",
@@ -367,7 +367,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span1-True-False-2]",
@@ -388,7 +388,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span2-False-True-2]",
@@ -409,7 +409,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span2-False-False-2]",
@@ -430,7 +430,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span2-True-True-2]",
@@ -451,7 +451,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span2-True-False-2]",
@@ -472,7 +472,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[3-False-True-2]",
@@ -493,7 +493,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[3-False-False-2]",
@@ -514,7 +514,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[3-True-True-2]",
@@ -535,7 +535,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[3-True-False-2]",
@@ -556,7 +556,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span4-False-True-2]",
@@ -577,7 +577,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span4-False-False-2]",
@@ -598,7 +598,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span4-True-True-2]",
@@ -619,7 +619,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestSamplers::test_slice_sampler_prioritized_span[span4-True-False-2]",
@@ -640,7 +640,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestRBMultidim::test_done_slicesampler[True]",
@@ -661,7 +661,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_rb.py::TestRBMultidim::test_done_slicesampler[False]",
@@ -682,7 +682,7 @@
         "2026-04-12T17:02:09Z"
       ],
       "first_seen_flaky": "2026-04-11T17:47:51Z",
-      "is_new": true
+      "is_new": false
     }
   ],
   "thresholds": {
