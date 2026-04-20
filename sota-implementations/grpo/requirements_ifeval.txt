@@ -1,0 +1,16 @@
+vllm==0.14.1
+torch
+transformers
+peft
+bitsandbytes
+datasets
+wandb
+hydra-core
+ray
+tqdm
+tensordict
+accelerate
+xformers
+nltk
+langdetect
+immutabledict

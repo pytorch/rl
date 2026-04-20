@@ -1,0 +1,190 @@
+# This workflow builds the torchrl docs and deploys them to gh-pages.
+name: Generate documentation
+on:
+  push:
+    branches:
+      - nightly
+      - main
+      - release/*
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]
+      - v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
+  # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
+  group: docs-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-docs:
+    strategy:
+      matrix:
+        python_version: [ "3.12" ]
+        cuda_arch_version: [ "12.8" ]
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    with:
+      runner: linux.g5.4xlarge.nvidia.gpu
+      repository: pytorch/rl
+      upload-artifact: docs
+      timeout: 120
+      # Use PyTorch image with newer GCC for GLIBCXX_3.4.30 support (needed by AOTInductor in export.py)
+      docker-image: pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel
+      script: |
+        set -e
+        set -v
+        
+        # Install system dependencies (Ubuntu-based PyTorch image)
+        apt-get update
+        apt-get install -y libglfw3 libglfw3-dev libgl1-mesa-glx libgl1-mesa-dev libegl1-mesa-dev \
+          freeglut3-dev libglu1-mesa libegl1 mesa-utils xvfb wget git cmake \
+          ffmpeg libavcodec-dev libavformat-dev libavutil-dev libswscale-dev \
+          libavdevice-dev libavfilter-dev libswresample-dev pkg-config
+        
+        # 2. upgrade pip, ninja and packaging
+        python -m pip install --upgrade pip
+        python -m pip install setuptools ninja packaging "pybind11[global]" -U
+        
+        # 3. check python version
+        python --version
+        
+        # 4. Check git version
+        git version
+        
+        # 5. Install PyTorch
+        # Uninstall pre-installed packages from Docker image to avoid conflicts
+        # (gym conflicts with gymnasium, torch/torchaudio versions conflict with nightly)
+        python -m pip uninstall -y torch torchvision torchaudio gym || true
+        
+        if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
+          # Use stable PyTorch for releases (tags and release/* branches)
+          python -m pip install torch torchvision --quiet --root-user-action=ignore
+          python -m pip install tensordict --quiet --root-user-action=ignore
+          python -m pip install torchcodec --quiet --root-user-action=ignore
+        else
+          # Use nightly PyTorch for main, nightly, and PRs
+          python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
+          python -m pip install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
+          torchcodec_dir=$(mktemp -d)
+          git clone --depth 1 https://github.com/pytorch/torchcodec.git "$torchcodec_dir"
+          python_base="$(python -c 'import sys; print(sys.base_prefix)')"
+          CMAKE_PREFIX_PATH="${python_base}${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}" \
+            I_CONFIRM_THIS_IS_NOT_A_LICENSE_VIOLATION=1 \
+            python -m pip install --no-build-isolation "$torchcodec_dir" --quiet --root-user-action=ignore
+          rm -rf "$torchcodec_dir"
+        fi
+        
+        # 6. Install doc requirements BEFORE TorchRL to ensure gymnasium is available
+        # (TorchRL's gym backend detection happens at import time)
+        python -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
+        
+        # 7. Install TorchRL
+        python -m pip install -e . --no-build-isolation
+
+        # 8. Assert PyTorch version matches expectations
+        if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
+          bash .github/unittest/helpers/assert_torch_version.sh stable
+        else
+          bash .github/unittest/helpers/assert_torch_version.sh nightly
+        fi
+
+        # 9. Set sanitize version
+        if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
+          echo '::group::Enable version string sanitization'
+          # This environment variable just has to exist and must not be empty. The actual value is arbitrary.
+          # See docs/source/conf.py for details
+          export RL_SANITIZE_VERSION_STR_IN_DOCS=1
+          echo '::endgroup::'
+        fi
+
+        # 10. Test torchrl installation
+        mkdir _tmp
+        cd _tmp
+        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python -c """from torchrl.envs.libs.dm_control import DMControlEnv
+        print(DMControlEnv('cheetah', 'run', from_pixels=True).reset())"""
+        cd ..
+        
+        # 11. Build doc
+        export MAX_IDLE_COUNT=180 # Max 180 secs before killing an unresponsive collector
+        export BATCHED_PIPE_TIMEOUT=180
+        cd ./docs
+        # timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
+        # bash -ic "PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
+        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl TORCHRL_CONSOLE_STREAM=stdout sphinx-build ./source _local_build -v -j 4
+        cd ..
+
+        cp -r docs/_local_build/* "${RUNNER_ARTIFACT_DIR}"
+        echo $(ls "${RUNNER_ARTIFACT_DIR}")
+        if [[ ${{ github.event_name == 'pull_request' }} ]]; then
+          cp -r docs/_local_build/* "${RUNNER_DOCS_DIR}"
+        fi
+
+  upload:
+    needs: build-docs
+    if: github.repository == 'pytorch/rl' && github.event_name == 'push' &&
+      ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
+    permissions:
+      contents: write
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      download-artifact: docs
+      ref: gh-pages
+      test-infra-ref: main
+      script: |
+        set -euo pipefail
+
+        REF_TYPE=${{ github.ref_type }}
+        REF_NAME=${{ github.ref_name }}
+
+        if [[ "${REF_TYPE}" == branch ]]; then
+          if [[ "${REF_NAME}" == main ]]; then
+            TARGET_FOLDER="${REF_NAME}"
+          # Bebug:
+          # else
+          #   TARGET_FOLDER="release-doc"
+          fi
+        elif [[ "${REF_TYPE}" == tag ]]; then
+          case "${REF_NAME}" in
+            *-rc*)
+              echo "Aborting upload since this is an RC tag: ${REF_NAME}"
+              exit 0
+              ;;
+            *)
+              # Strip the leading "v" as well as the trailing patch version. For example:
+              # 'v0.15.2' -> '0.15'
+              TARGET_FOLDER=$(echo "${REF_NAME}" | sed 's/v\([0-9]\+\)\.\([0-9]\+\)\.[0-9]\+/\1.\2/')
+              ;;
+          esac
+        fi
+
+        echo "Target Folder: ${TARGET_FOLDER}"
+
+        mkdir -p "${TARGET_FOLDER}"
+        rm -rf "${TARGET_FOLDER}"/*
+
+        echo $(ls "${RUNNER_ARTIFACT_DIR}")
+        rsync -a "${RUNNER_ARTIFACT_DIR}"/ "${TARGET_FOLDER}"
+        git add "${TARGET_FOLDER}" || true
+
+        # Debug
+        # if [[ "${TARGET_FOLDER}" == "main" ]] || [[ "${TARGET_FOLDER}" == "release-doc" ]]; then
+        if [[ "${TARGET_FOLDER}" == "main" ]] ; then
+          mkdir -p _static
+          rm -rf _static/*
+          cp -r "${TARGET_FOLDER}"/_static/* _static
+          git add _static || true
+        fi
+
+        git config user.name 'pytorchbot'
+        git config user.email 'soumith+bot@pytorch.org'
+        git config http.postBuffer 524288000
+        git commit -m "auto-generating sphinx docs" || true
+        git push
