@@ -2313,7 +2313,10 @@ class TargetReturn(Transform):
                 f"The shape of the reward ({reward.shape}) and target return ({target_return.shape}) must match."
             )
         if self.mode == "reduce":
-            target_return = target_return - reward
+            if len(target_return.shape) == 3:
+                target_return[:, -1] -= reward
+            else:
+                target_return = target_return - reward
             return target_return
         elif self.mode == "constant":
             target_return = target_return
