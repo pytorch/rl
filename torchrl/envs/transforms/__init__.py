@@ -45,6 +45,7 @@ from .transforms import (
     PermuteTransform,
     PinMemoryTransform,
     RandomCropTensorDict,
+    RandomTruncationTransform,
     RemoveEmptySpecs,
     RenameTransform,
     Resize,
@@ -74,6 +75,7 @@ from .transforms import (
 from .vc1 import VC1Transform
 from .vecnorm import VecNormV2
 from .vip import VIPRewardTransform, VIPTransform
+
 
 __all__ = [
     "ActionDiscretizer",
@@ -115,6 +117,7 @@ __all__ = [
     "PinMemoryTransform",
     "R3MTransform",
     "RandomCropTensorDict",
+    "RandomTruncationTransform",
     "RayTransform",
     "RemoveEmptySpecs",
     "RenameTransform",

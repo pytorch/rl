@@ -7,7 +7,7 @@ Evaluation
 
 The :class:`Evaluator` class provides a unified interface for running evaluation
 rollouts during RL training, either **synchronously** (blocking) or
-**asynchronously** (fire-and-forget in a background thread or Ray actor).
+**asynchronously** (in a background thread or Ray actor).
 
 Why use an Evaluator?
 ---------------------
@@ -16,8 +16,8 @@ In most RL training loops, evaluation is done inline and **blocks** the training
 loop while rollouts are collected.  For environments with expensive step
 functions (robotics simulators, LLM generation, etc.) this can waste
 significant training time.  The :class:`Evaluator` decouples evaluation from
-training by running rollouts in the background, logging results automatically,
-and letting you poll for metrics at your convenience.
+training by running rollouts in the background and letting you poll for metrics
+or react to results via a callback.
 
 Quick example
 -------------
@@ -40,7 +40,10 @@ Quick example
         make_eval_env,
         eval_policy,
         max_steps=1000,
-        logger=my_logger,       # auto-logs eval/reward, eval/episode_length
+        on_result=lambda result: my_logger.log_metrics(
+            {k: v.item() for k, v in result.items() if k != "eval/step"},
+            step=result["eval/step"].item(),
+        ),
     )
 
     # --- Inside training loop ---
@@ -54,7 +57,7 @@ Quick example
         # Optionally check for results
         result = evaluator.poll()
         if result is not None:
-            print(result)  # {"eval/reward": ..., "eval/episode_length": ...}
+            print(result)  # {"eval/reward": ..., "eval/episode_length": ..., "eval/fps": ...}
 
     evaluator.shutdown()
 
@@ -67,7 +70,7 @@ scripts), use :meth:`~Evaluator.evaluate`:
 .. code-block:: python
 
     metrics = evaluator.evaluate(weights=train_policy, step=step)
-    # metrics == {"eval/reward": -123.4, "eval/episode_length": 1000}
+    # metrics == {"eval/reward": -123.4, "eval/episode_length": 1000, "eval/fps": ...}
 
 Asynchronous usage
 ------------------
@@ -76,7 +79,7 @@ For non-blocking evaluation during training:
 
 .. code-block:: python
 
-    # Fire-and-forget: starts eval in a background thread
+    # Start eval in the background
     evaluator.trigger_eval(weights=train_policy, step=step)
 
     # ... continue training ...
@@ -87,9 +90,8 @@ For non-blocking evaluation during training:
     # Or block until done
     result = evaluator.wait(timeout=60)
 
-**Fire-and-forget semantics**: calling :meth:`~Evaluator.trigger_eval` while a
-previous evaluation is still running discards the in-progress result and starts
-the new one.
+By default, :meth:`~Evaluator.trigger_eval` raises if a previous evaluation is
+still pending. Set ``busy_policy="queue"`` to enqueue later requests instead.
 
 Device placement and compilation
 --------------------------------
@@ -115,7 +117,6 @@ training pipeline:
         eval_policy,
         max_steps=1000,
         device=eval_device,
-        logger=logger,
     )
 
 The ``device`` parameter controls where policy weights are moved before
@@ -127,22 +128,31 @@ Overlap policy (backpressure)
 -----------------------------
 
 Calling :meth:`~Evaluator.trigger_eval` while a previous evaluation is
-still running **drops** the in-progress result (fire-and-forget).  The new
-evaluation starts as soon as the background thread finishes the current
-``env.rollout()`` call.  There is no queue, no coalescing, and no error.
-Only the most recently triggered evaluation produces a result.
+still pending raises immediately by default (``busy_policy="error"``).
+This keeps training loops from silently piling up stale evaluation requests.
 
-This design means you can safely call ``trigger_eval`` on every training
-iteration without worrying about a backlog of pending evaluations.
+If you prefer to enqueue evaluations, pass ``busy_policy="queue"``.
+Queued requests are processed in order as earlier evaluations finish.
 
-Thread safety of logging
-------------------------
+Result callbacks
+----------------
 
-All logger writes (scalar metrics and video encoding) happen on the
-**caller thread** inside :meth:`~Evaluator.poll`, :meth:`~Evaluator.wait`,
-or :meth:`~Evaluator.evaluate`.  The background thread only computes plain
-metrics; it never touches the logger.  If you share a logger between
-training and evaluation, pass the same ``logger_lock`` to serialise writes.
+Pass ``on_result`` to react to completed evaluations without manual
+``poll()`` bookkeeping:
+
+.. code-block:: python
+
+    def on_eval(result):
+        metrics = {k: v.item() for k, v in result.items() if k != "eval/step"}
+        if metrics["eval/reward"] > best_reward:
+            save_checkpoint(step=result["eval/step"].item())
+
+    evaluator = Evaluator(env, policy, max_steps=1000, on_result=on_eval)
+
+For asynchronous evaluations, ``on_result`` runs on the evaluator's
+background coordination thread. If your callback talks to a logger that
+is also used by the training loop, handle any required locking inside the
+callback.
 
 Backends
 --------
@@ -189,15 +199,16 @@ Pass a ``metrics_fn`` to extract custom metrics from rollout data:
 
     evaluator = Evaluator(env, policy, max_steps=1000, metrics_fn=my_metrics)
 
-Or use a ``callback`` for side effects (e.g. saving checkpoints on good evals):
+Or use ``on_result`` to consume the prefixed evaluation metrics as a flat
+tensordict:
 
 .. code-block:: python
 
-    def on_eval(metrics, step):
-        if metrics["eval/reward"] > best_reward:
-            save_checkpoint(step)
+    def on_eval(result):
+        if result["eval/reward"].item() > best_reward:
+            save_checkpoint(result["eval/step"].item())
 
-    evaluator = Evaluator(env, policy, max_steps=1000, callback=on_eval)
+    evaluator = Evaluator(env, policy, max_steps=1000, on_result=on_eval)
 
 API Reference
 -------------
