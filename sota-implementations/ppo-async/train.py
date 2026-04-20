@@ -49,6 +49,21 @@ def _make_eval_policy(env, env_name, device):
     return make_ppo_models(env_name, device)[0]
 
 
+def _log_eval_result(logger, result):
+    if logger is None:
+        return
+    step = int(result["eval/step"].item())
+    logger.log_metrics(
+        {
+            key: value.item()
+            if isinstance(value, torch.Tensor) and value.numel() == 1
+            else value
+            for key, value in result.items()
+        },
+        step,
+    )
+
+
 def train_start(
     *,
     cfg,
@@ -121,8 +136,6 @@ def train_start(
     )
 
     # Async evaluator in a separate process (avoids CUDA stream contention)
-    # logger=None: we log eval metrics ourselves in the training loop so that
-    # eval and training metrics land in the same WandB row.
     evaluator = Evaluator(
         env=partial(
             make_eval_env,
@@ -136,6 +149,7 @@ def train_start(
         num_trajectories=num_eval_envs,
         max_steps=1000,
         backend="process",
+        on_result=partial(_log_eval_result, logger),
     )
 
     # Start collection and evaluation
@@ -149,11 +163,9 @@ def train_start(
     train_start_time = None
     last_write_count = 0
     last_trained_wc = 0
-    pending_eval_metrics = None
     # FPS tracking
     last_fps_time = time.time()
     last_fps_wc = 0
-    eval_trigger_time = time.time()
     last_eval_wc = 0  # frames at which we last triggered eval
     cumulative_trajectories = 0
     last_traj_wc = 0  # write_count at last trajectory snapshot
@@ -168,12 +180,9 @@ def train_start(
         if current_wc >= total_frames:
             break
 
-        # Trigger next eval; capture previous result for logging
+        # Trigger the next eval once the previous one has completed.
         if not evaluator.pending and (current_wc - last_eval_wc >= test_interval):
-            prev_eval = evaluator.trigger_eval(actor, step=current_wc)
-            if prev_eval is not None:
-                pending_eval_metrics = prev_eval
-            eval_trigger_time = time.time()
+            evaluator.trigger_eval(actor, step=current_wc)
             last_eval_wc = current_wc
 
         if current_wc <= last_trained_wc or len(data_buffer) < cfg_buffer_min_fill:
@@ -307,31 +316,11 @@ def train_start(
         last_fps_time = now
         last_fps_wc = current_wc
 
-        # Merge any pending eval metrics into this log step
-        if pending_eval_metrics is not None:
-            eval_dt = time.time() - eval_trigger_time
-            if eval_dt > 0:
-                eval_frames = num_eval_envs * 1000
-                pending_eval_metrics["eval/fps"] = eval_frames / eval_dt
-            metrics_to_log.update(pending_eval_metrics)
-            pending_eval_metrics = None
-        else:
-            # Poll in case result arrived since last trigger_eval
-            eval_result = evaluator.poll(0)
-            if eval_result is not None:
-                eval_dt = time.time() - eval_trigger_time
-                if eval_dt > 0:
-                    eval_frames = num_eval_envs * 1000
-                    eval_result["eval/fps"] = eval_frames / eval_dt
-                metrics_to_log.update(eval_result)
-
         if logger:
             logger.log_metrics(metrics_to_log, current_wc)
 
     # Log any final eval result
-    final_eval = evaluator.wait(timeout=120)
-    if final_eval is not None and logger:
-        logger.log_metrics(final_eval, last_write_count)
+    evaluator.wait(timeout=120)
 
     pbar.close()
     evaluator.shutdown()
@@ -398,8 +387,6 @@ def train_iterate(
     )
 
     # Async evaluator in a separate process (avoids CUDA stream contention)
-    # logger=None: we log eval metrics ourselves in the training loop so that
-    # eval and training metrics land in the same WandB row.
     evaluator = Evaluator(
         env=partial(
             make_eval_env,
@@ -413,6 +400,7 @@ def train_iterate(
         num_trajectories=num_eval_envs,
         max_steps=1000,
         backend="process",
+        on_result=partial(_log_eval_result, logger),
     )
 
     # Start continuous eval immediately
@@ -427,7 +415,6 @@ def train_iterate(
     # FPS tracking
     last_fps_time = time.time()
     last_fps_frames = 0
-    eval_trigger_time = time.time()
     last_eval_frames = 0  # frames at which we last triggered eval
     cumulative_trajectories = 0
 
@@ -570,36 +557,18 @@ def train_iterate(
         last_fps_time = now
         last_fps_frames = collected_frames
 
-        # Trigger next eval and merge previous result into this log step
+        # Trigger the next eval once the previous one has completed.
         if not evaluator.pending and (
             collected_frames - last_eval_frames >= test_interval
         ):
-            prev_eval = evaluator.trigger_eval(actor, step=collected_frames)
-            if prev_eval is not None:
-                eval_dt = time.time() - eval_trigger_time
-                if eval_dt > 0:
-                    eval_frames = num_eval_envs * 1000
-                    prev_eval["eval/fps"] = eval_frames / eval_dt
-                metrics_to_log.update(prev_eval)
-            eval_trigger_time = time.time()
+            evaluator.trigger_eval(actor, step=collected_frames)
             last_eval_frames = collected_frames
-        else:
-            # Poll in case result arrived since last trigger_eval
-            eval_result = evaluator.poll(0)
-            if eval_result is not None:
-                eval_dt = time.time() - eval_trigger_time
-                if eval_dt > 0:
-                    eval_frames = num_eval_envs * 1000
-                    eval_result["eval/fps"] = eval_frames / eval_dt
-                metrics_to_log.update(eval_result)
 
         if logger:
             logger.log_metrics(metrics_to_log, collected_frames)
 
     # Log any final eval result
-    final_eval = evaluator.wait(timeout=120)
-    if final_eval is not None and logger:
-        logger.log_metrics(final_eval, collected_frames)
+    evaluator.wait(timeout=120)
 
     pbar.close()
     evaluator.shutdown()
