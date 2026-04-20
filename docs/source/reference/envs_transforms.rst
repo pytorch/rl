@@ -283,6 +283,7 @@ Available Transforms
     PinMemoryTransform
     R3MTransform
     RandomCropTensorDict
+    RandomTruncationTransform
     RemoveEmptySpecs
     RenameTransform
     Resize
