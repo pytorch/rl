@@ -47,6 +47,7 @@ class TestEvaluatorSync:
             metrics = evaluator.evaluate(step=0)
             assert "eval/reward" in metrics
             assert "eval/episode_length" in metrics
+            assert "eval/fps" in metrics
             assert isinstance(metrics["eval/reward"], float)
         finally:
             evaluator.shutdown()
@@ -104,15 +105,15 @@ class TestEvaluatorSync:
         policy = _make_policy(env)
         results = []
 
-        def cb(metrics, step):
-            results.append((metrics, step))
+        def cb(metrics):
+            results.append(metrics)
 
-        evaluator = Evaluator(env, policy, max_steps=50, callback=cb)
+        evaluator = Evaluator(env, policy, max_steps=50, on_result=cb)
         try:
             evaluator.evaluate(step=42)
             assert len(results) == 1
-            assert results[0][1] == 42
-            assert "eval/reward" in results[0][0]
+            assert results[0]["eval/step"].item() == 42
+            assert "eval/reward" in results[0].keys()
         finally:
             evaluator.shutdown()
 
@@ -166,6 +167,7 @@ class TestEvaluatorAsync:
             result = evaluator.wait(timeout=30)
             assert result is not None
             assert "eval/reward" in result
+            assert "eval/fps" in result
         finally:
             evaluator.shutdown()
 
@@ -196,16 +198,30 @@ class TestEvaluatorAsync:
         finally:
             evaluator.shutdown()
 
-    def test_fire_and_forget(self):
+    def test_busy_policy_error(self):
         env = _make_env()
         policy = _make_policy(env)
         evaluator = Evaluator(env, policy, max_steps=200)
         try:
             evaluator.trigger_eval(step=0)
+            with pytest.raises(RuntimeError, match="busy_policy='queue'"):
+                evaluator.trigger_eval(step=1)
+        finally:
+            evaluator.shutdown()
+
+    def test_busy_policy_queue(self):
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=200, busy_policy="queue")
+        try:
+            evaluator.trigger_eval(step=0)
             evaluator.trigger_eval(step=1)
-            result = evaluator.wait(timeout=30)
-            assert result is not None
-            assert "eval/reward" in result
+            result0 = evaluator.wait(timeout=30)
+            result1 = evaluator.wait(timeout=30)
+            assert result0 is not None
+            assert result1 is not None
+            assert result0["eval/step"] == 0
+            assert result1["eval/step"] == 1
         finally:
             evaluator.shutdown()
 
@@ -227,15 +243,15 @@ class TestEvaluatorAsync:
         policy = _make_policy(env)
         results = []
 
-        def cb(metrics, step):
-            results.append((metrics, step))
+        def cb(metrics):
+            results.append(metrics)
 
-        evaluator = Evaluator(env, policy, max_steps=50, callback=cb)
+        evaluator = Evaluator(env, policy, max_steps=50, on_result=cb)
         try:
             evaluator.trigger_eval(step=7)
             evaluator.wait(timeout=30)
             assert len(results) >= 1
-            assert results[0][1] == 7
+            assert results[0]["eval/step"].item() == 7
         finally:
             evaluator.shutdown()
 
@@ -557,20 +573,20 @@ class TestEvaluatorProcess:
     def test_callback(self):
         results = []
 
-        def cb(metrics, step):
-            results.append((metrics, step))
+        def cb(metrics):
+            results.append(metrics)
 
         evaluator = Evaluator(
             _make_env,
             policy_factory=_make_policy,
             max_steps=50,
             backend="process",
-            callback=cb,
+            on_result=cb,
         )
         try:
             evaluator.evaluate(step=42)
             assert len(results) == 1
-            assert results[0][1] == 42
+            assert results[0]["eval/step"].item() == 42
         finally:
             evaluator.shutdown()
 
@@ -715,6 +731,15 @@ class TestEvaluatorErrors:
     def test_invalid_backend_raises(self):
         with pytest.raises(ValueError, match="Unknown backend"):
             Evaluator(_make_env, policy=_make_policy(), max_steps=50, backend="invalid")
+
+    def test_invalid_busy_policy_raises(self):
+        with pytest.raises(ValueError, match="Unknown busy_policy"):
+            Evaluator(
+                _make_env,
+                policy=_make_policy(),
+                max_steps=50,
+                busy_policy="replace",
+            )
 
 
 class TestEvaluatorWeightsDict:
