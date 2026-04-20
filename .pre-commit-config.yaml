@@ -1,0 +1,72 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-docstring-first
+      - id: check-toml
+      - id: check-yaml
+        exclude: packaging/.*
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: end-of-file-fixer
+
+  - repo: https://github.com/omnilib/ufmt
+    rev: v2.8.0
+    hooks:
+      - id: ufmt
+        exclude: ^torchrl/trainers/helpers/envs\.py$
+        additional_dependencies:
+          - black == 22.3.0
+          - usort == 1.0.3
+          - libcst == 1.0.1
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 6.1.0
+    hooks:
+      - id: flake8
+        args: [--config=setup.cfg]
+        additional_dependencies:
+          - flake8-bugbear==22.10.27
+          - flake8-comprehensions==3.10.1
+          - flake8-print==4.0.1
+
+  - repo: https://github.com/PyCQA/pydocstyle
+    rev: 6.3.0
+    hooks:
+      - id: pydocstyle
+        files: ^torchrl/
+
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.20.0
+    hooks:
+      - id: pyupgrade
+        args: [--py311-plus]
+        exclude: ^torchrl/trainers/helpers/envs\.py$
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        additional_dependencies:
+          - tomli
+
+  - repo: local
+    hooks:
+    - id: autoflake
+      name: autoflake
+      entry: autoflake --in-place --remove-unused-variables --remove-all-unused-imports
+      language: system
+      types: [python]
+    - id: check-sphinx-section-underline
+      name: Check Sphinx section underline lengths
+      entry: ./scripts/check-sphinx-section-underline --fix
+      language: script
+      files: ^docs/.*\.rst$
+      pass_filenames: true
+      description: Ensure Sphinx section underline lengths match section titles.
+    - id: forbid-version-file
+      name: Forbid committing _version.py
+      entry: bash -c 'git diff --cached --diff-filter=ACM --name-only | grep -qE "(^|/)_version\.py$" && { echo "ERROR - _version.py is auto-generated and must not be committed"; exit 1; } || exit 0'
+      language: system
+      always_run: true
+      pass_filenames: false
