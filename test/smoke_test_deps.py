@@ -1,0 +1,109 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
+import argparse
+import sys
+import tempfile
+
+import pytest
+
+
+@pytest.mark.skipif(
+    sys.version_info >= (3, 13),
+    reason="dm_control not available on Python 3.13+ (labmaze lacks wheels)",
+)
+def test_dm_control():
+    import dm_control  # noqa: F401
+    import dm_env  # noqa: F401
+    from dm_control import suite  # noqa: F401
+    from dm_control.suite.wrappers import pixels  # noqa: F401
+    from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv  # noqa
+
+    assert _has_dmc
+    env = DMControlEnv("cheetah", "run")
+    env.reset()
+
+
+@pytest.mark.skipif(
+    sys.version_info >= (3, 13),
+    reason="dm_control not available on Python 3.13+ (labmaze lacks wheels)",
+)
+@pytest.mark.skip(reason="Not implemented yet")
+def test_dm_control_pixels():
+    from torchrl.envs.libs.dm_control import DMControlEnv
+
+    env = DMControlEnv("cheetah", "run", from_pixels=True)
+    env.reset()
+
+
+@pytest.mark.skipif(
+    sys.version_info >= (3, 14),
+    reason="gymnasium[atari] / ALE not available on Python 3.14 in CI (ale-py install failing)",
+)
+def test_gym():
+    try:
+        import gymnasium as gym
+    except ImportError as err:
+        ERROR = err
+        try:
+            import gym as gym  # noqa: F401
+        except ImportError as err:
+            raise ImportError(
+                f"gym and gymnasium load failed. Gym got error {err}."
+            ) from ERROR
+
+    from torchrl.envs.libs.gym import _has_gym, GymEnv  # noqa
+
+    assert _has_gym
+    # If gymnasium is installed without the atari extra, ALE won't be registered.
+    # In that case we skip rather than hard-failing the dependency smoke test.
+    try:
+        import ale_py  # noqa: F401
+    except Exception:  # pragma: no cover
+        pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
+    from torchrl.testing import PONG_VERSIONED
+
+    try:
+        env = GymEnv(PONG_VERSIONED())
+    except Exception as err:  # gymnasium.error.NamespaceNotFound and similar
+        namespace_not_found = err.__class__.__name__ == "NamespaceNotFound"
+        if hasattr(gym, "error") and hasattr(gym.error, "NamespaceNotFound"):
+            namespace_not_found = namespace_not_found or isinstance(
+                err, gym.error.NamespaceNotFound
+            )
+        if namespace_not_found:
+            pytest.skip(
+                "ALE namespace not registered (gymnasium installed without atari extra)."
+            )
+        # Handle ale-py compatibility issues with older gym versions
+        if isinstance(err, AttributeError) and "ale_py" in str(err):
+            pytest.skip(f"ALE/gym version incompatibility: {err}")
+        raise
+    env.reset()
+
+
+def test_tb():
+    from torch.utils.tensorboard import SummaryWriter
+
+    _has_tb = True
+
+    assert _has_tb
+    test_rounds = 100
+    while test_rounds > 0:
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                writer = SummaryWriter(log_dir=directory)
+                writer.add_scalar("a", 1, 1)
+            break
+        except OSError:
+            # OS error could be raised randomly
+            # depending on the test machine
+            test_rounds -= 1
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
