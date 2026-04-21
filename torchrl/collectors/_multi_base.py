@@ -466,17 +466,20 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             and not weight_sync_schemes
             and weight_updater is None
         ):
-            if isinstance(policy, nn.Module) or has_uniform_policy_factory:
-                # Set up a default local shared-memory sync scheme for the policy.
-                # This is used to propagate weights from the orchestrator policy
-                # (possibly combined with a policy_factory) down to worker policies.
+            if isinstance(policy, nn.Module):
                 weight_sync_schemes["policy"] = SharedMemWeightSyncScheme()
+            elif has_uniform_policy_factory:
+                _probe = policy_factory[0]()
+                if isinstance(_probe, nn.Module):
+                    weight_sync_schemes["policy"] = SharedMemWeightSyncScheme()
+                del _probe
             elif has_distinct_policy_factory:
-                # Distinct factories: set up per-worker weight sync scheme.
-                # Each worker maintains independent weights that can be updated individually.
-                weight_sync_schemes["policy"] = SharedMemWeightSyncScheme(
-                    per_worker_weights=True
-                )
+                _probe = next(f() for f in policy_factory if f is not None)
+                if isinstance(_probe, nn.Module):
+                    weight_sync_schemes["policy"] = SharedMemWeightSyncScheme(
+                        per_worker_weights=True
+                    )
+                del _probe
 
         self._setup_multi_weight_sync(weight_updater, weight_sync_schemes)
 
@@ -503,7 +506,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             total_frames, total_frames_per_batch, frames_per_batch
         )
         self.reset_at_each_iter = reset_at_each_iter
-        self.postprocs = postproc
+        self.postproc = postproc
         self.max_frames_per_traj = (
             int(max_frames_per_traj) if max_frames_per_traj is not None else 0
         )
@@ -538,6 +541,27 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
 
         # Validate cat_results
         self._validate_cat_results(cat_results)
+
+    @property
+    def postprocs(self):
+        """Deprecated: use :attr:`postproc` instead. Will be removed in v0.14."""
+        warnings.warn(
+            "MultiCollector.postprocs is deprecated, use .postproc instead. "
+            "This will be removed in v0.14.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        return self.postproc
+
+    @postprocs.setter
+    def postprocs(self, value):
+        warnings.warn(
+            "MultiCollector.postprocs is deprecated, use .postproc instead. "
+            "This will be removed in v0.14.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        self.postproc = value
 
     def _setup_workers_and_env_fns(
         self,
@@ -1221,7 +1245,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "no_cuda_sync": self.no_cuda_sync,
                     "collector_class": self.collector_class,
                     "postproc": (
-                        self.postprocs if self.replay_buffer is not None else None
+                        self.postproc if self.replay_buffer is not None else None
                     ),
                     "weight_sync_schemes": self._weight_sync_schemes,
                     "worker_idx": i,  # Worker index for queue-based weight distribution

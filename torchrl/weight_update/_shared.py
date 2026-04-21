@@ -532,6 +532,8 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                         for worker_idx, factory in enumerate(factories):
                             if factory is not None:
                                 worker_model = factory()
+                                if not isinstance(worker_model, nn.Module):
+                                    continue
                                 worker_weights = TensorDict.from_module(worker_model)
                                 worker_weights = worker_weights.data.apply(
                                     _cast, worker_weights
@@ -546,8 +548,20 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                         # Set per_worker_weights flag on the scheme
                         self.per_worker_weights = True
                         return params_map
+            if not isinstance(model, nn.Module):
+                raise TypeError(
+                    f"SharedMemWeightSyncScheme requires an nn.Module policy, "
+                    f"got {type(model)}. Non-Module policies (e.g. RandomPolicy) "
+                    f"do not need weight synchronization."
+                )
             weights = TensorDict.from_module(model)
         elif model is not None:
+            if not isinstance(model, nn.Module):
+                raise TypeError(
+                    f"SharedMemWeightSyncScheme requires an nn.Module model, "
+                    f"got {type(model)}. Non-Module policies (e.g. RandomPolicy) "
+                    f"do not need weight synchronization."
+                )
             if weights is not None:
                 raise ValueError("weights cannot be provided if model is provided")
             weights = TensorDict.from_module(model)
