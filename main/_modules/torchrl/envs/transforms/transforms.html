@@ -152,6 +152,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/collector_trajectory_assembly.html">Collectors Deep Dive: Trajectory Assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/evaluator.html">Using the Evaluator</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
 </ul>
@@ -8809,6 +8810,223 @@
             <span class="s2">&quot;or a dataset. If you need StepCounter to work on a batch of sequential data &quot;</span>
             <span class="s2">&quot;(ie as LSTM would work over a whole sequence of data), file an issue on &quot;</span>
             <span class="s2">&quot;TorchRL requesting that feature.&quot;</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="RandomTruncationTransform">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.RandomTruncationTransform.html#torchrl.envs.transforms.RandomTruncationTransform">[docs]</a>
+<span class="k">class</span> <span class="nc">RandomTruncationTransform</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Randomly truncate episodes to decorrelate synchronized batched envs.</span>
+
+<span class="sd">    When many batched environments share the same ``max_episode_steps``, all</span>
+<span class="sd">    environments hit truncation at nearly the same step, creating correlated</span>
+<span class="sd">    waves of start-of-episode data in the replay buffer.  This transform</span>
+<span class="sd">    breaks that synchronisation by assigning each environment a random horizon.</span>
+
+<span class="sd">    On the **first reset** every environment receives a horizon drawn from</span>
+<span class="sd">    ``Uniform(1, max_horizon)`` so they immediately spread across different</span>
+<span class="sd">    phases of the episode.  On **subsequent resets**, with probability</span>
+<span class="sd">    ``prob`` a new horizon is sampled from ``Uniform(min_horizon, max_horizon)``;</span>
+<span class="sd">    otherwise the full ``max_horizon`` is used.</span>
+
+<span class="sd">    ``first_episode_prob`` controls the truncation probability for each</span>
+<span class="sd">    environment&#39;s first episode after the initial spread. By default it matches</span>
+<span class="sd">    ``prob`` so that ``prob=0.0`` disables all subsequent random truncation</span>
+<span class="sd">    after the initial spread. Setting it higher than ``prob`` can accelerate</span>
+<span class="sd">    decorrelation when batch sizes are large relative to ``max_horizon``.</span>
+
+<span class="sd">    .. note:: This transform must be placed **after** :class:`~torchrl.envs.StepCounter`</span>
+<span class="sd">        in the transform chain, as it relies on the ``&quot;step_count&quot;`` key.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        min_horizon (int): minimum horizon for random truncation</span>
+<span class="sd">            (inclusive).</span>
+<span class="sd">        max_horizon (int): maximum horizon for random truncation</span>
+<span class="sd">            (inclusive). Also used as the full-length horizon when no random</span>
+<span class="sd">            truncation is applied. This should typically match the</span>
+<span class="sd">            environment&#39;s ``max_episode_steps``, which unfortunately cannot</span>
+<span class="sd">            be retrieved automatically in general.</span>
+<span class="sd">        prob (float, optional): probability of sampling a random horizon on</span>
+<span class="sd">            each subsequent reset. Defaults to ``0.0`` (only the initial</span>
+<span class="sd">            spread is applied). When nonzero, a low value (e.g. ``0.01``) is</span>
+<span class="sd">            recommended -- frequent truncation can negatively impact training.</span>
+<span class="sd">        first_episode_prob (float, optional): truncation probability for each</span>
+<span class="sd">            environment&#39;s first episode after the initial spread. Defaults to</span>
+<span class="sd">            ``prob`` when omitted.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import GymEnv, TransformedEnv, StepCounter</span>
+<span class="sd">        &gt;&gt;&gt; base_env = GymEnv(&quot;Pendulum-v1&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; env = TransformedEnv(</span>
+<span class="sd">        ...     base_env,</span>
+<span class="sd">        ...     Compose(</span>
+<span class="sd">        ...         StepCounter(),</span>
+<span class="sd">        ...         RandomTruncationTransform(</span>
+<span class="sd">        ...             prob=0.1, min_horizon=50, max_horizon=200</span>
+<span class="sd">        ...         ),</span>
+<span class="sd">        ...     ),</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; rollout = env.rollout(300)</span>
+<span class="sd">        &gt;&gt;&gt; # Episode length will be at most 200 steps</span>
+<span class="sd">        &gt;&gt;&gt; print(rollout.shape)</span>
+<span class="sd">        torch.Size([...])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">invertible</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">min_horizon</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">max_horizon</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">prob</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">first_episode_prob</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">first_episode_prob</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">first_episode_prob</span> <span class="o">=</span> <span class="n">prob</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">prob</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;prob must be in [0, 1], got </span><span class="si">{</span><span class="n">prob</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">first_episode_prob</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;first_episode_prob must be in [0, 1], got </span><span class="si">{</span><span class="n">first_episode_prob</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">min_horizon</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;min_horizon must be &gt;= 1, got </span><span class="si">{</span><span class="n">min_horizon</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">max_horizon</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;max_horizon must be &gt;= 1, got </span><span class="si">{</span><span class="n">max_horizon</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">min_horizon</span> <span class="o">&gt;</span> <span class="n">max_horizon</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;min_horizon (</span><span class="si">{</span><span class="n">min_horizon</span><span class="si">}</span><span class="s2">) must be &lt;= max_horizon (</span><span class="si">{</span><span class="n">max_horizon</span><span class="si">}</span><span class="s2">)&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prob</span> <span class="o">=</span> <span class="n">prob</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">first_episode_prob</span> <span class="o">=</span> <span class="n">first_episode_prob</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">min_horizon</span> <span class="o">=</span> <span class="n">min_horizon</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_horizon</span> <span class="o">=</span> <span class="n">max_horizon</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_horizons</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_first_episode</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="nf">set_container</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">container</span><span class="p">:</span> <span class="n">Transform</span> <span class="o">|</span> <span class="n">EnvBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">set_container</span><span class="p">(</span><span class="n">container</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_step_counter_registration</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_validate_step_counter_registration</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">parent</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span>
+        <span class="k">if</span> <span class="n">parent</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">observation_spec</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">parent</span><span class="p">,</span> <span class="s2">&quot;observation_spec&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">observation_spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">keys</span> <span class="o">=</span> <span class="n">observation_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="n">has_step_count</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span>
+            <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;step_count&quot;</span> <span class="ow">or</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">and</span> <span class="n">key</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;step_count&quot;</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">has_step_count</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;RandomTruncationTransform requires a StepCounter earlier in the &quot;</span>
+                <span class="s2">&quot;transform chain. Use:</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="s2">&quot;  Compose(StepCounter(), RandomTruncationTransform(...))</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="s2">&quot;or add StepCounter() before RandomTruncationTransform in your &quot;</span>
+                <span class="s2">&quot;transform pipeline.&quot;</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_step</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">step_count</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;step_count&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">step_count</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_horizons</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">next_tensordict</span>
+
+        <span class="n">should_truncate</span> <span class="o">=</span> <span class="n">step_count</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_horizons</span>
+        <span class="n">truncated</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;truncated&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">should_truncate</span><span class="p">))</span>
+        <span class="n">done</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">should_truncate</span><span class="p">))</span>
+        <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;truncated&quot;</span><span class="p">,</span> <span class="n">truncated</span> <span class="o">|</span> <span class="n">should_truncate</span><span class="p">)</span>
+        <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="n">done</span> <span class="o">|</span> <span class="n">should_truncate</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">next_tensordict</span>
+
+    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">step_count</span> <span class="o">=</span> <span class="n">tensordict_reset</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;step_count&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">step_count</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">tensordict_reset</span>
+
+        <span class="c1"># Ensure truncated is False after reset</span>
+        <span class="n">done</span> <span class="o">=</span> <span class="n">tensordict_reset</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">done</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">tensordict_reset</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                <span class="s2">&quot;truncated&quot;</span><span class="p">,</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">done</span><span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span><span class="p">:</span>
+            <span class="c1"># First reset: uniform spread for immediate decorrelation</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_horizons</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span>
+                <span class="mi">1</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">max_horizon</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+                <span class="n">step_count</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">step_count</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_first_episode</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span>
+                <span class="n">step_count</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">step_count</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">return</span> <span class="n">tensordict_reset</span>
+
+        <span class="c1"># Resample horizons for envs that just reset</span>
+        <span class="n">reset_mask</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_reset&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">reset_mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">reset_mask</span><span class="o">.</span><span class="n">view_as</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_horizons</span><span class="p">)</span><span class="o">.</span><span class="n">bool</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">mask</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">prob</span> <span class="o">==</span> <span class="mf">0.0</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">first_episode_prob</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_horizons</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_horizon</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_first_episode</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+                    <span class="k">return</span> <span class="n">tensordict_reset</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+                <span class="n">new_h</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">min_horizon</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">max_horizon</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+                    <span class="p">(</span><span class="n">n</span><span class="p">,),</span>
+                    <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_horizons</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="c1"># Use first_episode_prob for envs still in their first</span>
+                <span class="c1"># episode, prob for all subsequent episodes</span>
+                <span class="n">first_ep</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_first_episode</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+                <span class="n">effective_prob</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+                    <span class="n">first_ep</span><span class="p">,</span>
+                    <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">first_episode_prob</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_horizons</span><span class="o">.</span><span class="n">device</span><span class="p">),</span>
+                    <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">prob</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_horizons</span><span class="o">.</span><span class="n">device</span><span class="p">),</span>
+                <span class="p">)</span>
+                <span class="n">keep_full</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_horizons</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">effective_prob</span>
+                <span class="n">new_h</span><span class="p">[</span><span class="n">keep_full</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_horizon</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_horizons</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_h</span><span class="o">.</span><span class="n">view_as</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_horizons</span><span class="p">[</span><span class="n">mask</span><span class="p">])</span>
+                <span class="c1"># First episode is over for these envs</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_first_episode</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="n">tensordict_reset</span>
+
+<div class="viewcode-block" id="RandomTruncationTransform.transform_output_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.RandomTruncationTransform.html#torchrl.envs.transforms.RandomTruncationTransform.transform_output_spec">[docs]</a>
+    <span class="k">def</span> <span class="nf">transform_output_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output_spec</span><span class="p">:</span> <span class="n">Composite</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
+        <span class="n">full_done_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_done_spec&quot;</span><span class="p">]</span>
+        <span class="c1"># Ensure truncated and done keys exist in the spec</span>
+        <span class="k">if</span> <span class="s2">&quot;truncated&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">full_done_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">done_shape</span> <span class="o">=</span> <span class="n">full_done_spec</span><span class="p">[</span><span class="s2">&quot;done&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+            <span class="n">full_done_spec</span><span class="p">[</span><span class="s2">&quot;truncated&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Categorical</span><span class="p">(</span>
+                <span class="mi">2</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">output_spec</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">done_shape</span>
+            <span class="p">)</span>
+        <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_done_spec&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">full_done_spec</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">transform_output_spec</span><span class="p">(</span><span class="n">output_spec</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RandomTruncationTransform.forward">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.RandomTruncationTransform.html#torchrl.envs.transforms.RandomTruncationTransform.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="s2">&quot;RandomTruncationTransform cannot be called independently, only its &quot;</span>
+            <span class="s2">&quot;step and reset methods are functional.&quot;</span>
         <span class="p">)</span></div>
 </div>
 

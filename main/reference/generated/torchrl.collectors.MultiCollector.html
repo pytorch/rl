@@ -155,6 +155,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/pretrained_models.html">Using pretrained models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/collector_trajectory_assembly.html">Collectors Deep Dive: Trajectory Assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/evaluator.html">Using the Evaluator</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/export.html">Exporting TorchRL modules</a></li>
 </ul>
@@ -730,6 +731,17 @@ If no weight updater is set, this is a no-op.</p>
 </dd></dl>
 
 <dl class="py property">
+<dt class="sig sig-object py" id="torchrl.collectors.MultiCollector.postprocs">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">postprocs</span></span><a class="headerlink" href="#torchrl.collectors.MultiCollector.postprocs" title="Link to this definition">¶</a></dt>
+<dd><p>use <code class="xref py py-attr docutils literal notranslate"><span class="pre">postproc</span></code> instead. Will be removed in v0.14.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Deprecated</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
 <dt class="sig sig-object py" id="torchrl.collectors.MultiCollector.profile_config">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">profile_config</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ProfileConfig</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.collectors.MultiCollector.profile_config" title="Link to this definition">¶</a></dt>
 <dd><p>Get the profiling configuration.</p>
@@ -1108,6 +1120,7 @@ the weight update logic for specific use cases.</p>
 <li><a class="reference internal" href="#torchrl.collectors.MultiCollector.load_state_dict"><code class="docutils literal notranslate"><span class="pre">MultiCollector.load_state_dict()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.collectors.MultiCollector.pause"><code class="docutils literal notranslate"><span class="pre">MultiCollector.pause()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.collectors.MultiCollector.policy_version"><code class="docutils literal notranslate"><span class="pre">MultiCollector.policy_version</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.collectors.MultiCollector.postprocs"><code class="docutils literal notranslate"><span class="pre">MultiCollector.postprocs</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.collectors.MultiCollector.profile_config"><code class="docutils literal notranslate"><span class="pre">MultiCollector.profile_config</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.collectors.MultiCollector.receive_weights"><code class="docutils literal notranslate"><span class="pre">MultiCollector.receive_weights()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.collectors.MultiCollector.register_scheme_receiver"><code class="docutils literal notranslate"><span class="pre">MultiCollector.register_scheme_receiver()</span></code></a></li>

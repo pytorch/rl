@@ -152,6 +152,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/collector_trajectory_assembly.html">Collectors Deep Dive: Trajectory Assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/evaluator.html">Using the Evaluator</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/export.html">Exporting TorchRL modules</a></li>
 </ul>
@@ -246,7 +247,7 @@
 
 <span class="sd">This module provides :class:`Evaluator`, a single entry-point for running</span>
 <span class="sd">evaluation rollouts either synchronously (blocking) or asynchronously</span>
-<span class="sd">(fire-and-forget) during RL training.</span>
+<span class="sd">(in the background) during RL training.</span>
 
 <span class="sd">Internally, the evaluator uses a :class:`~torchrl.collectors.Collector` with</span>
 <span class="sd">``trajs_per_batch`` to collect complete trajectories.  The collector</span>
@@ -262,7 +263,10 @@
 <span class="sd">        make_eval_env,</span>
 <span class="sd">        eval_policy,</span>
 <span class="sd">        max_steps=1000,</span>
-<span class="sd">        logger=logger,</span>
+<span class="sd">        on_result=lambda result: logger.log_metrics(</span>
+<span class="sd">            {k: v.item() for k, v in result.items() if k != &quot;eval/step&quot;},</span>
+<span class="sd">            step=result[&quot;eval/step&quot;].item(),</span>
+<span class="sd">        ),</span>
 <span class="sd">    )</span>
 
 <span class="sd">    # Non-blocking: trigger and poll later</span>
@@ -280,7 +284,6 @@
 <span class="sd">        lambda: make_eval_env(device=&quot;cuda:7&quot;),</span>
 <span class="sd">        policy_factory=lambda env: make_eval_policy(env).to(&quot;cuda:7&quot;),</span>
 <span class="sd">        max_steps=1000,</span>
-<span class="sd">        logger=logger,</span>
 <span class="sd">        backend=&quot;process&quot;,</span>
 <span class="sd">    )</span>
 
@@ -297,7 +300,6 @@
 <span class="sd">        make_eval_env,</span>
 <span class="sd">        policy_factory=make_eval_policy,</span>
 <span class="sd">        max_steps=1000,</span>
-<span class="sd">        logger=logger,</span>
 <span class="sd">        backend=&quot;ray&quot;,</span>
 <span class="sd">        init_fn=my_init_fn,</span>
 <span class="sd">        num_gpus=1,</span>
@@ -313,6 +315,8 @@
 <span class="kn">import</span> <span class="nn">importlib</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">threading</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">deque</span>
 <span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
 
@@ -345,8 +349,8 @@
 <span class="sd">    * **Asynchronous** -- call :meth:`trigger_eval` to kick off an evaluation</span>
 <span class="sd">      in the background, then :meth:`poll` (non-blocking) or :meth:`wait`</span>
 <span class="sd">      (blocking) to retrieve the result.  Use the :attr:`pending` property</span>
-<span class="sd">      to check whether an evaluation is currently in progress.</span>
-<span class="sd">      Results are also auto-logged if a *logger* is provided.</span>
+<span class="sd">      to check whether an evaluation is currently in progress. Results can</span>
+<span class="sd">      also be consumed via an ``on_result`` callback.</span>
 
 <span class="sd">    Internally, a :class:`~torchrl.collectors.Collector` is used with</span>
 <span class="sd">    ``trajs_per_batch=num_trajectories`` to collect complete episodes.  The</span>
@@ -369,20 +373,18 @@
 <span class="sd">      Requires *env* to be a callable and *policy_factory* to be provided.</span>
 
 <span class="sd">    **Backpressure / overlap policy**: calling :meth:`trigger_eval` while a</span>
-<span class="sd">    previous evaluation is still running **drops** the in-progress result</span>
-<span class="sd">    (fire-and-forget).  The new evaluation starts as soon as the background</span>
-<span class="sd">    worker finishes the current collection — there is no queue, no</span>
-<span class="sd">    coalescing, and no error.  Only the most-recently-triggered evaluation</span>
-<span class="sd">    will produce a result.  Use :attr:`pending` to conditionally skip</span>
+<span class="sd">    previous evaluation is still running either raises immediately</span>
+<span class="sd">    (``busy_policy=&quot;error&quot;``; default) or queues the new request</span>
+<span class="sd">    (``busy_policy=&quot;queue&quot;``). Use :attr:`pending` to conditionally skip</span>
 <span class="sd">    trigger calls::</span>
 
 <span class="sd">        if not evaluator.pending:</span>
 <span class="sd">            evaluator.trigger_eval(weights, step=step)</span>
 
-<span class="sd">    **Logging thread-safety**: all logger writes (scalar metrics, video</span>
-<span class="sd">    encoding) happen on the **caller thread** inside :meth:`poll`,</span>
-<span class="sd">    :meth:`wait`, or :meth:`evaluate`.  The background worker only computes</span>
-<span class="sd">    plain metrics and returns them; it never touches the logger.</span>
+<span class="sd">    **Callback thread-safety**: when ``on_result`` is provided, it is</span>
+<span class="sd">    invoked from the evaluator&#39;s async coordination thread after the</span>
+<span class="sd">    rollout completes. If the callback writes to a logger, the callback is</span>
+<span class="sd">    responsible for any locking it needs.</span>
 
 <span class="sd">    **Dedicated eval device** (multi-GPU example)::</span>
 
@@ -416,8 +418,10 @@
 <span class="sd">            evaluation round.  A :class:`~torchrl.collectors.Collector` is</span>
 <span class="sd">            used internally with ``trajs_per_batch=num_trajectories``.</span>
 <span class="sd">            Default: ``10``.</span>
-<span class="sd">        max_steps (int): Maximum environment steps per episode, passed as</span>
-<span class="sd">            ``max_frames_per_traj`` to the internal collector.</span>
+<span class="sd">        max_steps (int or None): Maximum environment steps per episode,</span>
+<span class="sd">            passed as ``max_frames_per_traj`` to the internal collector.</span>
+<span class="sd">            When ``None``, episodes run until done with no step limit.</span>
+<span class="sd">            Default: ``None``.</span>
 <span class="sd">        frames_per_batch (int or None): Internal collection batch size</span>
 <span class="sd">            (env steps per collector iteration).  If ``None``, defaults to</span>
 <span class="sd">            ``max_steps``.  This is purely internal — output granularity</span>
@@ -428,8 +432,6 @@
 <span class="sd">            Default: ``None`` (uses :class:`~torchrl.collectors.Collector`).</span>
 <span class="sd">        collector_kwargs (dict or None): Extra keyword arguments forwarded</span>
 <span class="sd">            to the collector constructor.</span>
-<span class="sd">        logger: Optional :class:`~torchrl.record.loggers.Logger` for</span>
-<span class="sd">            automatic metric / video logging.</span>
 <span class="sd">        log_prefix (str): Prefix prepended to all logged metric names.</span>
 <span class="sd">            Default: ``&quot;eval&quot;``.</span>
 <span class="sd">        reward_keys: Nested key(s) for reading the reward from the</span>
@@ -445,11 +447,21 @@
 <span class="sd">        dump_video (bool): Call ``dump()`` on :class:`VideoRecorder`</span>
 <span class="sd">            transforms after each evaluation (thread backend only).</span>
 <span class="sd">            Default: ``True``.</span>
-<span class="sd">        callback: Optional ``(dict, int) -&gt; None`` invoked with</span>
-<span class="sd">            ``(metrics, step)`` after each completed evaluation.</span>
-<span class="sd">        logger_lock: A :class:`threading.Lock` shared with the training</span>
-<span class="sd">            loop to serialise logger access.  If ``None`` a private lock</span>
-<span class="sd">            is created.</span>
+<span class="sd">        on_result: Optional ``(TensorDictBase) -&gt; None`` invoked after each</span>
+<span class="sd">            completed evaluation. The callback receives a flat tensordict</span>
+<span class="sd">            with the same prefixed metric names returned by</span>
+<span class="sd">            :meth:`evaluate`, :meth:`poll`, and :meth:`wait`.</span>
+<span class="sd">        busy_policy (str): Behaviour when :meth:`trigger_eval` is called</span>
+<span class="sd">            while another async evaluation is still pending. ``&quot;error&quot;``</span>
+<span class="sd">            raises immediately (default; recommended). ``&quot;queue&quot;`` enqueues</span>
+<span class="sd">            the new request and runs it when the current evaluation</span>
+<span class="sd">            finishes.</span>
+
+<span class="sd">            .. warning::</span>
+<span class="sd">                With ``busy_policy=&quot;queue&quot;``, each queued request stores a</span>
+<span class="sd">                copy of the weights dict. For large models this can consume</span>
+<span class="sd">                significant memory. Prefer checking :attr:`pending` and</span>
+<span class="sd">                skipping triggers instead.</span>
 <span class="sd">        weight_sync_schemes (dict or None): A dict mapping model IDs to</span>
 <span class="sd">            :class:`~torchrl.weight_update.WeightSyncScheme` instances.</span>
 <span class="sd">            When provided, a :class:`~torchrl.collectors.MultiSyncCollector`</span>
@@ -489,12 +501,11 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Callable</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">num_trajectories</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
-        <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">collector_cls</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">collector_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">weight_sync_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">logger</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">log_prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;eval&quot;</span><span class="p">,</span>
         <span class="n">reward_keys</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">),</span>
         <span class="n">done_keys</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">),</span>
@@ -502,8 +513,8 @@
         <span class="n">exploration_type</span><span class="p">:</span> <span class="n">ExplorationType</span> <span class="o">=</span> <span class="n">ExplorationType</span><span class="o">.</span><span class="n">DETERMINISTIC</span><span class="p">,</span>
         <span class="n">metrics_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">dump_video</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">callback</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">logger_lock</span><span class="p">:</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">on_result</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">busy_policy</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;error&quot;</span><span class="p">,</span>
         <span class="c1"># Backend selection</span>
         <span class="n">backend</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;thread&quot;</span><span class="p">,</span>
         <span class="c1"># Ray-specific</span>
@@ -511,16 +522,28 @@
         <span class="n">num_gpus</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">ray_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span> <span class="o">=</span> <span class="n">logger</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_log_prefix</span> <span class="o">=</span> <span class="n">log_prefix</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_reward_keys</span> <span class="o">=</span> <span class="n">reward_keys</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_done_keys</span> <span class="o">=</span> <span class="n">done_keys</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_exploration_type</span> <span class="o">=</span> <span class="n">exploration_type</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_metrics_fn</span> <span class="o">=</span> <span class="n">metrics_fn</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_callback</span> <span class="o">=</span> <span class="n">callback</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_logger_lock</span> <span class="o">=</span> <span class="n">logger_lock</span> <span class="ow">or</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_on_result</span> <span class="o">=</span> <span class="n">on_result</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_step_counter</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dump_video</span> <span class="o">=</span> <span class="n">dump_video</span>
+        <span class="k">if</span> <span class="n">busy_policy</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;error&quot;</span><span class="p">,</span> <span class="s2">&quot;queue&quot;</span><span class="p">}:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Unknown busy_policy </span><span class="si">{</span><span class="n">busy_policy</span><span class="si">!r}</span><span class="s2">. Choose &#39;error&#39; or &#39;queue&#39;.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_busy_policy</span> <span class="o">=</span> <span class="n">busy_policy</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_trigger</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ready_result</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_requests</span><span class="p">:</span> <span class="n">deque</span><span class="p">[</span>
+            <span class="nb">tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="n">deque</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ready_results</span><span class="p">:</span> <span class="n">deque</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="n">deque</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_shutdown</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_thread</span><span class="p">:</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="k">if</span> <span class="n">backend</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;thread&quot;</span><span class="p">,</span> <span class="s2">&quot;process&quot;</span><span class="p">):</span>
             <span class="c1"># The process backend is implemented as a thread backend</span>
@@ -617,7 +640,9 @@
         <span class="n">prepared</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_weights_dict</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">weights_dict</span><span class="p">)</span>
         <span class="n">step</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_step</span><span class="p">(</span><span class="n">step</span><span class="p">)</span>
         <span class="n">raw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">run_sync</span><span class="p">(</span><span class="n">prepared</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_finalize</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span></div>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_finalize</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_invoke_on_result</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span></div>
 
 
     <span class="c1"># ------------------------------------------------------------------</span>
@@ -633,10 +658,7 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">weights_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Start an async evaluation (fire-and-forget).</span>
-
-<span class="sd">        If a previous evaluation is still running its result will be</span>
-<span class="sd">        discarded.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Start an async evaluation.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            weights: Policy weights to load.  See :meth:`evaluate`.</span>
@@ -645,7 +667,17 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">prepared</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_weights_dict</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">weights_dict</span><span class="p">)</span>
         <span class="n">step</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_step</span><span class="p">(</span><span class="n">step</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">prepared</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span></div>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_lock</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_busy_policy</span> <span class="o">==</span> <span class="s2">&quot;error&quot;</span> <span class="ow">and</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">pending</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_requests</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;Evaluation already pending. Wait for completion or set &quot;</span>
+                    <span class="s2">&quot;busy_policy=&#39;queue&#39;.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_async_requests</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">prepared</span><span class="p">,</span> <span class="n">step</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_async_trigger</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_async_thread</span><span class="p">()</span></div>
 
 
 <div class="viewcode-block" id="Evaluator.poll">
@@ -656,10 +688,9 @@
 <span class="sd">        Args:</span>
 <span class="sd">            timeout: Seconds to wait.  ``0`` means non-blocking.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">raw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">raw</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">None</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_finalize</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span></div>
+        <span class="k">if</span> <span class="n">timeout</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_ready_result</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pop_ready_result</span><span class="p">()</span></div>
 
 
 <div class="viewcode-block" id="Evaluator.wait">
@@ -670,10 +701,8 @@
 <span class="sd">        Args:</span>
 <span class="sd">            timeout: Max seconds to wait.  ``None`` waits forever.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">raw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">raw</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">None</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_finalize</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ready_result</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pop_ready_result</span><span class="p">()</span></div>
 
 
     <span class="c1"># ------------------------------------------------------------------</span>
@@ -689,7 +718,8 @@
 <span class="sd">            if not evaluator.pending:</span>
 <span class="sd">                evaluator.trigger_eval(weights, step=step)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">pending</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_lock</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">pending</span> <span class="ow">or</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_async_requests</span><span class="p">)</span>
 
     <span class="c1"># ------------------------------------------------------------------</span>
     <span class="c1"># Lifecycle</span>
@@ -699,6 +729,10 @@
 <a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.shutdown">[docs]</a>
     <span class="k">def</span> <span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Cancel any running evaluation, clean up resources.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_shutdown</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_trigger</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_thread</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_async_thread</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span></div>
 
 
@@ -757,28 +791,73 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_step_counter</span> <span class="o">+=</span> <span class="mi">1</span>
         <span class="k">return</span> <span class="n">s</span>
 
-    <span class="k">def</span> <span class="nf">_finalize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">raw</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Format metrics, dump video, log, and invoke callback.</span>
+    <span class="k">def</span> <span class="nf">_ensure_async_thread</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_thread</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_shutdown</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
+            <span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_async_loop</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;evaluator-async&quot;</span><span class="p">,</span>
+            <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
 
-<span class="sd">        All heavy I/O (video dump, logger writes) happens here on the</span>
-<span class="sd">        **caller thread**, never inside the background eval thread.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">_async_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_shutdown</span><span class="p">:</span>
+            <span class="n">request</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_lock</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">pending</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_requests</span><span class="p">:</span>
+                    <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_requests</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_async_trigger</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">request</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="o">*</span><span class="n">request</span><span class="p">)</span>
+                <span class="k">continue</span>
+
+            <span class="n">raw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">raw</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_finalize</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_invoke_on_result</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+                <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_lock</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_ready_results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_ready_result</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+                    <span class="n">has_more_requests</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_async_requests</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">has_more_requests</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_async_trigger</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+                <span class="k">continue</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_async_trigger</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_pop_ready_result</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_lock</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ready_results</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_ready_result</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+                <span class="k">return</span> <span class="kc">None</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ready_results</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ready_results</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_ready_result</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">result</span>
+
+    <span class="k">def</span> <span class="nf">_invoke_on_result</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_on_result</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_on_result</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_to_callback_tensordict</span><span class="p">(</span><span class="n">result</span><span class="p">))</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Evaluator on_result callback failed&quot;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_finalize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">raw</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Format metrics and dump video on the caller or coordinator thread.&quot;&quot;&quot;</span>
         <span class="n">step</span> <span class="o">=</span> <span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_step&quot;</span><span class="p">)</span>
         <span class="n">metrics</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_metrics</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span>
-
-        <span class="c1"># Video dump -- on the caller thread so logger writes are safe</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dump_video</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">dump_video</span><span class="p">(</span><span class="n">step</span><span class="o">=</span><span class="n">step</span><span class="p">)</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">_auto_log</span><span class="p">(</span><span class="n">metrics</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_callback</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_callback</span><span class="p">(</span><span class="n">metrics</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">metrics</span>
 
     <span class="k">def</span> <span class="nf">_format_metrics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">raw</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
         <span class="n">prefix</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_log_prefix</span>
         <span class="n">out</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;reward&quot;</span><span class="p">,</span> <span class="s2">&quot;reward_std&quot;</span><span class="p">,</span> <span class="s2">&quot;num_episodes&quot;</span><span class="p">,</span> <span class="s2">&quot;episode_length&quot;</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;reward&quot;</span><span class="p">,</span> <span class="s2">&quot;reward_std&quot;</span><span class="p">,</span> <span class="s2">&quot;num_episodes&quot;</span><span class="p">,</span> <span class="s2">&quot;episode_length&quot;</span><span class="p">,</span> <span class="s2">&quot;fps&quot;</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">raw</span><span class="p">:</span>
                 <span class="n">out</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">raw</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
         <span class="k">if</span> <span class="s2">&quot;frames&quot;</span> <span class="ow">in</span> <span class="n">raw</span> <span class="ow">and</span> <span class="n">raw</span><span class="p">[</span><span class="s2">&quot;frames&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -791,22 +870,19 @@
                 <span class="n">out</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">k</span><span class="p">[</span><span class="mi">7</span><span class="p">:]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
         <span class="k">return</span> <span class="n">out</span>
 
-    <span class="k">def</span> <span class="nf">_auto_log</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">metrics</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span>
-        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_logger_lock</span><span class="p">:</span>
-            <span class="c1"># Separate non-scalar entries from scalar metrics for logging</span>
-            <span class="n">video</span> <span class="o">=</span> <span class="n">metrics</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_log_prefix</span><span class="si">}</span><span class="s2">/video&quot;</span><span class="p">)</span>
-            <span class="n">step_key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_log_prefix</span><span class="si">}</span><span class="s2">/step&quot;</span>
-            <span class="n">scalars</span> <span class="o">=</span> <span class="p">{</span>
-                <span class="n">k</span><span class="p">:</span> <span class="n">v</span>
-                <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">metrics</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-                <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_log_prefix</span><span class="si">}</span><span class="s2">/video&quot;</span> <span class="ow">and</span> <span class="n">k</span> <span class="o">!=</span> <span class="n">step_key</span>
-            <span class="p">}</span>
-            <span class="k">if</span> <span class="n">scalars</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">log_metrics</span><span class="p">(</span><span class="n">scalars</span><span class="p">,</span> <span class="n">step</span><span class="o">=</span><span class="n">step</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">video</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">log_video</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_log_prefix</span><span class="si">}</span><span class="s2">/video&quot;</span><span class="p">,</span> <span class="n">video</span><span class="p">,</span> <span class="n">step</span><span class="o">=</span><span class="n">step</span><span class="p">)</span></div>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_to_result_tensor</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">value</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_to_callback_tensordict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">metrics</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">key</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_result_tensor</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">metrics</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span></div>
 
 
 
@@ -832,7 +908,7 @@
 
     <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
     <span class="k">def</span> <span class="nf">submit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Start an async evaluation (fire-and-forget).&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Start an async evaluation.&quot;&quot;&quot;</span>
         <span class="o">...</span>
 
     <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
@@ -876,6 +952,7 @@
     <span class="n">reward_keys</span><span class="p">:</span> <span class="n">NestedKey</span><span class="p">,</span>
     <span class="n">done_keys</span><span class="p">:</span> <span class="n">NestedKey</span><span class="p">,</span>
     <span class="n">metrics_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">eval_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract evaluation metrics from a trajectory batch produced by a collector.</span>
 
@@ -887,6 +964,7 @@
 
     <span class="n">episode_rewards</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">episode_lengths</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">total_frames</span> <span class="o">=</span> <span class="mi">0</span>
 
     <span class="n">ep_reward_td</span> <span class="o">=</span> <span class="n">traj_batch</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_EPISODE_REWARD_KEY</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
     <span class="n">step_count_td</span> <span class="o">=</span> <span class="n">traj_batch</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;step_count&quot;</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
@@ -899,6 +977,7 @@
         <span class="n">valid_len</span> <span class="o">=</span> <span class="n">traj_mask</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">valid_len</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">continue</span>
+        <span class="n">total_frames</span> <span class="o">+=</span> <span class="nb">int</span><span class="p">(</span><span class="n">valid_len</span><span class="p">)</span>
 
         <span class="c1"># Last valid index</span>
         <span class="n">last_idx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">valid_len</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
@@ -942,6 +1021,9 @@
         <span class="s2">&quot;num_episodes&quot;</span><span class="p">:</span> <span class="n">num_episodes</span><span class="p">,</span>
         <span class="s2">&quot;episode_length&quot;</span><span class="p">:</span> <span class="n">mean_length</span><span class="p">,</span>
     <span class="p">}</span>
+    <span class="k">if</span> <span class="n">eval_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">eval_time</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;fps&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">total_frames</span> <span class="o">/</span> <span class="n">eval_time</span>
+    <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;frame_count&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">total_frames</span>
 
     <span class="k">if</span> <span class="n">metrics_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">custom</span> <span class="o">=</span> <span class="n">metrics_fn</span><span class="p">(</span><span class="n">traj_batch</span><span class="p">)</span>
@@ -1069,7 +1151,7 @@
         <span class="n">policy</span><span class="p">:</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Callable</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">num_trajectories</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-        <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">collector_cls</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">collector_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
@@ -1149,10 +1231,9 @@
 
         <span class="c1"># Threading state</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_cancel</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_eval_ready</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_result_ready</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>  <span class="c1"># set while an eval is in-flight</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_pending_request</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span>
             <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">int</span>
         <span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
@@ -1174,10 +1255,9 @@
 
     <span class="k">def</span> <span class="nf">submit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_cancel</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>  <span class="c1"># discard any in-progress result</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Evaluation already pending.&quot;</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_pending_request</span> <span class="o">=</span> <span class="p">(</span><span class="n">weights_dict</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_result</span> <span class="o">=</span> <span class="kc">None</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_result_ready</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_eval_ready</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_thread</span><span class="p">()</span>
@@ -1207,7 +1287,6 @@
 
     <span class="k">def</span> <span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_flag</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_cancel</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_eval_ready</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>  <span class="c1"># wake thread so it can exit</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
@@ -1258,23 +1337,17 @@
             <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
                 <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending_request</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_pending_request</span> <span class="o">=</span> <span class="kc">None</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_cancel</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
 
             <span class="k">if</span> <span class="n">request</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">continue</span>
 
             <span class="n">weights_dict</span><span class="p">,</span> <span class="n">step</span> <span class="o">=</span> <span class="n">request</span>
             <span class="n">metrics</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_eval</span><span class="p">(</span><span class="n">weights_dict</span><span class="p">)</span>
-
-            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cancel</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
-                <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;_step&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">step</span>
-                <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_result</span> <span class="o">=</span> <span class="n">metrics</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_result_ready</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="c1"># Cancelled -- clear pending since the result was discarded</span>
-                <span class="c1"># (submit() will re-set it for the new request)</span>
-                <span class="k">pass</span>
+            <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;_step&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">step</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_result</span> <span class="o">=</span> <span class="n">metrics</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_result_ready</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">_ensure_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create the collector lazily (inside the worker thread).&quot;&quot;&quot;</span>
@@ -1345,6 +1418,7 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_multi_collector</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_policy</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
 
+        <span class="n">eval_start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
         <span class="k">with</span> <span class="n">set_exploration_type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_exploration_type</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_multi_collector</span><span class="p">:</span>
                 <span class="c1"># MultiSyncCollector: use a persistent iterator because</span>
@@ -1366,6 +1440,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_reward_keys</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_done_keys</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_metrics_fn</span><span class="p">,</span>
+            <span class="n">eval_time</span><span class="o">=</span><span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">eval_start</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">dump_video</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -1398,7 +1473,7 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">env_maker</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Any</span><span class="p">],</span>
         <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">reward_keys</span><span class="p">:</span> <span class="n">NestedKey</span><span class="p">,</span>
         <span class="n">init_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">num_gpus</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>

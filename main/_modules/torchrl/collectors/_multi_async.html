@@ -152,6 +152,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/collector_trajectory_assembly.html">Collectors Deep Dive: Trajectory Assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/evaluator.html">Using the Evaluator</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/export.html">Exporting TorchRL modules</a></li>
 </ul>
@@ -371,14 +372,14 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">out_tensordicts</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="kc">None</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">running</span> <span class="o">=</span> <span class="kc">False</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">postproc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_postproc_per_device</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">postproc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span>
             <span class="k">for</span> <span class="n">_device</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">_device</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">_device</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_postproc_per_device</span><span class="p">:</span>
                     <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">postproc</span><span class="p">,</span> <span class="s2">&quot;to&quot;</span><span class="p">):</span>
                         <span class="n">postproc</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">postproc</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">_device</span><span class="p">)</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span><span class="p">[</span><span class="n">_device</span><span class="p">]</span> <span class="o">=</span> <span class="n">postproc</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_postproc_per_device</span><span class="p">[</span><span class="n">_device</span><span class="p">]</span> <span class="o">=</span> <span class="n">postproc</span>
 
     <span class="c1"># for RPC</span>
     <span class="k">def</span> <span class="nf">next</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -525,8 +526,8 @@
                 <span class="n">worker_frames</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch_worker</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">+=</span> <span class="n">worker_frames</span>
             <span class="n">workers_frames</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">workers_frames</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">+</span> <span class="n">worker_frames</span>
-            <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span><span class="p">:</span>
-                <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span><span class="p">[</span><span class="n">out</span><span class="o">.</span><span class="n">device</span><span class="p">](</span><span class="n">out</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_postproc_per_device</span><span class="p">:</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_postproc_per_device</span><span class="p">[</span><span class="n">out</span><span class="o">.</span><span class="n">device</span><span class="p">](</span><span class="n">out</span><span class="p">)</span>
 
             <span class="c1"># the function blocks here until the next item is asked, hence we send the message to the</span>
             <span class="c1"># worker to keep on working in the meantime before the yield statement</span>

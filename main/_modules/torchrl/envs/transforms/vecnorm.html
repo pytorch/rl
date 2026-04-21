@@ -152,6 +152,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/collector_trajectory_assembly.html">Collectors Deep Dive: Trajectory Assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/evaluator.html">Using the Evaluator</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
 </ul>
@@ -498,17 +499,18 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_cast_int_to_float</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stateful</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;initialized&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">))</span>
-            <span class="k">if</span> <span class="n">shared_data</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">shared_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_loc</span> <span class="o">=</span> <span class="n">shared_data</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">]</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_var</span> <span class="o">=</span> <span class="n">shared_data</span><span class="p">[</span><span class="s2">&quot;var&quot;</span><span class="p">]</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_count</span> <span class="o">=</span> <span class="n">shared_data</span><span class="p">[</span><span class="s2">&quot;count&quot;</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_loc</span> <span class="o">=</span> <span class="kc">None</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_var</span> <span class="o">=</span> <span class="kc">None</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_count</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span> <span class="o">=</span> <span class="kc">False</span>
-            <span class="k">if</span> <span class="n">shared_data</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">shared_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="c1"># FIXME</span>
                 <span class="k">raise</span> <span class="ne">NotImplementedError</span>
         <span class="k">if</span> <span class="n">reduce_batch_dims</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">stateful</span><span class="p">:</span>
@@ -610,6 +612,18 @@
         <span class="k">return</span> <span class="n">other</span></div>
 
 
+    <span class="k">def</span> <span class="nf">_stats_are_shared</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">stateful</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loc</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+
+        <span class="n">shared</span> <span class="o">=</span> <span class="p">[</span><span class="n">leaf</span><span class="o">.</span><span class="n">is_shared</span><span class="p">()</span> <span class="k">for</span> <span class="n">leaf</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loc</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)]</span>
+        <span class="n">shared</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">leaf</span><span class="o">.</span><span class="n">is_shared</span><span class="p">()</span> <span class="k">for</span> <span class="n">leaf</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_var</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_count</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">):</span>
+            <span class="n">shared</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">leaf</span><span class="o">.</span><span class="n">is_shared</span><span class="p">()</span> <span class="k">for</span> <span class="n">leaf</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_count</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">shared</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_count</span><span class="o">.</span><span class="n">is_shared</span><span class="p">())</span>
+        <span class="k">return</span> <span class="nb">all</span><span class="p">(</span><span class="n">shared</span><span class="p">)</span>
+
     <span class="k">def</span> <span class="nf">_apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="n">recurse</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply device/dtype transformation to the module and its TensorDict state.</span>
 
@@ -620,6 +634,10 @@
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="n">recurse</span><span class="o">=</span><span class="n">recurse</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stateful</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stats_are_shared</span><span class="p">():</span>
+                <span class="c1"># Shared stats must stay on CPU-backed shared memory so other</span>
+                <span class="c1"># processes can keep observing live updates.</span>
+                <span class="k">return</span> <span class="bp">self</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_loc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loc</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_var</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_var</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
             <span class="c1"># Move _count to same device as _loc, but preserve its int dtype.</span>
@@ -828,7 +846,27 @@
         <span class="k">return</span> <span class="n">data_update</span>
 
     <span class="k">def</span> <span class="nf">_stateful_norm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_norm</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_count</span><span class="p">)</span>
+        <span class="n">loc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loc</span>
+        <span class="n">var</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_var</span>
+        <span class="n">count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_count</span>
+        <span class="n">loc_device</span> <span class="o">=</span> <span class="n">loc</span><span class="o">.</span><span class="n">device</span>
+        <span class="n">data_device</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">device</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">loc_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">data_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">loc_device</span> <span class="o">!=</span> <span class="n">data_device</span>
+        <span class="p">):</span>
+            <span class="n">stats</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+                <span class="p">{</span><span class="s2">&quot;loc&quot;</span><span class="p">:</span> <span class="n">loc</span><span class="p">,</span> <span class="s2">&quot;var&quot;</span><span class="p">:</span> <span class="n">var</span><span class="p">,</span> <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="n">count</span><span class="p">},</span>
+                <span class="n">batch_size</span><span class="o">=</span><span class="p">[],</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">loc_device</span><span class="p">,</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">data_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">data_device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(</span><span class="n">data_device</span><span class="p">)</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+            <span class="n">loc</span> <span class="o">=</span> <span class="n">stats</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">]</span>
+            <span class="n">var</span> <span class="o">=</span> <span class="n">stats</span><span class="p">[</span><span class="s2">&quot;var&quot;</span><span class="p">]</span>
+            <span class="n">count</span> <span class="o">=</span> <span class="n">stats</span><span class="p">[</span><span class="s2">&quot;count&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_norm</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">loc</span><span class="p">,</span> <span class="n">var</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_stateful_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">frozen</span><span class="p">:</span>
@@ -866,6 +904,22 @@
                 <span class="n">weight</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">decay</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">weight</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">count</span>
+        <span class="n">data_mean_device</span> <span class="o">=</span> <span class="n">data_mean</span><span class="o">.</span><span class="n">device</span>
+        <span class="n">loc_device</span> <span class="o">=</span> <span class="n">loc</span><span class="o">.</span><span class="n">device</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">data_mean_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">loc_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">data_mean_device</span> <span class="o">!=</span> <span class="n">loc_device</span>
+        <span class="p">):</span>
+            <span class="n">data_stats</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+                <span class="p">{</span><span class="s2">&quot;mean&quot;</span><span class="p">:</span> <span class="n">data_mean</span><span class="p">,</span> <span class="s2">&quot;var&quot;</span><span class="p">:</span> <span class="n">data2</span><span class="p">},</span>
+                <span class="n">batch_size</span><span class="o">=</span><span class="p">[],</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">data_mean_device</span><span class="p">,</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">loc_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">data_mean_device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(</span><span class="n">data_mean_device</span><span class="p">)</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+            <span class="n">data_mean</span> <span class="o">=</span> <span class="n">data_stats</span><span class="p">[</span><span class="s2">&quot;mean&quot;</span><span class="p">]</span>
+            <span class="n">data2</span> <span class="o">=</span> <span class="n">data_stats</span><span class="p">[</span><span class="s2">&quot;var&quot;</span><span class="p">]</span>
         <span class="n">loc</span><span class="o">.</span><span class="n">lerp_</span><span class="p">(</span><span class="n">end</span><span class="o">=</span><span class="n">data_mean</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="n">weight</span><span class="p">)</span>
         <span class="n">var</span><span class="o">.</span><span class="n">lerp_</span><span class="p">(</span><span class="n">end</span><span class="o">=</span><span class="n">data2</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="n">weight</span><span class="p">)</span>
 

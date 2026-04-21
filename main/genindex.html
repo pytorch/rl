@@ -152,6 +152,7 @@
 <li class="toctree-l1"><a class="reference internal" href="tutorials/pretrained_models.html">Using pretrained models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/collector_trajectory_assembly.html">Collectors Deep Dive: Trajectory Assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/evaluator.html">Using the Evaluator</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/export.html">Exporting TorchRL modules</a></li>
 </ul>
@@ -2586,6 +2587,8 @@
       </ul></li>
       <li><a href="reference/generated/torchrl.modules.ConsistentDropoutModule.html#torchrl.modules.ConsistentDropoutModule">ConsistentDropoutModule (class in torchrl.modules)</a>
 </li>
+      <li><a href="reference/generated/torchrl.data.replay_buffers.StalenessAwareSampler.html#torchrl.data.replay_buffers.StalenessAwareSampler.consumer_version">consumer_version (torchrl.data.replay_buffers.StalenessAwareSampler property)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.container">container (torchrl.data.llm.TopKRewardSelector property)</a>
 
       <ul>
@@ -4763,6 +4766,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.RandomCropTensorDict.html#torchrl.envs.transforms.RandomCropTensorDict.forward">(torchrl.envs.transforms.RandomCropTensorDict method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.transforms.RandomTruncationTransform.html#torchrl.envs.transforms.RandomTruncationTransform.forward">(torchrl.envs.transforms.RandomTruncationTransform method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.transforms.RemoveEmptySpecs.html#torchrl.envs.transforms.RemoveEmptySpecs.forward">(torchrl.envs.transforms.RemoveEmptySpecs method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.RenameTransform.html#torchrl.envs.transforms.RenameTransform.forward">(torchrl.envs.transforms.RenameTransform method)</a>
@@ -6734,6 +6739,8 @@
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer.in_keys_inv">in_keys_inv (torchrl.envs.llm.transforms.RayDataLoadingPrimer property)</a>
 </li>
+      <li><a href="reference/generated/torchrl.data.replay_buffers.StalenessAwareSampler.html#torchrl.data.replay_buffers.StalenessAwareSampler.increment_consumer_version">increment_consumer_version() (torchrl.data.replay_buffers.StalenessAwareSampler method)</a>
+</li>
       <li><a href="reference/generated/torchrl.collectors.AsyncCollector.html#torchrl.collectors.AsyncCollector.increment_version">increment_version() (torchrl.collectors.AsyncCollector method)</a>
 
       <ul>
@@ -8167,6 +8174,8 @@
       <li><a href="reference/generated/torchrl.envs.llm.MATHEnv.html#torchrl.envs.llm.MATHEnv">MATHEnv (class in torchrl.envs.llm)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.llm.MATHRewardParser.html#torchrl.envs.llm.MATHRewardParser">MATHRewardParser (class in torchrl.envs.llm)</a>
+</li>
+      <li><a href="reference/generated/torchrl.data.replay_buffers.StalenessAwareSampler.html#torchrl.data.replay_buffers.StalenessAwareSampler.max_staleness">max_staleness (torchrl.data.replay_buffers.StalenessAwareSampler property)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.maybe_dense_stack">maybe_dense_stack() (torchrl.data.llm.ContentBase method)</a>
 
@@ -9870,12 +9879,12 @@
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.envs_libs.PettingZooEnvConfig.html#torchrl.trainers.algorithms.configs.envs_libs.PettingZooEnvConfig">PettingZooEnvConfig (class in torchrl.trainers.algorithms.configs.envs_libs)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.PettingZooWrapper.html#torchrl.envs.PettingZooWrapper">PettingZooWrapper() (in module torchrl.envs)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.PinMemoryTransform.html#torchrl.envs.transforms.PinMemoryTransform">PinMemoryTransform (class in torchrl.envs.transforms)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.transforms.PinMemoryTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.PinMemoryTransformConfig">PinMemoryTransformConfig (class in torchrl.trainers.algorithms.configs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.record.PixelRenderTransform.html#torchrl.record.PixelRenderTransform">PixelRenderTransform() (in module torchrl.record)</a>
@@ -9938,6 +9947,16 @@
         <li><a href="reference/generated/torchrl.collectors.VanillaWeightUpdater.html#torchrl.collectors.VanillaWeightUpdater.post_hooks">(torchrl.collectors.VanillaWeightUpdater property)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.post_hooks">(torchrl.collectors.WeightUpdaterBase property)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.collectors.AsyncCollector.html#torchrl.collectors.AsyncCollector.postprocs">postprocs (torchrl.collectors.AsyncCollector property)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector.postprocs">(torchrl.collectors.MultiAsyncCollector property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector.postprocs">(torchrl.collectors.MultiCollector property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector.postprocs">(torchrl.collectors.MultiSyncCollector property)</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.objectives.PPOLoss.html#torchrl.objectives.PPOLoss">PPOLoss (class in torchrl.objectives)</a>
@@ -10279,6 +10298,8 @@
       <li><a href="reference/generated/torchrl.data.replay_buffers.RandomSampler.html#torchrl.data.replay_buffers.RandomSampler">RandomSampler (class in torchrl.data.replay_buffers)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.data.RandomSamplerConfig.html#torchrl.trainers.algorithms.configs.data.RandomSamplerConfig">RandomSamplerConfig (class in torchrl.trainers.algorithms.configs.data)</a>
+</li>
+      <li><a href="reference/generated/torchrl.envs.transforms.RandomTruncationTransform.html#torchrl.envs.transforms.RandomTruncationTransform">RandomTruncationTransform (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector">RayCollector (class in torchrl.collectors.distributed)</a>
 </li>
@@ -13678,10 +13699,10 @@
 </li>
       <li><a href="reference/generated/torchrl.objectives.llm.SFTLossOutput.html#torchrl.objectives.llm.SFTLossOutput">SFTLossOutput (class in torchrl.objectives.llm)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.utils.SGDConfig.html#torchrl.trainers.algorithms.configs.utils.SGDConfig">SGDConfig (class in torchrl.trainers.algorithms.configs.utils)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.weight_update.llm.SGLangCollectiveTransport.html#torchrl.weight_update.llm.SGLangCollectiveTransport">SGLangCollectiveTransport (class in torchrl.weight_update.llm)</a>
 </li>
       <li><a href="reference/generated/torchrl.weight_update.llm.SGLangWeightSender.html#torchrl.weight_update.llm.SGLangWeightSender">SGLangWeightSender (class in torchrl.weight_update.llm)</a>
@@ -14073,6 +14094,8 @@
       <li><a href="reference/generated/torchrl.data.Stacked.html#torchrl.data.Stacked">Stacked (class in torchrl.data)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite">StackedComposite (class in torchrl.data)</a>
+</li>
+      <li><a href="reference/generated/torchrl.data.replay_buffers.StalenessAwareSampler.html#torchrl.data.replay_buffers.StalenessAwareSampler">StalenessAwareSampler (class in torchrl.data.replay_buffers)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm.standard_normal">standard_normal (torchrl.envs.transforms.VecNorm property)</a>
 
@@ -15786,6 +15809,8 @@
         <li><a href="reference/generated/torchrl.envs.transforms.ExcludeTransform.html#torchrl.envs.transforms.ExcludeTransform.transform_output_spec">(torchrl.envs.transforms.ExcludeTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.MultiAction.html#torchrl.envs.transforms.MultiAction.transform_output_spec">(torchrl.envs.transforms.MultiAction method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.RandomTruncationTransform.html#torchrl.envs.transforms.RandomTruncationTransform.transform_output_spec">(torchrl.envs.transforms.RandomTruncationTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.RemoveEmptySpecs.html#torchrl.envs.transforms.RemoveEmptySpecs.transform_output_spec">(torchrl.envs.transforms.RemoveEmptySpecs method)</a>
 </li>

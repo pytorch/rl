@@ -104,6 +104,23 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
 
 .. only:: html
 
+  .. image:: /tutorials/images/thumb/sphx_glr_evaluator_thumb.png
+    :alt:
+
+  :doc:`/tutorials/evaluator`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Using the Evaluator</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
+
+.. only:: html
+
   .. image:: /tutorials/images/thumb/sphx_glr_getting-started-5_thumb.png
     :alt:
 
@@ -385,6 +402,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
    /tutorials/getting-started-2
    /tutorials/getting-started-3
    /tutorials/pretrained_models
+   /tutorials/evaluator
    /tutorials/getting-started-5
    /tutorials/collector_trajectory_assembly
    /tutorials/getting-started-1

@@ -152,6 +152,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/collector_trajectory_assembly.html">Collectors Deep Dive: Trajectory Assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/evaluator.html">Using the Evaluator</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/export.html">Exporting TorchRL modules</a></li>
 </ul>
@@ -795,6 +796,8 @@
                         <span class="k">for</span> <span class="n">worker_idx</span><span class="p">,</span> <span class="n">factory</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">factories</span><span class="p">):</span>
                             <span class="k">if</span> <span class="n">factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                                 <span class="n">worker_model</span> <span class="o">=</span> <span class="n">factory</span><span class="p">()</span>
+                                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">worker_model</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+                                    <span class="k">continue</span>
                                 <span class="n">worker_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">worker_model</span><span class="p">)</span>
                                 <span class="n">worker_weights</span> <span class="o">=</span> <span class="n">worker_weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
                                     <span class="n">_cast</span><span class="p">,</span> <span class="n">worker_weights</span>
@@ -809,8 +812,20 @@
                         <span class="c1"># Set per_worker_weights flag on the scheme</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">per_worker_weights</span> <span class="o">=</span> <span class="kc">True</span>
                         <span class="k">return</span> <span class="n">params_map</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;SharedMemWeightSyncScheme requires an nn.Module policy, &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">model</span><span class="p">)</span><span class="si">}</span><span class="s2">. Non-Module policies (e.g. RandomPolicy) &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;do not need weight synchronization.&quot;</span>
+                <span class="p">)</span>
             <span class="n">weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
         <span class="k">elif</span> <span class="n">model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;SharedMemWeightSyncScheme requires an nn.Module model, &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">model</span><span class="p">)</span><span class="si">}</span><span class="s2">. Non-Module policies (e.g. RandomPolicy) &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;do not need weight synchronization.&quot;</span>
+                <span class="p">)</span>
             <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;weights cannot be provided if model is provided&quot;</span><span class="p">)</span>
             <span class="n">weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>

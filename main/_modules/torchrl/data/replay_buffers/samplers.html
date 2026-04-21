@@ -152,6 +152,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/collector_trajectory_assembly.html">Collectors Deep Dive: Trajectory Assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/evaluator.html">Using the Evaluator</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
 </ul>
@@ -540,6 +541,224 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">perc</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(</span><span class="si">{</span><span class="n">perc</span><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2">% sampled)&quot;</span></div>
+
+
+
+<span class="k">def</span> <span class="nf">_default_staleness_weight</span><span class="p">(</span><span class="n">s</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Default freshness weighting: 1 / (staleness + 1).&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">float</span><span class="p">()</span> <span class="o">+</span> <span class="mf">1.0</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="StalenessAwareSampler">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.StalenessAwareSampler.html#torchrl.data.replay_buffers.StalenessAwareSampler">[docs]</a>
+<span class="k">class</span> <span class="nc">StalenessAwareSampler</span><span class="p">(</span><span class="n">Sampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A sampler that weights entries by freshness and filters stale entries.</span>
+
+<span class="sd">    This sampler is designed for asynchronous training setups (e.g., async PPO)</span>
+<span class="sd">    where collected data may come from older policy versions. It reads a</span>
+<span class="sd">    ``policy_version`` field from the storage and uses it to:</span>
+
+<span class="sd">    - **Hard gate**: Exclude entries whose staleness exceeds ``max_staleness``.</span>
+<span class="sd">    - **Freshness weighting**: Sample proportionally to a weight that decays</span>
+<span class="sd">      with staleness (default: ``1 / (staleness + 1)``).</span>
+
+<span class="sd">    The training loop is responsible for updating :attr:`consumer_version`</span>
+<span class="sd">    (typically after each optimizer step or weight update) so the sampler</span>
+<span class="sd">    can compute staleness = ``consumer_version - policy_version``.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        max_staleness (int, optional): Hard cutoff. Entries with</span>
+<span class="sd">            ``staleness &gt; max_staleness`` are excluded from sampling.</span>
+<span class="sd">            ``-1`` (default) means no cutoff.</span>
+<span class="sd">        staleness_weight_fn (callable, optional): A callable that maps a</span>
+<span class="sd">            staleness tensor (int) to a weight tensor (float). Defaults to</span>
+<span class="sd">            ``lambda s: 1.0 / (s.float() + 1.0)``.</span>
+<span class="sd">        version_key (NestedKey, optional): The key in the storage holding</span>
+<span class="sd">            the policy version. Defaults to ``&quot;policy_version&quot;``.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import TensorDictReplayBuffer, LazyTensorStorage</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data.replay_buffers.samplers import StalenessAwareSampler</span>
+<span class="sd">        &gt;&gt;&gt; sampler = StalenessAwareSampler(max_staleness=5)</span>
+<span class="sd">        &gt;&gt;&gt; buffer = TensorDictReplayBuffer(</span>
+<span class="sd">        ...     storage=LazyTensorStorage(1000),</span>
+<span class="sd">        ...     sampler=sampler,</span>
+<span class="sd">        ...     batch_size=32,</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; # In training loop:</span>
+<span class="sd">        &gt;&gt;&gt; # sampler.consumer_version = current_training_step</span>
+
+<span class="sd">    Integration with :class:`~torchrl.collectors.SyncDataCollector` and</span>
+<span class="sd">    :class:`~torchrl.envs.transforms.PolicyVersion`::</span>
+
+<span class="sd">        from torchrl.collectors import SyncDataCollector</span>
+<span class="sd">        from torchrl.envs.transforms import PolicyVersion</span>
+<span class="sd">        from torchrl.data import TensorDictReplayBuffer, LazyTensorStorage</span>
+
+<span class="sd">        sampler = StalenessAwareSampler(max_staleness=10)</span>
+<span class="sd">        buffer = TensorDictReplayBuffer(</span>
+<span class="sd">            storage=LazyTensorStorage(10_000),</span>
+<span class="sd">            sampler=sampler,</span>
+<span class="sd">            batch_size=256,</span>
+<span class="sd">        )</span>
+<span class="sd">        collector = SyncDataCollector(</span>
+<span class="sd">            env,</span>
+<span class="sd">            policy,</span>
+<span class="sd">            frames_per_batch=1000,</span>
+<span class="sd">            total_frames=100_000,</span>
+<span class="sd">            env_transforms=[PolicyVersion(collector)],</span>
+<span class="sd">        )</span>
+<span class="sd">        for step, data in enumerate(collector):</span>
+<span class="sd">            buffer.extend(data)</span>
+<span class="sd">            sampler.consumer_version = step</span>
+<span class="sd">            batch = buffer.sample()</span>
+<span class="sd">            # ... train on batch ...</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        ``StalenessAwareSampler`` intentionally does **not** inherit from</span>
+<span class="sd">        :class:`PrioritizedSampler`.  ``PrioritizedSampler`` maintains a</span>
+<span class="sd">        segment-tree over per-transition TD-error priorities that are</span>
+<span class="sd">        updated after each training step.  Staleness weighting is</span>
+<span class="sd">        fundamentally different: weights are derived from a single scalar</span>
+<span class="sd">        (``consumer_version``) and per-entry ``policy_version`` stamps,</span>
+<span class="sd">        and are recomputed on every :meth:`sample` call rather than</span>
+<span class="sd">        maintained incrementally.  Sharing the segment-tree machinery</span>
+<span class="sd">        would add complexity without benefit.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">max_staleness</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">staleness_weight_fn</span><span class="p">:</span> <span class="nb">callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">version_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;policy_version&quot;</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_version</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_staleness</span> <span class="o">=</span> <span class="n">max_staleness</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_version_key</span> <span class="o">=</span> <span class="n">version_key</span>
+        <span class="k">if</span> <span class="n">staleness_weight_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">staleness_weight_fn</span> <span class="o">=</span> <span class="n">_default_staleness_weight</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_weight_fn</span> <span class="o">=</span> <span class="n">staleness_weight_fn</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">consumer_version</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The current training iteration / consumer version.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_version</span>
+
+    <span class="nd">@consumer_version</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">consumer_version</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_version</span> <span class="o">=</span> <span class="n">v</span>
+
+<div class="viewcode-block" id="StalenessAwareSampler.increment_consumer_version">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.StalenessAwareSampler.html#torchrl.data.replay_buffers.StalenessAwareSampler.increment_consumer_version">[docs]</a>
+    <span class="k">def</span> <span class="nf">increment_consumer_version</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Increment the consumer version by 1.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_version</span> <span class="o">+=</span> <span class="mi">1</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">max_staleness</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The maximum allowed staleness. -1 means no limit.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_staleness</span>
+
+    <span class="nd">@max_staleness</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">max_staleness</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_staleness</span> <span class="o">=</span> <span class="n">v</span>
+
+    <span class="k">def</span> <span class="nf">_get_versions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">:</span> <span class="n">Storage</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">TensorStorage</span><span class="p">):</span>
+            <span class="n">backing_storage</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="s2">&quot;_storage&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">backing_storage</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">versions</span> <span class="o">=</span> <span class="n">backing_storage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_version_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">versions</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">storage</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                        <span class="n">versions</span> <span class="o">=</span> <span class="n">versions</span><span class="p">[:</span> <span class="n">storage</span><span class="o">.</span><span class="n">_len_along_dim0</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span>
+                            <span class="mi">0</span><span class="p">,</span> <span class="n">storage</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span>
+                        <span class="p">)</span>
+                    <span class="k">elif</span> <span class="n">n</span> <span class="o">!=</span> <span class="n">storage</span><span class="o">.</span><span class="n">max_size</span><span class="p">:</span>
+                        <span class="n">versions</span> <span class="o">=</span> <span class="n">versions</span><span class="p">[:</span><span class="n">n</span><span class="p">]</span>
+                    <span class="k">return</span> <span class="n">versions</span>
+
+        <span class="c1"># Fallback: storage[:n] materialises all data. This path is used for</span>
+        <span class="c1"># non-TensorStorage backends (e.g. ListStorage). For hot-path</span>
+        <span class="c1"># performance, prefer TensorStorage where versions are read directly.</span>
+        <span class="n">all_data</span> <span class="o">=</span> <span class="n">storage</span><span class="p">[:</span><span class="n">n</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">all_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_version_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">:</span> <span class="n">Storage</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">n</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">_EMPTY_STORAGE_ERROR</span><span class="p">)</span>
+
+        <span class="n">versions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_versions</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">versions</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Could not find key </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_version_key</span><span class="si">!r}</span><span class="s2"> in the replay buffer &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;storage. Make sure data written to the buffer contains this key &quot;</span>
+                <span class="s2">&quot;(e.g., by adding the PolicyVersion transform to the environment &quot;</span>
+                <span class="s2">&quot;or enabling policy-version tracking on the collector).&quot;</span>
+            <span class="p">)</span>
+        <span class="n">versions</span> <span class="o">=</span> <span class="n">versions</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+
+        <span class="c1"># Compute staleness</span>
+        <span class="n">staleness</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_version</span> <span class="o">-</span> <span class="n">versions</span>
+
+        <span class="c1"># Hard gate</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_staleness</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">valid_mask</span> <span class="o">=</span> <span class="n">staleness</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_staleness</span>
+            <span class="n">valid_indices</span> <span class="o">=</span> <span class="n">valid_mask</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">as_tuple</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">valid_indices</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;All </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2"> entries in the buffer exceed max_staleness=&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_max_staleness</span><span class="si">}</span><span class="s2"> (consumer_version=&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_consumer_version</span><span class="si">}</span><span class="s2">). Increase max_staleness or &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;update collector policy weights more frequently.&quot;</span>
+                <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">valid_indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">versions</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="c1"># Compute freshness weights for valid entries</span>
+        <span class="n">valid_staleness</span> <span class="o">=</span> <span class="n">staleness</span><span class="p">[</span><span class="n">valid_indices</span><span class="p">]</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_fn</span><span class="p">(</span><span class="n">valid_staleness</span><span class="p">)</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="n">weights</span> <span class="o">/</span> <span class="n">weights</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+
+        <span class="c1"># Weighted sampling</span>
+        <span class="n">sampled_local</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">multinomial</span><span class="p">(</span>
+            <span class="n">weights</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">,</span> <span class="n">replacement</span><span class="o">=</span><span class="n">batch_size</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">valid_indices</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="n">valid_indices</span><span class="p">[</span><span class="n">sampled_local</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">index</span><span class="p">,</span> <span class="p">{</span>
+            <span class="s2">&quot;staleness&quot;</span><span class="p">:</span> <span class="n">staleness</span><span class="p">[</span><span class="n">index</span><span class="p">],</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span> <span class="nf">_empty</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_version</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">def</span> <span class="nf">dumps</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="n">path</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">TensorDict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">state_dict</span><span class="p">())</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">loads</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+        <span class="n">sd</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">sd</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="n">OrderedDict</span><span class="p">(</span>
+            <span class="n">consumer_version</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_consumer_version</span><span class="p">,</span>
+            <span class="n">max_staleness</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_max_staleness</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_version</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;consumer_version&quot;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_staleness</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;max_staleness&quot;</span><span class="p">])</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;consumer_version=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_consumer_version</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;max_staleness=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_max_staleness</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span></div>
 
 
 
