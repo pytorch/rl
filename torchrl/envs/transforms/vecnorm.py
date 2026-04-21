@@ -591,23 +591,13 @@ class VecNormV2(Transform):
         loc = self._loc
         var = self._var
         count = self._count
-        loc_device = loc.device
         data_device = data.device
-        if (
-            loc_device is not None
-            and data_device is not None
-            and loc_device != data_device
-        ):
-            stats = TensorDict(
-                {"loc": loc, "var": var, "count": count},
-                batch_size=[],
-                device=loc_device,
-            ).to(data_device, non_blocking=True)
+        if data_device is not None:
+            loc = loc.to(data_device, non_blocking=True)
+            var = var.to(data_device, non_blocking=True)
+            count = count.to(data_device, non_blocking=True)
             if data_device.type == "cuda":
                 torch.cuda.current_stream(data_device).synchronize()
-            loc = stats["loc"]
-            var = stats["var"]
-            count = stats["count"]
         return self._norm(data, loc, var, count)
 
     def _stateful_update(self, data):
@@ -646,24 +636,14 @@ class VecNormV2(Transform):
                 weight = 1 - self.decay
             else:
                 weight = 1 / count
-        data_mean_device = data_mean.device
-        loc_device = loc.device
-        if (
-            data_mean_device is not None
-            and loc_device is not None
-            and data_mean_device != loc_device
-        ):
-            data_stats = TensorDict(
-                {"mean": data_mean, "var": data2},
-                batch_size=[],
-                device=data_mean_device,
-            ).to(loc_device, non_blocking=True)
-            if data_mean_device.type == "cuda":
-                torch.cuda.current_stream(data_mean_device).synchronize()
-            data_mean = data_stats["mean"]
-            data2 = data_stats["var"]
-        loc.lerp_(end=data_mean, weight=weight)
-        var.lerp_(end=data2, weight=weight)
+        loc.named_apply(
+            lambda name, l, m: l.lerp_(end=m.to(l.device), weight=weight),
+            data_mean,
+        )
+        var.named_apply(
+            lambda name, v, d: v.lerp_(end=d.to(v.device), weight=weight),
+            data2,
+        )
 
     def _maybe_stateless_init(self, data):
         if not self.initialized or f"{self.prefix}_loc" not in data.keys():

@@ -14,7 +14,13 @@ from torch import Tensor
 
 from .common import Logger
 
-_has_trackio = importlib.util.find_spec("trackio") is not None
+try:
+    import trackio  # noqa: F401
+
+    _has_trackio = True
+    del trackio
+except ImportError:
+    _has_trackio = False
 _has_omegaconf = importlib.util.find_spec("omegaconf") is not None
 
 
