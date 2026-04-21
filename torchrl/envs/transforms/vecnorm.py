@@ -593,7 +593,11 @@ class VecNormV2(Transform):
         count = self._count
         loc_device = loc.device
         data_device = data.device
-        if loc_device is not None and data_device is not None and loc_device != data_device:
+        if (
+            loc_device is not None
+            and data_device is not None
+            and loc_device != data_device
+        ):
             stats = TensorDict(
                 {"loc": loc, "var": var, "count": count},
                 batch_size=[],
@@ -644,7 +648,11 @@ class VecNormV2(Transform):
                 weight = 1 / count
         data_mean_device = data_mean.device
         loc_device = loc.device
-        if data_mean_device is not None and loc_device is not None and data_mean_device != loc_device:
+        if (
+            data_mean_device is not None
+            and loc_device is not None
+            and data_mean_device != loc_device
+        ):
             data_stats = TensorDict(
                 {"mean": data_mean, "var": data2},
                 batch_size=[],
