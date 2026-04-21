@@ -849,23 +849,13 @@
         <span class="n">loc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loc</span>
         <span class="n">var</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_var</span>
         <span class="n">count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_count</span>
-        <span class="n">loc_device</span> <span class="o">=</span> <span class="n">loc</span><span class="o">.</span><span class="n">device</span>
         <span class="n">data_device</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">device</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="n">loc_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="ow">and</span> <span class="n">data_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="ow">and</span> <span class="n">loc_device</span> <span class="o">!=</span> <span class="n">data_device</span>
-        <span class="p">):</span>
-            <span class="n">stats</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
-                <span class="p">{</span><span class="s2">&quot;loc&quot;</span><span class="p">:</span> <span class="n">loc</span><span class="p">,</span> <span class="s2">&quot;var&quot;</span><span class="p">:</span> <span class="n">var</span><span class="p">,</span> <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="n">count</span><span class="p">},</span>
-                <span class="n">batch_size</span><span class="o">=</span><span class="p">[],</span>
-                <span class="n">device</span><span class="o">=</span><span class="n">loc_device</span><span class="p">,</span>
-            <span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">data_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">data_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">loc</span> <span class="o">=</span> <span class="n">loc</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">data_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">var</span> <span class="o">=</span> <span class="n">var</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">data_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">count</span> <span class="o">=</span> <span class="n">count</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">data_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">data_device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
                 <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(</span><span class="n">data_device</span><span class="p">)</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
-            <span class="n">loc</span> <span class="o">=</span> <span class="n">stats</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">]</span>
-            <span class="n">var</span> <span class="o">=</span> <span class="n">stats</span><span class="p">[</span><span class="s2">&quot;var&quot;</span><span class="p">]</span>
-            <span class="n">count</span> <span class="o">=</span> <span class="n">stats</span><span class="p">[</span><span class="s2">&quot;count&quot;</span><span class="p">]</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_norm</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">loc</span><span class="p">,</span> <span class="n">var</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_stateful_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
@@ -904,22 +894,14 @@
                 <span class="n">weight</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">decay</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">weight</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">count</span>
-        <span class="n">data_mean_device</span> <span class="o">=</span> <span class="n">data_mean</span><span class="o">.</span><span class="n">device</span>
-        <span class="n">loc_device</span> <span class="o">=</span> <span class="n">loc</span><span class="o">.</span><span class="n">device</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="n">data_mean_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="ow">and</span> <span class="n">loc_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="ow">and</span> <span class="n">data_mean_device</span> <span class="o">!=</span> <span class="n">loc_device</span>
-        <span class="p">):</span>
-            <span class="n">data_stats</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
-                <span class="p">{</span><span class="s2">&quot;mean&quot;</span><span class="p">:</span> <span class="n">data_mean</span><span class="p">,</span> <span class="s2">&quot;var&quot;</span><span class="p">:</span> <span class="n">data2</span><span class="p">},</span>
-                <span class="n">batch_size</span><span class="o">=</span><span class="p">[],</span>
-                <span class="n">device</span><span class="o">=</span><span class="n">data_mean_device</span><span class="p">,</span>
-            <span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">loc_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">data_mean_device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
-                <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(</span><span class="n">data_mean_device</span><span class="p">)</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
-            <span class="n">data_mean</span> <span class="o">=</span> <span class="n">data_stats</span><span class="p">[</span><span class="s2">&quot;mean&quot;</span><span class="p">]</span>
-            <span class="n">data2</span> <span class="o">=</span> <span class="n">data_stats</span><span class="p">[</span><span class="s2">&quot;var&quot;</span><span class="p">]</span>
+        <span class="n">data_mean</span> <span class="o">=</span> <span class="n">data_mean</span><span class="o">.</span><span class="n">named_apply</span><span class="p">(</span>
+            <span class="k">lambda</span> <span class="n">name</span><span class="p">,</span> <span class="n">dm</span><span class="p">,</span> <span class="n">ref</span><span class="p">:</span> <span class="n">dm</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">ref</span><span class="o">.</span><span class="n">device</span><span class="p">),</span>
+            <span class="n">loc</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">data2</span> <span class="o">=</span> <span class="n">data2</span><span class="o">.</span><span class="n">named_apply</span><span class="p">(</span>
+            <span class="k">lambda</span> <span class="n">name</span><span class="p">,</span> <span class="n">d2</span><span class="p">,</span> <span class="n">ref</span><span class="p">:</span> <span class="n">d2</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">ref</span><span class="o">.</span><span class="n">device</span><span class="p">),</span>
+            <span class="n">var</span><span class="p">,</span>
+        <span class="p">)</span>
         <span class="n">loc</span><span class="o">.</span><span class="n">lerp_</span><span class="p">(</span><span class="n">end</span><span class="o">=</span><span class="n">data_mean</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="n">weight</span><span class="p">)</span>
         <span class="n">var</span><span class="o">.</span><span class="n">lerp_</span><span class="p">(</span><span class="n">end</span><span class="o">=</span><span class="n">data2</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="n">weight</span><span class="p">)</span>
 
