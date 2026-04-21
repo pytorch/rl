@@ -175,8 +175,10 @@ class Evaluator:
             evaluation round.  A :class:`~torchrl.collectors.Collector` is
             used internally with ``trajs_per_batch=num_trajectories``.
             Default: ``10``.
-        max_steps (int): Maximum environment steps per episode, passed as
-            ``max_frames_per_traj`` to the internal collector.
+        max_steps (int or None): Maximum environment steps per episode,
+            passed as ``max_frames_per_traj`` to the internal collector.
+            When ``None``, episodes run until done with no step limit.
+            Default: ``None``.
         frames_per_batch (int or None): Internal collection batch size
             (env steps per collector iteration).  If ``None``, defaults to
             ``max_steps``.  This is purely internal — output granularity
@@ -256,7 +258,7 @@ class Evaluator:
         *,
         policy_factory: Callable[..., Callable] | None = None,
         num_trajectories: int = 10,
-        max_steps: int,
+        max_steps: int | None = None,
         frames_per_batch: int | None = None,
         collector_cls: type | str | None = None,
         collector_kwargs: dict | None = None,
@@ -887,7 +889,7 @@ class _ThreadEvalBackend(_EvalBackend):
         policy: TensorDictModuleBase | Callable | None,
         policy_factory: Callable[..., Callable] | None,
         num_trajectories: int,
-        max_steps: int,
+        max_steps: int | None,
         frames_per_batch: int | None,
         collector_cls: type | str | None,
         collector_kwargs: dict | None,
@@ -1209,7 +1211,7 @@ class _RayEvalBackend(_EvalBackend):
         self,
         env_maker: Callable[[], Any],
         policy_factory: Callable[..., Any] | None,
-        max_steps: int,
+        max_steps: int | None,
         reward_keys: NestedKey,
         init_fn: Callable[[], None] | None,
         num_gpus: int,
