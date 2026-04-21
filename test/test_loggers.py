@@ -677,6 +677,7 @@ class TestPixelRenderTransform:
 
 @pytest.fixture()
 def trackio_logger():
+    pytest.importorskip("trackio")
     exp_name = "ramala"
     logger = TrackioLogger(project="test", exp_name=exp_name)
     yield logger
