@@ -466,17 +466,20 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             and not weight_sync_schemes
             and weight_updater is None
         ):
-            if isinstance(policy, nn.Module) or has_uniform_policy_factory:
-                # Set up a default local shared-memory sync scheme for the policy.
-                # This is used to propagate weights from the orchestrator policy
-                # (possibly combined with a policy_factory) down to worker policies.
+            if isinstance(policy, nn.Module):
                 weight_sync_schemes["policy"] = SharedMemWeightSyncScheme()
+            elif has_uniform_policy_factory:
+                _probe = policy_factory[0]()
+                if isinstance(_probe, nn.Module):
+                    weight_sync_schemes["policy"] = SharedMemWeightSyncScheme()
+                del _probe
             elif has_distinct_policy_factory:
-                # Distinct factories: set up per-worker weight sync scheme.
-                # Each worker maintains independent weights that can be updated individually.
-                weight_sync_schemes["policy"] = SharedMemWeightSyncScheme(
-                    per_worker_weights=True
-                )
+                _probe = next(f() for f in policy_factory if f is not None)
+                if isinstance(_probe, nn.Module):
+                    weight_sync_schemes["policy"] = SharedMemWeightSyncScheme(
+                        per_worker_weights=True
+                    )
+                del _probe
 
         self._setup_multi_weight_sync(weight_updater, weight_sync_schemes)
 

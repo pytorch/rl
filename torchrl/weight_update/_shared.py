@@ -549,11 +549,19 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                         self.per_worker_weights = True
                         return params_map
             if not isinstance(model, nn.Module):
-                return {}
+                raise TypeError(
+                    f"SharedMemWeightSyncScheme requires an nn.Module policy, "
+                    f"got {type(model)}. Non-Module policies (e.g. RandomPolicy) "
+                    f"do not need weight synchronization."
+                )
             weights = TensorDict.from_module(model)
         elif model is not None:
             if not isinstance(model, nn.Module):
-                return {}
+                raise TypeError(
+                    f"SharedMemWeightSyncScheme requires an nn.Module model, "
+                    f"got {type(model)}. Non-Module policies (e.g. RandomPolicy) "
+                    f"do not need weight synchronization."
+                )
             if weights is not None:
                 raise ValueError("weights cannot be provided if model is provided")
             weights = TensorDict.from_module(model)
