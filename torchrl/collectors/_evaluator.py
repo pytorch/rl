@@ -554,11 +554,11 @@ class Evaluator:
             raw = self._backend.poll(timeout=0.1)
             if raw is not None:
                 result = self._finalize(raw)
+                self._invoke_on_result(result)
                 with self._async_lock:
                     self._ready_results.append(result)
                     self._ready_result.set()
                     has_more_requests = bool(self._async_requests)
-                self._invoke_on_result(result)
                 if has_more_requests:
                     self._async_trigger.set()
                 continue

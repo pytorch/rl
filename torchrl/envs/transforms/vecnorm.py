@@ -591,14 +591,16 @@ class VecNormV2(Transform):
         loc = self._loc
         var = self._var
         count = self._count
-        if loc.device != data.device:
+        loc_device = loc.device
+        data_device = data.device
+        if loc_device is not None and data_device is not None and loc_device != data_device:
             stats = TensorDict(
                 {"loc": loc, "var": var, "count": count},
                 batch_size=[],
-                device=loc.device,
-            ).to(data.device, non_blocking=True)
-            if data.device.type == "cuda":
-                torch.cuda.current_stream(data.device).synchronize()
+                device=loc_device,
+            ).to(data_device, non_blocking=True)
+            if data_device.type == "cuda":
+                torch.cuda.current_stream(data_device).synchronize()
             loc = stats["loc"]
             var = stats["var"]
             count = stats["count"]
@@ -640,14 +642,16 @@ class VecNormV2(Transform):
                 weight = 1 - self.decay
             else:
                 weight = 1 / count
-        if data_mean.device != loc.device:
+        data_mean_device = data_mean.device
+        loc_device = loc.device
+        if data_mean_device is not None and loc_device is not None and data_mean_device != loc_device:
             data_stats = TensorDict(
                 {"mean": data_mean, "var": data2},
                 batch_size=[],
-                device=data_mean.device,
-            ).to(loc.device, non_blocking=True)
-            if data_mean.device.type == "cuda":
-                torch.cuda.current_stream(data_mean.device).synchronize()
+                device=data_mean_device,
+            ).to(loc_device, non_blocking=True)
+            if data_mean_device.type == "cuda":
+                torch.cuda.current_stream(data_mean_device).synchronize()
             data_mean = data_stats["mean"]
             data2 = data_stats["var"]
         loc.lerp_(end=data_mean, weight=weight)
