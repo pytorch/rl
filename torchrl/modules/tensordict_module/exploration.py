@@ -774,7 +774,11 @@ class RandomPolicy:
     This is a wrapper around the action_spec.rand method.
 
     Args:
-        action_spec: TensorSpec object describing the action specs
+        action_spec: TensorSpec object describing the action specs. If ``None``,
+            the spec is initialized lazily (e.g. by a collector from
+            ``env.full_action_spec``). A ``RandomPolicy`` with no spec will
+            raise if called before the spec is set.
+        action_key: key at which the action is written. Defaults to ``"action"``.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -782,14 +786,39 @@ class RandomPolicy:
         >>> action_spec = Bounded(-torch.ones(3), torch.ones(3))
         >>> actor = RandomPolicy(action_spec=action_spec)
         >>> td = actor(TensorDict()) # selects a random action in the cube [-1; 1]
+
+        Lazy initialization — let the collector fill in the spec from the env:
+
+        >>> from torchrl.collectors import SyncDataCollector
+        >>> collector = SyncDataCollector(env, RandomPolicy(), ...)  # doctest: +SKIP
     """
 
-    def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
+    def __init__(
+        self,
+        action_spec: TensorSpec | None = None,
+        action_key: NestedKey = "action",
+    ):
         super().__init__()
-        self.action_spec = action_spec.clone()
+        self.action_spec = action_spec.clone() if action_spec is not None else None
         self.action_key = action_key
 
+    def set_action_spec_from_env(self, env: EnvBase) -> None:
+        """Initialize ``action_spec`` from ``env.full_action_spec``.
+
+        No-op if the spec is already set. Intended for lazy initialization by
+        data collectors.
+        """
+        if self.action_spec is None:
+            self.action_spec = env.full_action_spec.clone()
+
     def __call__(self, td: TensorDictBase) -> TensorDictBase:
+        if self.action_spec is None:
+            raise RuntimeError(
+                "RandomPolicy.action_spec is not set. Either pass `action_spec` "
+                "to the constructor, or let a collector initialize it by passing "
+                "the policy alongside an environment (e.g. `Collector(env, "
+                "RandomPolicy())`)."
+            )
         if isinstance(self.action_spec, Composite):
             return td.update(self.action_spec.rand())
         else:
