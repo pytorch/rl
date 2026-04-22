@@ -2053,7 +2053,7 @@ if __name__ == "__main__":
         """
         A simple mock environment that returns a fixed ID as its sole observation.
 
-        This environment is designed to test MultiSyncDataCollector ordering.
+        This environment is designed to test MultiSyncCollector ordering.
         Each environment instance is initialized with a unique env_id, which it
         returns as the observation at every step.
         """
@@ -2149,7 +2149,7 @@ if __name__ == "__main__":
         self, num_envs: int, n_steps: int, with_preempt: bool, cat_results: str | int
     ):
         """
-        Test that MultiSyncDataCollector returns data in the correct order.
+        Test that MultiSyncCollector returns data in the correct order.
 
         We create num_envs environments, each returning its env_id as the observation.
         After collection, we verify that the observations correspond to the correct env_ids in order
@@ -2272,7 +2272,7 @@ if __name__ == "__main__":
     ):
         """Regression test for issue #3137: traj_ids shape inconsistency with unbatched envs.
 
-        When using SyncDataCollector with an unbatched environment (batch_size=()),
+        When using Collector with an unbatched environment (batch_size=()),
         the traj_ids should maintain consistent shapes across all steps, even when
         done=True triggers trajectory updates.
 

@@ -20,7 +20,7 @@ from torch import distributions as d, nn, optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torchrl._utils import logger as torchrl_logger, VERBOSE
-from torchrl.collectors import DataCollectorBase
+from torchrl.collectors import BaseCollector
 from torchrl.data import (
     LazyMemmapStorage,
     MultiStep,
@@ -165,7 +165,7 @@ def correct_for_frame_skip(cfg: DictConfig) -> DictConfig:  # noqa: F821
 
 
 def make_trainer(
-    collector: DataCollectorBase,
+    collector: BaseCollector,
     loss_module: LossModule,
     recorder: EnvBase | None,
     target_net_updater: TargetNetUpdater | None,
@@ -177,7 +177,7 @@ def make_trainer(
     """Creates a Trainer instance given its constituents.
 
     Args:
-        collector (DataCollectorBase): A data collector to be used to collect data.
+        collector (BaseCollector): A data collector to be used to collect data.
         loss_module (LossModule): A TorchRL loss module
         recorder (EnvBase, optional): a recorder environment.
         target_net_updater (TargetNetUpdater): A target network update object.
@@ -196,7 +196,7 @@ def make_trainer(
         >>> from torchrl.trainers.loggers import TensorboardLogger
         >>> from torchrl.trainers import Trainer
         >>> from torchrl.envs import EnvCreator
-        >>> from torchrl.collectors import SyncDataCollector
+        >>> from torchrl.collectors import Collector
         >>> from torchrl.data import TensorDictReplayBuffer
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.modules import TensorDictModuleWrapper, SafeModule, ValueOperator, EGreedyWrapper
@@ -211,7 +211,7 @@ def make_trainer(
         >>> net_value = torch.nn.Linear(env_proof.observation_spec.shape[-1], 1)  # for the purpose of testing
         >>> policy = SafeModule(action_spec, net, in_keys=["observation"], out_keys=["action"])
         >>> value = ValueOperator(net_value, in_keys=["observation"], out_keys=["state_action_value"])
-        >>> collector = SyncDataCollector(env_maker, policy, total_frames=100)
+        >>> collector = Collector(env_maker, policy, total_frames=100)
         >>> loss_module = DDPGLoss(policy, value, gamma=0.99)
         >>> recorder = env_proof
         >>> target_net_updater = None
@@ -980,7 +980,7 @@ def make_collector_offpolicy(
     actor_model_explore: TensorDictModuleWrapper | ProbabilisticTensorDictSequential,
     cfg: DictConfig,  # noqa: F821
     make_env_kwargs: dict | None = None,
-) -> DataCollectorBase:
+) -> BaseCollector:
     """Returns a data collector for off-policy sota-implementations.
 
     Args:

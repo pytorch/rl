@@ -10,7 +10,7 @@ import torch
 from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn, optim
-from torchrl.collectors import aSyncDataCollector, SyncDataCollector
+from torchrl.collectors import AsyncCollector, Collector
 from torchrl.data import (
     LazyMemmapStorage,
     LazyTensorStorage,
@@ -131,7 +131,7 @@ def make_collector(cfg, train_env, actor_model_explore, compile_mode):
             device = torch.device("cuda:0")
         else:
             device = torch.device("cpu")
-    collector = SyncDataCollector(
+    collector = Collector(
         train_env,
         actor_model_explore,
         init_random_frames=cfg.collector.init_random_frames,
@@ -162,7 +162,7 @@ def make_collector_async(
         else:
             device = torch.device("cpu")
 
-    collector = aSyncDataCollector(
+    collector = AsyncCollector(
         train_env_make,
         actor_model_explore,
         init_random_frames=0,  # Currently not supported, but accounted for in script: cfg.collector.init_random_frames,

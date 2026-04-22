@@ -19,7 +19,7 @@ from functools import partial
 import torch
 import tqdm
 
-from torchrl.collectors import Evaluator, MultiaSyncDataCollector
+from torchrl.collectors import Evaluator, MultiAsyncCollector
 from torchrl.weight_update import SharedMemWeightSyncScheme
 from utils_mujoco import (
     ActorWithCritic,
@@ -121,7 +121,7 @@ def train_start(
     ]
 
     # Collector init compiles the collector env in a subprocess
-    collector = MultiaSyncDataCollector(
+    collector = MultiAsyncCollector(
         create_env_fn=create_env_fn,
         policy=collector_policy,
         frames_per_batch=cfg.collector.frames_per_batch,
@@ -374,7 +374,7 @@ def train_iterate(
     ]
 
     # Collector init compiles the collector env in a subprocess
-    collector = MultiaSyncDataCollector(
+    collector = MultiAsyncCollector(
         create_env_fn=create_env_fn,
         policy=collector_policy,
         frames_per_batch=cfg.collector.frames_per_batch,

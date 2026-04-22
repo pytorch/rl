@@ -91,7 +91,7 @@ from tensordict.nn import (
     TensorDictSequential as Seq,
 )
 from torch import nn
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.envs import (
@@ -411,7 +411,7 @@ rb = TensorDictReplayBuffer(
     transform=lambda td: td.to(device),
 )
 
-collector = SyncDataCollector(
+collector = Collector(
     env,
     stoch_policy,
     frames_per_batch=50,
