@@ -628,7 +628,7 @@ plt.show()
 # transformations can be recycled in the replay buffer:
 
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import (
     Compose,
@@ -663,7 +663,7 @@ print(env.rollout(3))
 
 from torchrl.envs.transforms import ExcludeTransform
 
-collector = SyncDataCollector(
+collector = Collector(
     env,
     RandomPolicy(env.action_spec),
     frames_per_batch=10,
@@ -741,7 +741,7 @@ env = TransformedEnv(
         CatFrames(dim=-4, N=4, in_keys=["pixels_trsf"]),
     ),
 )
-collector = SyncDataCollector(
+collector = Collector(
     env,
     RandomPolicy(env.action_spec),
     frames_per_batch=10,

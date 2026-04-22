@@ -126,7 +126,7 @@ from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
@@ -482,12 +482,12 @@ print("Running value:", value_module(env.reset()))
 # on which ``device`` the policy should be executed, etc. They are also
 # designed to work efficiently with batched and multiprocessed environments.
 #
-# The simplest data collector is the :class:`~torchrl.collectors.SyncDataCollector`:
+# The simplest data collector is the :class:`~torchrl.collectors.Collector`:
 # it is an iterator that you can use to get batches of data of a given length, and
 # that will stop once a total number of frames (``total_frames``) have been
 # collected.
-# Other data collectors (:class:`~torchrl.collectors.MultiSyncDataCollector` and
-# :class:`~torchrl.collectors.MultiaSyncDataCollector`) will execute
+# Other data collectors (:class:`~torchrl.collectors.MultiSyncCollector` and
+# :class:`~torchrl.collectors.MultiAsyncCollector`) will execute
 # the same operations in synchronous and asynchronous manner over a
 # set of multiprocessed workers.
 #
@@ -497,7 +497,7 @@ print("Running value:", value_module(env.reset()))
 # training loop allows you to write data loading pipelines
 # that are 100% oblivious to the actual specificities of the rollout content.
 #
-collector = SyncDataCollector(
+collector = Collector(
     env,
     policy_module,
     frames_per_batch=frames_per_batch,

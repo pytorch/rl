@@ -336,10 +336,10 @@ class StalenessAwareSampler(Sampler):
         >>> # In training loop:
         >>> # sampler.consumer_version = current_training_step
 
-    Integration with :class:`~torchrl.collectors.SyncDataCollector` and
+    Integration with :class:`~torchrl.collectors.Collector` and
     :class:`~torchrl.envs.transforms.PolicyVersion`::
 
-        from torchrl.collectors import SyncDataCollector
+        from torchrl.collectors import Collector
         from torchrl.envs.transforms import PolicyVersion
         from torchrl.data import TensorDictReplayBuffer, LazyTensorStorage
 
@@ -349,7 +349,7 @@ class StalenessAwareSampler(Sampler):
             sampler=sampler,
             batch_size=256,
         )
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             policy,
             frames_per_batch=1000,

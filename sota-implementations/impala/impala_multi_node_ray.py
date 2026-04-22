@@ -22,7 +22,7 @@ def main(cfg: DictConfig):  # noqa: F821
     import tqdm
 
     from tensordict import TensorDict
-    from torchrl.collectors import SyncDataCollector
+    from torchrl.collectors import Collector
     from torchrl.collectors.distributed import RayCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -94,7 +94,7 @@ def main(cfg: DictConfig):  # noqa: F821
         create_env_fn=[make_env(cfg.env.env_name, device, gym_backend=cfg.env.backend)]
         * num_workers,
         policy=actor,
-        collector_class=SyncDataCollector,
+        collector_class=Collector,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
         max_frames_per_traj=-1,

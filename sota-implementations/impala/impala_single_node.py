@@ -22,7 +22,7 @@ def main(cfg: DictConfig):  # noqa: F821
     import tqdm
 
     from tensordict import TensorDict
-    from torchrl.collectors import MultiaSyncDataCollector
+    from torchrl.collectors import MultiAsyncCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
@@ -61,7 +61,7 @@ def main(cfg: DictConfig):  # noqa: F821
     actor, critic = make_ppo_models(cfg.env.env_name, cfg.env.backend)
 
     # Create collector
-    collector = MultiaSyncDataCollector(
+    collector = MultiAsyncCollector(
         create_env_fn=[make_env(cfg.env.env_name, device, gym_backend=cfg.env.backend)]
         * num_workers,
         policy=actor,

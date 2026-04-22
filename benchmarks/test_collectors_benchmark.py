@@ -10,9 +10,9 @@ import torch.cuda
 import tqdm
 
 from torchrl.collectors import (
-    MultiaSyncDataCollector,
-    MultiSyncDataCollector,
-    SyncDataCollector,
+    MultiAsyncCollector,
+    MultiSyncCollector,
+    Collector,
 )
 from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.data.utils import CloudpickleWrapper
@@ -24,7 +24,7 @@ from torchrl.modules import RandomPolicy
 def single_collector_setup():
     device = "cuda:0" if torch.cuda.device_count() else "cpu"
     env = TransformedEnv(DMControlEnv("cheetah", "run", device=device), StepCounter(50))
-    c = SyncDataCollector(
+    c = Collector(
         env,
         RandomPolicy(env.action_spec),
         total_frames=-1,
@@ -45,7 +45,7 @@ def sync_collector_setup():
             DMControlEnv("cheetah", "run", device=device), StepCounter(50)
         )
     )
-    c = MultiSyncDataCollector(
+    c = MultiSyncCollector(
         [env, env],
         RandomPolicy(env().action_spec),
         total_frames=-1,
@@ -66,7 +66,7 @@ def async_collector_setup():
             DMControlEnv("cheetah", "run", device=device), StepCounter(50)
         )
     )
-    c = MultiaSyncDataCollector(
+    c = MultiAsyncCollector(
         [env, env],
         RandomPolicy(env().action_spec),
         total_frames=-1,
@@ -86,7 +86,7 @@ def single_collector_setup_pixels():
     #     DMControlEnv("cheetah", "run", device=device, from_pixels=True), StepCounter(50)
     # )
     env = TransformedEnv(GymEnv("ALE/Pong-v5"), StepCounter(50))
-    c = SyncDataCollector(
+    c = Collector(
         env,
         RandomPolicy(env.action_spec),
         total_frames=-1,
@@ -109,7 +109,7 @@ def sync_collector_setup_pixels():
             StepCounter(50),
         )
     )
-    c = MultiSyncDataCollector(
+    c = MultiSyncCollector(
         [env, env],
         RandomPolicy(env().action_spec),
         total_frames=-1,
@@ -132,7 +132,7 @@ def async_collector_setup_pixels():
             StepCounter(50),
         )
     )
-    c = MultiaSyncDataCollector(
+    c = MultiAsyncCollector(
         [env, env],
         RandomPolicy(env().action_spec),
         total_frames=-1,
@@ -164,7 +164,7 @@ def single_collector_with_rb_setup():
     device = "cuda:0" if torch.cuda.device_count() else "cpu"
     env = TransformedEnv(DMControlEnv("cheetah", "run", device=device), StepCounter(50))
     rb = ReplayBuffer(storage=LazyTensorStorage(10000))
-    c = SyncDataCollector(
+    c = Collector(
         env,
         RandomPolicy(env.action_spec),
         total_frames=-1,
@@ -185,7 +185,7 @@ def single_collector_with_rb_setup_pixels():
     device = "cuda:0" if torch.cuda.device_count() else "cpu"
     env = TransformedEnv(GymEnv("ALE/Pong-v5"), StepCounter(50))
     rb = ReplayBuffer(storage=LazyTensorStorage(10000))
-    c = SyncDataCollector(
+    c = Collector(
         env,
         RandomPolicy(env.action_spec),
         total_frames=-1,
@@ -278,7 +278,7 @@ class TestRBGCollector:
 
         fpb = n_wokrers_per_col * 100
         total_frames = n_wokrers_per_col * 100_000
-        c = MultiaSyncDataCollector(
+        c = MultiAsyncCollector(
             [make_env] * n_col,
             policy,
             frames_per_batch=fpb,

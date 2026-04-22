@@ -28,7 +28,7 @@ import tqdm
 from torchrl._utils import logger as torchrl_logger
 
 from torchrl.collectors import Collector, MultiSyncCollector
-from torchrl.collectors.distributed import DistributedSyncDataCollector
+from torchrl.collectors.distributed import DistributedSyncCollector
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.modules import RandomPolicy
@@ -125,7 +125,7 @@ if __name__ == "__main__":
             f"device assignment not implemented for backend {args.backend}"
         )
 
-    collector = DistributedSyncDataCollector(
+    collector = DistributedSyncCollector(
         [make_env] * num_nodes,
         RandomPolicy(action_spec),
         num_workers_per_collector=num_workers_per_collector,

@@ -42,7 +42,7 @@ import tempfile
 #
 #
 # The primary data collector discussed here is the
-# :class:`~torchrl.collectors.SyncDataCollector`, which is the focus of this
+# :class:`~torchrl.collectors.Collector`, which is the focus of this
 # documentation. At a fundamental level, a collector is a straightforward
 # class responsible for executing your policy within the environment,
 # resetting the environment when necessary, and providing batches of a
@@ -58,7 +58,7 @@ import tempfile
 
 import torch
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.envs import GymEnv
 from torchrl.modules import RandomPolicy
 
@@ -68,7 +68,7 @@ env = GymEnv("CartPole-v1")
 env.set_seed(0)
 
 policy = RandomPolicy(env.action_spec)
-collector = SyncDataCollector(env, policy, frames_per_batch=200, total_frames=-1)
+collector = Collector(env, policy, frames_per_batch=200, total_frames=-1)
 
 #################################
 # We now expect that our collector will deliver batches of size ``200`` no
@@ -181,8 +181,8 @@ print(sample)
 # ----------
 #
 # - You can have look at other multiprocessed
-#   collectors such as :class:`~torchrl.collectors.MultiSyncDataCollector` or
-#   :class:`~torchrl.collectors.MultiaSyncDataCollector`.
+#   collectors such as :class:`~torchrl.collectors.MultiSyncCollector` or
+#   :class:`~torchrl.collectors.MultiAsyncCollector`.
 # - TorchRL also offers distributed collectors if you have multiple nodes to
 #   use for inference. Check them out in the
 #   :ref:`API reference <ref_collectors>`.

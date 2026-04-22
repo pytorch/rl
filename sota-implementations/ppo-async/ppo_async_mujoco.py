@@ -29,7 +29,7 @@ Supports three collection/advantage modes (configured via YAML):
     collector workers.
 
 Key components:
-  - MultiaSyncDataCollector for continuous background collection
+  - MultiAsyncCollector for continuous background collection
   - Replay buffer with StalenessAwareSampler for freshness-weighted sampling
   - Policy version tracking for staleness computation
   - IS diagnostics: ESS, max_ratio, mean_ratio, kl_approx
