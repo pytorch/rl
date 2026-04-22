@@ -70,12 +70,17 @@ if [[ -f "${ISAACLAB_PYTHON}" ]]; then
     "${ISAACLAB_PYTHON}" -p -m pip install ray --disable-pip-version-check || echo "WARNING: ray installation failed (optional)"
     "${ISAACLAB_PYTHON}" -p -c "import torchrl; print(f'TorchRL imported successfully')"
     
-    # Install pytest
-    "${ISAACLAB_PYTHON}" -p -m pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio --disable-pip-version-check
-    
+    # Install pytest.  pytest-forked is used to run each test in its own
+    # subprocess — Isaac Sim / Omniverse leaves non-trivial process-global
+    # state (CUDA context, running Kit threads, zombie Ray actors) that has
+    # repeatedly crashed the parent process with a native SIGSEGV when the
+    # next test tried to reinitialise AppLauncher.  Per-test forking gives
+    # each test a clean slate and isolates any single-test segfault.
+    "${ISAACLAB_PYTHON}" -p -m pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio pytest-forked --disable-pip-version-check
+
     # Run tests
     cd "${root_dir}"
-    "${ISAACLAB_PYTHON}" -p -m pytest test/libs -k isaac -s || exit $?
+    "${ISAACLAB_PYTHON}" -p -m pytest test/libs -k isaac -s --forked || exit $?
 else
     echo "ERROR: Could not find isaaclab.sh at ${ISAACLAB_PYTHON}"
     echo "* Listing /workspace contents:"
