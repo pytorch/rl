@@ -502,6 +502,82 @@ class TestMakePolicyFactory:
             collector.shutdown()
 
 
+class TestRandomPolicyLazyInit:
+    """Tests for lazy initialization of ``RandomPolicy`` from the env's action_spec."""
+
+    def test_standalone_random_policy_requires_spec(self):
+        """Calling a spec-less ``RandomPolicy`` outside a collector raises a clear error."""
+        pol = RandomPolicy()
+        assert pol.action_spec is None
+        with pytest.raises(RuntimeError, match="action_spec is not set"):
+            pol(TensorDict())
+
+    def test_set_action_spec_from_env_is_idempotent(self):
+        """``set_action_spec_from_env`` only fills the spec when unset."""
+        env = ContinuousActionVecMockEnv()
+        pol = RandomPolicy()
+        pol.set_action_spec_from_env(env)
+        assert pol.action_spec is not None
+        first_spec = pol.action_spec
+        # Second call is a no-op — should not overwrite
+        pol.set_action_spec_from_env(env)
+        assert pol.action_spec is first_spec
+
+    def test_sync_collector_lazy_policy_instance(self):
+        """``Collector(env, RandomPolicy())`` fills the spec from the env."""
+        pol = RandomPolicy()
+        env = ContinuousActionVecMockEnv()
+        collector = Collector(
+            env,
+            policy=pol,
+            total_frames=20,
+            frames_per_batch=10,
+        )
+        try:
+            # Spec is filled by the collector, the user's policy instance is mutated.
+            assert pol.action_spec is not None
+            data = next(iter(collector))
+            assert "action" in data.keys()
+            assert data["action"].shape[-1] == env.full_action_spec["action"].shape[-1]
+        finally:
+            collector.shutdown()
+
+    def test_sync_collector_lazy_policy_factory(self):
+        """``policy_factory=RandomPolicy`` (returning a spec-less instance) also works."""
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            policy_factory=RandomPolicy,
+            total_frames=20,
+            frames_per_batch=10,
+        )
+        try:
+            data = next(iter(collector))
+            assert "action" in data.keys()
+        finally:
+            collector.shutdown()
+
+    def test_multi_sync_collector_lazy_policy_instance(self):
+        """Multi-worker collectors inherit the lazy-init path via the inner ``Collector``."""
+        collector = MultiSyncCollector(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            policy=RandomPolicy(),
+            total_frames=40,
+            frames_per_batch=20,
+        )
+        try:
+            data = next(iter(collector))
+            assert "action" in data.keys()
+        finally:
+            collector.shutdown()
+
+    def test_explicit_spec_still_works(self):
+        """Passing an explicit ``action_spec`` keeps the original behavior unchanged."""
+        env = ContinuousActionVecMockEnv()
+        pol = RandomPolicy(env.full_action_spec)
+        td = pol(TensorDict())
+        assert "action" in td.keys()
+
+
 class TestCollectorGeneric:
     @pytest.mark.parametrize("num_env", [1, 2])
     # 1226: for efficiency, we just test vec, not "conv"

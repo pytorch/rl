@@ -606,6 +606,12 @@ class Collector(BaseCollector):
         elif policy_factory is not None:
             raise TypeError("policy_factory cannot be used with policy argument.")
 
+        # Lazily initialize a RandomPolicy that was constructed without an
+        # action_spec (supports both `policy=RandomPolicy()` and a
+        # `policy_factory` that returns one).
+        if isinstance(policy, RandomPolicy):
+            policy.set_action_spec_from_env(env)
+
         if trust_policy is None:
             trust_policy = isinstance(policy, (RandomPolicy, CudaGraphModule))
         self.trust_policy = trust_policy
