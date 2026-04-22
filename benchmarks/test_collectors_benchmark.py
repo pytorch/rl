@@ -9,11 +9,7 @@ import pytest
 import torch.cuda
 import tqdm
 
-from torchrl.collectors import (
-    MultiAsyncCollector,
-    MultiSyncCollector,
-    Collector,
-)
+from torchrl.collectors import Collector, MultiAsyncCollector, MultiSyncCollector
 from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import EnvCreator, GymEnv, ParallelEnv, StepCounter, TransformedEnv

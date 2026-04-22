@@ -105,7 +105,7 @@ import uuid
 
 import torch
 from torch import nn
-from torchrl.collectors import MultiAsyncCollector, Collector
+from torchrl.collectors import Collector, MultiAsyncCollector
 from torchrl.data import LazyMemmapStorage, MultiStep, TensorDictReplayBuffer
 from torchrl.envs import (
     EnvCreator,

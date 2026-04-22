@@ -20,11 +20,7 @@ import time
 import torch
 import tqdm
 from torchrl._utils import timeit
-from torchrl.collectors import (
-    MultiAsyncCollector,
-    MultiSyncCollector,
-    Collector,
-)
+from torchrl.collectors import Collector, MultiAsyncCollector, MultiSyncCollector
 from torchrl.envs import EnvCreator, GymEnv, ParallelEnv
 from torchrl.envs.libs.gym import gym_backend as gym_bc, set_gym_backend
 from torchrl.modules import RandomPolicy
