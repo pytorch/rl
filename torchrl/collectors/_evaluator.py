@@ -243,8 +243,12 @@ class Evaluator:
             with a :class:`~torchrl.collectors.MultiSyncCollector` (1
             worker) running in a child process.  This provides full CUDA
             context isolation without custom queue management.
-        init_fn: (*Ray only*) Callable invoked at the start of the actor
-            process, before any ``torch`` import.
+        init_fn: Callable invoked at the start of the worker / actor
+            process, before any evaluation work (and, ideally, before any
+            ``torch`` import inside that process).  Used by both the
+            ``"process"`` and ``"ray"`` backends.  Typical use case: start
+            Isaac Lab's ``AppLauncher`` in headless mode.  Ignored by the
+            ``"thread"`` backend because no new process is spawned.
         num_gpus (int): (*Ray only*) GPUs requested for the actor.
             Default: ``1``.
         ray_kwargs (dict): (*Ray only*) Extra keyword arguments forwarded
@@ -343,6 +347,7 @@ class Evaluator:
                 metrics_fn=metrics_fn,
                 weight_sync_schemes=weight_sync_schemes,
                 use_multi_collector=use_multi_collector,
+                init_fn=init_fn,
             )
         elif backend == "ray":
             self._backend = _RayEvalBackend(
@@ -900,6 +905,7 @@ class _ThreadEvalBackend(_EvalBackend):
         metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
         weight_sync_schemes: dict[str, Any] | None = None,
         use_multi_collector: bool = False,
+        init_fn: Callable[[], None] | None = None,
     ) -> None:
         if policy is not None and policy_factory is not None:
             raise ValueError("Provide either `policy` or `policy_factory`, not both.")
@@ -910,6 +916,7 @@ class _ThreadEvalBackend(_EvalBackend):
             weight_sync_schemes is not None
         )
         self._weight_sync_schemes = weight_sync_schemes
+        self._init_fn = init_fn
 
         env_is_callable = callable(env) and not isinstance(env, EnvBase)
 
@@ -1110,6 +1117,7 @@ class _ThreadEvalBackend(_EvalBackend):
                 trajs_per_batch=self._num_trajectories,
                 exploration_type=self._exploration_type,
                 weight_sync_schemes=self._weight_sync_schemes,
+                init_fn=self._init_fn,
                 **kwargs,
             )
         else:

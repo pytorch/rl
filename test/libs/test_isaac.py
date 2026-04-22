@@ -10,10 +10,11 @@ from functools import partial
 
 import pytest
 import torch
+import torch.distributed as dist
 import torchrl.testing.env_helper
 
 from torchrl._utils import logger as torchrl_logger
-from torchrl.collectors import Collector
+from torchrl.collectors import Collector, Evaluator
 from torchrl.collectors.distributed import RayCollector
 from torchrl.data import LazyMemmapStorage, ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SliceSampler
@@ -21,6 +22,11 @@ from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs import StepCounter
 from torchrl.envs.utils import check_env_specs
 from torchrl.testing import get_default_devices
+from torchrl.testing.env_helper import (
+    _isaac_app_launcher_init,
+    make_isaac_env,
+    make_isaac_policy,
+)
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
@@ -31,6 +37,25 @@ if _has_isaac:
 
 _has_isaaclab = importlib.util.find_spec("isaaclab") is not None
 _has_ray = importlib.util.find_spec("ray") is not None
+
+if _has_ray:
+    import ray
+
+
+def _isaac_env_maker():
+    return make_isaac_env(init_app=False)
+
+
+def _isaac_env_maker_cuda1():
+    return make_isaac_env(init_app=False, device=torch.device("cuda:1"))
+
+
+def _isaac_policy_maker(env=None):
+    return make_isaac_policy(env)
+
+
+def _isaac_policy_maker_cuda1(env=None):
+    return make_isaac_policy(env, device=torch.device("cuda:1"))
 
 
 @pytest.mark.skipif(not _has_isaac, reason="IsaacGym not found")
@@ -363,3 +388,137 @@ class TestIsaacLab:
         # Verify recurrent states are carried through the rollout
         assert ("next", "recurrent_state_h") in rollout.keys(True)
         assert ("next", "recurrent_state_c") in rollout.keys(True)
+
+
+@pytest.mark.skipif(not _has_isaaclab, reason="Isaaclab not found")
+class TestIsaacLabEvaluator:
+    """End-to-end coverage for the Evaluator with Isaac Lab.
+
+    Isaac Lab has two quirks that stress every Evaluator backend:
+      * ``AppLauncher`` must run before ``import torch`` in whatever process
+        hosts the env, so the ``process`` / ``ray`` backends must expose an
+        ``init_fn`` hook.
+      * The env is GPU-native and pinned to a CUDA device, so device
+        assignment must be exercised on a dedicated GPU.
+    """
+
+    @pytest.fixture(scope="class")
+    def env(self):
+        env = make_isaac_env()
+        try:
+            yield env
+        finally:
+            torchrl_logger.info("Closing IsaacLab env (evaluator tests)...")
+            env.close()
+            torchrl_logger.info("Closed")
+
+    @pytest.fixture(scope="function")
+    def clean_ray(self):
+        if dist.is_initialized():
+            dist.destroy_process_group()
+        ray.shutdown()
+        ray.init(ignore_reinit_error=True)
+        yield
+        ray.shutdown()
+        if dist.is_initialized():
+            dist.destroy_process_group()
+
+    def test_evaluator_thread_backend(self, env):
+        """Thread backend with an eagerly-constructed env + policy.
+
+        This is the simplest case: ``AppLauncher`` has already run in the
+        main process via the ``env`` fixture, so the daemon thread spawned
+        by the Evaluator inherits the ready-to-use Isaac state.
+        """
+        policy = make_isaac_policy(env)
+        evaluator = Evaluator(
+            env=env,
+            policy=policy,
+            num_trajectories=1,
+            max_steps=32,
+            backend="thread",
+        )
+        try:
+            result = evaluator.evaluate(step=0)
+            assert "eval/reward" in result
+            assert "eval/episode_length" in result
+            assert torch.isfinite(torch.as_tensor(result["eval/reward"]))
+        finally:
+            evaluator.shutdown()
+
+    def test_evaluator_process_backend(self):
+        """Process backend: AppLauncher must be started in the child via init_fn.
+
+        Uses ``_isaac_app_launcher_init`` as ``init_fn`` and a factory that
+        skips the in-process AppLauncher (``init_app=False``).  Exercises
+        the newly plumbed ``init_fn`` support in ``_ThreadEvalBackend`` →
+        ``MultiSyncCollector`` → ``_main_async_collector``.
+        """
+        evaluator = Evaluator(
+            env=_isaac_env_maker,
+            policy_factory=_isaac_policy_maker,
+            num_trajectories=1,
+            max_steps=32,
+            backend="process",
+            init_fn=_isaac_app_launcher_init,
+        )
+        try:
+            result = evaluator.evaluate(step=0)
+            assert "eval/reward" in result
+            assert "eval/episode_length" in result
+            assert torch.isfinite(torch.as_tensor(result["eval/reward"]))
+        finally:
+            evaluator.shutdown()
+
+    @pytest.mark.skipif(not _has_ray, reason="Ray not found")
+    def test_evaluator_ray_backend(self, clean_ray):
+        """Ray backend: the canonical Isaac-friendly path.
+
+        The Ray actor process is fresh, so ``init_fn`` runs before any torch
+        import and the env / policy are built inside the actor.
+        """
+        evaluator = Evaluator(
+            env=_isaac_env_maker,
+            policy_factory=_isaac_policy_maker,
+            num_trajectories=1,
+            max_steps=32,
+            backend="ray",
+            init_fn=_isaac_app_launcher_init,
+            num_gpus=1,
+        )
+        try:
+            result = evaluator.evaluate(step=0)
+            assert "eval/reward" in result
+            assert "eval/episode_length" in result
+            assert torch.isfinite(torch.as_tensor(result["eval/reward"]))
+        finally:
+            evaluator.shutdown()
+
+    @pytest.mark.skipif(
+        not torch.cuda.is_available() or torch.cuda.device_count() < 2,
+        reason="Needs 2+ CUDA devices to test dedicated-device eval",
+    )
+    @pytest.mark.skipif(not _has_ray, reason="Ray not found")
+    def test_evaluator_dedicated_device(self, clean_ray):
+        """Run Isaac + policy on cuda:1 while the main process keeps cuda:0.
+
+        Reserved GPU 0 for training; evaluation runs on GPU 1.  Uses Ray
+        backend so that (a) ``init_fn`` fires before torch is imported in
+        the actor and (b) the actor gets its own CUDA context on the target
+        device.
+        """
+        evaluator = Evaluator(
+            env=_isaac_env_maker_cuda1,
+            policy_factory=_isaac_policy_maker_cuda1,
+            num_trajectories=1,
+            max_steps=32,
+            backend="ray",
+            init_fn=_isaac_app_launcher_init,
+            num_gpus=1,
+        )
+        try:
+            result = evaluator.evaluate(step=0)
+            assert "eval/reward" in result
+            assert torch.isfinite(torch.as_tensor(result["eval/reward"]))
+        finally:
+            evaluator.shutdown()

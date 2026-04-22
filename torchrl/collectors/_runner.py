@@ -189,7 +189,13 @@ def _main_async_collector(
     init_random_frames: int | None = None,
     profile_config: ProfileConfig | None = None,
     trajs_per_batch: int | None = None,
+    init_fn: Callable[[], None] | None = None,
 ) -> None:
+    # Process-level initialisation hook (e.g. Isaac Lab ``AppLauncher``).
+    # Runs before any CUDA/torchrl work in the child process.
+    if init_fn is not None:
+        init_fn()
+
     if collector_class is None:
         collector_class = Collector
     # init variables that will be cleared when closing
