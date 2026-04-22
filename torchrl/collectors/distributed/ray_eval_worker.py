@@ -221,14 +221,24 @@ class RayEvalWorker:
         return result
 
     def shutdown(self) -> None:
-        """Close the environment and kill the actor."""
+        """Close the environment and kill the actor.
+
+        Safe to call multiple times or after ``ray.shutdown()`` has already
+        torn down the actor (e.g. via a test fixture).
+        """
         import ray
 
+        if self._actor is None:
+            return
         try:
             ray.get(self._actor.shutdown.remote())
         except Exception:
             logger.warning("RayEvalWorker: error during shutdown", exc_info=True)
-        ray.kill(self._actor)
+        try:
+            ray.kill(self._actor)
+        except Exception:
+            # The actor may already be dead (e.g. ray.shutdown() ran first).
+            logger.debug("RayEvalWorker: actor already terminated", exc_info=True)
         self._actor = None
         self._pending_ref = None
 
