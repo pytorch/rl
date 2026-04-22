@@ -355,7 +355,7 @@ frames-per-second.</p>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;First eval:&quot;</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>First eval: {&#39;eval/reward&#39;: -1438.59912109375, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 664.9339927508709, &#39;eval/step&#39;: 0}
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>First eval: {&#39;eval/reward&#39;: -899.5836181640625, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 706.453162109594, &#39;eval/step&#39;: 0}
 </pre></div>
 </div>
 <p>Each subsequent call increments the internal step counter:</p>
@@ -363,7 +363,7 @@ frames-per-second.</p>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Second eval:&quot;</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Second eval: {&#39;eval/reward&#39;: -1535.7105712890625, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 669.4093304103845, &#39;eval/step&#39;: 1}
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Second eval: {&#39;eval/reward&#39;: -1335.571044921875, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 708.3130140465775, &#39;eval/step&#39;: 1}
 </pre></div>
 </div>
 </section>
@@ -387,7 +387,7 @@ or <a class="reference internal" href="../reference/generated/torchrl.collectors
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;poll(timeout=30) returned:&quot;</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>poll(timeout=30) returned: {&#39;eval/reward&#39;: -1622.3465576171875, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 704.4997100980352, &#39;eval/step&#39;: 2}
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>poll(timeout=30) returned: {&#39;eval/reward&#39;: -1758.3446044921875, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 702.6060307592257, &#39;eval/step&#39;: 2}
 </pre></div>
 </div>
 <p>By default, calling <code class="docutils literal notranslate"><span class="pre">trigger_eval()</span></code> while a previous evaluation is
@@ -432,7 +432,7 @@ and <a class="reference internal" href="../reference/generated/torchrl.collector
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Before weight update:&quot;</span><span class="p">,</span> <span class="n">evaluator_w</span><span class="o">.</span><span class="n">evaluate</span><span class="p">())</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Before weight update: {&#39;eval/reward&#39;: -1216.20068359375, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 644.9237628206179, &#39;eval/step&#39;: 0}
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Before weight update: {&#39;eval/reward&#39;: -1627.89599609375, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 646.8519275599477, &#39;eval/step&#39;: 0}
 </pre></div>
 </div>
 <p>Simulate a “training step” by perturbing the weights:</p>
@@ -447,7 +447,7 @@ automatically:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;After weight update:&quot;</span><span class="p">,</span> <span class="n">evaluator_w</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="n">weights</span><span class="o">=</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">real_policy</span></a><span class="p">))</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>After weight update: {&#39;eval/reward&#39;: -1496.60107421875, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 653.218555778249, &#39;eval/step&#39;: 1}
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>After weight update: {&#39;eval/reward&#39;: -1759.6209716796875, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 654.5444403587144, &#39;eval/step&#39;: 1}
 </pre></div>
 </div>
 <p>You can also pass a <code class="docutils literal notranslate"><span class="pre">TensorDictBase</span></code> of weights, which is useful
@@ -457,7 +457,7 @@ when you already have detached weight snapshots:</p>
 <span class="n">evaluator_w</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>With TensorDict weights: {&#39;eval/reward&#39;: -1717.5076904296875, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 649.1303707530873, &#39;eval/step&#39;: 2}
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>With TensorDict weights: {&#39;eval/reward&#39;: -1154.371826171875, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 652.5710003692498, &#39;eval/step&#39;: 2}
 </pre></div>
 </div>
 </section>
@@ -485,7 +485,7 @@ environment and the policy:</p>
 <span class="n">evaluator_proc</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Process backend: {&#39;eval/reward&#39;: -1484.1182861328125, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 510.8463144913539, &#39;eval/step&#39;: 0}
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Process backend: {&#39;eval/reward&#39;: -787.8598022460938, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 513.382160802574, &#39;eval/step&#39;: 0}
 </pre></div>
 </div>
 </section>
@@ -529,10 +529,10 @@ automatically log every evaluation result to a CSV file:</p>
 <span class="nb">print</span><span class="p">(</span><span class="n">csv_path</span><span class="o">.</span><span class="n">read_text</span><span class="p">())</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Logged to: /tmp/tmpo5k3__ei/eval_demo/scalars/eval/reward.csv
-0,-1595.546630859375
-1,-1712.7056884765625
-2,-1692.9453125
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Logged to: /tmp/tmpt_is5ol2/eval_demo/scalars/eval/reward.csv
+0,-1198.5655517578125
+1,-1200.9764404296875
+2,-1668.4849853515625
 </pre></div>
 </div>
 <p>The <code class="docutils literal notranslate"><span class="pre">on_result</span></code> callback works with both synchronous and asynchronous
@@ -563,7 +563,7 @@ the latest trained parameters.</p></li>
 deep dive into how collectors assemble data.</p></li>
 <li><p><a class="reference external" href="https://pytorch.org/rl/">TorchRL documentation</a></p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 6.254 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 6.231 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-evaluator-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/0b7694ad40d411d9b5498dc6c93ed596/evaluator.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">evaluator.ipynb</span></code></a></p>

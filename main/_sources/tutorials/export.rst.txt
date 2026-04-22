@@ -85,7 +85,7 @@ later.
     from torch.optim import Adam
 
     from torchrl._utils import timeit
-    from torchrl.collectors import SyncDataCollector
+    from torchrl.collectors import Collector
     from torchrl.data import LazyTensorStorage, ReplayBuffer
 
     from torchrl.envs import (
@@ -124,7 +124,7 @@ later.
     init_rand_steps = 5000
     frames_per_batch = 100
     optim_steps = 10
-    collector = SyncDataCollector(
+    collector = Collector(
         env,
         policy_explore,
         frames_per_batch=frames_per_batch,
@@ -833,7 +833,7 @@ Here's an example of how you can use AOTInductor to export your policy, inspired
 
  .. code-block:: none
 
-    pkg_path /tmp/tmpgpw26hgo/model.pt2
+    pkg_path /tmp/tmpwv3u7j_z/model.pt2
     tensor(1)
 
 
@@ -994,8 +994,8 @@ Exporting to ONNX is quite similar the Export/AOTI above:
     [torch.onnx] Translate the graph into ONNX... ✅
     [torch.onnx] Optimize the ONNX graph...
     [torch.onnx] Optimize the ONNX graph... ✅
-    ONNX rollout took 650.7432 msec (total =  0.6507 sec since last reset).
-    TorchRL version took 1985.2626 msec (total =  1.9853 sec since last reset).
+    ONNX rollout took 660.1679 msec (total =  0.6602 sec since last reset).
+    TorchRL version took 1981.4243 msec (total =  1.9814 sec since last reset).
 
 
 
@@ -1032,7 +1032,7 @@ Further reading and learning steps:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 23.804 seconds)
+   **Total running time of the script:** (0 minutes 23.519 seconds)
 
 
 .. _sphx_glr_download_tutorials_export.py:

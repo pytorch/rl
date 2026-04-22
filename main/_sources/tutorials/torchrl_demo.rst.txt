@@ -94,7 +94,7 @@ collect a trajectory:
 
  .. code-block:: none
 
-    Collected 10 steps, total reward: 10
+    Collected 35 steps, total reward: 35
 
 
 
@@ -634,7 +634,7 @@ While you can write your own rollout loop, TorchRL's *collectors* handle
 this efficiently, including batching, device management, and multi-process
 collection.
 
-The :class:`~torchrl.collectors.SyncDataCollector` collects data
+The :class:`~torchrl.collectors.Collector` collects data
 synchronously - it waits for a batch to be ready before returning:
 
 .. GENERATED FROM PYTHON SOURCE LINES 315-335
@@ -642,12 +642,12 @@ synchronously - it waits for a batch to be ready before returning:
 .. code-block:: Python
 
 
-    from torchrl.collectors import SyncDataCollector
+    from torchrl.collectors import Collector
 
     # A simple deterministic policy for demonstration
     actor = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
 
-    collector = SyncDataCollector(
+    collector = Collector(
         create_env_fn=lambda: GymEnv("Pendulum-v1"),
         policy=actor,
         frames_per_batch=200,  # Collect 200 frames per iteration
@@ -669,11 +669,11 @@ synchronously - it waits for a batch to be ready before returning:
 
  .. code-block:: none
 
-    Collected batch: torch.Size([200]), reward: -5.49
-    Collected batch: torch.Size([200]), reward: -5.27
-    Collected batch: torch.Size([200]), reward: -7.40
-    Collected batch: torch.Size([200]), reward: -7.99
-    Collected batch: torch.Size([200]), reward: -7.22
+    Collected batch: torch.Size([200]), reward: -9.36
+    Collected batch: torch.Size([200]), reward: -9.16
+    Collected batch: torch.Size([200]), reward: -9.63
+    Collected batch: torch.Size([200]), reward: -9.70
+    Collected batch: torch.Size([200]), reward: -8.97
 
 
 
@@ -681,7 +681,7 @@ synchronously - it waits for a batch to be ready before returning:
 .. GENERATED FROM PYTHON SOURCE LINES 336-345
 
 For async collection (useful when training takes longer than collecting),
-see :class:`~torchrl.collectors.MultiaSyncDataCollector`.
+see :class:`~torchrl.collectors.MultiAsyncCollector`.
 
 Replay Buffers
 --------------
@@ -753,7 +753,7 @@ variants), use :class:`~torchrl.data.PrioritizedReplayBuffer`:
 
  .. code-block:: none
 
-    Prioritized sample indices: tensor([65, 22,  1, 66, 80]) ...
+    Prioritized sample indices: tensor([21, 97, 40, 48, 96]) ...
 
 
 
@@ -835,7 +835,7 @@ dummy batch to see it in action:
 
  .. code-block:: none
 
-    Loss: tensor(1.1961, grad_fn=<MeanBackward0>)
+    Loss: tensor(0.7174, grad_fn=<MeanBackward0>)
 
 
 
@@ -870,7 +870,7 @@ training loop. We'll train a simple DQN agent on CartPole:
     policy = QValueActor(qnet, in_keys=["observation"], spec=env.action_spec)
 
     # 3. Set up the data collector
-    collector = SyncDataCollector(
+    collector = Collector(
         create_env_fn=lambda: GymEnv("CartPole-v1"),
         policy=policy,
         frames_per_batch=100,
@@ -916,10 +916,10 @@ training loop. We'll train a simple DQN agent on CartPole:
 
  .. code-block:: none
 
-    Step 0: loss=0.992
-    Step 5: loss=0.659
-    Step 10: loss=0.420
-    Step 15: loss=0.277
+    Step 0: loss=1.000
+    Step 5: loss=0.689
+    Step 10: loss=0.407
+    Step 15: loss=0.248
 
 
 
@@ -968,7 +968,7 @@ folder contains production-ready implementations of:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.393 seconds)
+   **Total running time of the script:** (0 minutes 4.376 seconds)
 
 
 .. _sphx_glr_download_tutorials_torchrl_demo.py:

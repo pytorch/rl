@@ -303,7 +303,7 @@ these two classes.</p>
 <section id="data-collectors">
 <h2>Data collectors<a class="headerlink" href="#data-collectors" title="Link to this heading">¶</a></h2>
 <p id="gs-storage-collector">The primary data collector discussed here is the
-<code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code>, which is the focus of this
+<a class="reference internal" href="../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector"><code class="xref py py-class docutils literal notranslate"><span class="pre">Collector</span></code></a>, which is the focus of this
 documentation. At a fundamental level, a collector is a straightforward
 class responsible for executing your policy within the environment,
 resetting the environment when necessary, and providing batches of a
@@ -317,7 +317,7 @@ infinite) of the iterator, the policy and the environment. For simplicity,
 we will use a dummy, random policy in this example.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
 
-<span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SyncDataCollector</span></a>
+<span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">Collector</span></a>
 <span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">GymEnv</span></a>
 <span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <span class="n">RandomPolicy</span>
 
@@ -327,11 +327,7 @@ we will use a dummy, random policy in this example.</p>
 <span class="n">env</span><span class="o">.</span><span class="n">set_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
 
 <span class="n">policy</span> <span class="o">=</span> <span class="n">RandomPolicy</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="p">)</span>
-<span class="n">collector</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SyncDataCollector</span></a><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>/pytorch/rl/torchrl/collectors/_base.py:1188: DeprecationWarning: SyncDataCollector has been deprecated and will be removed in v0.13. Please use Collector instead.
-  warnings.warn(
+<span class="n">collector</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">Collector</span></a><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>We now expect that our collector will deliver batches of size <code class="docutils literal notranslate"><span class="pre">200</span></code> no
@@ -499,8 +495,8 @@ collector!</p>
 <h2>Next steps<a class="headerlink" href="#next-steps" title="Link to this heading">¶</a></h2>
 <ul class="simple">
 <li><p>You can have look at other multiprocessed
-collectors such as <code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code> or
-<code class="xref py py-class docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code>.</p></li>
+collectors such as <a class="reference internal" href="../reference/generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector" title="torchrl.collectors.MultiSyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncCollector</span></code></a> or
+<a class="reference internal" href="../reference/generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector" title="torchrl.collectors.MultiAsyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiAsyncCollector</span></code></a>.</p></li>
 <li><p>TorchRL also offers distributed collectors if you have multiple nodes to
 use for inference. Check them out in the
 <a class="reference internal" href="../reference/collectors_basics.html#ref-collectors"><span class="std std-ref">API reference</span></a>.</p></li>
@@ -519,7 +515,7 @@ see <a class="reference internal" href="../reference/collectors_replay.html#coll
 and sample clean trajectory slices from the replay buffer, especially
 with multi-process collectors.</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.077 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.076 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-getting-started-3-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/5cb0ffc0980a276546c9aeed94b0aa13/getting-started-3.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">getting-started-3.ipynb</span></code></a></p>

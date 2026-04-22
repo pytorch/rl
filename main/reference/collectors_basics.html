@@ -342,7 +342,7 @@ that the batch size equals the <code class="docutils literal notranslate"><span 
 collector.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
-<p><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code> (i.e., <code class="docutils literal notranslate"><span class="pre">MultiCollector(sync=True)</span></code>) should not be
+<p><a class="reference internal" href="generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector" title="torchrl.collectors.MultiSyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncCollector</span></code></a> (i.e., <code class="docutils literal notranslate"><span class="pre">MultiCollector(sync=True)</span></code>) should not be
 used with <code class="docutils literal notranslate"><span class="pre">cat_results=0</span></code>, as the data will be stacked along the batch
 dimension with batched environment, or the time dimension for single environments,
 which can introduce some confusion when swapping one with the other.
@@ -351,12 +351,12 @@ with the environments as it will keep each dimension separate, and provide
 better interchangeability between configurations, collector classes and other
 components.</p>
 </div>
-<p>Whereas <code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code> (i.e., <code class="docutils literal notranslate"><span class="pre">MultiCollector(sync=True)</span></code>)
+<p>Whereas <a class="reference internal" href="generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector" title="torchrl.collectors.MultiSyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncCollector</span></code></a> (i.e., <code class="docutils literal notranslate"><span class="pre">MultiCollector(sync=True)</span></code>)
 has a dimension corresponding to the number of sub-collectors being run (<code class="docutils literal notranslate"><span class="pre">B</span></code>),
-<code class="xref py py-class docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code> (i.e., <code class="docutils literal notranslate"><span class="pre">MultiCollector(sync=False)</span></code>) doesn’t. This
-is easily understood when considering that <code class="xref py py-class docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code>
+<a class="reference internal" href="generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector" title="torchrl.collectors.MultiAsyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiAsyncCollector</span></code></a> (i.e., <code class="docutils literal notranslate"><span class="pre">MultiCollector(sync=False)</span></code>) doesn’t. This
+is easily understood when considering that <a class="reference internal" href="generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector" title="torchrl.collectors.MultiAsyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiAsyncCollector</span></code></a>
 delivers batches of data on a first-come, first-serve basis, whereas
-<code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code> gathers data from
+<a class="reference internal" href="generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector" title="torchrl.collectors.MultiSyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncCollector</span></code></a> gathers data from
 each sub-collector before delivering it.</p>
 </section>
 <section id="collectors-and-policy-copies">

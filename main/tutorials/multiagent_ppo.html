@@ -372,7 +372,7 @@ to render and visualise your own trained policy prior and after training.</p>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">multiprocessing</span>
 
 <span class="c1"># Data collection</span>
-<span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SyncDataCollector</span></a>
+<span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">Collector</span></a>
 <span class="kn">from</span> <span class="nn">torchrl.data.replay_buffers</span> <span class="kn">import</span> <span class="n">ReplayBuffer</span>
 <span class="kn">from</span> <span class="nn">torchrl.data.replay_buffers.samplers</span> <span class="kn">import</span> <span class="n">SamplerWithoutReplacement</span>
 <span class="kn">from</span> <span class="nn">torchrl.data.replay_buffers.storages</span> <span class="kn">import</span> <span class="n">LazyTensorStorage</span>
@@ -938,7 +938,7 @@ the last two steps until the environment signals a stop (or reaches a done
 state).</p>
 <p>We will use the simplest possible data collector, which has the same output as an environment rollout,
 with the only difference that it will auto reset done states until the desired frames are collected.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">collector</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SyncDataCollector</span></a><span class="p">(</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">collector</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">Collector</span></a><span class="p">(</span>
     <span class="n">env</span><span class="p">,</span>
     <span class="n">policy</span><span class="p">,</span>
     <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">vmas_device</span></a><span class="p">,</span>
@@ -1109,11 +1109,11 @@ The steps include:</p>
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>episode_reward_mean = 0:   0%|          | 0/5 [00:00&lt;?, ?it/s]
-episode_reward_mean = -0.5401270389556885:  20%|██        | 1/5 [00:05&lt;00:21,  5.35s/it]
-episode_reward_mean = 0.3631371259689331:  40%|████      | 2/5 [00:10&lt;00:15,  5.31s/it]
-episode_reward_mean = 0.9600974321365356:  60%|██████    | 3/5 [00:15&lt;00:10,  5.31s/it]
-episode_reward_mean = 1.4642550945281982:  80%|████████  | 4/5 [00:21&lt;00:05,  5.31s/it]
-episode_reward_mean = 1.8227423429489136: 100%|██████████| 5/5 [00:26&lt;00:00,  5.31s/it]
+episode_reward_mean = -0.4424140155315399:  20%|██        | 1/5 [00:05&lt;00:21,  5.32s/it]
+episode_reward_mean = 0.5352442264556885:  40%|████      | 2/5 [00:10&lt;00:16,  5.34s/it]
+episode_reward_mean = 1.0268021821975708:  60%|██████    | 3/5 [00:16&lt;00:10,  5.35s/it]
+episode_reward_mean = 1.5103888511657715:  80%|████████  | 4/5 [00:21&lt;00:05,  5.33s/it]
+episode_reward_mean = 1.7744019031524658: 100%|██████████| 5/5 [00:26&lt;00:00,  5.32s/it]
 </pre></div>
 </div>
 </section>
@@ -1206,7 +1206,7 @@ Here are a few videos of some possible scenarios you can try in VMAS.</p>
 <p><span class="caption-text">Scenarios available in <a class="reference external" href="https://github.com/proroklab/VectorizedMultiAgentSimulator">VMAS</a></span><a class="headerlink" href="#id3" title="Link to this image">¶</a></p>
 </figcaption>
 </figure>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 26.746 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 26.827 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-multiagent-ppo-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/a977047786179278d12b52546e1c0da8/multiagent_ppo.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">multiagent_ppo.ipynb</span></code></a></p>

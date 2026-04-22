@@ -387,7 +387,7 @@ change the <code class="docutils literal notranslate"><span class="pre">collate_
 <span class="nb">print</span><span class="p">(</span><span class="n">buffer_list</span><span class="o">.</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">sample</span></a><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>[&#39;b&#39;, 0, &#39;a&#39;]
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>[&#39;a&#39;, 0, &#39;b&#39;]
 </pre></div>
 </div>
 <p>Because it is the one with the lowest amount of assumption, the
@@ -443,13 +443,13 @@ separate datapoints:</p>
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>samples tensor([[ 0,  1,  2,  3],
-        [ 4,  5,  6,  7],
-        [ 8,  9, 10, 11],
         [ 0,  1,  2,  3],
+        [ 0,  1,  2,  3],
+        [ 8,  9, 10, 11],
         [ 0,  1,  2,  3]]) tensor([[ 0,  1,  2,  3,  4],
-        [ 5,  6,  7,  8,  9],
-        [10, 11, 12, 13, 14],
         [ 0,  1,  2,  3,  4],
+        [ 0,  1,  2,  3,  4],
+        [10, 11, 12, 13, 14],
         [ 0,  1,  2,  3,  4]])
 </pre></div>
 </div>
@@ -474,18 +474,18 @@ We can also customize the storage location on disk:</p>
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>The buffer has 3 elements
-the &#39;a&#39; tensor is stored in /tmp/tmpy712gn7n/a.memmap
-the (&#39;b&#39;, &#39;c&#39;) tensor is stored in /tmp/tmpy712gn7n/b/c.memmap
-samples: a= tensor([[ 0,  1,  2,  3],
-        [ 8,  9, 10, 11],
+the &#39;a&#39; tensor is stored in /tmp/tmpuwzqkku9/a.memmap
+the (&#39;b&#39;, &#39;c&#39;) tensor is stored in /tmp/tmpuwzqkku9/b/c.memmap
+samples: a= tensor([[ 8,  9, 10, 11],
+        [ 4,  5,  6,  7],
         [ 0,  1,  2,  3],
-        [ 8,  9, 10, 11],
-        [ 4,  5,  6,  7]])
-(&#39;b&#39;, &#39;c&#39;): tensor([[ 0,  1,  2,  3,  4],
-        [10, 11, 12, 13, 14],
+        [ 4,  5,  6,  7],
+        [ 0,  1,  2,  3]])
+(&#39;b&#39;, &#39;c&#39;): tensor([[10, 11, 12, 13, 14],
+        [ 5,  6,  7,  8,  9],
         [ 0,  1,  2,  3,  4],
-        [10, 11, 12, 13, 14],
-        [ 5,  6,  7,  8,  9]])
+        [ 5,  6,  7,  8,  9],
+        [ 0,  1,  2,  3,  4]])
 </pre></div>
 </div>
 </section>
@@ -537,7 +537,7 @@ Let us have a look at these indices:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">sample</span></a><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">])</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([0, 1, 0, 0, 2, 0, 2, 2, 1, 1, 0, 1])
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([0, 2, 0, 2, 2, 1, 1, 0, 1, 0, 1, 0])
 </pre></div>
 </div>
 <section id="integration-with-tensorclass">
@@ -946,7 +946,7 @@ it can be useful to save the raw images.
 The following script show how one can build a collector that returns only
 the raw images but uses the transformed ones for inference, and how these
 transformations can be recycled in the replay buffer:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SyncDataCollector</span></a>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">Collector</span></a>
 <span class="kn">from</span> <span class="nn">torchrl.envs.libs.gym</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">GymEnv</span></a>
 <span class="kn">from</span> <span class="nn">torchrl.envs.transforms</span> <span class="kn">import</span> <span class="p">(</span>
     <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Compose</span></a><span class="p">,</span>
@@ -1002,7 +1002,7 @@ To do this, we will append a transform to the collector to select the keys
 we want to see appearing:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.envs.transforms</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ExcludeTransform</span></a>
 
-<span class="n">collector</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SyncDataCollector</span></a><span class="p">(</span>
+<span class="n">collector</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">Collector</span></a><span class="p">(</span>
     <span class="n">env</span><span class="p">,</span>
     <span class="n">RandomPolicy</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="p">),</span>
     <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
@@ -1121,7 +1121,7 @@ observations:</p>
         <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">CatFrames</span></a><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">4</span><span class="p">,</span> <span class="n">N</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;pixels_trsf&quot;</span><span class="p">]),</span>
     <span class="p">),</span>
 <span class="p">)</span>
-<span class="n">collector</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SyncDataCollector</span></a><span class="p">(</span>
+<span class="n">collector</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">Collector</span></a><span class="p">(</span>
     <span class="n">env</span><span class="p">,</span>
     <span class="n">RandomPolicy</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="p">),</span>
     <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
@@ -1276,8 +1276,8 @@ We mark the steps as well.</p>
 <span class="n">gc</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>episode are grouped tensor([3, 3, 4, 4, 1, 1, 1, 1], dtype=torch.int32)
-steps are successive tensor([0, 1, 1, 2, 1, 2, 0, 1])
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>episode are grouped tensor([1, 1, 4, 4, 3, 3, 3, 3], dtype=torch.int32)
+steps are successive tensor([0, 1, 1, 2, 0, 1, 0, 1])
 
 1060
 </pre></div>
@@ -1293,7 +1293,7 @@ automatically.</p>
 <p>For <strong>single-process</strong> collectors the setup is straightforward — just
 <code class="docutils literal notranslate"><span class="pre">extend</span></code> the buffer with the collected batch and use <code class="docutils literal notranslate"><span class="pre">traj_ids</span></code> as
 the trajectory key:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">Collector</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">Collector</span></a>
 <span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">ReplayBuffer</span><span class="p">,</span> <span class="n">LazyTensorStorage</span><span class="p">,</span> <span class="n">SliceSampler</span>
 
 <span class="n">rb</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span>
@@ -1304,7 +1304,7 @@ the trajectory key:</p>
     <span class="p">),</span>
     <span class="n">batch_size</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="n">collector</span> <span class="o">=</span> <span class="n">Collector</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">collector</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">Collector</span></a><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
 <span class="k">for</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">data</span></a> <span class="ow">in</span> <span class="n">collector</span><span class="p">:</span>
     <span class="n">rb</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">data</span></a><span class="p">)</span>
     <span class="n">batch</span> <span class="o">=</span> <span class="n">rb</span><span class="o">.</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">sample</span></a><span class="p">()</span>  <span class="c1"># contiguous sub-sequences</span>
@@ -1354,7 +1354,7 @@ which are based on our Replay Buffer API;</p></li>
 such as <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictMaxValueWriter</span></code>.</p></li>
 <li><p>Check how to checkpoint ReplayBuffers in <a class="reference internal" href="../reference/data_storage.html#checkpoint-rb"><span class="std std-ref">the doc</span></a>.</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.793 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.791 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-rb-tutorial-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/c64b1e484ba3e0219549719cc3c37479/rb_tutorial.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">rb_tutorial.ipynb</span></code></a></p>

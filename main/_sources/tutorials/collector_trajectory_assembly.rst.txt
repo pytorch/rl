@@ -41,7 +41,7 @@ Collectors Deep Dive: Trajectory Assembly
 
       * `TorchRL <https://github.com/pytorch/rl>`_ and
         `gymnasium <https://gymnasium.farama.org>`_ installed
-      * Familiarity with :class:`~torchrl.collectors.SyncDataCollector`
+      * Familiarity with :class:`~torchrl.collectors.Collector`
         (see :ref:`the data-collection tutorial <gs_storage_collector>`)
 
 .. GENERATED FROM PYTHON SOURCE LINES 28-39
@@ -51,7 +51,7 @@ Collectors Deep Dive: Trajectory Assembly
 
 
     import torch
-    from torchrl.collectors import SyncDataCollector
+    from torchrl.collectors import Collector
     from torchrl.collectors.utils import split_trajectories
     from torchrl.data import LazyTensorStorage, ReplayBuffer
     from torchrl.envs import GymEnv
@@ -68,7 +68,7 @@ Collectors Deep Dive: Trajectory Assembly
  .. code-block:: none
 
 
-    <torch._C.Generator object at 0x7fdd5a78cc30>
+    <torch._C.Generator object at 0x7f28e6b34c30>
 
 
 
@@ -95,7 +95,7 @@ multiple trajectories** stitched together. Let's see this in practice.
     env.set_seed(0)
 
     policy = RandomPolicy(env.action_spec)
-    collector = SyncDataCollector(env, policy, frames_per_batch=200, total_frames=-1)
+    collector = Collector(env, policy, frames_per_batch=200, total_frames=-1)
 
     for data in collector:
         print(data)
@@ -503,7 +503,7 @@ finished episodes.
 .. code-block:: Python
 
 
-    collector_trajs = SyncDataCollector(
+    collector_trajs = Collector(
         env,
         policy,
         frames_per_batch=200,
@@ -746,7 +746,7 @@ the stored transitions. A typical training loop looks like this:
 
 .. code-block:: python
 
-    collector = SyncDataCollector(env, policy, frames_per_batch=200, ...)
+    collector = Collector(env, policy, frames_per_batch=200, ...)
     rb = ReplayBuffer(
         storage=LazyTensorStorage(max_size=100_000),
         sampler=SliceSampler(slice_len=16, end_key=("next", "done")),
@@ -926,7 +926,7 @@ Useful next resources
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.294 seconds)
+   **Total running time of the script:** (0 minutes 0.298 seconds)
 
 
 .. _sphx_glr_download_tutorials_collector_trajectory_assembly.py:

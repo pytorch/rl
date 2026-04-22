@@ -143,7 +143,7 @@ Let's import our dependencies
     from torch import multiprocessing
 
     # Data collection
-    from torchrl.collectors import SyncDataCollector
+    from torchrl.collectors import Collector
     from torchrl.data.replay_buffers import ReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.data.replay_buffers.storages import LazyTensorStorage
@@ -944,7 +944,7 @@ with the only difference that it will auto reset done states until the desired f
 
 .. code-block:: Python
 
-    collector = SyncDataCollector(
+    collector = Collector(
         env,
         policy,
         device=vmas_device,
@@ -1147,7 +1147,7 @@ The steps include:
 
  .. code-block:: none
 
-    episode_reward_mean = 0:   0%|          | 0/5 [00:00<?, ?it/s]    episode_reward_mean = -0.5401270389556885:  20%|██        | 1/5 [00:05<00:21,  5.35s/it]    episode_reward_mean = 0.3631371259689331:  40%|████      | 2/5 [00:10<00:15,  5.31s/it]     episode_reward_mean = 0.9600974321365356:  60%|██████    | 3/5 [00:15<00:10,  5.31s/it]    episode_reward_mean = 1.4642550945281982:  80%|████████  | 4/5 [00:21<00:05,  5.31s/it]    episode_reward_mean = 1.8227423429489136: 100%|██████████| 5/5 [00:26<00:00,  5.31s/it]
+    episode_reward_mean = 0:   0%|          | 0/5 [00:00<?, ?it/s]    episode_reward_mean = -0.4424140155315399:  20%|██        | 1/5 [00:05<00:21,  5.32s/it]    episode_reward_mean = 0.5352442264556885:  40%|████      | 2/5 [00:10<00:16,  5.34s/it]     episode_reward_mean = 1.0268021821975708:  60%|██████    | 3/5 [00:16<00:10,  5.35s/it]    episode_reward_mean = 1.5103888511657715:  80%|████████  | 4/5 [00:21<00:05,  5.33s/it]    episode_reward_mean = 1.7744019031524658: 100%|██████████| 5/5 [00:26<00:00,  5.32s/it]
 
 
 
@@ -1278,7 +1278,7 @@ Here are a few videos of some possible scenarios you can try in VMAS.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 26.746 seconds)
+   **Total running time of the script:** (0 minutes 26.827 seconds)
 
 
 .. _sphx_glr_download_tutorials_multiagent_ppo.py:

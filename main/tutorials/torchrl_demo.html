@@ -313,7 +313,7 @@ collect a trajectory:</p>
 <span class="p">)</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Collected 10 steps, total reward: 10
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Collected 35 steps, total reward: 35
 </pre></div>
 </div>
 <p>That’s it! We wrapped a Gym environment, created a Q-value actor with an
@@ -663,14 +663,14 @@ which is crucial for policy gradient methods.</p>
 While you can write your own rollout loop, TorchRL’s <em>collectors</em> handle
 this efficiently, including batching, device management, and multi-process
 collection.</p>
-<p>The <code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code> collects data
+<p>The <a class="reference internal" href="../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector"><code class="xref py py-class docutils literal notranslate"><span class="pre">Collector</span></code></a> collects data
 synchronously - it waits for a batch to be ready before returning:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SyncDataCollector</span></a>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">Collector</span></a>
 
 <span class="c1"># A simple deterministic policy for demonstration</span>
 <span class="n">actor</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">])</span>
 
-<span class="n">collector</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SyncDataCollector</span></a><span class="p">(</span>
+<span class="n">collector</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">Collector</span></a><span class="p">(</span>
     <span class="n">create_env_fn</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">GymEnv</span></a><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">),</span>
     <span class="n">policy</span><span class="o">=</span><span class="n">actor</span><span class="p">,</span>
     <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>  <span class="c1"># Collect 200 frames per iteration</span>
@@ -685,15 +685,15 @@ synchronously - it waits for a batch to be ready before returning:</p>
 <span class="n">collector</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Collected batch: torch.Size([200]), reward: -5.49
-Collected batch: torch.Size([200]), reward: -5.27
-Collected batch: torch.Size([200]), reward: -7.40
-Collected batch: torch.Size([200]), reward: -7.99
-Collected batch: torch.Size([200]), reward: -7.22
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Collected batch: torch.Size([200]), reward: -9.36
+Collected batch: torch.Size([200]), reward: -9.16
+Collected batch: torch.Size([200]), reward: -9.63
+Collected batch: torch.Size([200]), reward: -9.70
+Collected batch: torch.Size([200]), reward: -8.97
 </pre></div>
 </div>
 <p>For async collection (useful when training takes longer than collecting),
-see <code class="xref py py-class docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code>.</p>
+see <a class="reference internal" href="../reference/generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector" title="torchrl.collectors.MultiAsyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiAsyncCollector</span></code></a>.</p>
 </section>
 <section id="replay-buffers">
 <h2>Replay Buffers<a class="headerlink" href="#replay-buffers" title="Link to this heading">¶</a></h2>
@@ -734,7 +734,7 @@ variants), use <a class="reference internal" href="../reference/generated/torchr
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Prioritized sample indices:&quot;</span><span class="p">,</span> <span class="n">info</span><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">][:</span><span class="mi">5</span><span class="p">],</span> <span class="s2">&quot;...&quot;</span><span class="p">)</span>  <span class="c1"># First 5 indices</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Prioritized sample indices: tensor([65, 22,  1, 66, 80]) ...
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Prioritized sample indices: tensor([21, 97, 40, 48, 96]) ...
 </pre></div>
 </div>
 </section>
@@ -785,7 +785,7 @@ dummy batch to see it in action:</p>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Loss:&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">loss_td</span></a><span class="p">[</span><span class="s2">&quot;loss&quot;</span><span class="p">])</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Loss: tensor(1.1961, grad_fn=&lt;MeanBackward0&gt;)
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Loss: tensor(0.7174, grad_fn=&lt;MeanBackward0&gt;)
 </pre></div>
 </div>
 <p>The loss function handles target network updates, Bellman backup
@@ -809,7 +809,7 @@ training loop. We’ll train a simple DQN agent on CartPole:</p>
 <span class="n">policy</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">QValueActor</span></a><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">qnet</span></a><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">],</span> <span class="n">spec</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="p">)</span>
 
 <span class="c1"># 3. Set up the data collector</span>
-<span class="n">collector</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SyncDataCollector</span></a><span class="p">(</span>
+<span class="n">collector</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">Collector</span></a><span class="p">(</span>
     <span class="n">create_env_fn</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">GymEnv</span></a><span class="p">(</span><span class="s2">&quot;CartPole-v1&quot;</span><span class="p">),</span>
     <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
     <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
@@ -848,10 +848,10 @@ training loop. We’ll train a simple DQN agent on CartPole:</p>
 <span class="n">env</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Step 0: loss=0.992
-Step 5: loss=0.659
-Step 10: loss=0.420
-Step 15: loss=0.277
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Step 0: loss=1.000
+Step 5: loss=0.689
+Step 10: loss=0.407
+Step 15: loss=0.248
 </pre></div>
 </div>
 <p>This is a minimal example - a production DQN would include target network
@@ -889,7 +889,7 @@ folder contains production-ready implementations of:</p>
 <li><p><a class="reference external" href="https://github.com/pytorch/rl">GitHub</a></p></li>
 <li><p><a class="reference external" href="https://github.com/pytorch/rl/blob/main/CONTRIBUTING.md">Contributing Guide</a></p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 4.393 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 4.376 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-torchrl-demo-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/36fe09d5d4546649ee1a029c7144936e/torchrl_demo.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">torchrl_demo.ipynb</span></code></a></p>

@@ -588,10 +588,10 @@
 <span class="sd">        &gt;&gt;&gt; # In training loop:</span>
 <span class="sd">        &gt;&gt;&gt; # sampler.consumer_version = current_training_step</span>
 
-<span class="sd">    Integration with :class:`~torchrl.collectors.SyncDataCollector` and</span>
+<span class="sd">    Integration with :class:`~torchrl.collectors.Collector` and</span>
 <span class="sd">    :class:`~torchrl.envs.transforms.PolicyVersion`::</span>
 
-<span class="sd">        from torchrl.collectors import SyncDataCollector</span>
+<span class="sd">        from torchrl.collectors import Collector</span>
 <span class="sd">        from torchrl.envs.transforms import PolicyVersion</span>
 <span class="sd">        from torchrl.data import TensorDictReplayBuffer, LazyTensorStorage</span>
 
@@ -601,7 +601,7 @@
 <span class="sd">            sampler=sampler,</span>
 <span class="sd">            batch_size=256,</span>
 <span class="sd">        )</span>
-<span class="sd">        collector = SyncDataCollector(</span>
+<span class="sd">        collector = Collector(</span>
 <span class="sd">            env,</span>
 <span class="sd">            policy,</span>
 <span class="sd">            frames_per_batch=1000,</span>

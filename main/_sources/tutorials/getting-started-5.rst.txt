@@ -130,13 +130,13 @@ and a :ref:`replay buffer <gs_storage_rb>` to store that data for training.
 .. code-block:: Python
 
 
-    from torchrl.collectors import SyncDataCollector
+    from torchrl.collectors import Collector
     from torchrl.data import LazyTensorStorage, ReplayBuffer
 
     init_rand_steps = 5000
     frames_per_batch = 100
     optim_steps = 10
-    collector = SyncDataCollector(
+    collector = Collector(
         env,
         policy_explore,
         frames_per_batch=frames_per_batch,
@@ -303,7 +303,7 @@ Feel free to share feedback about it on GitHub.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.679 seconds)
+   **Total running time of the script:** (0 minutes 4.409 seconds)
 
 
 .. _sphx_glr_download_tutorials_getting-started-5.py:

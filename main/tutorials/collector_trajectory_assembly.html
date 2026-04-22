@@ -300,7 +300,7 @@ to download the full example code.</p>
 <ul class="simple">
 <li><p class="sd-card-text"><a class="reference external" href="https://github.com/pytorch/rl">TorchRL</a> and
 <a class="reference external" href="https://gymnasium.farama.org">gymnasium</a> installed</p></li>
-<li><p class="sd-card-text">Familiarity with <code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code>
+<li><p class="sd-card-text">Familiarity with <a class="reference internal" href="../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector"><code class="xref py py-class docutils literal notranslate"><span class="pre">Collector</span></code></a>
 (see <a class="reference internal" href="getting-started-3.html#gs-storage-collector"><span class="std std-ref">the data-collection tutorial</span></a>)</p></li>
 </ul>
 </div>
@@ -309,7 +309,7 @@ to download the full example code.</p>
 </div>
 </div>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SyncDataCollector</span></a>
+<span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">Collector</span></a>
 <span class="kn">from</span> <span class="nn">torchrl.collectors.utils</span> <span class="kn">import</span> <span class="n">split_trajectories</span>
 <span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">LazyTensorStorage</span><span class="p">,</span> <span class="n">ReplayBuffer</span>
 <span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">GymEnv</span></a>
@@ -318,7 +318,7 @@ to download the full example code.</p>
 <a href="https://docs.pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="torch.manual_seed" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span></a><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>&lt;torch._C.Generator object at 0x7fdd5a78cc30&gt;
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>&lt;torch._C.Generator object at 0x7f28e6b34c30&gt;
 </pre></div>
 </div>
 <section id="why-collectors-return-fixed-size-chunks">
@@ -334,7 +334,7 @@ multiple trajectories</strong> stitched together. Let’s see this in practice.<
 <span class="n">env</span><span class="o">.</span><span class="n">set_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
 
 <span class="n">policy</span> <span class="o">=</span> <span class="n">RandomPolicy</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="p">)</span>
-<span class="n">collector</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SyncDataCollector</span></a><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">collector</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">Collector</span></a><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
 
 <span class="k">for</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">data</span></a> <span class="ow">in</span> <span class="n">collector</span><span class="p">:</span>
     <span class="nb">print</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">data</span></a><span class="p">)</span>
@@ -600,7 +600,7 @@ episodes</strong> rather than fixed-frame chunks. The <code class="docutils lite
 argument tells the collector to buffer partial trajectories internally
 and yield only once it has accumulated the requested number of
 finished episodes.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">collector_trajs</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SyncDataCollector</span></a><span class="p">(</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">collector_trajs</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">Collector</span></a><span class="p">(</span>
     <span class="n">env</span><span class="p">,</span>
     <span class="n">policy</span><span class="p">,</span>
     <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
@@ -764,7 +764,7 @@ exactly <code class="docutils literal notranslate"><span class="pre">32</span> <
 </div>
 <p>Each sampled batch contains contiguous slices of 16 steps drawn from
 the stored transitions. A typical training loop looks like this:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">collector</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SyncDataCollector</span></a><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">collector</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">Collector</span></a><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
 <span class="n">rb</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span>
     <span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span><span class="n">max_size</span><span class="o">=</span><span class="mi">100_000</span><span class="p">),</span>
     <span class="n">sampler</span><span class="o">=</span><span class="n">SliceSampler</span><span class="p">(</span><span class="n">slice_len</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">end_key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">)),</span>
@@ -892,7 +892,7 @@ and replay-buffer workflow.</p></li>
 policy where per-episode data is essential.</p></li>
 <li><p><a class="reference external" href="https://pytorch.org/rl/">TorchRL documentation</a></p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.294 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.298 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-collector-trajectory-assembly-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/a2c17acd7f5b44ec53e851e28c3416ac/collector_trajectory_assembly.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">collector_trajectory_assembly.ipynb</span></code></a></p>
