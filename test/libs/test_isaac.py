@@ -41,21 +41,20 @@ _has_ray = importlib.util.find_spec("ray") is not None
 if _has_ray:
     import ray
 
-
-def _isaac_env_maker():
-    return make_isaac_env(init_app=False)
-
-
-def _isaac_env_maker_cuda1():
-    return make_isaac_env(init_app=False, device=torch.device("cuda:1"))
-
-
-def _isaac_policy_maker(env=None):
-    return make_isaac_policy(env)
-
-
-def _isaac_policy_maker_cuda1(env=None):
-    return make_isaac_policy(env, device=torch.device("cuda:1"))
+# Ray / process backends pickle the factory callables and import them by
+# qualified name in the child / actor process.  Locally-defined helpers in
+# this test module live at ``test_isaac.*`` which is not importable inside a
+# fresh Ray actor.  We therefore bind arguments onto library-level functions
+# (reachable from anywhere via ``torchrl.testing.env_helper``) using
+# ``functools.partial``.
+_isaac_env_maker = partial(make_isaac_env, init_app=False)
+_isaac_env_maker_cuda1 = partial(
+    make_isaac_env, init_app=False, device=torch.device("cuda:1")
+)
+# ``make_isaac_policy`` already accepts ``env=None`` for the probe path, so
+# it can be used directly as a ``policy_factory``.
+_isaac_policy_maker = make_isaac_policy
+_isaac_policy_maker_cuda1 = partial(make_isaac_policy, device=torch.device("cuda:1"))
 
 
 @pytest.mark.skipif(not _has_isaac, reason="IsaacGym not found")
