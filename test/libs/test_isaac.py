@@ -506,6 +506,10 @@ class TestIsaacLabEvaluator:
         the actor and (b) the actor gets its own CUDA context on the target
         device.
         """
+        # ``num_gpus=2`` so the actor gets both cuda:0 and cuda:1 visible and
+        # can place Isaac + policy on cuda:1 explicitly.  With ``num_gpus=1``
+        # Ray would map a single physical GPU onto the actor's cuda:0 and
+        # cuda:1 would be 'invalid device ordinal'.
         evaluator = Evaluator(
             env=_isaac_env_maker_cuda1,
             policy_factory=_isaac_policy_maker_cuda1,
@@ -513,7 +517,7 @@ class TestIsaacLabEvaluator:
             max_steps=32,
             backend="ray",
             init_fn=_isaac_app_launcher_init,
-            num_gpus=1,
+            num_gpus=2,
         )
         try:
             result = evaluator.evaluate(step=0)

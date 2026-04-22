@@ -83,7 +83,15 @@ def make_isaac_policy(env=None, device=None):
 
     if env is None:
         obs_size, action_size = 60, 8  # Isaac-Ant-v0 shapes; probe-only.
-        target_device = torch.device("cpu") if device is None else torch.device(device)
+        # Match what a real Isaac env would produce (cuda:0) so that the
+        # Evaluator's main-process weight-sync probe and the worker-created
+        # policy agree on device.  Fall back to CPU if CUDA is unavailable.
+        if device is None:
+            target_device = (
+                torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+            )
+        else:
+            target_device = torch.device(device)
     else:
         obs_size = env.observation_spec["policy"].shape[-1]
         action_size = env.action_spec.shape[-1]
