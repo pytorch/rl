@@ -88,7 +88,9 @@ def make_isaac_policy(env=None, device=None):
         # policy agree on device.  Fall back to CPU if CUDA is unavailable.
         if device is None:
             target_device = (
-                torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+                torch.device("cuda:0")
+                if torch.cuda.is_available()
+                else torch.device("cpu")
             )
         else:
             target_device = torch.device(device)
