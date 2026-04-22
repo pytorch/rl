@@ -253,12 +253,18 @@
 <h1>RandomPolicy<a class="headerlink" href="#randompolicy" title="Link to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.modules.tensordict_module.RandomPolicy">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.tensordict_module.</span></span><span class="sig-name descname"><span class="pre">RandomPolicy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">action_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.tensor_specs.TensorSpec"><span class="pre">TensorSpec</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">action_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'action'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/tensordict_module/exploration.html#RandomPolicy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.tensordict_module.RandomPolicy" title="Link to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.tensordict_module.</span></span><span class="sig-name descname"><span class="pre">RandomPolicy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">action_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.tensor_specs.TensorSpec"><span class="pre">TensorSpec</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'action'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/tensordict_module/exploration.html#RandomPolicy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.tensordict_module.RandomPolicy" title="Link to this definition">¶</a></dt>
 <dd><p>A random policy for data collectors.</p>
 <p>This is a wrapper around the action_spec.rand method.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>action_spec</strong> – TensorSpec object describing the action specs</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action_spec</strong> – TensorSpec object describing the action specs. If <code class="docutils literal notranslate"><span class="pre">None</span></code>,
+the spec is initialized lazily (e.g. by a collector from
+<code class="docutils literal notranslate"><span class="pre">env.full_action_spec</span></code>). A <code class="docutils literal notranslate"><span class="pre">RandomPolicy</span></code> with no spec will
+raise if called before the spec is set.</p></li>
+<li><p><strong>action_key</strong> – key at which the action is written. Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;action&quot;</span></code>.</p></li>
+</ul>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -269,6 +275,19 @@
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">actor</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">())</span> <span class="c1"># selects a random action in the cube [-1; 1]</span>
 </pre></div>
 </div>
+<p>Lazy initialization — let the collector fill in the spec from the env:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">SyncDataCollector</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span> <span class="o">=</span> <span class="n">SyncDataCollector</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">RandomPolicy</span><span class="p">(),</span> <span class="o">...</span><span class="p">)</span>  
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.modules.tensordict_module.RandomPolicy.set_action_spec_from_env">
+<span class="sig-name descname"><span class="pre">set_action_spec_from_env</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><span class="pre">EnvBase</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/modules/tensordict_module/exploration.html#RandomPolicy.set_action_spec_from_env"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.tensordict_module.RandomPolicy.set_action_spec_from_env" title="Link to this definition">¶</a></dt>
+<dd><p>Initialize <code class="docutils literal notranslate"><span class="pre">action_spec</span></code> from <code class="docutils literal notranslate"><span class="pre">env.full_action_spec</span></code>.</p>
+<p>No-op if the spec is already set. Intended for lazy initialization by
+data collectors.</p>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -311,7 +330,10 @@
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">RandomPolicy</a><ul>
-<li><a class="reference internal" href="#torchrl.modules.tensordict_module.RandomPolicy"><code class="docutils literal notranslate"><span class="pre">RandomPolicy</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.modules.tensordict_module.RandomPolicy"><code class="docutils literal notranslate"><span class="pre">RandomPolicy</span></code></a><ul>
+<li><a class="reference internal" href="#torchrl.modules.tensordict_module.RandomPolicy.set_action_spec_from_env"><code class="docutils literal notranslate"><span class="pre">RandomPolicy.set_action_spec_from_env()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>

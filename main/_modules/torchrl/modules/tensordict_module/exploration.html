@@ -1044,7 +1044,11 @@
 <span class="sd">    This is a wrapper around the action_spec.rand method.</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        action_spec: TensorSpec object describing the action specs</span>
+<span class="sd">        action_spec: TensorSpec object describing the action specs. If ``None``,</span>
+<span class="sd">            the spec is initialized lazily (e.g. by a collector from</span>
+<span class="sd">            ``env.full_action_spec``). A ``RandomPolicy`` with no spec will</span>
+<span class="sd">            raise if called before the spec is set.</span>
+<span class="sd">        action_key: key at which the action is written. Defaults to ``&quot;action&quot;``.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict</span>
@@ -1052,14 +1056,42 @@
 <span class="sd">        &gt;&gt;&gt; action_spec = Bounded(-torch.ones(3), torch.ones(3))</span>
 <span class="sd">        &gt;&gt;&gt; actor = RandomPolicy(action_spec=action_spec)</span>
 <span class="sd">        &gt;&gt;&gt; td = actor(TensorDict()) # selects a random action in the cube [-1; 1]</span>
+
+<span class="sd">        Lazy initialization — let the collector fill in the spec from the env:</span>
+
+<span class="sd">        &gt;&gt;&gt; from torchrl.collectors import SyncDataCollector</span>
+<span class="sd">        &gt;&gt;&gt; collector = SyncDataCollector(env, RandomPolicy(), ...)  # doctest: +SKIP</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">action_spec</span><span class="p">:</span> <span class="n">TensorSpec</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span><span class="p">,</span>
+    <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span> <span class="k">if</span> <span class="n">action_spec</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">action_key</span> <span class="o">=</span> <span class="n">action_key</span>
 
+<div class="viewcode-block" id="RandomPolicy.set_action_spec_from_env">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.tensordict_module.RandomPolicy.html#torchrl.modules.RandomPolicy.set_action_spec_from_env">[docs]</a>
+    <span class="k">def</span> <span class="nf">set_action_spec_from_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">:</span> <span class="n">EnvBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize ``action_spec`` from ``env.full_action_spec``.</span>
+
+<span class="sd">        No-op if the spec is already set. Intended for lazy initialization by</span>
+<span class="sd">        data collectors.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">full_action_spec</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span></div>
+
+
     <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;RandomPolicy.action_spec is not set. Either pass `action_spec` &quot;</span>
+                <span class="s2">&quot;to the constructor, or let a collector initialize it by passing &quot;</span>
+                <span class="s2">&quot;the policy alongside an environment (e.g. `Collector(env, &quot;</span>
+                <span class="s2">&quot;RandomPolicy())`).&quot;</span>
+            <span class="p">)</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span><span class="p">,</span> <span class="n">Composite</span><span class="p">):</span>
             <span class="k">return</span> <span class="n">td</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">rand</span><span class="p">())</span>
         <span class="k">else</span><span class="p">:</span>

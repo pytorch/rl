@@ -840,7 +840,7 @@ every 50 data collection iterations, and plot the results after training.
 
  .. code-block:: none
 
-      0%|          | 0/200 [00:00<?, ?it/s]     25%|██▌       | 50/200 [00:00<00:01, 125.76it/s]     50%|█████     | 100/200 [00:00<00:00, 127.63it/s]     75%|███████▌  | 150/200 [00:01<00:00, 128.88it/s]    100%|██████████| 200/200 [00:01<00:00, 129.42it/s]
+      0%|          | 0/200 [00:00<?, ?it/s]     25%|██▌       | 50/200 [00:00<00:01, 123.72it/s]     50%|█████     | 100/200 [00:00<00:00, 125.46it/s]     75%|███████▌  | 150/200 [00:01<00:00, 126.99it/s]    100%|██████████| 200/200 [00:01<00:00, 127.26it/s]
 
 
 
@@ -891,7 +891,7 @@ Further Reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.699 seconds)
+   **Total running time of the script:** (0 minutes 5.807 seconds)
 
 
 .. _sphx_glr_download_tutorials_dqn_with_rnn.py:

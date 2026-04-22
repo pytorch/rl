@@ -849,6 +849,12 @@
         <span class="k">elif</span> <span class="n">policy_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;policy_factory cannot be used with policy argument.&quot;</span><span class="p">)</span>
 
+        <span class="c1"># Lazily initialize a RandomPolicy that was constructed without an</span>
+        <span class="c1"># action_spec (supports both `policy=RandomPolicy()` and a</span>
+        <span class="c1"># `policy_factory` that returns one).</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">RandomPolicy</span><span class="p">):</span>
+            <span class="n">policy</span><span class="o">.</span><span class="n">set_action_spec_from_env</span><span class="p">(</span><span class="n">env</span><span class="p">)</span>
+
         <span class="k">if</span> <span class="n">trust_policy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">trust_policy</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="p">(</span><span class="n">RandomPolicy</span><span class="p">,</span> <span class="n">CudaGraphModule</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">trust_policy</span> <span class="o">=</span> <span class="n">trust_policy</span>
