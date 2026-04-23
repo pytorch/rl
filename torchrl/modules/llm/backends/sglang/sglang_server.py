@@ -30,6 +30,7 @@ from .sglang_utils import (
     check_server_health,
     convert_sampling_params,
     dtype_to_str,
+    get_local_ip_address,
     get_model_info,
     get_open_port,
     get_server_info,
@@ -104,7 +105,7 @@ class AsyncSGLang(RLSGLangEngine):
         self._model_info: dict[str, Any] | None = None
 
         # Weight sync state
-        self._master_address: str = "localhost"
+        self._master_address: str = get_local_ip_address()
         self._master_port: int | None = None
         self._weight_update_initialized: bool = False
 
@@ -143,6 +144,18 @@ class AsyncSGLang(RLSGLangEngine):
         port = self._server_kwargs.pop("port", None) or get_open_port()
         host = self._server_kwargs.pop("host", "127.0.0.1")
 
+        # Extract cuda_devices for GPU pinning via --base-gpu-id.
+        # We use base_gpu_id instead of CUDA_VISIBLE_DEVICES so that all
+        # processes see the full set of GPUs — required for NCCL device ID
+        # consistency when doing cross-process weight broadcasts.
+        cuda_devices = self._server_kwargs.pop("cuda_devices", None)
+        base_gpu_id = 0
+        if cuda_devices is not None and len(cuda_devices) > 0:
+            base_gpu_id = cuda_devices[0]
+            torchrl_logger.info(
+                f"Pinning SGLang server to GPU {base_gpu_id} via --base-gpu-id"
+            )
+
         # Build command line arguments
         cmd = [
             "python3",
@@ -158,6 +171,8 @@ class AsyncSGLang(RLSGLangEngine):
             str(self._tp_size),
             "--dp-size",
             str(self._dp_size),
+            "--base-gpu-id",
+            str(base_gpu_id),
         ]
 
         # Add additional kwargs
@@ -180,11 +195,20 @@ class AsyncSGLang(RLSGLangEngine):
         self._log_file_path = log_file.name
         torchrl_logger.info(f"SGLang server output logging to: {self._log_file_path}")
 
+        # Set up environment for the server subprocess.
+        # Disable NCCL P2P/IPC: Ray may restrict CUDA_VISIBLE_DEVICES for the
+        # trainer worker while this server sees all GPUs. The topology mismatch
+        # causes NCCL P2P/IPC channel setup to fail with "invalid argument".
+        env = os.environ.copy()
+        env["NCCL_P2P_DISABLE"] = "1"
+        env["NCCL_SHM_DISABLE"] = "1"
+
         # Launch subprocess with output going to the log file
         self._managed_process = subprocess.Popen(
             cmd,
             stdout=log_file,
             stderr=subprocess.STDOUT,
+            env=env,
         )
 
         torchrl_logger.info(
@@ -367,6 +391,13 @@ class AsyncSGLang(RLSGLangEngine):
         if return_logprobs:
             sglang_params["return_logprob"] = True
 
+        if not hasattr(self, "_logged_sglang_params"):
+            torchrl_logger.info(
+                f"SGLang generate: merged_params={merged_params}, "
+                f"sglang_params={sglang_params}"
+            )
+            self._logged_sglang_params = True
+
         timeout = timeout or self._timeout
 
         # Determine if using text or token mode
@@ -387,17 +418,33 @@ class AsyncSGLang(RLSGLangEngine):
             else:
                 inputs = prompts
 
+        # SGLang's /generate endpoint expects sampling parameters nested
+        # under a "sampling_params" key, not as flat top-level fields.
+        # Extract top-level GenerateReqInput fields from sglang_params.
+        top_level_keys = {
+            "return_logprob",
+            "stream",
+            "return_text_in_logprobs",
+            "logprob_start_len",
+            "top_logprobs_num",
+        }
+        top_level_params = {
+            k: sglang_params.pop(k) for k in top_level_keys if k in sglang_params
+        }
+
         results = []
         for inp in inputs:
             if use_tokens:
                 data = {
                     "input_ids": inp,
-                    **sglang_params,
+                    "sampling_params": sglang_params,
+                    **top_level_params,
                 }
             else:
                 data = {
                     "text": inp,
-                    **sglang_params,
+                    "sampling_params": sglang_params,
+                    **top_level_params,
                 }
 
             response = requests.post(
@@ -639,6 +686,25 @@ class AsyncSGLang(RLSGLangEngine):
             except OSError:
                 pass  # Ignore cleanup errors
             self._log_file_path = None
+
+    def __getstate__(self) -> dict[str, Any]:
+        """Serialize the client state without transferring subprocess ownership."""
+        state = self.__dict__.copy()
+        # Remote workers should reconnect to the existing server instead of
+        # inheriting the managed subprocess handle from the parent process.
+        state["_managed_process"] = None
+        state["_log_file_path"] = None
+        state["_nccl_group"] = None
+        return state
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        """Restore the client state and reconnect to the server when needed."""
+        self.__dict__.update(state)
+        self._managed_process = None
+        self._log_file_path = None
+        self._nccl_group = None
+        if self._server_url is not None:
+            self._validate_and_connect()
 
     def __del__(self) -> None:
         """Cleanup on deletion."""

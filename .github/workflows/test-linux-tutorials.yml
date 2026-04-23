@@ -97,6 +97,7 @@ jobs:
         python -c "import torch; print(f'PyTorch: {torch.__version__}')"
         python -c "import torchrl; print(f'TorchRL: {torchrl.__version__}')"
         python -c "import tensordict; print(f'TensorDict: {tensordict.__version__}')"
+        bash .github/unittest/helpers/assert_torch_version.sh stable
         echo "::endgroup::"
 
         # ============================================

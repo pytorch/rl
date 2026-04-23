@@ -74,7 +74,7 @@
   - changed-files:
     - any-glob-to-any-file:
       - 'torchrl/envs/libs/**'
-      - 'test/test_libs.py'
+      - 'test/libs/**'
 
 # =============================================================================
 # Data Sub-Labels (trigger specific tests in test-linux-libs.yml)
@@ -106,6 +106,20 @@
       - 'torchrl/data/datasets/**'
 
 # =============================================================================
+# Integrations Sub-Labels (trigger specific tests in test-linux-libs.yml)
+# =============================================================================
+"Integrations/torch_geometric":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/collectors/**', 'torchrl/modules/**']
+
+# Parent Integrations label (any integration-related change)
+"Integrations":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'torchrl/collectors/**'
+      - 'torchrl/modules/**'
+
+# =============================================================================
 # LLM (triggers test-linux-llm.yml)
 # =============================================================================
 "llm/":
@@ -132,7 +146,7 @@
   - changed-files:
     - any-glob-to-any-file:
       - 'torchrl/objectives/**'
-      - 'test/test_objectives.py'
+      - 'test/objectives/**'
 
 "Modules":
   - changed-files:
@@ -146,7 +160,7 @@
   - changed-files:
     - any-glob-to-any-file:
       - 'torchrl/envs/transforms/**'
-      - 'test/test_transforms.py'
+      - 'test/transforms/**'
 
 "Trainers":
   - changed-files:

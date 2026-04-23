@@ -267,7 +267,7 @@ lines of code*!
   from tensordict.nn.distributions import NormalParamExtractor
   from torch import nn
   
-  from torchrl.collectors import SyncDataCollector
+  from torchrl.collectors import Collector
   from torchrl.data.replay_buffers import TensorDictReplayBuffer, \
     LazyTensorStorage, SamplerWithoutReplacement
   from torchrl.envs.libs.gym import GymEnv
@@ -308,7 +308,7 @@ lines of code*!
     sampler=SamplerWithoutReplacement(),
     batch_size=50,
     )
-  collector = SyncDataCollector(
+  collector = Collector(
     env,
     actor,
     frames_per_batch=1000,
@@ -495,7 +495,7 @@ And it is `functorch` and `torch.compile` compatible!
 
   ```python
   env_make = lambda: GymEnv("Pendulum-v1", from_pixels=True)
-  collector = MultiaSyncDataCollector(
+  collector = MultiAsyncCollector(
       [env_make, env_make],
       policy=policy,
       devices=["cuda:0", "cuda:0"],

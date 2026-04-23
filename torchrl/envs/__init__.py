@@ -52,7 +52,7 @@ from .libs import (
     VmasEnv,
     VmasWrapper,
 )
-from .model_based import DreamerDecoder, DreamerEnv, ModelBasedEnvBase
+from .model_based import DreamerDecoder, DreamerEnv, ImaginedEnv, ModelBasedEnvBase
 from .transforms import (
     ActionDiscretizer,
     ActionMask,
@@ -83,6 +83,7 @@ from .transforms import (
     Hash,
     InitTracker,
     LineariseRewards,
+    MeanActionSelector,
     MultiAction,
     MultiStepTransform,
     NoopResetEnv,
@@ -92,6 +93,7 @@ from .transforms import (
     PinMemoryTransform,
     R3MTransform,
     RandomCropTensorDict,
+    RandomTruncationTransform,
     RemoveEmptySpecs,
     RenameTransform,
     Resize,
@@ -184,6 +186,7 @@ __all__ = [
     "HabitatEnv",
     "Hash",
     "InitTracker",
+    "ImaginedEnv",
     "IsaacGymEnv",
     "IsaacGymWrapper",
     "JumanjiEnv",
@@ -193,6 +196,7 @@ __all__ = [
     "MOGymEnv",
     "MOGymWrapper",
     "MarlGroupMapType",
+    "MeanActionSelector",
     "MeltingpotEnv",
     "MeltingpotWrapper",
     "ModelBasedEnvBase",
@@ -216,6 +220,7 @@ __all__ = [
     "ProcgenWrapper",
     "R3MTransform",
     "RandomCropTensorDict",
+    "RandomTruncationTransform",
     "RemoveEmptySpecs",
     "RenameTransform",
     "Resize",

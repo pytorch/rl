@@ -63,7 +63,7 @@ from tensordict.nn import (
 from torch.optim import Adam
 
 from torchrl._utils import timeit
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, ReplayBuffer
 
 from torchrl.envs import (
@@ -102,7 +102,7 @@ policy_explore = Seq(policy, exploration_module)
 init_rand_steps = 5000
 frames_per_batch = 100
 optim_steps = 10
-collector = SyncDataCollector(
+collector = Collector(
     env,
     policy_explore,
     frames_per_batch=frames_per_batch,

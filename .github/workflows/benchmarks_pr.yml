@@ -84,7 +84,8 @@ jobs:
           python3.10 -m pip install git+https://github.com/pytorch/tensordict 
           python3.10 -m pip install safetensors tqdm pandas numpy matplotlib
           python3.10 setup.py develop
-          # python3.10 -m pip install git+https://github.com/pytorch/rl@$GITHUB_BRANCH
+
+          bash .github/unittest/helpers/assert_torch_version.sh nightly
 
           # test import
           python -c """import torch

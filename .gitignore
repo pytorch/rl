@@ -177,6 +177,8 @@ cython_debug/
 .vscode
 version.py
 torchrl/version.py
+_version.py
+torchrl/_version.py
 wandb
 outputs
 log
@@ -189,6 +191,7 @@ log
 Roms
 
 scratch/*
+setup-and-run.sh
 
 # Large directories from git history that should not be committed
 dev/

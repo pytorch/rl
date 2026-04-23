@@ -147,6 +147,7 @@ jobs:
           mkdir test-reports
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python -m torch.utils.collect_env
+          bash .github/unittest/helpers/assert_torch_version.sh nightly
           python -c "import torchrl; print(torchrl.__version__);from torchrl.data import ReplayBuffer"
           EXIT_STATUS=0
           pytest test/smoke_test.py -v --durations 200
@@ -300,6 +301,7 @@ jobs:
           export IN_CI=1
           mkdir test-reports
           python -m torch.utils.collect_env
+          bash .github/unittest/helpers/assert_torch_version.sh nightly
           python -c "import torchrl; print(torchrl.__version__);from torchrl.data import ReplayBuffer"
           EXIT_STATUS=0
           pytest test/smoke_test.py -v --durations 200

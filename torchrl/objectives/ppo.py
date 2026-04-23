@@ -398,6 +398,7 @@ class PPOLoss(LossModule):
     default_keys = _AcceptedKeys
     tensor_keys: _AcceptedKeys
     default_value_estimator = ValueEstimators.GAE
+    _schedulable_buffers = frozenset({"entropy_coeff", "critic_coeff", "clip_value"})
 
     actor_network: ProbabilisticTensorDictModule
     critic_network: TensorDictModule
@@ -1139,6 +1140,8 @@ class ClipPPOLoss(PPOLoss):
 
     """
 
+    _schedulable_buffers = frozenset({"clip_epsilon"})
+
     actor_network: TensorDictModule
     critic_network: TensorDictModule
     actor_network_params: TensorDictParams
@@ -1213,7 +1216,7 @@ class ClipPPOLoss(PPOLoss):
                 keys.append("loss_critic")
             if self.clip_value:
                 keys.append("value_clip_fraction")
-            keys.append("ESS")
+            keys.extend(["ESS", "kl_approx", "max_ratio", "mean_ratio"])
             self._out_keys = keys
         return self._out_keys
 
@@ -1296,6 +1299,10 @@ class ClipPPOLoss(PPOLoss):
                 td_out.set("explained_variance", explained_variance)
 
         td_out.set("ESS", _reduce(ess, self.reduction) / batch)
+        with torch.no_grad():
+            ratio = log_weight.exp()
+            td_out.set("max_ratio", ratio.max())
+            td_out.set("mean_ratio", ratio.mean())
         td_out = td_out.named_apply(
             lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
             if name.startswith("loss_")
@@ -1430,6 +1437,8 @@ class KLPENPPOLoss(PPOLoss):
       This will work regardless of whether separate_losses is activated or not.
 
     """
+
+    _schedulable_buffers = frozenset({"beta"})
 
     actor_network: TensorDictModule
     critic_network: TensorDictModule
