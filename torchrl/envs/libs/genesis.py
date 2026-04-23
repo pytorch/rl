@@ -411,12 +411,10 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
     def _create_scene(self, env_name: str, task_name: str | None, **kwargs):
         gs = self.lib
 
-        try:
+        if not getattr(gs, "_initialized", False):
             gs.init(backend=gs.cpu)
-        except Exception:
-            pass  # already initialized
 
-        scene = gs.Scene()
+        scene = gs.Scene(show_viewer=False)
 
         if env_name == "franka_reach":
             scene.add_entity(gs.morphs.Plane())

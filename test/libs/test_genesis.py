@@ -16,8 +16,9 @@ from torchrl.envs.utils import check_env_specs
 def _franka_scene():
     import genesis as gs
 
-    gs.init(backend=gs.cpu)
-    scene = gs.Scene()
+    if not getattr(gs, "_initialized", False):
+        gs.init(backend=gs.cpu)
+    scene = gs.Scene(show_viewer=False)
     scene.add_entity(gs.morphs.Plane())
     scene.add_entity(gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml"))
     scene.build()
