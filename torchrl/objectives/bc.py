@@ -5,31 +5,32 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import torch
+import torch.nn.functional as F
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import _reduce, distance_loss
+from torchrl.objectives.utils import _reduce
 
 
 class BCLoss(LossModule):
     """Behavior Cloning Loss Module.
 
     Implements behavior cloning loss for both stochastic and deterministic policies.
-    For stochastic policies, minimizes the negative log-likelihood: -E[log π(a_expert | s)].
-    For deterministic policies, minimizes the distance between predicted and expert actions.
+    Minimizes the negative log-likelihood: -E[log π(a_expert | s)] where π is the
+    policy being trained and a_expert are the expert actions from the demonstration dataset.
 
-    The policy type is auto-detected based on whether the actor network outputs a log_prob key.
+    Works with any actor network that implements get_dist() method, including both
+    stochastic and deterministic policies.
 
     Args:
         actor_network (TensorDictModule): the actor network to be trained.
 
     Keyword Args:
-        loss_function (str, optional): loss function for deterministic policies.
-            Can be one of "smooth_l1", "l2", "l1". Default is "l2".
         reduction (str, optional): Specifies the reduction to apply to the output:
             "none" | "mean" | "sum". "none": no reduction will be applied,
             "mean": the sum of the output will be divided by the number of
@@ -107,7 +108,7 @@ class BCLoss(LossModule):
         self,
         actor_network: TensorDictModule,
         *,
-        loss_function: str = "l2",
+        loss_function: callable | None = None,
         reduction: str | None = None,
     ) -> None:
         if reduction is None:
@@ -120,8 +121,8 @@ class BCLoss(LossModule):
             "actor_network",
         )
 
-        self.loss_function = loss_function
         self.reduction = reduction
+        self.loss_function = loss_function
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         pass
@@ -160,21 +161,35 @@ class BCLoss(LossModule):
 
         # Forward pass through actor
         with self.actor_network_params.to_module(self.actor_network):
-            tensordict_actor = self.actor_network(tensordict)
+            tensordict = self.actor_network(tensordict)
 
-        # Check if stochastic (has log_prob) or deterministic
-        if "log_prob" in tensordict_actor.keys():
-            # Stochastic policy: minimize -log π(a_expert | s)
-            log_prob = tensordict_actor.get("log_prob")
-            loss = -log_prob
-        else:
-            # Deterministic policy: minimize distance(a_pred, a_expert)
-            action_pred = tensordict_actor.get(self.tensor_keys.action)
-            loss = distance_loss(
-                action_pred,
-                action_expert,
-                loss_function=self.loss_function,
-            )
+            if self.loss_function is not None:
+                # Use provided loss function on predicted and expert actions
+                action_pred = tensordict.get("action")
+                if isinstance(self.loss_function, str):
+                    if self.loss_function == "l1":
+                        loss = F.l1_loss(action_pred, action_expert, reduction="none")
+                    elif self.loss_function == "l2":
+                        loss = F.mse_loss(action_pred, action_expert, reduction="none")
+                    elif self.loss_function == "smooth_l1":
+                        loss = F.smooth_l1_loss(
+                            action_pred, action_expert, reduction="none"
+                        )
+                    else:
+                        raise ValueError(
+                            f"Unsupported loss_function: {self.loss_function}"
+                        )
+                else:
+                    loss = self.loss_function(action_pred, action_expert)
+            elif "action" in tensordict:
+                # Deterministic actor with no loss_function: use MSE loss
+                action_pred = tensordict.get("action")
+                loss = F.mse_loss(action_pred, action_expert, reduction="none")
+            else:
+                # Use distribution-based negative log probability
+                dist = self.actor_network.get_dist(tensordict)
+                log_prob = dist.log_prob(action_expert)
+                loss = -log_prob
 
         loss = _reduce(loss, reduction=self.reduction)
 
