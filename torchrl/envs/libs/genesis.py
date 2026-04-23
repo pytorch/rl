@@ -25,28 +25,20 @@ from torchrl.envs.utils import _classproperty
 
 _has_genesis = importlib.util.find_spec("genesis") is not None
 
-__all__ = ["GenesisEnv", "GenesisWrapper", "genesis_cleanup"]
+__all__ = ["GenesisEnv", "GenesisWrapper"]
 
 
-def genesis_cleanup():
+def _genesis_cleanup():
     """Clean up Genesis resources to free memory.
 
     Call this function to force cleanup of Genesis cached kernels and free up memory.
     This is useful when creating multiple Genesis environments in a long-running process.
-
-    Examples:
-        >>> from torchrl.envs.libs.genesis import genesis_cleanup
-        >>> # After done with Genesis environments
-        >>> genesis_cleanup()
     """
     if not _has_genesis:
         return
-    try:
-        import genesis as gs
+    import genesis as gs
 
-        gs.destroy()
-    except Exception:
-        pass
+    gs.destroy()
 
 
 def _get_obs_func(
@@ -160,6 +152,17 @@ class GenesisWrapper(GymLikeEnv):
     git_url = "https://github.com/Genesis-Embodied-AI/Genesis"
     libname = "genesis"
 
+    _lib = None
+
+    @_classproperty
+    def lib(cls):
+        if cls._lib is not None:
+            return cls._lib
+        import genesis
+
+        cls._lib = genesis
+        return genesis
+
     def __init__(
         self,
         scene=None,
@@ -199,12 +202,6 @@ class GenesisWrapper(GymLikeEnv):
         if not _has_genesis:
             return []
         return ["custom_scene"]
-
-    @property
-    def lib(self):
-        import genesis
-
-        return genesis
 
     def _build_env(
         self,
@@ -424,9 +421,9 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
         done_func (callable, optional): Custom done function.
         max_steps (int, optional): Max steps per episode. Defaults to 1000.
         from_pixels (bool, optional): Return pixel observations.
-            Defaults to False.
+            Defaults to `False`.
         pixels_only (bool, optional): Only return pixels if True.
-            Defaults to True.
+            Defaults to `True`.
         frame_skip (int, optional): Frame skip value. Defaults to 1.
         device (torch.device, optional): Device for tensors.
             Defaults to CPU.
@@ -493,8 +490,6 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
         self._env_name = env_name
         self._task_name = task_name
 
-        import genesis as gs
-
         scene = self._create_scene(env_name, task_name, **kwargs)
 
         super().__init__(
@@ -514,9 +509,8 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
 
     def _create_scene(self, env_name: str, task_name: str | None, **kwargs):
         """Create a Genesis scene based on environment configuration."""
-        import genesis as gs
+        gs = self.lib
 
-        # Check if Genesis is already initialized, if not init
         try:
             gs.init(backend=gs.cpu)
         except Exception:
