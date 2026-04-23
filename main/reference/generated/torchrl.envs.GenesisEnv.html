@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>GymEnv &mdash; torchrl main documentation</title>
+  <title>GenesisEnv &mdash; torchrl main documentation</title>
   
 
   
@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="GymWrapper" href="torchrl.envs.GymWrapper.html" />
-    <link rel="prev" title="GenesisWrapper" href="torchrl.envs.GenesisWrapper.html" /> 
+    <link rel="next" title="GenesisWrapper" href="torchrl.envs.GenesisWrapper.html" />
+    <link rel="prev" title="DMControlWrapper" href="torchrl.envs.DMControlWrapper.html" /> 
 
   
   <script src="../../_static/js/modernizr.min.js"></script>
@@ -218,13 +218,13 @@
         
           <li><a href="../envs_libraries.html">Library Wrappers</a> &gt;</li>
         
-      <li>GymEnv</li>
+      <li>GenesisEnv</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="../../_sources/reference/generated/torchrl.envs.GymEnv.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+            <a href="../../_sources/reference/generated/torchrl.envs.GenesisEnv.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -249,182 +249,48 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" class="pytorch-article">
               
-  <section id="gymenv">
-<h1>GymEnv<a class="headerlink" href="#gymenv" title="Link to this heading">¶</a></h1>
+  <section id="genesisenv">
+<h1>GenesisEnv<a class="headerlink" href="#genesisenv" title="Link to this heading">¶</a></h1>
 <dl class="py function">
-<dt class="sig sig-object py" id="torchrl.envs.GymEnv">
-<span class="sig-prename descclassname"><span class="pre">torchrl.envs.</span></span><span class="sig-name descname"><span class="pre">GymEnv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/libs/gym.html#GymEnv"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.GymEnv" title="Link to this definition">¶</a></dt>
-<dd><p>OpenAI Gym environment wrapper constructed by environment ID directly.</p>
-<p>Works across <a class="reference external" href="https://gymnasium.farama.org/">gymnasium</a> and <a class="reference external" href="https://github.com/openai/gym">OpenAI/gym</a>.</p>
+<dt class="sig sig-object py" id="torchrl.envs.GenesisEnv">
+<span class="sig-prename descclassname"><span class="pre">torchrl.envs.</span></span><span class="sig-name descname"><span class="pre">GenesisEnv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/libs/genesis.html#GenesisEnv"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.GenesisEnv" title="Link to this definition">¶</a></dt>
+<dd><p>Genesis environment built from a named configuration.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>env_name</strong> (<em>str</em>) – the environment id registered in <cite>gym.registry</cite>.</p></li>
-<li><p><strong>categorical_action_encoding</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, categorical
-specs will be converted to the TorchRL equivalent (<a class="reference internal" href="torchrl.data.Categorical.html#torchrl.data.Categorical" title="torchrl.data.Categorical"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.data.Categorical</span></code></a>),
-otherwise a one-hot encoding will be used (<a class="reference internal" href="torchrl.data.OneHot.html#torchrl.data.OneHot" title="torchrl.data.OneHot"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.data.OneHot</span></code></a>).
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>env_name</strong> (<em>str</em>) – registered environment name. Currently one of
+<code class="docutils literal notranslate"><span class="pre">'franka_reach'</span></code> or <code class="docutils literal notranslate"><span class="pre">'franka_grab'</span></code>.</p></li>
+<li><p><strong>task_name</strong> (<em>str</em><em>, </em><em>optional</em>) – task name; unused by the built-in configs.</p></li>
+<li><p><strong>num_workers</strong> (<em>int</em><em>, </em><em>optional</em>) – when <code class="docutils literal notranslate"><span class="pre">&gt;</span> <span class="pre">1</span></code>, returns a lazy
+<a class="reference internal" href="torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> wrapping per-worker Genesis envs.
+Defaults to <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
+<li><p><strong>max_steps</strong> (<em>int</em><em>, </em><em>optional</em>) – truncation horizon. Defaults to <code class="docutils literal notranslate"><span class="pre">1000</span></code>.</p></li>
+<li><p><strong>frame_skip</strong> (<em>int</em><em>, </em><em>optional</em>) – physics steps per env step. Defaults to <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
+<li><p><strong>from_pixels</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a default camera is added
+to the scene before it is built and a <code class="docutils literal notranslate"><span class="pre">pixels</span></code> entry is added
+to the observation. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>pixels_key</strong> (<em>str</em><em>, </em><em>optional</em>) – key for the rendered frame. Defaults to
+<code class="docutils literal notranslate"><span class="pre">&quot;pixels&quot;</span></code>.</p></li>
+<li><p><strong>pixels_res</strong> (<em>tuple</em><em>[</em><em>int</em><em>, </em><em>int</em><em>]</em><em>, </em><em>optional</em>) – <code class="docutils literal notranslate"><span class="pre">(H,</span> <span class="pre">W)</span></code> of the auto-added
+camera. Ignored when <code class="docutils literal notranslate"><span class="pre">from_pixels=False</span></code>. Defaults to
+<code class="docutils literal notranslate"><span class="pre">(320,</span> <span class="pre">320)</span></code>.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.11)"><em>torch.device</em></a><em>, </em><em>optional</em>) – torch device. When <code class="docutils literal notranslate"><span class="pre">None</span></code> (the
+default), uses <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.get_default_device.html#torch.get_default_device" title="(in PyTorch v2.11)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.get_default_device()</span></code></a> and calls
+<code class="xref py py-func docutils literal notranslate"><span class="pre">genesis.init()</span></code> with the matching backend (<code class="docutils literal notranslate"><span class="pre">gs.cpu</span></code>,
+<code class="docutils literal notranslate"><span class="pre">gs.cuda</span></code>, or <code class="docutils literal notranslate"><span class="pre">gs.metal</span></code>). If Genesis is already initialized
+with a different device, raises <code class="xref py py-class docutils literal notranslate"><span class="pre">RuntimeError</span></code>.</p></li>
+<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.11)"><em>torch.Size</em></a><em>, </em><em>optional</em>) – env batch size. Defaults to <code class="docutils literal notranslate"><span class="pre">()</span></code>.</p></li>
+<li><p><strong>allow_done_after_reset</strong> (<em>bool</em><em>, </em><em>optional</em>) – Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
-</dd>
-<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><ul class="simple">
-<li><p><strong>num_envs</strong> (<em>int</em><em>, </em><em>optional</em>) – the number of envs to run in parallel. Defaults to
-<code class="docutils literal notranslate"><span class="pre">None</span></code> (a single env is to be run). <code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncVectorEnv</span></code>
-will be used by default.</p></li>
-<li><p><strong>num_workers</strong> (<em>int</em><em>, </em><em>optional</em>) – number of top-level worker subprocesses used to create/run
-multiple <a class="reference internal" href="#torchrl.envs.GymEnv" title="torchrl.envs.GymEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">GymEnv</span></code></a> instances in parallel (handled by the metaclass
-<code class="xref py py-class docutils literal notranslate"><span class="pre">_GymAsyncMeta</span></code>). When <code class="docutils literal notranslate"><span class="pre">num_workers</span> <span class="pre">&gt;</span> <span class="pre">1</span></code>, a lazy
-<a class="reference internal" href="torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> is returned whose factory preserves the original
-<cite>GymEnv</cite> kwargs. You can modify the ParallelEnv construction/configuration before
-it starts by calling <code class="xref py py-meth docutils literal notranslate"><span class="pre">configure_parallel()</span></code>
-on the returned object (for example: <code class="docutils literal notranslate"><span class="pre">env.configure_parallel(use_buffers=True,</span> <span class="pre">num_threads=2)</span></code>).
-When both <code class="docutils literal notranslate"><span class="pre">num_workers</span></code> and <code class="docutils literal notranslate"><span class="pre">num_envs</span></code> are greater than 1, the total number of
-environments executed in parallel is <code class="docutils literal notranslate"><span class="pre">num_workers</span> <span class="pre">*</span> <span class="pre">num_envs</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
-<li><p><strong>disable_env_checker</strong> (<em>bool</em><em>, </em><em>optional</em>) – for gym &gt; 0.24 only. If <code class="docutils literal notranslate"><span class="pre">True</span></code> (default
-for these versions), the environment checker won’t be run.</p></li>
-<li><p><strong>from_pixels</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, an attempt to return the pixel
-observations from the env will be performed. By default, these observations
-will be written under the <code class="docutils literal notranslate"><span class="pre">&quot;pixels&quot;</span></code> entry.
-The method being used varies
-depending on the gym version and may involve a <code class="docutils literal notranslate"><span class="pre">wrappers.pixel_observation.PixelObservationWrapper</span></code>.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>pixels_only</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, only the pixel observations will
-be returned (by default under the <code class="docutils literal notranslate"><span class="pre">&quot;pixels&quot;</span></code> entry in the output tensordict).
-If <code class="docutils literal notranslate"><span class="pre">False</span></code>, observations (eg, states) and pixels will be returned
-whenever <code class="docutils literal notranslate"><span class="pre">from_pixels=True</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>frame_skip</strong> (<em>int</em><em>, </em><em>optional</em>) – if provided, indicates for how many steps the
-same action is to be repeated. The observation returned will be the
-last observation of the sequence, whereas the reward will be the sum
-of rewards across steps.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.11)"><em>torch.device</em></a><em>, </em><em>optional</em>) – if provided, the device on which the data
-is to be cast. Defaults to <code class="docutils literal notranslate"><span class="pre">torch.device(&quot;cpu&quot;)</span></code>.</p></li>
-<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.11)"><em>torch.Size</em></a><em>, </em><em>optional</em>) – the batch size of the environment.
-Should match the leading dimensions of all observations, done states,
-rewards, actions and infos.
-Defaults to <code class="docutils literal notranslate"><span class="pre">torch.Size([])</span></code>.</p></li>
-<li><p><strong>allow_done_after_reset</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, it is tolerated
-for envs to be <code class="docutils literal notranslate"><span class="pre">done</span></code> just after <a class="reference internal" href="torchrl.envs.ModelBasedEnvBase.html#torchrl.envs.reset" title="torchrl.envs.reset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reset()</span></code></a> is called.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-</ul>
-</dd>
-<dt class="field-odd">Variables<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>available_envs</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – the list of envs that can be built.</p>
 </dd>
 </dl>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>If an attribute cannot be found, this class will attempt to retrieve it from
-the nested env:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">GymEnv</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">max_episode_steps</span><span class="p">)</span>
-<span class="go">200</span>
-</pre></div>
-</div>
-<p>If a use-case is not covered by TorchRL, please submit an issue on GitHub.</p>
-</div>
+<p>For task-specific obs / reward / action, subclass <a class="reference internal" href="torchrl.envs.GenesisWrapper.html#torchrl.envs.GenesisWrapper" title="torchrl.envs.GenesisWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">GenesisWrapper</span></code></a>
+directly – see its docstring for the hook list.</p>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">GymEnv</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">rand_step</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        action: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        next: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">                observation: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">                reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">                truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([]),</span>
-<span class="go">            device=cpu,</span>
-<span class="go">            is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=cpu,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">available_envs</span><span class="p">)</span>
-<span class="go">[&#39;ALE/Adventure-ram-v5&#39;, &#39;ALE/Adventure-v5&#39;, &#39;ALE/AirRaid-ram-v5&#39;, &#39;ALE/AirRaid-v5&#39;, &#39;ALE/Alien-ram-v5&#39;, &#39;ALE/Alien-v5&#39;,</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">GenesisEnv</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">GenesisEnv</span><span class="p">(</span><span class="n">env_name</span><span class="o">=</span><span class="s2">&quot;franka_reach&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
 </pre></div>
-</div>
-<p>To run multiple environments in parallel:
-&gt;&gt;&gt; from torchrl.envs import GymEnv
-&gt;&gt;&gt; env = GymEnv(“Pendulum-v1”, num_workers=4)
-&gt;&gt;&gt; td_reset = env.reset()
-&gt;&gt;&gt; td = env.rand_step(td_reset)
-&gt;&gt;&gt; print(td)
-TensorDict(</p>
-<blockquote>
-<div><dl>
-<dt>fields={</dt><dd><p>action: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
-done: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-next: TensorDict(</p>
-<blockquote>
-<div><dl class="simple">
-<dt>fields={</dt><dd><p>done: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-observation: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-reward: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
-terminated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-truncated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</p>
-</dd>
-</dl>
-<p>batch_size=torch.Size([4]),
-device=None,
-is_shared=False),</p>
-</div></blockquote>
-<p>observation: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-terminated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-truncated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</p>
-</dd>
-</dl>
-<p>batch_size=torch.Size([4]),
-device=None,
-is_shared=False)</p>
-</div></blockquote>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>If both <cite>OpenAI/gym</cite> and <cite>gymnasium</cite> are present in the virtual environment,
-one can swap backend using <code class="xref py py-func docutils literal notranslate"><span class="pre">set_gym_backend()</span></code>:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">set_gym_backend</span><span class="p">,</span> <span class="n">GymEnv</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_gym_backend</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="n">env</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)</span>
-<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">_env</span><span class="p">)</span>
-<span class="go">&lt;class &#39;gym.wrappers.time_limit.TimeLimit&#39;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_gym_backend</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="n">env</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)</span>
-<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">_env</span><span class="p">)</span>
-<span class="go">&lt;class &#39;gymnasium.wrappers.time_limit.TimeLimit&#39;&gt;</span>
-</pre></div>
-</div>
-</div>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>info dictionaries will be read using <code class="xref py py-class docutils literal notranslate"><span class="pre">default_info_dict_reader</span></code>
-if no other reader is provided. To provide another reader, refer to
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">set_info_dict_reader()</span></code>. To automatically register the info_dict
-content, refer to <a class="reference internal" href="torchrl.envs.GymLikeEnv.html#torchrl.envs.GymLikeEnv.auto_register_info_dict" title="torchrl.envs.GymLikeEnv.auto_register_info_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torchrl.envs.GymLikeEnv.auto_register_info_dict()</span></code></a>.</p>
-</div>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Gym spaces are not completely covered.
-The following spaces are accounted for provided that they can be represented by a torch.Tensor, a nested tensor
-and/or within a tensordict:</p>
-<ul class="simple">
-<li><p>spaces.Box</p></li>
-<li><p>spaces.Sequence</p></li>
-<li><p>spaces.Tuple</p></li>
-<li><p>spaces.Discrete</p></li>
-<li><p>spaces.MultiBinary</p></li>
-<li><p>spaces.MultiDiscrete</p></li>
-<li><p>spaces.Dict</p></li>
-</ul>
-<p>Some considerations should be made when working with gym spaces. For instance, a tuple of spaces
-can only be supported if the spaces are semantically identical (same dtype and same number of dimensions).
-Ragged dimension can be supported through <a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#torch.nested.nested_tensor" title="(in PyTorch v2.11)"><code class="xref py py-func docutils literal notranslate"><span class="pre">nested_tensor()</span></code></a>, but then there should be only
-one level of tuple and data should be stacked along the first dimension (as nested_tensors can only be
-stacked along the first dimension).</p>
-<p>Check the example in examples/envs/gym_conversion_examples.py to know more!</p>
 </div>
 </dd></dl>
 
@@ -438,10 +304,10 @@ stacked along the first dimension).</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.envs.GymWrapper.html" class="btn btn-neutral float-right" title="GymWrapper" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.envs.GenesisWrapper.html" class="btn btn-neutral float-right" title="GenesisWrapper" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.envs.GenesisWrapper.html" class="btn btn-neutral" title="GenesisWrapper" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.envs.DMControlWrapper.html" class="btn btn-neutral" title="DMControlWrapper" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -467,8 +333,8 @@ stacked along the first dimension).</p>
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">GymEnv</a><ul>
-<li><a class="reference internal" href="#torchrl.envs.GymEnv"><code class="docutils literal notranslate"><span class="pre">GymEnv()</span></code></a></li>
+<li><a class="reference internal" href="#">GenesisEnv</a><ul>
+<li><a class="reference internal" href="#torchrl.envs.GenesisEnv"><code class="docutils literal notranslate"><span class="pre">GenesisEnv()</span></code></a></li>
 </ul>
 </li>
 </ul>
