@@ -38,9 +38,6 @@ if _has_isaac:
 _has_isaaclab = importlib.util.find_spec("isaaclab") is not None
 _has_ray = importlib.util.find_spec("ray") is not None
 
-if _has_ray:
-    import ray
-
 # Ray / process backends pickle the factory callables and import them by
 # qualified name in the child / actor process.  Locally-defined helpers in
 # this test module live at ``test_isaac.*`` which is not importable inside a
@@ -413,6 +410,8 @@ class TestIsaacLabEvaluator:
 
     @pytest.fixture(scope="function")
     def clean_ray(self):
+        import ray
+
         if dist.is_initialized():
             dist.destroy_process_group()
         ray.shutdown()
