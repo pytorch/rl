@@ -6,20 +6,14 @@
 from __future__ import annotations
 
 import importlib
-from typing import Any, Callable
+from typing import Callable
 
-import numpy as np
 import torch
 from tensordict import TensorDict
 
-from torchrl.data.tensor_specs import (
-    Categorical,
-    Composite,
-    Unbounded,
-)
+from torchrl.data.tensor_specs import Categorical, Composite, Unbounded
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs.common import _EnvPostInit
-from torchrl.envs.gym_like import GymLikeEnv
+from torchrl.envs.common import _EnvPostInit, EnvBase
 from torchrl.envs.utils import _classproperty
 
 _has_genesis = importlib.util.find_spec("genesis") is not None
@@ -40,120 +34,95 @@ def _genesis_cleanup():
     gs.destroy()
 
 
-def _to_numpy(x):
-    """Convert a Genesis output (torch.Tensor or ndarray) to a 1-D numpy array."""
-    if isinstance(x, torch.Tensor):
-        x = x.detach().cpu().numpy()
-    else:
-        x = np.asarray(x)
-    return x.reshape(-1)
+def _as_tensor(x, *, device, dtype=None) -> torch.Tensor:
+    """Coerce a Genesis output to a ``torch.Tensor`` on ``device``."""
+    if not isinstance(x, torch.Tensor):
+        x = torch.as_tensor(x)
+    if dtype is not None and x.dtype != dtype:
+        x = x.to(dtype)
+    if x.device != torch.device(device):
+        x = x.to(device)
+    return x
 
 
-def _get_obs_func(
-    scene,
-    observation_type: str = "joints",
-) -> dict[str, np.ndarray]:
-    """Extract observation from Genesis scene.
-
-    Args:
-        scene: Genesis scene object
-        observation_type: Type of observation to extract.
-            Can be 'joints' (default), 'end_effector', or a custom callable.
-
-    Returns:
-        Dictionary of observations
-    """
-    if callable(observation_type):
-        return observation_type(scene)
-
+def _default_obs_func(scene) -> dict[str, torch.Tensor]:
+    """Default observation: per-entity dof positions and velocities."""
     obs = {}
-    if observation_type == "joints":
-        for entity in scene.entities:
-            if getattr(entity, "n_dofs", 0) > 0:
-                obs[f"{entity.name}_qpos"] = _to_numpy(entity.get_dofs_position())
-                obs[f"{entity.name}_qvel"] = _to_numpy(entity.get_dofs_velocity())
-    elif observation_type == "end_effector":
-        for entity in scene.entities:
-            if hasattr(entity, "get_link"):
-                try:
-                    ee_link = entity.get_link("hand")
-                except Exception:
-                    continue
-                obs[f"{entity.name}_ee_pos"] = _to_numpy(ee_link.get_pos())
-
+    for entity in scene.entities:
+        if getattr(entity, "n_dofs", 0) > 0:
+            obs[f"{entity.name}_qpos"] = entity.get_dofs_position()
+            obs[f"{entity.name}_qvel"] = entity.get_dofs_velocity()
     if not obs:
-        obs["empty_obs"] = np.zeros(1)
+        obs["empty_obs"] = torch.zeros(1)
     return obs
 
 
 def _default_reward_func(scene) -> float:
-    """Default reward function - returns 0."""
     return 0.0
 
 
 def _default_done_func(scene, max_steps: int, current_step: int) -> bool:
-    """Default done function - done when max steps reached."""
     return current_step >= max_steps
 
 
-class GenesisWrapper(GymLikeEnv):
-    """Genesis physics simulation environment wrapper.
+def _default_action_func(scene, action: torch.Tensor) -> None:
+    """Apply ``action`` as a DoF position target on the first actuated entity."""
+    for entity in scene.entities:
+        n = getattr(entity, "n_dofs", 0)
+        if n > 0:
+            entity.control_dofs_position(action[..., :n])
+            return
 
-    Genesis is a universal physics engine designed for general-purpose
-    robotics and embodied AI applications. It provides ultra-fast physics
-    simulation and photo-realistic rendering.
+
+class GenesisWrapper(EnvBase):
+    """TorchRL wrapper around a Genesis physics scene.
+
+    Genesis is a torch-native physics engine for general-purpose robotics
+    and embodied AI. This wrapper keeps tensors on-device end-to-end: no
+    numpy round-trips, no gym-style shims.
 
     Args:
-        scene (gs.Scene): Genesis scene instance.
-        observation_func (callable, optional): A callable that takes the scene
-            as input and returns a dictionary of observations.
-            Defaults to extracting joint positions and velocities.
-        reward_func (callable, optional): A callable that takes the scene
-            as input and returns a float reward.
-            Defaults to returning 0.
-        done_func (callable, optional): A callable that takes the scene,
-            max_steps, and current_step as inputs and returns a boolean
-            indicating if the episode is done.
-            Defaults to done when max_steps is reached.
-        max_steps (int, optional): Maximum number of steps per episode.
-            Defaults to 1000.
-        from_pixels (bool, optional): If ``True``, pixel observations
-            will be returned. Defaults to ``False``.
-        pixels_only (bool, optional): If ``True``, only pixel observations
-            will be returned. Defaults to ``True``.
-        frame_skip (int, optional): Number of times to repeat each action.
-            Defaults to 1.
-        device (torch.device, optional): Device for tensor operations.
-            Defaults to CPU.
-        batch_size (torch.Size, optional): Batch size for vectorized envs.
-            Defaults to empty batch size.
-        allow_done_after_reset (bool, optional): If ``True``, allows done
-            states immediately after reset. Defaults to ``False``.
+        scene (gs.Scene): a pre-built Genesis scene.
+        observation_func (callable, optional): ``scene -> dict[str, Tensor]``.
+            Defaults to per-entity DoF position/velocity via
+            :meth:`get_dofs_position` / :meth:`get_dofs_velocity`.
+        reward_func (callable, optional): ``scene -> float | Tensor``.
+            Defaults to ``0``.
+        done_func (callable, optional): ``(scene, max_steps, current_step) -> bool | Tensor``.
+            Defaults to ``current_step >= max_steps``.
+        action_func (callable, optional): ``(scene, action) -> None``, applies the
+            action to the scene before :meth:`scene.step` is called.
+            Defaults to feeding ``action[..., :n_dofs]`` of the first actuated
+            entity as a position target via :meth:`control_dofs_position`.
+        max_steps (int, optional): truncation horizon. Defaults to ``1000``.
+        frame_skip (int, optional): physics steps per env step. Defaults to ``1``.
+        device (torch.device, optional): torch device for returned tensors.
+            Defaults to ``"cpu"``.
+        batch_size (torch.Size, optional): batch size for the env. Should match
+            the ``n_envs`` passed to :meth:`scene.build`. Defaults to ``()``.
+        allow_done_after_reset (bool, optional): passed through to
+            :class:`~torchrl.envs.EnvBase`. Defaults to ``False``.
 
     Examples:
         >>> import genesis as gs
         >>> from torchrl.envs import GenesisWrapper
-        >>> # Initialize Genesis
         >>> gs.init(backend=gs.cpu)
-        >>> # Create scene
         >>> scene = gs.Scene()
         >>> plane = scene.add_entity(gs.morphs.Plane())
         >>> franka = scene.add_entity(
         ...     gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml")
         ... )
         >>> scene.build()
-        >>> # Wrap with TorchRL
         >>> env = GenesisWrapper(scene)
-        >>> td = env.rand_step()
-        >>> print(td)
-        >>> # Or use with custom observation/reward functions:
+        >>> td = env.rollout(10)
+        >>> # Or with custom obs / reward / action:
         >>> def custom_obs(scene):
-        ...     return {"joint_pos": franka.get_dofs_position().cpu().numpy()}
+        ...     return {"joint_pos": franka.get_dofs_position()}
         >>> def custom_reward(scene):
-        ...     qpos = franka.get_dofs_position().cpu().numpy()
-        ...     return -float(np.linalg.norm(qpos))
-        >>> env = GenesisWrapper(scene, observation_func=custom_obs,
-        ...                      reward_func=custom_reward)
+        ...     return -franka.get_dofs_position().norm()
+        >>> env = GenesisWrapper(
+        ...     scene, observation_func=custom_obs, reward_func=custom_reward
+        ... )
     """
 
     git_url = "https://github.com/Genesis-Embodied-AI/Genesis"
@@ -176,33 +145,39 @@ class GenesisWrapper(GymLikeEnv):
         observation_func: Callable | None = None,
         reward_func: Callable | None = None,
         done_func: Callable | None = None,
+        action_func: Callable | None = None,
         max_steps: int = 1000,
-        from_pixels: bool = False,
-        pixels_only: bool = True,
         frame_skip: int = 1,
         device: DEVICE_TYPING = "cpu",
         batch_size: torch.Size | None = None,
         allow_done_after_reset: bool = False,
-        **kwargs,
     ):
-        if scene is not None:
-            kwargs["scene"] = scene
-        if observation_func is not None:
-            kwargs["observation_func"] = observation_func
-        if reward_func is not None:
-            kwargs["reward_func"] = reward_func
-        if done_func is not None:
-            kwargs["done_func"] = done_func
-        kwargs["max_steps"] = max_steps
-        kwargs["from_pixels"] = from_pixels
-        kwargs["pixels_only"] = pixels_only
+        if scene is None:
+            raise TypeError("GenesisWrapper requires a 'scene' argument.")
+        if not hasattr(scene, "step"):
+            raise TypeError("scene does not have a 'step' method.")
+
+        if batch_size is None:
+            batch_size = torch.Size([])
+        else:
+            batch_size = torch.Size(batch_size)
+
         super().__init__(
             device=device,
             batch_size=batch_size,
-            frame_skip=frame_skip,
             allow_done_after_reset=allow_done_after_reset,
-            **kwargs,
         )
+
+        self._scene = scene
+        self._observation_func = observation_func or _default_obs_func
+        self._reward_func = reward_func or _default_reward_func
+        self._done_func = done_func or _default_done_func
+        self._action_func = action_func or _default_action_func
+        self._max_steps = max_steps
+        self._frame_skip = frame_skip
+        self._current_step = 0
+
+        self._make_specs()
 
     @_classproperty
     def available_envs(cls):
@@ -210,49 +185,26 @@ class GenesisWrapper(GymLikeEnv):
             return []
         return ["custom_scene"]
 
-    def _build_env(
-        self,
-        scene,
-        observation_func: Callable | None = None,
-        reward_func: Callable | None = None,
-        done_func: Callable | None = None,
-        max_steps: int = 1000,
-        from_pixels: bool = False,
-        pixels_only: bool = True,
-        **kwargs,
-    ):
-        self._scene = scene
-        self._observation_func = observation_func or _get_obs_func
-        self._reward_func = reward_func or _default_reward_func
-        self._done_func = done_func or _default_done_func
-        self._max_steps = max_steps
-        self._current_step = 0
-        self._from_pixels = from_pixels
-        self._pixels_only = pixels_only
-        return scene
-
-    def _make_specs(self, env) -> None:
+    def _make_specs(self) -> None:
         dummy_obs = self._observation_func(self._scene)
-        if isinstance(dummy_obs, dict):
-            self.observation_spec = Composite(
-                **{
-                    k: Unbounded(shape=v.shape, dtype=torch.float32)
-                    for k, v in dummy_obs.items()
-                },
-                shape=self.batch_size,
+        if not isinstance(dummy_obs, dict):
+            dummy_obs = {"observation": dummy_obs}
+
+        obs_entries = {}
+        for k, v in dummy_obs.items():
+            t = _as_tensor(v, device=self.device)
+            event_shape = t.shape[len(self.batch_size) :]
+            obs_entries[k] = Unbounded(
+                shape=(*self.batch_size, *event_shape),
+                dtype=t.dtype if t.is_floating_point() else torch.float32,
                 device=self.device,
             )
-        else:
-            self.observation_spec = Composite(
-                observation=Unbounded(shape=dummy_obs.shape, dtype=torch.float32),
-                shape=self.batch_size,
-                device=self.device,
-            )
+        self.observation_spec = Composite(
+            **obs_entries, shape=self.batch_size, device=self.device
+        )
 
         self.reward_spec = Unbounded(
-            shape=(*self.batch_size, 1),
-            dtype=torch.float32,
-            device=self.device,
+            shape=(*self.batch_size, 1), dtype=torch.float32, device=self.device
         )
 
         done_spec = Categorical(
@@ -262,130 +214,99 @@ class GenesisWrapper(GymLikeEnv):
             done=done_spec.clone(),
             truncated=done_spec.clone(),
             terminated=done_spec.clone(),
+            shape=self.batch_size,
             device=self.device,
         )
 
-        action_dim = 7
+        action_dim = 0
         for entity in self._scene.entities:
-            if hasattr(entity, "n_dofs"):
-                action_dim = max(action_dim, entity.n_dofs)
-            elif hasattr(entity, "qpos"):
-                try:
-                    action_dim = max(action_dim, len(entity.qpos))
-                except TypeError:
-                    pass
-
+            n = getattr(entity, "n_dofs", 0)
+            if n > action_dim:
+                action_dim = n
+        if action_dim == 0:
+            action_dim = 1
         self.action_spec = Unbounded(
             shape=(*self.batch_size, action_dim),
             dtype=torch.float32,
             device=self.device,
         )
 
-    def _check_kwargs(self, kwargs: dict):
-        if "scene" not in kwargs:
-            raise TypeError("Could not find scene key 'scene' in kwargs.")
-        scene = kwargs["scene"]
-        if not hasattr(scene, "step"):
-            raise TypeError("scene does not have a 'step' method.")
+    def _obs_as_tensordict(self) -> dict[str, torch.Tensor]:
+        obs = self._observation_func(self._scene)
+        if not isinstance(obs, dict):
+            obs = {"observation": obs}
+        return {k: _as_tensor(v, device=self.device) for k, v in obs.items()}
 
-    def _init_env(self, seed: int | None = None) -> int | None:
+    def _reset(self, tensordict=None, **kwargs):
         self._current_step = 0
-        return seed
-
-    def _set_seed(self, _seed: int | None) -> None:
-        if _seed is None:
-            return
-        self._current_step = 0
+        out = TensorDict(
+            self._obs_as_tensordict(),
+            batch_size=self.batch_size,
+            device=self.device,
+        )
+        return out
 
     def _step(self, tensordict):
-        if len(self.action_keys) == 1:
-            action = tensordict[self.action_key]
-        else:
-            action = tensordict.select(*self.action_keys).to_dict()
+        action = tensordict.get(self.action_key)
+        if not isinstance(action, torch.Tensor):
+            action = torch.as_tensor(action, device=self.device)
 
-        if self._convert_actions_to_numpy:
-            action = self.read_action(action)
-
-        if isinstance(action, torch.Tensor):
-            action_np = action.cpu().numpy()
-        elif isinstance(action, dict):
-            action_np = {
-                k: v.cpu().numpy() if isinstance(v, torch.Tensor) else v
-                for k, v in action.items()
-            }
-        else:
-            action_np = action
-
-        reward = 0
-        for _ in range(self.wrapper_frame_skip):
+        reward = torch.zeros(
+            *self.batch_size, 1, dtype=torch.float32, device=self.device
+        )
+        for _ in range(self._frame_skip):
+            self._action_func(self._scene, action)
             self._scene.step()
             self._current_step += 1
             r = self._reward_func(self._scene)
             if r is not None:
-                reward = reward + r
+                reward = reward + _as_tensor(
+                    r, device=self.device, dtype=torch.float32
+                ).reshape(*self.batch_size, 1)
 
-        obs = self._observation_func(self._scene)
-        terminated = False
-        truncated = self._done_func(self._scene, self._max_steps, self._current_step)
-        done = terminated or truncated
+        terminated = torch.zeros(
+            *self.batch_size, 1, dtype=torch.bool, device=self.device
+        )
+        truncated = _as_tensor(
+            self._done_func(self._scene, self._max_steps, self._current_step),
+            device=self.device,
+            dtype=torch.bool,
+        ).reshape(*self.batch_size, 1)
+        done = terminated | truncated
 
-        reward = self.read_reward(reward)
-        obs_dict = self.read_obs(obs)
-        obs_dict[self.reward_key] = reward
+        return TensorDict(
+            {
+                **self._obs_as_tensordict(),
+                "reward": reward,
+                "done": done,
+                "terminated": terminated,
+                "truncated": truncated,
+            },
+            batch_size=self.batch_size,
+            device=self.device,
+        )
 
-        if isinstance(done, torch.Tensor):
-            terminated = done.clone()
-        else:
-            terminated = torch.tensor(terminated)
-        if isinstance(truncated, torch.Tensor):
-            truncated = truncated.clone()
-        else:
-            truncated = torch.tensor(truncated)
-        if isinstance(done, torch.Tensor):
-            done = done.clone()
-        else:
-            done = torch.tensor(done)
-        obs_dict["truncated"] = truncated
-        obs_dict["done"] = done
-        obs_dict["terminated"] = terminated
-
-        tensordict_out = TensorDict(obs_dict, batch_size=tensordict.batch_size)
-
-        if self.device is not None:
-            tensordict_out = tensordict_out.to(self.device)
-
-        return tensordict_out
-
-    def _reset(self, tensordict=None, **kwargs):
+    def _set_seed(self, seed: int | None) -> None:
+        if seed is None:
+            return
+        torch.manual_seed(seed)
         self._current_step = 0
-        obs = self._observation_func(self._scene)
-        source = self.read_obs(obs)
-        tensordict_out = TensorDict(source=source, batch_size=self.batch_size)
-        if self.device is not None:
-            tensordict_out = tensordict_out.to(self.device)
-        return tensordict_out
-
-    def _output_transform(self, step_outputs_tuple) -> tuple:
-        obs, reward, terminated, truncated, done, info = step_outputs_tuple
-        return obs, reward, terminated, truncated, done, info
-
-    def _reset_output_transform(self, reset_data):
-        return reset_data, {}
 
     def close(self, *, raise_if_closed: bool = True) -> None:
-        if hasattr(self, "_scene") and self._scene is not None:
-            try:
-                self._scene.destroy()
-            except Exception:
-                pass
+        scene = getattr(self, "_scene", None)
+        if scene is not None and hasattr(scene, "destroy"):
+            scene.destroy()
         super().close(raise_if_closed=raise_if_closed)
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(scene={type(self._scene).__name__}, batch_size={self.batch_size})"
+        return (
+            f"{self.__class__.__name__}("
+            f"scene={type(self._scene).__name__}, batch_size={self.batch_size})"
+        )
 
 
 class _GenesisEnvMeta(_EnvPostInit):
-    """Metaclass for GenesisEnv that returns a lazy ParallelEnv when num_workers > 1."""
+    """Return a lazy ParallelEnv when ``num_workers > 1``."""
 
     def __call__(cls, *args, num_workers: int | None = None, **kwargs):
         if num_workers is None:
@@ -413,52 +334,27 @@ class _GenesisEnvMeta(_EnvPostInit):
 
 
 class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
-    """Genesis physics simulation environment.
-
-    Creates a Genesis scene from configuration and wraps it with TorchRL.
+    """Genesis environment built from a named configuration.
 
     Args:
-        env_name (str): Name of the environment configuration.
-            Currently supports 'franka_reach', 'franka_grab', etc.
-        task_name (str, optional): Task name for the environment.
-        num_workers (int, optional): Number of parallel environments.
-            When > 1, returns a lazy ParallelEnv. Defaults to 1.
-        observation_func (callable, optional): Custom observation function.
-        reward_func (callable, optional): Custom reward function.
-        done_func (callable, optional): Custom done function.
-        max_steps (int, optional): Max steps per episode. Defaults to 1000.
-        from_pixels (bool, optional): Return pixel observations.
-            Defaults to `False`.
-        pixels_only (bool, optional): Only return pixels if True.
-            Defaults to `True`.
-        frame_skip (int, optional): Frame skip value. Defaults to 1.
-        device (torch.device, optional): Device for tensors.
-            Defaults to CPU.
-        batch_size (torch.Size, optional): Batch size. Defaults to ().
-        allow_done_after_reset (bool, optional): Allow done after reset.
-            Defaults to False.
+        env_name (str): registered environment name. Currently one of
+            ``'franka_reach'`` or ``'franka_grab'``.
+        task_name (str, optional): task name; unused by the built-in configs.
+        num_workers (int, optional): when ``> 1``, returns a lazy
+            :class:`~torchrl.envs.ParallelEnv` wrapping per-worker Genesis envs.
+            Defaults to ``1``.
+        observation_func, reward_func, done_func, action_func: see
+            :class:`GenesisWrapper`.
+        max_steps (int, optional): truncation horizon. Defaults to ``1000``.
+        frame_skip (int, optional): physics steps per env step. Defaults to ``1``.
+        device (torch.device, optional): torch device. Defaults to ``"cpu"``.
+        batch_size (torch.Size, optional): env batch size. Defaults to ``()``.
+        allow_done_after_reset (bool, optional): Defaults to ``False``.
 
     Examples:
         >>> from torchrl.envs import GenesisEnv
         >>> env = GenesisEnv(env_name="franka_reach")
-        >>> td = env.rand_step()
-        >>> print(td)
-        TensorDict(
-            fields={
-                action: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.float32, is_shared=False),
-                next: TensorDict(
-                    fields={
-                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
-                        empty_obs: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
-                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
-                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
-                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
-                    batch_size=torch.Size([]),
-                    device=cpu,
-                    is_shared=False)},
-            batch_size=torch.Size([]),
-            device=cpu,
-            is_shared=False)
+        >>> td = env.rollout(10)
     """
 
     _ENV_CONFIGS = {
@@ -480,63 +376,56 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
         observation_func: Callable | None = None,
         reward_func: Callable | None = None,
         done_func: Callable | None = None,
+        action_func: Callable | None = None,
         max_steps: int = 1000,
-        from_pixels: bool = False,
-        pixels_only: bool = True,
         frame_skip: int = 1,
         device: DEVICE_TYPING = "cpu",
         batch_size: torch.Size | None = None,
         allow_done_after_reset: bool = False,
-        **kwargs,
+        **scene_kwargs,
     ):
         if not _has_genesis:
             raise ImportError(
-                "genesis python package was not found. Please install it with: pip install genesis-world"
+                "genesis python package was not found. "
+                "Please install it with: pip install genesis-world"
             )
 
         self._env_name = env_name
         self._task_name = task_name
 
-        scene = self._create_scene(env_name, task_name, **kwargs)
+        scene = self._create_scene(env_name, task_name, **scene_kwargs)
 
         super().__init__(
             scene=scene,
             observation_func=observation_func,
             reward_func=reward_func,
             done_func=done_func,
+            action_func=action_func,
             max_steps=max_steps,
-            from_pixels=from_pixels,
-            pixels_only=pixels_only,
             frame_skip=frame_skip,
             device=device,
             batch_size=batch_size,
             allow_done_after_reset=allow_done_after_reset,
-            **kwargs,
         )
 
     def _create_scene(self, env_name: str, task_name: str | None, **kwargs):
-        """Create a Genesis scene based on environment configuration."""
         gs = self.lib
 
         try:
             gs.init(backend=gs.cpu)
         except Exception:
-            pass  # Already initialized
+            pass  # already initialized
 
         scene = gs.Scene()
 
         if env_name == "franka_reach":
-            plane = scene.add_entity(gs.morphs.Plane())
-            franka = scene.add_entity(
-                gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml")
-            )
+            scene.add_entity(gs.morphs.Plane())
+            scene.add_entity(gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml"))
             scene.build()
         elif env_name == "franka_grab":
-            plane = scene.add_entity(gs.morphs.Plane())
-            franka = scene.add_entity(
-                gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml")
-            )
-            box = scene.add_entity(
+            scene.add_entity(gs.morphs.Plane())
+            scene.add_entity(gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml"))
+            scene.add_entity(
                 gs.morphs.Box(size=(0.05, 0.05, 0.05), pos=(0.5, 0, 0.05))
             )
             scene.build()
@@ -548,51 +437,9 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
 
         return scene
 
-    def _build_env(
-        self,
-        env_name: str | None = None,
-        task_name: str | None = None,
-        _seed: int | None = None,
-        **kwargs,
-    ):
-        # Get env_name from instance if not provided
-        if env_name is None:
-            env_name = getattr(self, "env_name", None) or getattr(
-                self, "_env_name", None
-            )
-        if task_name is None:
-            task_name = getattr(self, "task_name", None) or getattr(
-                self, "_task_name", None
-            )
-
-        from_pixels = kwargs.get("from_pixels", False)
-        pixels_only = kwargs.get("pixels_only", True)
-
-        if "from_pixels" in kwargs:
-            del kwargs["from_pixels"]
-        if "pixels_only" in kwargs:
-            del kwargs["pixels_only"]
-
-        if env_name is None:
-            raise TypeError("GenesisEnv requires env_name to be specified")
-
-        self.env_name = env_name
-        self.task_name = task_name
-
-        if not _has_genesis:
-            raise ImportError(
-                f"genesis not found, unable to create {env_name}:"
-                f" {task_name}. Consider installing from {self.git_url}"
-            )
-
-        scene = self._create_scene(env_name, task_name)
-        kwargs["scene"] = scene
-        return super()._build_env(**kwargs)
-
-    def _check_kwargs(self, kwargs: dict):
-        # env_name can be in kwargs or already set as instance attribute
-        if "env_name" not in kwargs and not hasattr(self, "_env_name"):
-            raise TypeError("GenesisEnv requires env_name to be specified")
-
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(env={self.env_name}, task={self.task_name}, batch_size={self.batch_size})"
+        return (
+            f"{self.__class__.__name__}("
+            f"env={self._env_name}, task={self._task_name}, "
+            f"batch_size={self.batch_size})"
+        )

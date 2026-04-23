@@ -6,11 +6,22 @@ from __future__ import annotations
 
 import argparse
 
-import numpy as np
 import pytest
 import torch
 
 from torchrl.envs.libs.genesis import _has_genesis, GenesisEnv, GenesisWrapper
+from torchrl.envs.utils import check_env_specs
+
+
+def _franka_scene():
+    import genesis as gs
+
+    gs.init(backend=gs.cpu)
+    scene = gs.Scene()
+    scene.add_entity(gs.morphs.Plane())
+    scene.add_entity(gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml"))
+    scene.build()
+    return scene
 
 
 @pytest.mark.skipif(not _has_genesis, reason="Genesis not found")
@@ -23,81 +34,38 @@ class TestGenesis:
         envs = GenesisEnv.available_envs
         assert isinstance(envs, list)
 
-    def test_genesis_wrapper_basic(self):
-        import genesis as gs
-
-        gs.init(backend=gs.cpu)
-        scene = gs.Scene()
-        plane = scene.add_entity(gs.morphs.Plane())
-        scene.build()
-
+    def test_genesis_wrapper_reset_step(self):
+        scene = _franka_scene()
         env = GenesisWrapper(scene)
         try:
             td = env.reset()
-            assert "observation" in td.keys()
-        finally:
-            env.close()
-
-    def test_genesis_wrapper_step(self):
-        import genesis as gs
-
-        gs.init(backend=gs.cpu)
-        scene = gs.Scene()
-        plane = scene.add_entity(gs.morphs.Plane())
-        scene.build()
-
-        env = GenesisWrapper(scene)
-        try:
-            td = env.reset()
+            assert any(k.endswith("qpos") for k in td.keys())
             td = env.rand_step(td)
             assert "next" in td.keys()
-            assert "observation" in td["next"].keys()
             assert "reward" in td["next"].keys()
             assert "done" in td["next"].keys()
         finally:
             env.close()
 
     def test_genesis_wrapper_specs(self):
-        import genesis as gs
-
-        gs.init(backend=gs.cpu)
-        scene = gs.Scene()
-        plane = scene.add_entity(gs.morphs.Plane())
-        scene.build()
-
+        scene = _franka_scene()
         env = GenesisWrapper(scene)
         try:
-            env.reset()
-            assert env.observation_spec is not None
-            assert env.action_spec is not None
-            assert env.reward_spec is not None
-            assert env.done_spec is not None
+            check_env_specs(env)
         finally:
             env.close()
 
-    def test_genesis_wrapper_batch_size(self):
-        import genesis as gs
-
-        gs.init(backend=gs.cpu)
-        scene = gs.Scene()
-        plane = scene.add_entity(gs.morphs.Plane())
-        scene.build()
-
-        env = GenesisWrapper(scene, batch_size=torch.Size([2]))
+    def test_genesis_wrapper_rollout(self):
+        scene = _franka_scene()
+        env = GenesisWrapper(scene, max_steps=10)
         try:
-            td = env.reset()
-            assert td.batch_size[0] == 2
+            td = env.rollout(5)
+            assert td.batch_size == (5,)
         finally:
             env.close()
 
     def test_genesis_wrapper_frame_skip(self):
-        import genesis as gs
-
-        gs.init(backend=gs.cpu)
-        scene = gs.Scene()
-        plane = scene.add_entity(gs.morphs.Plane())
-        scene.build()
-
+        scene = _franka_scene()
         env = GenesisWrapper(scene, frame_skip=4)
         try:
             td = env.reset()
@@ -107,29 +75,22 @@ class TestGenesis:
             env.close()
 
     def test_genesis_custom_functions(self):
-        import genesis as gs
-
-        gs.init(backend=gs.cpu)
-        scene = gs.Scene()
-        plane = scene.add_entity(gs.morphs.Plane())
-        scene.build()
+        scene = _franka_scene()
 
         def custom_obs(scene):
-            return {"custom_obs": np.array([1.0, 2.0, 3.0])}
+            return {"custom_obs": torch.tensor([1.0, 2.0, 3.0])}
 
         def custom_reward(scene):
             return 1.0
 
         env = GenesisWrapper(
-            scene,
-            observation_func=custom_obs,
-            reward_func=custom_reward,
+            scene, observation_func=custom_obs, reward_func=custom_reward
         )
         try:
             td = env.reset()
-            assert "custom_obs" in td["observation"].keys()
+            assert "custom_obs" in td.keys()
             td = env.rand_step(td)
-            assert "custom_obs" in td["next"]["observation"].keys()
+            assert td["next", "reward"].item() == pytest.approx(1.0)
         finally:
             env.close()
 
