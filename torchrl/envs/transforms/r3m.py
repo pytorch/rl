@@ -39,7 +39,14 @@ class _R3MNet(Transform):
 
     inplace = False
 
-    def __init__(self, in_keys, out_keys, model_name, del_keys: bool = True):
+    def __init__(
+        self,
+        in_keys,
+        out_keys,
+        model_name,
+        del_keys: bool = True,
+        requires_grad: bool = False,
+    ):
         if not _has_tv:
             raise ImportError(
                 "Tried to instantiate R3M without torchvision. Make sure you have "
@@ -68,6 +75,7 @@ class _R3MNet(Transform):
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.convnet = convnet
         self.del_keys = del_keys
+        self.requires_grad = requires_grad
 
     @set_lazy_legacy(False)
     def _call(self, next_tensordict):
@@ -87,13 +95,16 @@ class _R3MNet(Transform):
             tensordict_reset = self._call(tensordict_reset)
         return tensordict_reset
 
-    @torch.no_grad()
     def _apply_transform(self, obs: torch.Tensor) -> None:
         shape = None
         if obs.ndimension() > 4:
             shape = obs.shape[:-3]
             obs = obs.flatten(0, -4)
-        out = self.convnet(obs)
+        if self.requires_grad:
+            out = self.convnet(obs)
+        else:
+            with torch.no_grad():
+                out = self.convnet(obs)
         if shape is not None:
             out = out.view(*shape, *out.shape[1:])
         return out
@@ -220,6 +231,10 @@ class R3MTransform(Compose):
         tensor_pixels_keys (list of str, optional): Optionally, one can keep the
             original images (as collected from the env) in the output tensordict.
             If no value is provided, this won't be collected.
+        requires_grad (bool, optional): if ``True``, gradients will flow through
+            the R3M encoder, allowing it to be fine-tuned as part of a policy.
+            Defaults to ``False`` (no_grad, frozen encoder) to preserve the
+            original behaviour.
     """
 
     @classmethod
@@ -239,6 +254,7 @@ class R3MTransform(Compose):
         download: bool | WeightsEnum | str = False,  # noqa: F821
         download_path: str | None = None,
         tensor_pixels_keys: list[str] = None,
+        requires_grad: bool = False,
     ):
         super().__init__()
         self.in_keys = in_keys if in_keys is not None else ["pixels"]
@@ -249,6 +265,7 @@ class R3MTransform(Compose):
         self.size = size
         self.stack_images = stack_images
         self.tensor_pixels_keys = tensor_pixels_keys
+        self.requires_grad = requires_grad
         self._init()
 
     def _init(self):
@@ -329,6 +346,7 @@ class R3MTransform(Compose):
                 out_keys=out_keys,
                 model_name=model_name,
                 del_keys=False,
+                requires_grad=self.requires_grad,
             )
             flatten = FlattenObservation(-2, -1, out_keys)
             transforms = [*transforms, cattensors, network, flatten]
@@ -339,6 +357,7 @@ class R3MTransform(Compose):
                 out_keys=out_keys,
                 model_name=model_name,
                 del_keys=True,
+                requires_grad=self.requires_grad,
             )
             transforms = [*transforms, network]
 

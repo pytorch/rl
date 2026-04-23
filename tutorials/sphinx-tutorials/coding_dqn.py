@@ -105,7 +105,7 @@ import uuid
 
 import torch
 from torch import nn
-from torchrl.collectors import MultiaSyncDataCollector, SyncDataCollector
+from torchrl.collectors import Collector, MultiAsyncCollector
 from torchrl.data import LazyMemmapStorage, MultiStep, TensorDictReplayBuffer
 from torchrl.envs import (
     EnvCreator,
@@ -398,7 +398,7 @@ def get_replay_buffer(buffer_size, n_optim, batch_size, device):
 #   This feature is only available when running the code within the "spawn"
 #   start method of python multiprocessing library. If this tutorial is run
 #   directly as a script (thereby using the "fork" method) we will be using
-#   a regular :class:`~torchrl.collectors.SyncDataCollector`.
+#   a regular :class:`~torchrl.collectors.Collector`.
 #
 # The advantage of this configuration is that we can balance the amount of
 # compute that is executed in batch with what we want to be executed
@@ -430,10 +430,10 @@ def get_collector(
 ):
     # We can't use nested child processes with mp_start_method="fork"
     if is_fork:
-        cls = SyncDataCollector
+        cls = Collector
         env_arg = make_env(parallel=True, obs_norm_sd=stats, num_workers=num_workers)
     else:
-        cls = MultiaSyncDataCollector
+        cls = MultiAsyncCollector
         env_arg = [
             make_env(parallel=True, obs_norm_sd=stats, num_workers=num_workers)
         ] * num_collectors

@@ -17,6 +17,7 @@ Samplers control how data is retrieved from the replay buffer storage.
     SamplerWithoutReplacement
     SliceSampler
     SliceSamplerWithoutReplacement
+    StalenessAwareSampler
 
 Writers
 -------

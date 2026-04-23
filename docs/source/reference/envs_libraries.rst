@@ -130,7 +130,7 @@ current episode.
 
 To handle these cases, torchrl provides a :class:`~torchrl.envs.AutoResetTransform` that will copy the observations
 that result from the call to `step` to the next `reset` and skip the calls to `reset` during rollouts (in both
-:meth:`~torchrl.envs.EnvBase.rollout` and :class:`~torchrl.collectors.SyncDataCollector` iterations).
+:meth:`~torchrl.envs.EnvBase.rollout` and :class:`~torchrl.collectors.Collector` iterations).
 This transform class also provides a fine-grained control over the behavior to be adopted for the invalid observations,
 which can be masked with `"nan"` or any other values, or not masked at all.
 

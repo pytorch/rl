@@ -7,7 +7,7 @@ defaults:
 
 # Environment configuration
 env:
-  dataset: gsm8k  # choices: [gsm8k, ifeval]
+  dataset: gsm8k  # choices: [gsm8k, ifeval, math, countdown]
   # Number of environments to run in parallel. This determines the batch size passed to vLLM.
   # More envs do not consume more GPU memory but there will be a sync on the call to vLLM.
   num_envs: 32
@@ -83,19 +83,20 @@ train_model:
     dropout: 0.1  # Dropout probability for LoRA layers
   quantization:
     enabled: false  # Enable 4-bit quantization for base model
-  attn_implementation: sdpa  # Using flash attention for memory efficiency
+  attn_implementation: flash_attention_2
   torch_dtype: bfloat16
 
 # Inference model configuration
 inference_model:
+  backend: "vllm"  # Inference backend: "vllm" or "sglang"
   num_devices: 1  # Number of devices to use
   quantization:
     enabled: false  # Enable 4-bit quantization for base model
-  attn_implementation: sdpa  # Using flash attention for memory efficiency
+  attn_implementation: flash_attention_2
   torch_dtype: bfloat16
   gpu_memory_utilization: 0.9  # Limit GPU memory usage
   temperature: 1.0
-  top_p: 0.95
+  top_p: 1.0
   max_tokens: 1024
   include_stop_str_in_output: true
   enforce_eager: false
@@ -113,7 +114,7 @@ ref_model:
     dropout: 0.1  # Dropout probability for LoRA layers
   quantization:
     enabled: false  # Enable 4-bit quantization for base model
-  attn_implementation: sdpa  # Using flash attention for memory efficiency
+  attn_implementation: flash_attention_2
   torch_dtype: bfloat16
 
 # Optimizer configuration
@@ -133,7 +134,7 @@ ray:
     _temp_dir: "/tmp/ray_grpo"  # Custom temp directory
     _system_config:
       object_spilling_threshold: 0.8  # Spill when 80% full
-      max_direct_memory_size: 10 * 1024 * 1024 * 1024  # 10GB limit
+      max_direct_memory_size: 10737418240  # 10GB limit
       object_store_full_delay_ms: 100  # Delay when store is full
       object_store_full_max_retries: 3  # Max retries when store is full
   collector_config:

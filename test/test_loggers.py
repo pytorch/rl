@@ -18,11 +18,14 @@ from packaging import version
 from tensordict import MemoryMappedTensor
 
 from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
+from torchrl.record.loggers.common import _has_torchcodec, _has_tv
 from torchrl.record.loggers.csv import CSVLogger
-from torchrl.record.loggers.mlflow import _has_mlflow, _has_tv, MLFlowLogger
+from torchrl.record.loggers.mlflow import _has_mlflow, MLFlowLogger
+from torchrl.record.loggers.ray import RayLogger
 from torchrl.record.loggers.tensorboard import _has_tb, TensorboardLogger
 from torchrl.record.loggers.trackio import _has_trackio, TrackioLogger
-from torchrl.record.loggers.wandb import _has_wandb, WandbLogger
+from torchrl.record.loggers.utils import get_logger
+from torchrl.record.loggers.wandb import _has_moviepy, _has_wandb, WandbLogger
 from torchrl.record.recorder import PixelRenderTransform, VideoRecorder
 
 if _has_tv:
@@ -34,12 +37,17 @@ if _has_tv:
 else:
     TORCHVISION_VERSION = version.parse("0.0.1")
 
+_has_mp4 = (
+    _has_tv and version.parse("0.20") <= TORCHVISION_VERSION < version.parse("0.22")
+) or _has_torchcodec
+
 if _has_tb:
     from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
 if _has_mlflow:
     import mlflow
 
+_has_ray = importlib.util.find_spec("ray") is not None
 _has_gym = (
     importlib.util.find_spec("gym", None) is not None
     or importlib.util.find_spec("gymnasium", None) is not None
@@ -102,7 +110,10 @@ class TestTensorboard:
         # C - number of image channels (e.g. 3 for RGB), H, W - image dimensions.
         # the first 64 frames are black and the next 64 are white
         video = torch.cat(
-            (torch.zeros(64, 1, 32, 32), torch.full((64, 1, 32, 32), 255))
+            (
+                torch.zeros(64, 1, 32, 32, dtype=torch.uint8),
+                torch.full((64, 1, 32, 32), 255, dtype=torch.uint8),
+            )
         )
         video = video[None, :]
         for i in range(3):
@@ -170,10 +181,7 @@ class TestCSVLogger:
 
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
     @pytest.mark.parametrize(
-        "video_format", ["pt", "memmap"] + ["mp4"] if _has_tv else []
-    )
-    @pytest.mark.skipif(
-        TORCHVISION_VERSION < version.parse("0.20.0"), reason="av compatibility bug"
+        "video_format", ["pt", "memmap"] + (["mp4"] if _has_mp4 else [])
     )
     def test_log_video(self, steps, video_format, tmpdir):
         torch.manual_seed(0)
@@ -217,11 +225,18 @@ class TestCSVLogger:
             )
             assert torch.equal(video, logged_video), logged_video
         elif video_format == "mp4":
-            import torchvision
+            if _has_torchcodec:
+                from torchcodec.decoders import VideoDecoder
 
-            logged_video = torchvision.io.read_video(path, output_format="TCHW")[0][
-                :, :1
-            ]
+                logged_video = (
+                    VideoDecoder(path)
+                    .get_frames_in_range(start=0, stop=128)
+                    .data[:, :1]
+                )
+            else:
+                logged_video = torchvision.io.read_video(path, output_format="TCHW")[0][
+                    :, :1
+                ]
             logged_video = logged_video.unsqueeze(0)
             torch.testing.assert_close(video, logged_video)
 
@@ -259,34 +274,70 @@ class TestCSVLogger:
 
 @pytest.fixture(scope="class")
 def wandb_logger(tmp_path_factory):
+    import wandb
+
+    wandb.finish()
     tmpdir1 = tmp_path_factory.mktemp("tmpdir1")
     exp_name = "ramala"
     logger = WandbLogger(log_dir=tmpdir1, exp_name=exp_name, offline=True)
     yield logger
     logger.experiment.finish()
+    wandb.finish()
+    del logger
+
+
+@pytest.fixture
+def wandb_tmp_logger(tmp_path):
+    import wandb
+
+    wandb.finish()
+    logger = WandbLogger(log_dir=tmp_path, exp_name="ramala", offline=True)
+    yield logger
+    logger.experiment.finish()
+    wandb.finish()
     del logger
 
 
 @pytest.mark.skipif(not _has_wandb, reason="Wandb not installed")
 class TestWandbLogger:
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
-    def test_log_scalar(self, steps, wandb_logger):
+    def test_log_scalar(self, steps, wandb_tmp_logger, monkeypatch):
         torch.manual_seed(0)
+
+        logged = []
+        defined = []
+
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "log",
+            lambda payload, **kwargs: logged.append((payload, kwargs)),
+        )
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "define_metric",
+            lambda name, step_metric=None: defined.append((name, step_metric)),
+        )
 
         values = torch.rand(3)
         for i in range(3):
             scalar_name = "foo"
             scalar_value = values[i].item()
-            wandb_logger.log_scalar(
+            wandb_tmp_logger.log_scalar(
                 value=scalar_value,
                 name=scalar_name,
                 step=steps[i] if steps else None,
                 commit=True,
             )
 
-        assert wandb_logger.experiment.summary["foo"] == values[-1].item()
-        assert wandb_logger.experiment.summary["_step"] == i if not steps else steps[i]
+        assert len(logged) == 3
+        assert defined == [("step", None), ("foo", "step")]
 
+        for i, (payload, kwargs) in enumerate(logged):
+            expected_step = i if not steps else steps[i]
+            assert payload == {"foo": values[i].item(), "step": expected_step}
+            assert kwargs == {"commit": True}
+
+    @pytest.mark.skipif(not _has_moviepy, reason="moviepy not installed")
     def test_log_video(self, wandb_logger):
         torch.manual_seed(0)
 
@@ -294,7 +345,10 @@ class TestWandbLogger:
         # C - number of image channels (e.g. 3 for RGB), H, W - image dimensions.
         # the first 64 frames are black and the next 64 are white
         video = torch.cat(
-            (torch.zeros(128, 1, 32, 32), torch.full((128, 1, 32, 32), 255))
+            (
+                torch.zeros(128, 1, 32, 32, dtype=torch.uint8),
+                torch.full((128, 1, 32, 32), 255, dtype=torch.uint8),
+            )
         )
         video = video[None, :]
         wandb_logger.log_video(
@@ -340,6 +394,168 @@ class TestWandbLogger:
         data = torch.randn(10).numpy()
         wandb_logger.log_histogram("hist", data, step=1, bins=2)
 
+    def test_log_metrics_infers_nested_steps(self, wandb_tmp_logger, monkeypatch):
+        logged = []
+        defined = []
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "log",
+            lambda payload, **kwargs: logged.append((payload, kwargs)),
+        )
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "define_metric",
+            lambda name, step_metric=None: defined.append((name, step_metric)),
+        )
+
+        metrics = {"eval/reward": 1.0, "eval/other/something": 2.0}
+        result = wandb_tmp_logger.log_metrics(metrics, step=7)
+
+        assert result == metrics
+        assert logged == [
+            (
+                {
+                    "eval/reward": 1.0,
+                    "eval/other/something": 2.0,
+                    "eval/step": 7,
+                    "eval/other/step": 7,
+                },
+                {},
+            )
+        ]
+        assert defined == [
+            ("eval/step", None),
+            ("eval/other/step", None),
+            ("eval/reward", "eval/step"),
+            ("eval/other/something", "eval/other/step"),
+        ]
+
+    def test_log_metrics_preserves_explicit_step_keys(
+        self, wandb_tmp_logger, monkeypatch
+    ):
+        logged = []
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "log",
+            lambda payload, **kwargs: logged.append((payload, kwargs)),
+        )
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment, "define_metric", lambda *args, **kwargs: None
+        )
+
+        wandb_tmp_logger.log_metrics({"eval/reward": 1.0, "eval/step": 4}, step=99)
+        wandb_tmp_logger.log_metrics({"eval/reward": 2.0})
+
+        assert logged[0][0]["eval/step"] == 4
+        assert logged[1][0]["eval/step"] == 5
+
+    def test_log_metrics_auto_increments_per_group(self, wandb_tmp_logger, monkeypatch):
+        logged = []
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "log",
+            lambda payload, **kwargs: logged.append((payload, kwargs)),
+        )
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment, "define_metric", lambda *args, **kwargs: None
+        )
+
+        wandb_tmp_logger.log_metrics({"eval/reward": 1.0})
+        wandb_tmp_logger.log_metrics({"train/loss": 0.5})
+        wandb_tmp_logger.log_metrics({"eval/reward": 2.0})
+
+        assert logged[0][0]["eval/step"] == 0
+        assert logged[1][0]["train/step"] == 0
+        assert logged[2][0]["eval/step"] == 1
+
+    def test_override_global_step_uses_legacy_wandb_step(
+        self, wandb_tmp_logger, monkeypatch
+    ):
+        logged = []
+        defined = []
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "log",
+            lambda payload, **kwargs: logged.append((payload, kwargs)),
+        )
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "define_metric",
+            lambda name, step_metric=None: defined.append((name, step_metric)),
+        )
+
+        wandb_tmp_logger.log_metrics(
+            {"eval/reward": 1.0}, step=123, override_global_step=True
+        )
+
+        assert logged == [({"eval/reward": 1.0}, {"step": 123})]
+        assert defined == []
+
+    @pytest.mark.skipif(not _has_moviepy, reason="moviepy not installed")
+    def test_log_video_uses_inferred_step(self, wandb_tmp_logger, monkeypatch):
+        logged = []
+        defined = []
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "log",
+            lambda payload, **kwargs: logged.append((payload, kwargs)),
+        )
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "define_metric",
+            lambda name, step_metric=None: defined.append((name, step_metric)),
+        )
+
+        video = torch.randint(0, 255, (1, 4, 3, 8, 8), dtype=torch.uint8)
+        wandb_tmp_logger.log_video("eval/video", video, step=11)
+
+        payload, kwargs = logged[0]
+        assert payload["eval/step"] == 11
+        assert "eval/video" in payload
+        assert kwargs == {}
+        assert defined == [("eval/step", None), ("eval/video", "eval/step")]
+
+    def test_log_histogram_uses_inferred_step(self, wandb_tmp_logger, monkeypatch):
+        logged = []
+        defined = []
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "log",
+            lambda payload, **kwargs: logged.append((payload, kwargs)),
+        )
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "define_metric",
+            lambda name, step_metric=None: defined.append((name, step_metric)),
+        )
+
+        wandb_tmp_logger.log_histogram("eval/hist", torch.randn(10), step=3, bins=4)
+
+        payload, kwargs = logged[0]
+        assert payload["eval/step"] == 3
+        assert "eval/hist" in payload
+        assert kwargs == {}
+        assert defined == [("eval/step", None), ("eval/hist", "eval/step")]
+
+    def test_log_str_uses_inferred_step(self, wandb_tmp_logger, monkeypatch):
+        logged = []
+        defined = []
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "log",
+            lambda payload, **kwargs: logged.append((payload, kwargs)),
+        )
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "define_metric",
+            lambda name, step_metric=None: defined.append((name, step_metric)),
+        )
+
+        wandb_tmp_logger.log_str("eval/text", "hello", step=9)
+
+        assert logged == [({"eval/text": "hello", "eval/step": 9}, {})]
+        assert defined == [("eval/step", None), ("eval/text", "eval/step")]
+
 
 @pytest.fixture
 def mlflow_fixture():
@@ -376,12 +592,15 @@ class TestMLFlowLogger:
             assert metric.value == values[i].item()
 
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
-    @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
+    @pytest.mark.skipif(not _has_mp4, reason="no mp4 video backend available")
     def test_log_video(self, steps, mlflow_fixture):
 
         logger, client = mlflow_fixture
         videos = torch.cat(
-            (torch.full((3, 64, 3, 32, 32), 255), torch.zeros(3, 64, 3, 32, 32)),
+            (
+                torch.full((3, 64, 3, 32, 32), 255, dtype=torch.uint8),
+                torch.zeros(3, 64, 3, 32, 32, dtype=torch.uint8),
+            ),
             dim=1,
         )
         fps = 6
@@ -458,6 +677,7 @@ class TestPixelRenderTransform:
 
 @pytest.fixture()
 def trackio_logger():
+    pytest.importorskip("trackio")
     exp_name = "ramala"
     logger = TrackioLogger(project="test", exp_name=exp_name)
     yield logger
@@ -497,7 +717,10 @@ class TestTrackioLogger:
         # C - number of image channels (e.g. 3 for RGB), H, W - image dimensions.
         # the first 64 frames are black and the next 64 are white
         video = torch.cat(
-            (torch.zeros(128, 3, 32, 32), torch.full((128, 3, 32, 32), 255))
+            (
+                torch.zeros(128, 3, 32, 32, dtype=torch.uint8),
+                torch.full((128, 3, 32, 32), 255, dtype=torch.uint8),
+            )
         )
         video = video[None, :]
         trackio_logger.log_video(
@@ -526,6 +749,190 @@ class TestTrackioLogger:
             trackio_logger.log_histogram(
                 "hist", data, step=steps[i] if steps else None, bins=10
             )
+
+
+@pytest.fixture(autouse=False)
+def ray_init_shutdown():
+    """Initialize Ray before a test and shut it down after."""
+    import ray
+
+    if not ray.is_initialized():
+        ray.init(num_cpus=2, log_to_driver=False)
+    yield
+    ray.shutdown()
+
+
+def test_ray_logger_log_metrics_forwards_override_global_step():
+    class _FakeRemoteMethod:
+        def __init__(self):
+            self.calls = []
+
+        def remote(self, *args, **kwargs):
+            self.calls.append((args, kwargs))
+            return self.calls[-1]
+
+    class _FakeActor:
+        def __init__(self):
+            self.log_metrics = _FakeRemoteMethod()
+
+    class _FakeRay:
+        @staticmethod
+        def get(value):
+            return value
+
+    logger = RayLogger.__new__(RayLogger)
+    logger._actor = _FakeActor()
+    logger._ray = _FakeRay()
+
+    result = logger.log_metrics(
+        {"loss": torch.tensor(0.5)},
+        step=12,
+        override_global_step=True,
+    )
+
+    assert result == {"loss": 0.5}
+    assert logger._actor.log_metrics.calls == [
+        (
+            ({"loss": 0.5},),
+            {
+                "step": 12,
+                "keys_sep": "/",
+                "override_global_step": True,
+            },
+        )
+    ]
+
+
+@pytest.mark.skipif(not _has_ray, reason="Ray not available")
+class TestRayLogger:
+    @pytest.fixture(autouse=True)
+    def _setup_ray(self, ray_init_shutdown):
+        pass
+
+    def test_csv_logger_returns_ray_logger(self):
+        from torchrl.record.loggers.common import Logger
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(exp_name="test", log_dir=tmpdir, use_ray_service=True)
+            assert isinstance(logger, RayLogger)
+            # The metaclass __instancecheck__ makes isinstance transparent
+            assert isinstance(logger, CSVLogger)
+            assert isinstance(logger, Logger)
+            assert not isinstance(logger, WandbLogger)
+
+    def test_csv_logger_returns_csv_logger(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(exp_name="test", log_dir=tmpdir)
+            assert isinstance(logger, CSVLogger)
+
+    def test_log_scalar(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_scalar", log_dir=tmpdir, use_ray_service=True
+            )
+            logger.log_scalar("loss", 0.5, step=0)
+            logger.log_scalar("loss", 0.3, step=1)
+
+            scalars_dir = os.path.join(tmpdir, "test_scalar", "scalars")
+            assert os.path.isdir(scalars_dir)
+            assert os.path.isfile(os.path.join(scalars_dir, "loss.csv"))
+
+    def test_log_metrics(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_metrics", log_dir=tmpdir, use_ray_service=True
+            )
+            metrics = {"train/loss": 0.5, "train/reward": 1.0}
+            result = logger.log_metrics(metrics, step=0)
+            assert result == metrics
+
+    def test_log_metrics_with_tensors(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_tensor_metrics", log_dir=tmpdir, use_ray_service=True
+            )
+            metrics = {"loss": torch.tensor(0.5), "reward": torch.tensor(1.0)}
+            result = logger.log_metrics(metrics, step=0)
+            assert isinstance(result["loss"], float)
+            assert isinstance(result["reward"], float)
+
+    def test_log_hparams(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_hparams", log_dir=tmpdir, use_ray_service=True
+            )
+            logger.log_hparams({"lr": 0.001, "batch_size": 32})
+
+    def test_log_video(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_video",
+                log_dir=tmpdir,
+                video_format="pt",
+                use_ray_service=True,
+            )
+            video = torch.randint(0, 255, (1, 10, 3, 64, 64), dtype=torch.uint8)
+            logger.log_video("test_vid", video, step=0)
+
+            videos_dir = os.path.join(tmpdir, "test_video", "videos")
+            assert os.path.isdir(videos_dir)
+
+    def test_repr(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_repr", log_dir=tmpdir, use_ray_service=True
+            )
+            r = repr(logger)
+            assert isinstance(r, str)
+            assert "CSVLogger" in r
+
+    def test_getattr_fallback(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_getattr", log_dir=tmpdir, use_ray_service=True
+            )
+            # CSVLogger.print_log_dir() is a non-standard method
+            logger.print_log_dir()
+
+    def test_private_attr_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_private", log_dir=tmpdir, use_ray_service=True
+            )
+            assert isinstance(logger, RayLogger)
+            with pytest.raises(AttributeError):
+                logger._nonexistent
+
+    def test_ray_actor_options(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_options",
+                log_dir=tmpdir,
+                use_ray_service=True,
+                ray_actor_options={"num_cpus": 1},
+            )
+            assert isinstance(logger, RayLogger)
+            logger.log_scalar("x", 1.0, step=0)
+
+    def test_exp_name_property(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="my_experiment", log_dir=tmpdir, use_ray_service=True
+            )
+            assert logger.exp_name == "my_experiment"
+
+    def test_log_dir_property(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_logdir", log_dir=tmpdir, use_ray_service=True
+            )
+            assert logger.log_dir == tmpdir
+
+    def test_get_logger_with_ray(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = get_logger("csv", tmpdir, "test_get_logger", use_ray_service=True)
+            assert isinstance(logger, RayLogger)
+            logger.log_scalar("x", 1.0, step=0)
 
 
 if __name__ == "__main__":

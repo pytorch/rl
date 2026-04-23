@@ -113,6 +113,15 @@ def _default_dtype_and_device(
         device = _make_ordinal_device(torch.device(device))
     elif not allow_none_device:
         device = torch.zeros(()).device
+
+    if device is not None and device.type == "mps" and dtype == torch.float64:
+        warnings.warn(
+            "MPS device does not support float64. Downcasting dtype from float64 to float32.",
+            UserWarning,
+            stacklevel=2,
+        )
+        dtype = torch.float32
+
     return dtype, device
 
 
@@ -3668,6 +3677,15 @@ class MultiOneHot(OneHot):
     def to_one_hot_spec(self) -> OneHot:
         """No-op for MultiOneHot."""
         return self
+
+    def to_numpy(self, val: torch.Tensor, safe: bool | None = None) -> np.ndarray:
+        if safe is None:
+            safe = _CHECK_SPEC_ENCODE
+        if safe:
+            if not isinstance(val, torch.Tensor):
+                raise NotImplementedError
+            self.assert_is_in(val)
+        return self.to_categorical(val, safe=False).cpu().numpy()
 
     def expand(self, *shape):
         nvecs = [space.n for space in self.space]

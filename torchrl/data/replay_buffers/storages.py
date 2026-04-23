@@ -647,6 +647,13 @@ class TensorStorage(Storage):
             measuring the storage size. For instance, a storage of shape ``[3, 4]``
             has capacity ``3`` if ``ndim=1`` and ``12`` if ``ndim=2``.
             Defaults to ``1``.
+
+            .. important:: When using a collector with ``trajs_per_batch``,
+                keep the default ``ndim=1``.  ``trajs_per_batch`` writes
+                variable-length trajectories as flat 1-D sequences, which is
+                incompatible with a storage that expects a fixed second
+                dimension (``ndim >= 2``).
+
         compilable (bool, optional): whether the storage is compilable.
             If ``True``, the writer cannot be shared between multiple processes.
             Defaults to ``False``.
@@ -770,7 +777,7 @@ class TensorStorage(Storage):
 
     @property
     def _len(self):
-        _len_value = self.__dict__.get("_len_value", None)
+        _len_value = getattr(self, "_len_value", None)
         if not self._compilable:
             if _len_value is None:
                 _len_value = self._len_value = mp.Value("i", 0)
@@ -783,7 +790,7 @@ class TensorStorage(Storage):
     @_len.setter
     def _len(self, value):
         if not is_compiling() and not self._compilable:
-            _len_value = self.__dict__.get("_len_value", None)
+            _len_value = getattr(self, "_len_value", None)
             if _len_value is None:
                 _len_value = self._len_value = mp.Value("i", 0)
             _len_value.value = value
@@ -793,7 +800,7 @@ class TensorStorage(Storage):
     @property
     def _total_shape(self):
         # Total shape, irrespective of how full the storage is
-        _total_shape = self.__dict__.get("_total_shape_value", None)
+        _total_shape = getattr(self, "_total_shape_value", None)
         if _total_shape is None and self.initialized:
             if is_tensor_collection(self._storage):
                 _total_shape = self._storage.shape[: self.ndim]
@@ -1332,6 +1339,12 @@ class LazyTensorStorage(TensorStorage):
             measuring the storage size. For instance, a storage of shape ``[3, 4]``
             has capacity ``3`` if ``ndim=1`` and ``12`` if ``ndim=2``.
             Defaults to ``1``.
+
+            .. important:: When using a collector with ``trajs_per_batch``,
+                keep the default ``ndim=1``.  ``trajs_per_batch`` writes
+                variable-length trajectories as flat 1-D sequences, which is
+                incompatible with a storage that expects a fixed second
+                dimension (``ndim >= 2``).
         compilable (bool, optional): whether the storage is compilable.
             If ``True``, the writer cannot be shared between multiple processes.
             Defaults to ``False``.
@@ -1566,6 +1579,13 @@ class LazyMemmapStorage(LazyTensorStorage):
             measuring the storage size. For instance, a storage of shape ``[3, 4]``
             has capacity ``3`` if ``ndim=1`` and ``12`` if ``ndim=2``.
             Defaults to ``1``.
+
+            .. important:: When using a collector with ``trajs_per_batch``,
+                keep the default ``ndim=1``.  ``trajs_per_batch`` writes
+                variable-length trajectories as flat 1-D sequences, which is
+                incompatible with a storage that expects a fixed second
+                dimension (``ndim >= 2``).
+
         existsok (bool, optional): whether an error should be raised if any of the
             tensors already exists on disk. Defaults to ``True``. If ``False``, the
             tensor will be opened as is, not overewritten.
@@ -2440,7 +2460,7 @@ class StoreStorage(Storage):
 
     @property
     def _len(self):
-        _len_value = self.__dict__.get("_len_value", None)
+        _len_value = getattr(self, "_len_value", None)
         if not self._compilable:
             if _len_value is None:
                 _len_value = self._len_value = mp.Value("i", 0)
@@ -2452,7 +2472,7 @@ class StoreStorage(Storage):
     @_len.setter
     def _len(self, value):
         if not is_compiling() and not self._compilable:
-            _len_value = self.__dict__.get("_len_value", None)
+            _len_value = getattr(self, "_len_value", None)
             if _len_value is None:
                 _len_value = self._len_value = mp.Value("i", 0)
             _len_value.value = value

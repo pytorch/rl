@@ -5,15 +5,12 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
 
 import numpy as np
 import pytest
 import torch
 
-from torchrl.envs.libs.genesis import GenesisEnv, GenesisWrapper
-
-_has_genesis = importlib.util.find_spec("genesis") is not None
+from torchrl.envs.libs.genesis import _has_genesis, GenesisEnv, GenesisWrapper
 
 
 @pytest.mark.skipif(not _has_genesis, reason="Genesis not found")

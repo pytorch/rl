@@ -78,6 +78,8 @@ python -m torch.utils.collect_env
 git config --global --add safe.directory '*'
 
 root_dir="$(git rev-parse --show-toplevel)"
+
+bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
 env_dir="${root_dir}/env"
 lib_dir="${env_dir}/lib"
 
@@ -97,6 +99,6 @@ print('device count', devcount)
 echo $MUJOCO_GL
 echo $sim_backend
 
-sim_backend=MUJOCO MUJOCO_GL=egl python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 20 -k "robohive" --error-for-skips
+sim_backend=MUJOCO MUJOCO_GL=egl python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/libs --instafail -v --durations 20 -k "robohive" --error-for-skips
 coverage combine -q
 coverage xml -i

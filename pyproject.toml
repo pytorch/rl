@@ -43,7 +43,7 @@ dependencies = [
     "numpy",
     "packaging",
     "cloudpickle",
-    "tensordict>=0.11.0,<0.12.0",
+    "tensordict>=0.12.0,<0.13.0",
 ]
 
 [project.optional-dependencies]
@@ -51,7 +51,7 @@ atari = ["gymnasium[atari]"]
 dm_control = ["dm_control"]
 replay_buffer = ["torch>=2.7.0"]
 gym_continuous = ["gymnasium<1.0", "mujoco"]
-rendering = ["moviepy<2.0.0"]
+rendering = ["moviepy<2.0.0", "torchcodec>=0.10.0"]
 tests = [
     "pytest",
     "pyyaml",
@@ -94,6 +94,10 @@ open_spiel = ["open_spiel>=1.5"]
 brax = ["jax>=0.7.0; python_version>='3.11'", "brax; python_version>='3.11'"]
 genesis = ["genesis-world"]
 procgen = ["procgen"]
+pilco = [
+    "botorch",
+    "gpytorch",
+]
 # Base LLM dependencies (no inference backend - use llm-vllm or llm-sglang)
 llm = [
     "transformers",
@@ -111,7 +115,7 @@ llm = [
 # LLM with vLLM backend
 llm-vllm = [
     "torchrl[llm]",
-    "vllm",
+    "vllm>=0.17",
 ]
 # LLM with SGLang backend
 llm-sglang = [
@@ -121,7 +125,7 @@ llm-sglang = [
 # LLM with both backends
 llm-all = [
     "torchrl[llm]",
-    "vllm",
+    "vllm>=0.17",
     "sglang[all]",
 ]
 grpo = [
@@ -159,7 +163,7 @@ version_scheme = "post-release"
 # Local scheme is handled by setup.py (appends +g<sha> unless on release/v<version> branch)
 local_scheme = "no-local-version"
 version_file = "torchrl/_version.py"
-fallback_version = "0.11.0"
+fallback_version = "0.12.0"
 
 [tool.setuptools.packages.find]
 exclude = [

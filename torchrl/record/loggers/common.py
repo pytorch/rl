@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import abc
+import importlib.util
 from collections.abc import Sequence
 from typing import Any
 
@@ -12,8 +13,66 @@ import torch
 from tensordict import TensorDictBase
 from torch import Tensor
 
+from torchrl._utils import _RayServiceMetaClass, implement_for
+
+_has_tv = importlib.util.find_spec("torchvision") is not None
+try:
+    from torchcodec.encoders import VideoEncoder  # noqa: F401
+
+    _has_torchcodec = True
+    del VideoEncoder
+except Exception:
+    _has_torchcodec = False
+
 
 __all__ = ["Logger"]
+
+
+@implement_for("torchvision", None, "0.22")
+def _write_video(filename, video_array, **kwargs):
+    if not _has_tv:
+        raise ImportError(
+            "Writing mp4 videos with torchvision < 0.22 requires torchvision to be installed. "
+            "Install it with: pip install torchvision"
+        )
+    import torchvision
+
+    torchvision.io.write_video(filename, video_array, **kwargs)
+
+
+@implement_for("torchvision", "0.22")
+def _write_video(filename, video_array, **kwargs):  # noqa: F811
+    if not _has_torchcodec:
+        raise ImportError(
+            "Writing mp4 videos with torchvision >= 0.22 requires torchcodec >= 0.10.0, "
+            "since torchvision.io.write_video was deprecated in 0.22 and removed in 0.24. "
+            "Install it with: pip install 'torchcodec>=0.10.0'"
+        )
+    from torchcodec.encoders import VideoEncoder
+
+    fps = kwargs.pop("fps", 30)
+    video_codec = kwargs.pop("video_codec", None)
+    options = dict(kwargs.pop("options", None) or {})
+    crf = options.pop("crf", None)
+    preset = options.pop("preset", None)
+    pixel_format = options.pop("pixel_format", None)
+
+    # VideoEncoder expects (N, C, H, W); callers pass (T, H, W, C)
+    video_array = video_array.permute(0, 3, 1, 2).contiguous()
+
+    to_file_kwargs = {}
+    if video_codec is not None:
+        to_file_kwargs["codec"] = video_codec
+    if crf is not None:
+        to_file_kwargs["crf"] = float(crf)
+    if preset is not None:
+        to_file_kwargs["preset"] = preset
+    if pixel_format is not None:
+        to_file_kwargs["pixel_format"] = pixel_format
+    if options:
+        to_file_kwargs["extra_options"] = options
+
+    VideoEncoder(frames=video_array, frame_rate=fps).to_file(filename, **to_file_kwargs)
 
 
 def _make_metrics_safe(
@@ -128,8 +187,33 @@ def _make_metrics_safe_tensordict(
     return out
 
 
-class Logger:
-    """A template for loggers."""
+class Logger(metaclass=_RayServiceMetaClass):
+    """A template for loggers.
+
+    Keyword Args:
+        use_ray_service (bool): If ``True``, the logger runs as a Ray actor
+            in a separate process. All method calls are delegated to the remote
+            actor via ``ray.get(actor.method.remote(...))``. CUDA tensors in
+            :meth:`log_metrics` and :meth:`log_video` are automatically moved
+            to CPU before the remote call. Requires ``ray`` to be installed.
+            Default: ``False``.
+        ray_actor_options (dict, optional): Options passed to ``ray.remote()``
+            when creating the Ray actor (e.g., ``{"num_cpus": 1}``).
+            Only used when ``use_ray_service=True``.
+    """
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        _concrete_cls = cls
+
+        def _ray_wrapper(*args, ray_actor_options=None, **kwargs):
+            from torchrl.record.loggers.ray import RayLogger
+
+            return RayLogger(
+                _concrete_cls, *args, ray_actor_options=ray_actor_options, **kwargs
+            )
+
+        cls._RayServiceClass = staticmethod(_ray_wrapper)
 
     def __init__(self, exp_name: str, log_dir: str) -> None:
         self.exp_name = exp_name

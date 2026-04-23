@@ -38,11 +38,11 @@ jobs:
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
-          export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=nightly
         fi
+        # vLLM pins its own stable PyTorch, so always use stable here
+        export TORCH_VERSION=stable
 
         set -euo pipefail
         export PYTHON_VERSION="3.12"
@@ -54,6 +54,7 @@ jobs:
 
         bash .github/unittest/llm/scripts_llm/setup_env.sh
         bash .github/unittest/llm/scripts_llm/install.sh
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/llm/scripts_llm/run_test.sh
         bash .github/unittest/llm/scripts_llm/post_process.sh
 
@@ -74,11 +75,11 @@ jobs:
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
-          export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=nightly
         fi
+        # SGLang pins its own stable PyTorch, so always use stable here
+        export TORCH_VERSION=stable
 
         set -euo pipefail
         export PYTHON_VERSION="3.12"
@@ -92,5 +93,6 @@ jobs:
         # This avoids Triton version conflicts between vLLM and SGLang
         bash .github/unittest/llm/scripts_sglang/setup_env.sh
         bash .github/unittest/llm/scripts_sglang/install.sh
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
         bash .github/unittest/llm/scripts_sglang/run_test.sh
         bash .github/unittest/llm/scripts_sglang/post_process.sh

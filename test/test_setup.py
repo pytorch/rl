@@ -140,7 +140,18 @@ except Exception as err:
 print(json.dumps(out))
 """
     out = _run([sys.executable, "-c", code], cwd=probe_dir, timeout=5 * 60)
-    info = json.loads(out.strip())
+    # Warnings or deprecation notices may be printed to stdout (stderr is
+    # merged), so extract only the JSON object which is always the last line.
+    json_line = ""
+    for line in reversed(out.strip().splitlines()):
+        if line.strip().startswith("{"):
+            json_line = line.strip()
+            break
+    if not json_line:
+        raise RuntimeError(
+            f"Probe script produced no JSON output.\nFull output:\n{out}"
+        )
+    info = json.loads(json_line)
 
     dist_version = str(info["dist_version"]).strip()
     assert dist_version != "0.0.0"
