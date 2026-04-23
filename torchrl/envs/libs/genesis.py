@@ -44,6 +44,20 @@ def _as_tensor(x, *, device, dtype=None) -> torch.Tensor:
     return x
 
 
+def _broadcast_to(x, shape, *, device, dtype) -> torch.Tensor:
+    """Materialize ``x`` as a ``shape``-shaped tensor on ``device``/``dtype``.
+
+    Scalars (or single-element tensors) are broadcast to ``shape``; tensors
+    whose element count already matches are reshaped in-place. This lets the
+    default, scalar-returning hooks (``_compute_reward``, ``_compute_done``)
+    work transparently on batched envs.
+    """
+    t = _as_tensor(x, device=device, dtype=dtype)
+    if t.numel() == 1:
+        return torch.full(shape, t.item(), dtype=dtype, device=device)
+    return t.reshape(shape)
+
+
 def _genesis_backend_for_device(device: torch.device):
     """Map a ``torch.device`` to the matching Genesis backend constant."""
     import genesis as gs
@@ -217,6 +231,23 @@ class GenesisWrapper(EnvBase):
                 )
             self._camera = cameras[0]
 
+            # Batched scenes need env_separate_rigid=True so cam.render()
+            # returns a (n_envs, H, W, 3) stack instead of env-0 only.
+            if n_envs:
+                ctx = getattr(scene.visualizer, "_context", None)
+                env_sep = bool(getattr(ctx, "env_separate_rigid", False))
+                rendered_idx = list(getattr(ctx, "rendered_envs_idx", None) or [])
+                if not env_sep or len(rendered_idx) != n_envs:
+                    raise ValueError(
+                        f"from_pixels=True on a batched scene (n_envs={n_envs}) "
+                        f"requires VisOptions(env_separate_rigid=True) and "
+                        f"rendered_envs_idx covering all {n_envs} envs. The "
+                        f"scene has env_separate_rigid={env_sep}, "
+                        f"rendered_envs_idx={rendered_idx}. Construct the scene "
+                        f"with "
+                        f"`Scene(vis_options=gs.options.VisOptions(env_separate_rigid=True))`."
+                    )
+
         self._make_specs()
 
     @_classproperty
@@ -372,8 +403,9 @@ class GenesisWrapper(EnvBase):
         if not isinstance(action, torch.Tensor):
             action = torch.as_tensor(action, device=self.device)
 
+        reward_shape = (*self.batch_size, 1)
         reward = torch.zeros(
-            *self.batch_size, 1, dtype=torch.float32, device=self.device
+            reward_shape, dtype=torch.float32, device=self.device
         )
         for _ in range(self._frame_skip):
             self._apply_action(action)
@@ -381,16 +413,16 @@ class GenesisWrapper(EnvBase):
             self._current_step += 1
             r = self._compute_reward(action)
             if r is not None:
-                reward = reward + _as_tensor(
-                    r, device=self.device, dtype=torch.float32
-                ).reshape(*self.batch_size, 1)
+                reward = reward + _broadcast_to(
+                    r, reward_shape, device=self.device, dtype=torch.float32
+                )
 
         terminated = torch.zeros(
-            *self.batch_size, 1, dtype=torch.bool, device=self.device
+            reward_shape, dtype=torch.bool, device=self.device
         )
-        truncated = _as_tensor(
-            self._compute_done(), device=self.device, dtype=torch.bool
-        ).reshape(*self.batch_size, 1)
+        truncated = _broadcast_to(
+            self._compute_done(), reward_shape, device=self.device, dtype=torch.bool
+        )
         done = terminated | truncated
 
         return TensorDict(
@@ -528,12 +560,14 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
         self._env_name = env_name
         self._task_name = task_name
 
+        n_envs = int(batch_size[0]) if batch_size else 0
         scene = self._create_scene(
             env_name,
             task_name,
             from_pixels=from_pixels,
             pixels_res=pixels_res,
             device=device,
+            n_envs=n_envs,
             **scene_kwargs,
         )
 
@@ -555,6 +589,7 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
         from_pixels: bool = False,
         pixels_res: tuple[int, int] = (320, 320),
         device: torch.device | None = None,
+        n_envs: int = 0,
         **kwargs,
     ):
         gs = self.lib
@@ -573,7 +608,12 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
                 f"device argument to use the Genesis default)."
             )
 
-        scene = gs.Scene(show_viewer=False)
+        scene_kwargs: dict = {"show_viewer": False}
+        if from_pixels and n_envs:
+            scene_kwargs["vis_options"] = gs.options.VisOptions(
+                env_separate_rigid=True
+            )
+        scene = gs.Scene(**scene_kwargs)
 
         if env_name == "franka_reach":
             scene.add_entity(gs.morphs.Plane())
@@ -593,7 +633,10 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
         if from_pixels:
             scene.add_camera(res=pixels_res)
 
-        scene.build()
+        if n_envs:
+            scene.build(n_envs=n_envs)
+        else:
+            scene.build()
         return scene
 
     def __repr__(self) -> str:

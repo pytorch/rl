@@ -13,17 +13,28 @@ from torchrl.envs.libs.genesis import _has_genesis, GenesisEnv, GenesisWrapper
 from torchrl.envs.utils import check_env_specs
 
 
-def _franka_scene(with_camera: bool = False, res: tuple = (64, 48)):
+def _franka_scene(
+    with_camera: bool = False,
+    res: tuple = (64, 48),
+    n_envs: int = 0,
+    env_separate_rigid: bool = False,
+):
     import genesis as gs
 
     if not getattr(gs, "_initialized", False):
         gs.init(backend=gs.cpu)
-    scene = gs.Scene(show_viewer=False)
+    scene_kwargs = {"show_viewer": False}
+    if env_separate_rigid:
+        scene_kwargs["vis_options"] = gs.options.VisOptions(env_separate_rigid=True)
+    scene = gs.Scene(**scene_kwargs)
     scene.add_entity(gs.morphs.Plane())
     scene.add_entity(gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml"))
     if with_camera:
         scene.add_camera(res=res)
-    scene.build()
+    if n_envs:
+        scene.build(n_envs=n_envs)
+    else:
+        scene.build()
     return scene
 
 
@@ -110,6 +121,26 @@ class TestGenesis:
             assert td["pixels"].dtype == torch.uint8
             td = env.rand_step(td)
             assert td["next", "pixels"].shape == (48, 64, 3)
+        finally:
+            env.close()
+
+    def test_genesis_from_pixels_batched_requires_env_separate(self):
+        # Batched scene with camera but env_separate_rigid=False: should raise.
+        scene = _franka_scene(with_camera=True, n_envs=4, env_separate_rigid=False)
+        with pytest.raises(ValueError, match="env_separate_rigid"):
+            GenesisWrapper(scene, from_pixels=True)
+
+    def test_genesis_from_pixels_batched(self):
+        scene = _franka_scene(
+            with_camera=True, res=(32, 24), n_envs=4, env_separate_rigid=True
+        )
+        env = GenesisWrapper(scene, from_pixels=True, max_steps=3)
+        try:
+            td = env.reset()
+            assert td["pixels"].shape == (4, 24, 32, 3)
+            assert td["pixels"].dtype == torch.uint8
+            td = env.rollout(2)
+            assert td["next", "pixels"].shape == (4, 2, 24, 32, 3)
         finally:
             env.close()
 
