@@ -76,6 +76,13 @@ class GenesisWrapper(EnvBase):
         max_steps (int, optional): truncation horizon consulted by the default
             :meth:`_compute_done`. Defaults to ``1000``.
         frame_skip (int, optional): physics steps per env step. Defaults to ``1``.
+        from_pixels (bool, optional): if ``True``, render a ``pixels`` entry
+            into the observation using the first camera on the scene.
+            Cameras must be added via :meth:`scene.add_camera` **before**
+            :meth:`scene.build` (Genesis cannot add cameras post-build);
+            a missing camera raises :class:`ValueError`. Defaults to ``False``.
+        pixels_key (str, optional): key under which the rendered frame is
+            stored in the returned tensordict. Defaults to ``"pixels"``.
         device (torch.device, optional): torch device for returned tensors.
             Defaults to ``"cpu"``.
         batch_size (torch.Size, optional): batch size for the env. If omitted,
@@ -135,6 +142,8 @@ class GenesisWrapper(EnvBase):
         scene=None,
         max_steps: int = 1000,
         frame_skip: int = 1,
+        from_pixels: bool = False,
+        pixels_key: str = "pixels",
         device: DEVICE_TYPING = "cpu",
         batch_size: torch.Size | None = None,
         allow_done_after_reset: bool = False,
@@ -169,6 +178,19 @@ class GenesisWrapper(EnvBase):
         self._max_steps = max_steps
         self._frame_skip = frame_skip
         self._current_step = 0
+        self._from_pixels = from_pixels
+        self._pixels_key = pixels_key
+        self._camera = None
+        if from_pixels:
+            cameras = list(getattr(scene.visualizer, "cameras", []))
+            if not cameras:
+                raise ValueError(
+                    "from_pixels=True but the scene has no camera. Add one "
+                    "before building the scene, e.g. "
+                    "`scene.add_camera(res=(320, 320))` before "
+                    "`scene.build()`. (Cameras cannot be added after build.)"
+                )
+            self._camera = cameras[0]
 
         self._make_specs()
 
@@ -221,6 +243,20 @@ class GenesisWrapper(EnvBase):
         """
         return 0.0
 
+    def _render_pixels(self) -> torch.Tensor:
+        """Render the scene as an RGB tensor. Called when ``from_pixels=True``.
+
+        The default renders ``self._camera`` (the first camera on the scene)
+        and returns a ``torch.Tensor`` of shape ``(H, W, 3)`` uint8 on
+        ``self.device``. Override for multi-camera / depth / segmentation.
+        """
+        rgb, _, _, _ = self._camera.render()
+        # Genesis's rasterizer returns arrays with negative strides (image
+        # flipped). torch.from_numpy rejects those, so force contiguity.
+        if rgb.strides[0] < 0 or rgb.strides[1] < 0:
+            rgb = rgb.copy()
+        return torch.from_numpy(rgb).to(self.device)
+
     def _compute_done(self) -> torch.Tensor | bool:
         """Per-env truncation flag. Override for early termination.
 
@@ -247,6 +283,14 @@ class GenesisWrapper(EnvBase):
             obs_entries[k] = Unbounded(
                 shape=(*self.batch_size, *event_shape),
                 dtype=t.dtype if t.is_floating_point() else torch.float32,
+                device=self.device,
+            )
+        if self._from_pixels:
+            pix = self._render_pixels()
+            event_shape = pix.shape[len(self.batch_size) :]
+            obs_entries[self._pixels_key] = Unbounded(
+                shape=(*self.batch_size, *event_shape),
+                dtype=pix.dtype,
                 device=self.device,
             )
         self.observation_spec = Composite(
@@ -285,7 +329,10 @@ class GenesisWrapper(EnvBase):
         obs = self._make_obs()
         if not isinstance(obs, dict):
             obs = {"observation": obs}
-        return {k: _as_tensor(v, device=self.device) for k, v in obs.items()}
+        out = {k: _as_tensor(v, device=self.device) for k, v in obs.items()}
+        if self._from_pixels:
+            out[self._pixels_key] = self._render_pixels()
+        return out
 
     def _reset(self, tensordict=None, **kwargs):
         self._current_step = 0
@@ -392,6 +439,14 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
             Defaults to ``1``.
         max_steps (int, optional): truncation horizon. Defaults to ``1000``.
         frame_skip (int, optional): physics steps per env step. Defaults to ``1``.
+        from_pixels (bool, optional): if ``True``, a default camera is added
+            to the scene before it is built and a ``pixels`` entry is added
+            to the observation. Defaults to ``False``.
+        pixels_key (str, optional): key for the rendered frame. Defaults to
+            ``"pixels"``.
+        pixels_res (tuple[int, int], optional): ``(H, W)`` of the auto-added
+            camera. Ignored when ``from_pixels=False``. Defaults to
+            ``(320, 320)``.
         device (torch.device, optional): torch device. Defaults to ``"cpu"``.
         batch_size (torch.Size, optional): env batch size. Defaults to ``()``.
         allow_done_after_reset (bool, optional): Defaults to ``False``.
@@ -423,6 +478,9 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
         num_workers: int | None = None,
         max_steps: int = 1000,
         frame_skip: int = 1,
+        from_pixels: bool = False,
+        pixels_key: str = "pixels",
+        pixels_res: tuple[int, int] = (320, 320),
         device: DEVICE_TYPING = "cpu",
         batch_size: torch.Size | None = None,
         allow_done_after_reset: bool = False,
@@ -437,18 +495,33 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
         self._env_name = env_name
         self._task_name = task_name
 
-        scene = self._create_scene(env_name, task_name, **scene_kwargs)
+        scene = self._create_scene(
+            env_name,
+            task_name,
+            from_pixels=from_pixels,
+            pixels_res=pixels_res,
+            **scene_kwargs,
+        )
 
         super().__init__(
             scene=scene,
             max_steps=max_steps,
             frame_skip=frame_skip,
+            from_pixels=from_pixels,
+            pixels_key=pixels_key,
             device=device,
             batch_size=batch_size,
             allow_done_after_reset=allow_done_after_reset,
         )
 
-    def _create_scene(self, env_name: str, task_name: str | None, **kwargs):
+    def _create_scene(
+        self,
+        env_name: str,
+        task_name: str | None,
+        from_pixels: bool = False,
+        pixels_res: tuple[int, int] = (320, 320),
+        **kwargs,
+    ):
         gs = self.lib
 
         if not getattr(gs, "_initialized", False):
@@ -459,20 +532,22 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
         if env_name == "franka_reach":
             scene.add_entity(gs.morphs.Plane())
             scene.add_entity(gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml"))
-            scene.build()
         elif env_name == "franka_grab":
             scene.add_entity(gs.morphs.Plane())
             scene.add_entity(gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml"))
             scene.add_entity(
                 gs.morphs.Box(size=(0.05, 0.05, 0.05), pos=(0.5, 0, 0.05))
             )
-            scene.build()
         else:
             raise ValueError(
                 f"Unknown environment: {env_name}. "
                 f"Available environments: {list(self._ENV_CONFIGS.keys())}"
             )
 
+        if from_pixels:
+            scene.add_camera(res=pixels_res)
+
+        scene.build()
         return scene
 
     def __repr__(self) -> str:

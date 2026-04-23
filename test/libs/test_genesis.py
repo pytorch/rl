@@ -13,7 +13,7 @@ from torchrl.envs.libs.genesis import _has_genesis, GenesisEnv, GenesisWrapper
 from torchrl.envs.utils import check_env_specs
 
 
-def _franka_scene():
+def _franka_scene(with_camera: bool = False, res: tuple = (64, 48)):
     import genesis as gs
 
     if not getattr(gs, "_initialized", False):
@@ -21,6 +21,8 @@ def _franka_scene():
     scene = gs.Scene(show_viewer=False)
     scene.add_entity(gs.morphs.Plane())
     scene.add_entity(gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml"))
+    if with_camera:
+        scene.add_camera(res=res)
     scene.build()
     return scene
 
@@ -89,6 +91,25 @@ class TestGenesis:
             assert "custom_obs" in td.keys()
             td = env.rand_step(td)
             assert td["next", "reward"].item() == pytest.approx(1.0)
+        finally:
+            env.close()
+
+    def test_genesis_from_pixels_requires_camera(self):
+        # Scene has no camera: from_pixels=True should raise with a helpful msg.
+        scene = _franka_scene(with_camera=False)
+        with pytest.raises(ValueError, match="scene has no camera"):
+            GenesisWrapper(scene, from_pixels=True)
+
+    def test_genesis_from_pixels(self):
+        scene = _franka_scene(with_camera=True, res=(64, 48))
+        env = GenesisWrapper(scene, from_pixels=True, max_steps=5)
+        try:
+            td = env.reset()
+            assert "pixels" in td.keys()
+            assert td["pixels"].shape == (48, 64, 3)
+            assert td["pixels"].dtype == torch.uint8
+            td = env.rand_step(td)
+            assert td["next", "pixels"].shape == (48, 64, 3)
         finally:
             env.close()
 
