@@ -78,8 +78,10 @@ class GenesisWrapper(EnvBase):
         frame_skip (int, optional): physics steps per env step. Defaults to ``1``.
         device (torch.device, optional): torch device for returned tensors.
             Defaults to ``"cpu"``.
-        batch_size (torch.Size, optional): batch size for the env. Should match
-            the ``n_envs`` passed to :meth:`scene.build`. Defaults to ``()``.
+        batch_size (torch.Size, optional): batch size for the env. If omitted,
+            inferred from ``scene.n_envs`` (``()`` for non-batched scenes,
+            ``(n_envs,)`` for batched scenes). If provided, validated against
+            ``scene.n_envs``; a mismatch raises :class:`ValueError`.
         allow_done_after_reset (bool, optional): passed through to
             :class:`~torchrl.envs.EnvBase`. Defaults to ``False``.
 
@@ -142,10 +144,20 @@ class GenesisWrapper(EnvBase):
         if not hasattr(scene, "step"):
             raise TypeError("scene does not have a 'step' method.")
 
+        n_envs = getattr(scene, "n_envs", 0)
+        scene_batch_size = torch.Size([n_envs]) if n_envs else torch.Size([])
         if batch_size is None:
-            batch_size = torch.Size([])
+            batch_size = scene_batch_size
         else:
             batch_size = torch.Size(batch_size)
+            if batch_size != scene_batch_size:
+                raise ValueError(
+                    f"batch_size={tuple(batch_size)} does not match the scene's "
+                    f"n_envs={n_envs} (expected batch_size="
+                    f"{tuple(scene_batch_size)}). Rebuild the scene with "
+                    f"scene.build(n_envs={batch_size[0] if batch_size else 0}) "
+                    f"or drop the batch_size argument to auto-infer."
+                )
 
         super().__init__(
             device=device,
