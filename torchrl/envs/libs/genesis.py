@@ -288,9 +288,7 @@ class GenesisWrapper(EnvBase):
                 entity.control_dofs_position(action[..., :n])
                 return
 
-    def _compute_reward(
-        self, action: torch.Tensor
-    ) -> torch.Tensor | float | None:
+    def _compute_reward(self, action: torch.Tensor) -> torch.Tensor | float | None:
         """Per-substep reward. Override for task-specific reward.
 
         Called once per physics substep (``frame_skip`` times per env step);
@@ -404,9 +402,7 @@ class GenesisWrapper(EnvBase):
             action = torch.as_tensor(action, device=self.device)
 
         reward_shape = (*self.batch_size, 1)
-        reward = torch.zeros(
-            reward_shape, dtype=torch.float32, device=self.device
-        )
+        reward = torch.zeros(reward_shape, dtype=torch.float32, device=self.device)
         for _ in range(self._frame_skip):
             self._apply_action(action)
             self._scene.step()
@@ -417,9 +413,7 @@ class GenesisWrapper(EnvBase):
                     r, reward_shape, device=self.device, dtype=torch.float32
                 )
 
-        terminated = torch.zeros(
-            reward_shape, dtype=torch.bool, device=self.device
-        )
+        terminated = torch.zeros(reward_shape, dtype=torch.bool, device=self.device)
         truncated = _broadcast_to(
             self._compute_done(), reward_shape, device=self.device, dtype=torch.bool
         )
@@ -610,9 +604,7 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
 
         scene_kwargs: dict = {"show_viewer": False}
         if from_pixels and n_envs:
-            scene_kwargs["vis_options"] = gs.options.VisOptions(
-                env_separate_rigid=True
-            )
+            scene_kwargs["vis_options"] = gs.options.VisOptions(env_separate_rigid=True)
         scene = gs.Scene(**scene_kwargs)
 
         if env_name == "franka_reach":
@@ -621,9 +613,7 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
         elif env_name == "franka_grab":
             scene.add_entity(gs.morphs.Plane())
             scene.add_entity(gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml"))
-            scene.add_entity(
-                gs.morphs.Box(size=(0.05, 0.05, 0.05), pos=(0.5, 0, 0.05))
-            )
+            scene.add_entity(gs.morphs.Box(size=(0.05, 0.05, 0.05), pos=(0.5, 0, 0.05)))
         else:
             raise ValueError(
                 f"Unknown environment: {env_name}. "

@@ -6,6 +6,7 @@
 from .brax import BraxEnv, BraxWrapper
 from .dm_control import DMControlEnv, DMControlWrapper
 from .envpool import MultiThreadedEnv, MultiThreadedEnvWrapper
+from .genesis import GenesisEnv, GenesisWrapper
 from .gym import (
     gym_backend,
     GymEnv,
@@ -15,7 +16,6 @@ from .gym import (
     register_gym_spec_conversion,
     set_gym_backend,
 )
-from .genesis import GenesisEnv, GenesisWrapper
 from .habitat import HabitatEnv
 from .isaac_lab import IsaacLabWrapper
 from .isaacgym import IsaacGymEnv, IsaacGymWrapper
