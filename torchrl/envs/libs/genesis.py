@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import importlib
-from typing import Callable
 
 import torch
 from tensordict import TensorDict
@@ -45,35 +44,6 @@ def _as_tensor(x, *, device, dtype=None) -> torch.Tensor:
     return x
 
 
-def _default_obs_func(scene) -> dict[str, torch.Tensor]:
-    """Default observation: per-entity dof positions and velocities."""
-    obs = {}
-    for entity in scene.entities:
-        if getattr(entity, "n_dofs", 0) > 0:
-            obs[f"{entity.name}_qpos"] = entity.get_dofs_position()
-            obs[f"{entity.name}_qvel"] = entity.get_dofs_velocity()
-    if not obs:
-        obs["empty_obs"] = torch.zeros(1)
-    return obs
-
-
-def _default_reward_func(scene) -> float:
-    return 0.0
-
-
-def _default_done_func(scene, max_steps: int, current_step: int) -> bool:
-    return current_step >= max_steps
-
-
-def _default_action_func(scene, action: torch.Tensor) -> None:
-    """Apply ``action`` as a DoF position target on the first actuated entity."""
-    for entity in scene.entities:
-        n = getattr(entity, "n_dofs", 0)
-        if n > 0:
-            entity.control_dofs_position(action[..., :n])
-            return
-
-
 class GenesisWrapper(EnvBase):
     """TorchRL wrapper around a Genesis physics scene.
 
@@ -81,20 +51,30 @@ class GenesisWrapper(EnvBase):
     and embodied AI. This wrapper keeps tensors on-device end-to-end: no
     numpy round-trips, no gym-style shims.
 
+    Customization is done by subclassing and overriding the hooks below;
+    ``GenesisWrapper(scene)`` works out of the box on any built scene with
+    sensible defaults, so it's still useful for one-off experiments.
+
+    Subclass hooks (all optional):
+
+    * :meth:`_make_obs` -- read observations off ``self._scene`` and return a
+      ``dict[str, Tensor]`` (or a single ``Tensor``). Default: for each entity
+      with DoFs, emit ``{entity.name}_qpos`` and ``{entity.name}_qvel`` via
+      :meth:`get_dofs_position` / :meth:`get_dofs_velocity`.
+    * :meth:`_apply_action` -- push the agent's action into the scene before
+      ``scene.step()`` is called. Default: feed ``action[..., :n_dofs]`` of
+      the first actuated entity as a position target via
+      :meth:`control_dofs_position`.
+    * :meth:`_compute_reward` -- compute the per-step reward. Called once per
+      physics substep when ``frame_skip > 1`` and the results are summed.
+      Default: ``0``.
+    * :meth:`_compute_done` -- compute the truncation flag. Default:
+      ``self._current_step >= self._max_steps``.
+
     Args:
         scene (gs.Scene): a pre-built Genesis scene.
-        observation_func (callable, optional): ``scene -> dict[str, Tensor]``.
-            Defaults to per-entity DoF position/velocity via
-            :meth:`get_dofs_position` / :meth:`get_dofs_velocity`.
-        reward_func (callable, optional): ``scene -> float | Tensor``.
-            Defaults to ``0``.
-        done_func (callable, optional): ``(scene, max_steps, current_step) -> bool | Tensor``.
-            Defaults to ``current_step >= max_steps``.
-        action_func (callable, optional): ``(scene, action) -> None``, applies the
-            action to the scene before :meth:`scene.step` is called.
-            Defaults to feeding ``action[..., :n_dofs]`` of the first actuated
-            entity as a position target via :meth:`control_dofs_position`.
-        max_steps (int, optional): truncation horizon. Defaults to ``1000``.
+        max_steps (int, optional): truncation horizon consulted by the default
+            :meth:`_compute_done`. Defaults to ``1000``.
         frame_skip (int, optional): physics steps per env step. Defaults to ``1``.
         device (torch.device, optional): torch device for returned tensors.
             Defaults to ``"cpu"``.
@@ -104,25 +84,34 @@ class GenesisWrapper(EnvBase):
             :class:`~torchrl.envs.EnvBase`. Defaults to ``False``.
 
     Examples:
-        >>> import genesis as gs
-        >>> from torchrl.envs import GenesisWrapper
-        >>> gs.init(backend=gs.cpu)
-        >>> scene = gs.Scene()
-        >>> plane = scene.add_entity(gs.morphs.Plane())
-        >>> franka = scene.add_entity(
-        ...     gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml")
-        ... )
-        >>> scene.build()
-        >>> env = GenesisWrapper(scene)
-        >>> td = env.rollout(10)
-        >>> # Or with custom obs / reward / action:
-        >>> def custom_obs(scene):
-        ...     return {"joint_pos": franka.get_dofs_position()}
-        >>> def custom_reward(scene):
-        ...     return -franka.get_dofs_position().norm()
-        >>> env = GenesisWrapper(
-        ...     scene, observation_func=custom_obs, reward_func=custom_reward
-        ... )
+        Out-of-the-box use on an arbitrary scene::
+
+            >>> import genesis as gs
+            >>> from torchrl.envs import GenesisWrapper
+            >>> gs.init(backend=gs.cpu)
+            >>> scene = gs.Scene(show_viewer=False)
+            >>> scene.add_entity(gs.morphs.Plane())
+            >>> scene.add_entity(
+            ...     gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml")
+            ... )
+            >>> scene.build()
+            >>> env = GenesisWrapper(scene)
+            >>> td = env.rollout(10)
+
+        Subclassing for a custom task::
+
+            >>> class ReachEnv(GenesisWrapper):
+            ...     def __init__(self, scene, target, **kwargs):
+            ...         self._franka = scene.entities[1]  # set before super().__init__
+            ...         self._target = target
+            ...         super().__init__(scene, **kwargs)
+            ...     def _make_obs(self):
+            ...         return {"qpos": self._franka.get_dofs_position()}
+            ...     def _apply_action(self, action):
+            ...         self._franka.control_dofs_position(action)
+            ...     def _compute_reward(self, action):
+            ...         ee = self._franka.get_link("hand").get_pos()
+            ...         return -(ee - self._target).norm()
     """
 
     git_url = "https://github.com/Genesis-Embodied-AI/Genesis"
@@ -142,10 +131,6 @@ class GenesisWrapper(EnvBase):
     def __init__(
         self,
         scene=None,
-        observation_func: Callable | None = None,
-        reward_func: Callable | None = None,
-        done_func: Callable | None = None,
-        action_func: Callable | None = None,
         max_steps: int = 1000,
         frame_skip: int = 1,
         device: DEVICE_TYPING = "cpu",
@@ -169,10 +154,6 @@ class GenesisWrapper(EnvBase):
         )
 
         self._scene = scene
-        self._observation_func = observation_func or _default_obs_func
-        self._reward_func = reward_func or _default_reward_func
-        self._done_func = done_func or _default_done_func
-        self._action_func = action_func or _default_action_func
         self._max_steps = max_steps
         self._frame_skip = frame_skip
         self._current_step = 0
@@ -185,8 +166,65 @@ class GenesisWrapper(EnvBase):
             return []
         return ["custom_scene"]
 
+    # ------------------------------------------------------------------
+    # Subclass hooks
+    # ------------------------------------------------------------------
+
+    def _make_obs(self) -> dict[str, torch.Tensor] | torch.Tensor:
+        """Read observations from ``self._scene``.
+
+        Override in a subclass for task-specific observations. The default
+        emits per-entity DoF position and velocity.
+        """
+        obs = {}
+        for entity in self._scene.entities:
+            if getattr(entity, "n_dofs", 0) > 0:
+                obs[f"{entity.name}_qpos"] = entity.get_dofs_position()
+                obs[f"{entity.name}_qvel"] = entity.get_dofs_velocity()
+        if not obs:
+            obs["empty_obs"] = torch.zeros(1)
+        return obs
+
+    def _apply_action(self, action: torch.Tensor) -> None:
+        """Push ``action`` into ``self._scene`` before ``scene.step()``.
+
+        The default applies ``action[..., :n_dofs]`` of the first entity with
+        DoFs as a joint-position target. Override for velocity / force control
+        or to address multiple entities.
+        """
+        for entity in self._scene.entities:
+            n = getattr(entity, "n_dofs", 0)
+            if n > 0:
+                entity.control_dofs_position(action[..., :n])
+                return
+
+    def _compute_reward(
+        self, action: torch.Tensor
+    ) -> torch.Tensor | float | None:
+        """Per-substep reward. Override for task-specific reward.
+
+        Called once per physics substep (``frame_skip`` times per env step);
+        the wrapper sums the returned values. Return ``None`` to skip the
+        contribution for this substep. The default returns ``0``.
+        """
+        return 0.0
+
+    def _compute_done(self) -> torch.Tensor | bool:
+        """Per-env truncation flag. Override for early termination.
+
+        Returned as ``truncated``; ``terminated`` is always ``False`` unless
+        you override this to return a tensor that you've separately stashed
+        under ``self`` (in which case, override :meth:`_step` too for full
+        control). The default truncates at ``self._max_steps``.
+        """
+        return self._current_step >= self._max_steps
+
+    # ------------------------------------------------------------------
+    # Spec / TD machinery
+    # ------------------------------------------------------------------
+
     def _make_specs(self) -> None:
-        dummy_obs = self._observation_func(self._scene)
+        dummy_obs = self._make_obs()
         if not isinstance(dummy_obs, dict):
             dummy_obs = {"observation": dummy_obs}
 
@@ -232,19 +270,18 @@ class GenesisWrapper(EnvBase):
         )
 
     def _obs_as_tensordict(self) -> dict[str, torch.Tensor]:
-        obs = self._observation_func(self._scene)
+        obs = self._make_obs()
         if not isinstance(obs, dict):
             obs = {"observation": obs}
         return {k: _as_tensor(v, device=self.device) for k, v in obs.items()}
 
     def _reset(self, tensordict=None, **kwargs):
         self._current_step = 0
-        out = TensorDict(
+        return TensorDict(
             self._obs_as_tensordict(),
             batch_size=self.batch_size,
             device=self.device,
         )
-        return out
 
     def _step(self, tensordict):
         action = tensordict.get(self.action_key)
@@ -255,10 +292,10 @@ class GenesisWrapper(EnvBase):
             *self.batch_size, 1, dtype=torch.float32, device=self.device
         )
         for _ in range(self._frame_skip):
-            self._action_func(self._scene, action)
+            self._apply_action(action)
             self._scene.step()
             self._current_step += 1
-            r = self._reward_func(self._scene)
+            r = self._compute_reward(action)
             if r is not None:
                 reward = reward + _as_tensor(
                     r, device=self.device, dtype=torch.float32
@@ -268,9 +305,7 @@ class GenesisWrapper(EnvBase):
             *self.batch_size, 1, dtype=torch.bool, device=self.device
         )
         truncated = _as_tensor(
-            self._done_func(self._scene, self._max_steps, self._current_step),
-            device=self.device,
-            dtype=torch.bool,
+            self._compute_done(), device=self.device, dtype=torch.bool
         ).reshape(*self.batch_size, 1)
         done = terminated | truncated
 
@@ -343,13 +378,14 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
         num_workers (int, optional): when ``> 1``, returns a lazy
             :class:`~torchrl.envs.ParallelEnv` wrapping per-worker Genesis envs.
             Defaults to ``1``.
-        observation_func, reward_func, done_func, action_func: see
-            :class:`GenesisWrapper`.
         max_steps (int, optional): truncation horizon. Defaults to ``1000``.
         frame_skip (int, optional): physics steps per env step. Defaults to ``1``.
         device (torch.device, optional): torch device. Defaults to ``"cpu"``.
         batch_size (torch.Size, optional): env batch size. Defaults to ``()``.
         allow_done_after_reset (bool, optional): Defaults to ``False``.
+
+    For task-specific obs / reward / action, subclass :class:`GenesisWrapper`
+    directly -- see its docstring for the hook list.
 
     Examples:
         >>> from torchrl.envs import GenesisEnv
@@ -373,10 +409,6 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
         env_name: str,
         task_name: str | None = None,
         num_workers: int | None = None,
-        observation_func: Callable | None = None,
-        reward_func: Callable | None = None,
-        done_func: Callable | None = None,
-        action_func: Callable | None = None,
         max_steps: int = 1000,
         frame_skip: int = 1,
         device: DEVICE_TYPING = "cpu",
@@ -397,10 +429,6 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
 
         super().__init__(
             scene=scene,
-            observation_func=observation_func,
-            reward_func=reward_func,
-            done_func=done_func,
-            action_func=action_func,
             max_steps=max_steps,
             frame_skip=frame_skip,
             device=device,

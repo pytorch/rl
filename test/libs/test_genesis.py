@@ -75,18 +75,15 @@ class TestGenesis:
         finally:
             env.close()
 
-    def test_genesis_custom_functions(self):
-        scene = _franka_scene()
+    def test_genesis_subclass_hooks(self):
+        class _CustomEnv(GenesisWrapper):
+            def _make_obs(self):
+                return {"custom_obs": torch.tensor([1.0, 2.0, 3.0])}
 
-        def custom_obs(scene):
-            return {"custom_obs": torch.tensor([1.0, 2.0, 3.0])}
+            def _compute_reward(self, action):
+                return 1.0
 
-        def custom_reward(scene):
-            return 1.0
-
-        env = GenesisWrapper(
-            scene, observation_func=custom_obs, reward_func=custom_reward
-        )
+        env = _CustomEnv(_franka_scene())
         try:
             td = env.reset()
             assert "custom_obs" in td.keys()
