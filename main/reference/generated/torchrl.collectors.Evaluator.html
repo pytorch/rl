@@ -405,8 +405,12 @@ The <code class="docutils literal notranslate"><span class="pre">&quot;process&q
 with a <a class="reference internal" href="torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector" title="torchrl.collectors.MultiSyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncCollector</span></code></a> (1
 worker) running in a child process.  This provides full CUDA
 context isolation without custom queue management.</p></li>
-<li><p><strong>init_fn</strong> – (<em>Ray only</em>) Callable invoked at the start of the actor
-process, before any <code class="docutils literal notranslate"><span class="pre">torch</span></code> import.</p></li>
+<li><p><strong>init_fn</strong> – Callable invoked at the start of the worker / actor
+process, before any evaluation work (and, ideally, before any
+<code class="docutils literal notranslate"><span class="pre">torch</span></code> import inside that process).  Used by both the
+<code class="docutils literal notranslate"><span class="pre">&quot;process&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;ray&quot;</span></code> backends.  Typical use case: start
+Isaac Lab’s <code class="docutils literal notranslate"><span class="pre">AppLauncher</span></code> in headless mode.  Ignored by the
+<code class="docutils literal notranslate"><span class="pre">&quot;thread&quot;</span></code> backend because no new process is spawned.</p></li>
 <li><p><strong>num_gpus</strong> (<em>int</em>) – (<em>Ray only</em>) GPUs requested for the actor.
 Default: <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
 <li><p><strong>ray_kwargs</strong> (<em>dict</em>) – (<em>Ray only</em>) Extra keyword arguments forwarded

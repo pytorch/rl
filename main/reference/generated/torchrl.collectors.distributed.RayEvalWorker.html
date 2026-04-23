@@ -336,6 +336,8 @@ non-blocking (return immediately if not ready).</p>
 <dt class="sig sig-object py" id="torchrl.collectors.distributed.RayEvalWorker.shutdown">
 <span class="sig-name descname"><span class="pre">shutdown</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray_eval_worker.html#RayEvalWorker.shutdown"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayEvalWorker.shutdown" title="Link to this definition">¶</a></dt>
 <dd><p>Close the environment and kill the actor.</p>
+<p>Safe to call multiple times or after <code class="docutils literal notranslate"><span class="pre">ray.shutdown()</span></code> has already
+torn down the actor (e.g. via a test fixture).</p>
 </dd></dl>
 
 <dl class="py method">

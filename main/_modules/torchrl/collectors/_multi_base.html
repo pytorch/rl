@@ -642,11 +642,17 @@
         <span class="n">track_policy_version</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">trajs_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">init_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">worker_idx</span> <span class="o">=</span> <span class="n">worker_idx</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">trajs_per_batch</span> <span class="o">=</span> <span class="n">trajs_per_batch</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_worker_trajs_per_batch</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># Wrap init_fn with CloudpickleWrapper to support lambdas / closures</span>
+        <span class="c1"># across the spawn start method.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_worker_init_fn</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">CloudpickleWrapper</span><span class="p">(</span><span class="n">init_fn</span><span class="p">)</span> <span class="k">if</span> <span class="n">init_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
 
         <span class="c1"># Set up workers and environment functions</span>
         <span class="n">create_env_fn</span><span class="p">,</span> <span class="n">total_frames_per_batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_setup_workers_and_env_fns</span><span class="p">(</span>
@@ -1495,6 +1501,7 @@
                     <span class="s2">&quot;init_random_frames&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span><span class="p">,</span>
                     <span class="s2">&quot;profile_config&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span><span class="p">,</span>
                     <span class="s2">&quot;trajs_per_batch&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_worker_trajs_per_batch</span><span class="p">,</span>
+                    <span class="s2">&quot;init_fn&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_worker_init_fn</span><span class="p">,</span>
                 <span class="p">}</span>
                 <span class="n">proc</span> <span class="o">=</span> <span class="n">_ProcessNoWarnCtx</span><span class="p">(</span>
                     <span class="n">target</span><span class="o">=</span><span class="n">_main_async_collector</span><span class="p">,</span>
