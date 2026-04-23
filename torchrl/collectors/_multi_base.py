@@ -399,11 +399,17 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         track_policy_version: bool = False,
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
+        init_fn: Callable[[], None] | None = None,
     ):
         self.closed = True
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
         self._worker_trajs_per_batch = None
+        # Wrap init_fn with CloudpickleWrapper to support lambdas / closures
+        # across the spawn start method.
+        self._worker_init_fn = (
+            CloudpickleWrapper(init_fn) if init_fn is not None else None
+        )
 
         # Set up workers and environment functions
         create_env_fn, total_frames_per_batch = self._setup_workers_and_env_fns(
@@ -1252,6 +1258,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "init_random_frames": self.init_random_frames,
                     "profile_config": self._profile_config,
                     "trajs_per_batch": self._worker_trajs_per_batch,
+                    "init_fn": self._worker_init_fn,
                 }
                 proc = _ProcessNoWarnCtx(
                     target=_main_async_collector,
