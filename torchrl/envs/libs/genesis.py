@@ -44,6 +44,23 @@ def _as_tensor(x, *, device, dtype=None) -> torch.Tensor:
     return x
 
 
+def _genesis_backend_for_device(device: torch.device):
+    """Map a ``torch.device`` to the matching Genesis backend constant."""
+    import genesis as gs
+
+    t = device.type
+    if t == "cpu":
+        return gs.cpu
+    if t == "cuda":
+        return gs.cuda
+    if t == "mps":
+        return gs.metal
+    raise ValueError(
+        f"No Genesis backend maps to torch device '{t}'. "
+        f"Supported torch devices: 'cpu', 'cuda', 'mps'."
+    )
+
+
 class GenesisWrapper(EnvBase):
     """TorchRL wrapper around a Genesis physics scene.
 
@@ -84,7 +101,10 @@ class GenesisWrapper(EnvBase):
         pixels_key (str, optional): key under which the rendered frame is
             stored in the returned tensordict. Defaults to ``"pixels"``.
         device (torch.device, optional): torch device for returned tensors.
-            Defaults to ``"cpu"``.
+            When ``None`` (the default), inferred from ``gs.device`` — i.e.
+            the device Genesis itself is running on. This avoids a silent
+            per-step copy when the sim is on GPU but the wrapper was
+            defaulting to CPU.
         batch_size (torch.Size, optional): batch size for the env. If omitted,
             inferred from ``scene.n_envs`` (``()`` for non-batched scenes,
             ``(n_envs,)`` for batched scenes). If provided, validated against
@@ -144,7 +164,7 @@ class GenesisWrapper(EnvBase):
         frame_skip: int = 1,
         from_pixels: bool = False,
         pixels_key: str = "pixels",
-        device: DEVICE_TYPING = "cpu",
+        device: DEVICE_TYPING | None = None,
         batch_size: torch.Size | None = None,
         allow_done_after_reset: bool = False,
     ):
@@ -152,6 +172,11 @@ class GenesisWrapper(EnvBase):
             raise TypeError("GenesisWrapper requires a 'scene' argument.")
         if not hasattr(scene, "step"):
             raise TypeError("scene does not have a 'step' method.")
+
+        if device is None:
+            import genesis as gs
+
+            device = getattr(gs, "device", None) or "cpu"
 
         n_envs = getattr(scene, "n_envs", 0)
         scene_batch_size = torch.Size([n_envs]) if n_envs else torch.Size([])
@@ -447,7 +472,11 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
         pixels_res (tuple[int, int], optional): ``(H, W)`` of the auto-added
             camera. Ignored when ``from_pixels=False``. Defaults to
             ``(320, 320)``.
-        device (torch.device, optional): torch device. Defaults to ``"cpu"``.
+        device (torch.device, optional): torch device. When ``None`` (the
+            default), uses :func:`torch.get_default_device` and calls
+            :func:`genesis.init` with the matching backend (``gs.cpu``,
+            ``gs.cuda``, or ``gs.metal``). If Genesis is already initialized
+            with a different device, raises :class:`RuntimeError`.
         batch_size (torch.Size, optional): env batch size. Defaults to ``()``.
         allow_done_after_reset (bool, optional): Defaults to ``False``.
 
@@ -481,7 +510,7 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
         from_pixels: bool = False,
         pixels_key: str = "pixels",
         pixels_res: tuple[int, int] = (320, 320),
-        device: DEVICE_TYPING = "cpu",
+        device: DEVICE_TYPING | None = None,
         batch_size: torch.Size | None = None,
         allow_done_after_reset: bool = False,
         **scene_kwargs,
@@ -492,6 +521,10 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
                 "Please install it with: pip install genesis-world"
             )
 
+        if device is None:
+            device = torch.get_default_device()
+        device = torch.device(device)
+
         self._env_name = env_name
         self._task_name = task_name
 
@@ -500,6 +533,7 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
             task_name,
             from_pixels=from_pixels,
             pixels_res=pixels_res,
+            device=device,
             **scene_kwargs,
         )
 
@@ -520,12 +554,24 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
         task_name: str | None,
         from_pixels: bool = False,
         pixels_res: tuple[int, int] = (320, 320),
+        device: torch.device | None = None,
         **kwargs,
     ):
         gs = self.lib
 
         if not getattr(gs, "_initialized", False):
-            gs.init(backend=gs.cpu)
+            backend = (
+                _genesis_backend_for_device(device) if device is not None else gs.cpu
+            )
+            gs.init(backend=backend)
+        elif device is not None and torch.device(gs.device) != device:
+            raise RuntimeError(
+                f"Genesis is already initialized with device {gs.device!r}, "
+                f"but GenesisEnv was asked for device {str(device)!r}. "
+                f"Genesis can only be initialized once per process; either "
+                f"restart Python or pass device={gs.device!r} (or drop the "
+                f"device argument to use the Genesis default)."
+            )
 
         scene = gs.Scene(show_viewer=False)
 

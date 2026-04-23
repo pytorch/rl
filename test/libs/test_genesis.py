@@ -113,6 +113,21 @@ class TestGenesis:
         finally:
             env.close()
 
+    def test_genesis_wrapper_device_defaults_to_gs_device(self):
+        import genesis as gs
+
+        scene = _franka_scene()
+        env = GenesisWrapper(scene)  # no device= passed
+        try:
+            assert env.device == torch.device(gs.device)
+            td = env.reset()
+            for key in td.keys():
+                t = td[key]
+                if isinstance(t, torch.Tensor):
+                    assert t.device == env.device, (key, t.device, env.device)
+        finally:
+            env.close()
+
     def test_genesis_env_config(self):
         try:
             env = GenesisEnv(env_name="franka_reach", max_steps=100)
