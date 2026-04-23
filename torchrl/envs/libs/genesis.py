@@ -13,9 +13,8 @@ import torch
 from tensordict import TensorDict
 
 from torchrl.data.tensor_specs import (
-    Bounded,
+    Categorical,
     Composite,
-    TensorSpec,
     Unbounded,
 )
 from torchrl.data.utils import DEVICE_TYPING
@@ -41,6 +40,15 @@ def _genesis_cleanup():
     gs.destroy()
 
 
+def _to_numpy(x):
+    """Convert a Genesis output (torch.Tensor or ndarray) to a 1-D numpy array."""
+    if isinstance(x, torch.Tensor):
+        x = x.detach().cpu().numpy()
+    else:
+        x = np.asarray(x)
+    return x.reshape(-1)
+
+
 def _get_obs_func(
     scene,
     observation_type: str = "joints",
@@ -55,25 +63,23 @@ def _get_obs_func(
     Returns:
         Dictionary of observations
     """
+    if callable(observation_type):
+        return observation_type(scene)
+
     obs = {}
     if observation_type == "joints":
         for entity in scene.entities:
-            if hasattr(entity, "n_dofs") and entity.n_dofs > 0:
-                try:
-                    joints = entity.joints
-                    if joints is not None and len(joints) > 0:
-                        qpos = np.array([joint.q for joint in joints])
-                        qvel = np.array([joint.dq_dt for joint in joints])
-                        obs[f"{entity.name}_qpos"] = qpos
-                        obs[f"{entity.name}_qvel"] = qvel
-                except Exception:
-                    pass
+            if getattr(entity, "n_dofs", 0) > 0:
+                obs[f"{entity.name}_qpos"] = _to_numpy(entity.get_dofs_position())
+                obs[f"{entity.name}_qvel"] = _to_numpy(entity.get_dofs_velocity())
     elif observation_type == "end_effector":
         for entity in scene.entities:
-            if hasattr(entity, "end_effector_pos"):
-                obs[f"{entity.name}_ee_pos"] = np.array(entity.end_effector_pos)
-    elif callable(observation_type):
-        return observation_type(scene)
+            if hasattr(entity, "get_link"):
+                try:
+                    ee_link = entity.get_link("hand")
+                except Exception:
+                    continue
+                obs[f"{entity.name}_ee_pos"] = _to_numpy(ee_link.get_pos())
 
     if not obs:
         obs["empty_obs"] = np.zeros(1)
@@ -142,9 +148,10 @@ class GenesisWrapper(GymLikeEnv):
         >>> print(td)
         >>> # Or use with custom observation/reward functions:
         >>> def custom_obs(scene):
-        ...     return {"joint_pos": franka.joint_pos}
+        ...     return {"joint_pos": franka.get_dofs_position().cpu().numpy()}
         >>> def custom_reward(scene):
-        ...     return -np.linalg.norm(franka.joint_pos)
+        ...     qpos = franka.get_dofs_position().cpu().numpy()
+        ...     return -float(np.linalg.norm(qpos))
         >>> env = GenesisWrapper(scene, observation_func=custom_obs,
         ...                      reward_func=custom_reward)
     """
@@ -248,8 +255,8 @@ class GenesisWrapper(GymLikeEnv):
             device=self.device,
         )
 
-        done_spec = torch.zeros(
-            (*self.batch_size, 1), dtype=torch.bool, device=self.device
+        done_spec = Categorical(
+            n=2, shape=(*self.batch_size, 1), dtype=torch.bool, device=self.device
         )
         self.done_spec = Composite(
             done=done_spec.clone(),
