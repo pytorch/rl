@@ -16,6 +16,7 @@ from torchrl.objectives.dreamer import (
     DreamerValueLoss,
 )
 from torchrl.objectives.dreamer_v3 import (
+    categorical_kl_balanced,
     DreamerV3ActorLoss,
     DreamerV3ModelLoss,
     DreamerV3ValueLoss,
@@ -83,6 +84,7 @@ __all__ = [
     "TargetNetUpdater",
     "ValueEstimators",
     "add_random_module",
+    "categorical_kl_balanced",
     "default_value_kwargs",
     "distance_loss",
     "group_optimizers",

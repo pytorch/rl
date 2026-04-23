@@ -149,13 +149,14 @@ def categorical_kl_balanced(
         loss = α * KL(sg(posterior) ‖ prior) + (1 - α) * KL(posterior ‖ sg(prior))
 
     The first term trains only the *prior*; the second trains only the
-    *posterior*. Free bits are applied per categorical before averaging.
+    *posterior*. Free bits are applied on the *mean* KL (matching Hafner
+    et al. 2023, "Mastering Diverse Domains in World Models", eq. 5).
 
     Args:
         posterior_logits: Shape ``[..., num_categoricals, num_classes]``.
         prior_logits: Shape ``[..., num_categoricals, num_classes]``.
         alpha (float): Balancing weight (0.8 in the paper). Default: 0.8.
-        free_bits (float): Minimum KL per categorical in nats. Default: 1.0.
+        free_bits (float): Minimum mean KL in nats. Default: 1.0.
 
     Returns:
         Scalar KL loss.
@@ -163,27 +164,40 @@ def categorical_kl_balanced(
     posterior = torch.softmax(posterior_logits, dim=-1)
     prior = torch.softmax(prior_logits, dim=-1)
 
-    # Numerical stability: add small epsilon
     eps = 1e-8
     posterior = posterior.clamp(min=eps)
     prior = prior.clamp(min=eps)
 
-    # KL(sg(posterior) || prior): only prior gets gradients
     post_sg = posterior.detach()
-    kl_term1 = (post_sg * (post_sg.log() - prior.log())).sum(-1)  # [..., num_cats]
+    kl_term1 = (post_sg * (post_sg.log() - prior.log())).sum(-1)
 
-    # KL(posterior || sg(prior)): only posterior gets gradients
     prior_sg = prior.detach()
-    kl_term2 = (posterior * (posterior.log() - prior_sg.log())).sum(
-        -1
-    )  # [..., num_cats]
+    kl_term2 = (posterior * (posterior.log() - prior_sg.log())).sum(-1)
 
-    # Free bits per categorical
-    kl_term1 = kl_term1.clamp_min(free_bits)
-    kl_term2 = kl_term2.clamp_min(free_bits)
+    # Free bits applied on the mean KL, not per categorical (DreamerV3 §3).
+    kl_term1 = kl_term1.mean().clamp_min(free_bits)
+    kl_term2 = kl_term2.mean().clamp_min(free_bits)
 
-    # Average over categoricals and batch
-    return (alpha * kl_term1 + (1.0 - alpha) * kl_term2).mean()
+    return alpha * kl_term1 + (1.0 - alpha) * kl_term2
+
+
+def _match_trailing_dim(source: torch.Tensor, reference: torch.Tensor) -> torch.Tensor:
+    """Align ``source`` to the trailing feature dim of ``reference`` for broadcast.
+
+    Multivariate action distributions often emit per-dim log-probs, while the
+    discount / advantage tensors carry a singleton trailing dim. This helper
+    keeps them compatible by summing over the extra feature dim (multi-D
+    log-prob) or unsqueezing when the trailing dim is missing.
+    """
+    if source.ndim == reference.ndim:
+        return source
+    if source.ndim == reference.ndim - 1:
+        return source.unsqueeze(-1)
+    if source.ndim == reference.ndim + 1:
+        return source.sum(-1, keepdim=True)
+    raise ValueError(
+        f"Cannot align shape {tuple(source.shape)} to {tuple(reference.shape)}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -505,6 +519,7 @@ class DreamerV3ActorLoss(LossModule):
         if self.use_reinforce:
             # REINFORCE: log π(a|z) * sg(A_t)
             log_prob = fake_data.get(self.tensor_keys.action_log_prob)
+            log_prob = _match_trailing_dim(log_prob, lambda_target)
             with hold_out_net(self.value_model):
                 baseline_td = fake_data.select(*self.value_model.in_keys, strict=False)
                 self.value_model(baseline_td)
@@ -518,6 +533,7 @@ class DreamerV3ActorLoss(LossModule):
         # Entropy bonus (if actor provides log_prob)
         log_prob_for_entropy = fake_data.get(self.tensor_keys.action_log_prob, None)
         if log_prob_for_entropy is not None and self.entropy_bonus > 0:
+            log_prob_for_entropy = _match_trailing_dim(log_prob_for_entropy, discount)
             entropy = -(discount * log_prob_for_entropy).sum((-2, -1)).mean()
             actor_loss = actor_loss - self.entropy_bonus * entropy
 
@@ -601,7 +617,8 @@ class DreamerV3ValueLoss(LossModule):
         discount_loss (bool, optional): If ``True``, discounts the loss with
             a cumulative gamma factor. Default: ``True``.
         gamma (float, optional): Discount factor used when ``discount_loss=True``.
-            Default: ``0.99``.
+            Default: ``0.99``. Must match the actor loss's value-estimator gamma;
+            use :meth:`sync_gamma_with_actor_loss` to keep them in sync.
         num_value_bins (int, optional): Number of bins for ``"two_hot"`` loss.
             Default: 255.
     """
@@ -642,6 +659,18 @@ class DreamerV3ValueLoss(LossModule):
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         pass
+
+    def sync_gamma_with_actor_loss(self, actor_loss: "DreamerV3ActorLoss") -> None:
+        """Pull ``gamma`` from an actor loss's value estimator.
+
+        The discount used inside :class:`DreamerV3ValueLoss` must match the one
+        the actor used to compute ``lambda_target``; call this after the actor
+        loss's ``make_value_estimator`` to keep them in lockstep.
+        """
+        estimator_gamma = actor_loss.value_estimator.gamma
+        if torch.is_tensor(estimator_gamma):
+            estimator_gamma = estimator_gamma.item()
+        self.gamma = float(estimator_gamma)
 
     @_maybe_record_function_decorator("dreamer_v3/value_loss")
     def forward(self, fake_data) -> tuple[TensorDict, TensorDict]:
