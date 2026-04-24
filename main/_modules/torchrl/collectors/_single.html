@@ -681,7 +681,6 @@
         <span class="n">use_buffers</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">replay_buffer</span><span class="p">:</span> <span class="n">ReplayBuffer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">extend_buffer</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">local_init_rb</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">trust_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">compile_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">cudagraph_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -736,7 +735,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_setup_replay_buffer</span><span class="p">(</span>
             <span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay_buffer</span><span class="p">,</span>
             <span class="n">extend_buffer</span><span class="o">=</span><span class="n">extend_buffer</span><span class="p">,</span>
-            <span class="n">local_init_rb</span><span class="o">=</span><span class="n">local_init_rb</span><span class="p">,</span>
             <span class="n">postproc</span><span class="o">=</span><span class="n">postproc</span><span class="p">,</span>
             <span class="n">split_trajs</span><span class="o">=</span><span class="n">split_trajs</span><span class="p">,</span>
             <span class="n">return_same_td</span><span class="o">=</span><span class="n">return_same_td</span><span class="p">,</span>
@@ -937,7 +935,6 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">replay_buffer</span><span class="p">:</span> <span class="n">ReplayBuffer</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">extend_buffer</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
-        <span class="n">local_init_rb</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">postproc</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">split_trajs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">return_same_td</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
@@ -946,17 +943,7 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Set up replay buffer configuration and validate compatibility.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">replay_buffer</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">extend_buffer</span> <span class="o">=</span> <span class="n">extend_buffer</span>
-
-        <span class="c1"># Handle local_init_rb deprecation</span>
-        <span class="k">if</span> <span class="n">local_init_rb</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">local_init_rb</span> <span class="o">=</span> <span class="kc">False</span>
-            <span class="k">if</span> <span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">local_init_rb</span><span class="p">:</span>
-                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                    <span class="s2">&quot;local_init_rb=False is deprecated and will be removed in v0.12. &quot;</span>
-                    <span class="s2">&quot;The new storage-level initialization provides better performance.&quot;</span><span class="p">,</span>
-                    <span class="ne">FutureWarning</span><span class="p">,</span>
-                <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">local_init_rb</span> <span class="o">=</span> <span class="n">local_init_rb</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">local_init_rb</span> <span class="o">=</span> <span class="kc">True</span>
 
         <span class="c1"># Validate replay buffer compatibility</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignore_rb</span><span class="p">:</span>
@@ -2389,6 +2376,7 @@
       <script type="text/javascript" src="../../../_static/documentation_options.js"></script>
       <script type="text/javascript" src="../../../_static/doctools.js"></script>
       <script type="text/javascript" src="../../../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../../../_static/sg-tags.js"></script>
       <script type="text/javascript" src="../../../_static/design-tabs.js"></script>
 
   

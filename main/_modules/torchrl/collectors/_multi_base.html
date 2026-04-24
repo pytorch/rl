@@ -520,11 +520,6 @@
 <span class="sd">            but populate the buffer instead. Defaults to ``None``.</span>
 <span class="sd">        extend_buffer (bool, optional): if `True`, the replay buffer is extended with entire rollouts and not</span>
 <span class="sd">            with single steps. Defaults to `True` for multiprocessed data collectors.</span>
-<span class="sd">        local_init_rb (bool, optional): if ``False``, the collector will use fake data to initialize</span>
-<span class="sd">            the replay buffer in the main process (legacy behavior). If ``True``, the storage-level</span>
-<span class="sd">            coordination will handle initialization with real data from worker processes.</span>
-<span class="sd">            Defaults to ``None``, which maintains backward compatibility but shows a deprecation warning.</span>
-<span class="sd">            This parameter is deprecated and will be removed in v0.12.</span>
 <span class="sd">        trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be</span>
 <span class="sd">            assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules</span>
 <span class="sd">            and ``False`` otherwise.</span>
@@ -629,7 +624,6 @@
         <span class="n">use_buffers</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">replay_buffer</span><span class="p">:</span> <span class="n">ReplayBuffer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">extend_buffer</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">local_init_rb</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">trust_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">compile_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">cudagraph_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -686,7 +680,7 @@
         <span class="c1"># Set up replay buffer</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span> <span class="o">=</span> <span class="n">use_buffers</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">replay_buffer</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_setup_multi_replay_buffer</span><span class="p">(</span><span class="n">local_init_rb</span><span class="p">,</span> <span class="n">replay_buffer</span><span class="p">,</span> <span class="n">extend_buffer</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_setup_multi_replay_buffer</span><span class="p">(</span><span class="n">replay_buffer</span><span class="p">,</span> <span class="n">extend_buffer</span><span class="p">)</span>
 
         <span class="c1"># Set up policy and weights</span>
         <span class="k">if</span> <span class="n">trust_policy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -861,21 +855,11 @@
 
     <span class="k">def</span> <span class="nf">_setup_multi_replay_buffer</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">local_init_rb</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">replay_buffer</span><span class="p">:</span> <span class="n">ReplayBuffer</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">extend_buffer</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Set up replay buffer for multi-process collector.&quot;&quot;&quot;</span>
-        <span class="c1"># Handle local_init_rb deprecation</span>
-        <span class="k">if</span> <span class="n">local_init_rb</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">local_init_rb</span> <span class="o">=</span> <span class="kc">False</span>
-            <span class="k">if</span> <span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">local_init_rb</span><span class="p">:</span>
-                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                    <span class="s2">&quot;local_init_rb=False is deprecated and will be removed in v0.12. &quot;</span>
-                    <span class="s2">&quot;The new storage-level initialization provides better performance.&quot;</span><span class="p">,</span>
-                    <span class="ne">FutureWarning</span><span class="p">,</span>
-                <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">local_init_rb</span> <span class="o">=</span> <span class="n">local_init_rb</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">local_init_rb</span> <span class="o">=</span> <span class="kc">True</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_check_replay_buffer_init</span><span class="p">()</span>
 
@@ -2267,6 +2251,7 @@
       <script type="text/javascript" src="../../../_static/documentation_options.js"></script>
       <script type="text/javascript" src="../../../_static/doctools.js"></script>
       <script type="text/javascript" src="../../../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../../../_static/sg-tags.js"></script>
       <script type="text/javascript" src="../../../_static/design-tabs.js"></script>
 
   

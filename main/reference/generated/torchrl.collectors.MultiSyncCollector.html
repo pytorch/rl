@@ -539,11 +539,6 @@ for envs without dynamic specs, <code class="docutils literal notranslate"><span
 but populate the buffer instead. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>extend_buffer</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <cite>True</cite>, the replay buffer is extended with entire rollouts and not
 with single steps. Defaults to <cite>True</cite> for multiprocessed data collectors.</p></li>
-<li><p><strong>local_init_rb</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, the collector will use fake data to initialize
-the replay buffer in the main process (legacy behavior). If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the storage-level
-coordination will handle initialization with real data from worker processes.
-Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which maintains backward compatibility but shows a deprecation warning.
-This parameter is deprecated and will be removed in v0.12.</p></li>
 <li><p><strong>trust_policy</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a non-TensorDictModule policy will be trusted to be
 assumed to be compatible with the collector. This defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code> for CudaGraphModules
 and <code class="docutils literal notranslate"><span class="pre">False</span></code> otherwise.</p></li>
@@ -1235,6 +1230,7 @@ the weight update logic for specific use cases.</p>
       <script type="text/javascript" src="../../_static/documentation_options.js"></script>
       <script type="text/javascript" src="../../_static/doctools.js"></script>
       <script type="text/javascript" src="../../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../../_static/sg-tags.js"></script>
       <script type="text/javascript" src="../../_static/design-tabs.js"></script>
 
   

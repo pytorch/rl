@@ -6,6 +6,10 @@ README Tutos
 Check the tutorials on torchrl documentation: https://pytorch.org/rl
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 

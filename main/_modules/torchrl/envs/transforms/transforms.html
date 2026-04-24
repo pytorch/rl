@@ -1203,12 +1203,6 @@
 <span class="sd">        &gt;&gt;&gt; # The inner env has been unwrapped</span>
 <span class="sd">        &gt;&gt;&gt; assert isinstance(transformed_env.base_env, GymEnv)</span>
 
-<span class="sd">    .. note::</span>
-<span class="sd">        The first argument was renamed from ``env`` to ``base_env`` for clarity.</span>
-<span class="sd">        The old ``env`` argument is still supported for backward compatibility</span>
-<span class="sd">        but will be removed in v0.12. A deprecation warning will be shown when</span>
-<span class="sd">        using the old argument name.</span>
-
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="nd">@overload</span>
@@ -1235,18 +1229,6 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="o">...</span>
 
-    <span class="nd">@overload</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="o">*</span><span class="p">,</span>
-        <span class="n">env</span><span class="p">:</span> <span class="n">EnvBase</span><span class="p">,</span>  <span class="c1"># type: ignore[misc]  # deprecated</span>
-        <span class="n">transform</span><span class="p">:</span> <span class="n">Transform</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">cache_specs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">auto_unwrap</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="o">...</span>
-
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="n">args</span><span class="p">,</span>
@@ -1260,17 +1242,9 @@
             <span class="n">cache_specs</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">2</span> <span class="k">else</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;cache_specs&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
             <span class="n">auto_unwrap</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;auto_unwrap&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">elif</span> <span class="s2">&quot;env&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
-            <span class="c1"># Old syntax: TransformedEnv(env=..., transform=...)</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="s2">&quot;The &#39;env&#39; argument is deprecated and will be removed in v0.12. &quot;</span>
-                <span class="s2">&quot;Use &#39;base_env&#39; instead.&quot;</span><span class="p">,</span>
-                <span class="ne">DeprecationWarning</span><span class="p">,</span>
-                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;The &#39;env&#39; argument has been removed. Use &#39;base_env&#39; instead.&quot;</span>
             <span class="p">)</span>
-            <span class="n">base_env</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;env&quot;</span><span class="p">)</span>
-            <span class="n">transform</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;transform&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="n">cache_specs</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;cache_specs&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
-            <span class="n">auto_unwrap</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;auto_unwrap&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">elif</span> <span class="s2">&quot;base_env&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
             <span class="c1"># New syntax with keyword arguments: TransformedEnv(base_env=..., transform=...)</span>
             <span class="n">base_env</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;base_env&quot;</span><span class="p">)</span>
@@ -13157,6 +13131,7 @@
       <script type="text/javascript" src="../../../../_static/documentation_options.js"></script>
       <script type="text/javascript" src="../../../../_static/doctools.js"></script>
       <script type="text/javascript" src="../../../../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../../../../_static/sg-tags.js"></script>
       <script type="text/javascript" src="../../../../_static/design-tabs.js"></script>
 
   
