@@ -906,12 +906,6 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         >>> # The inner env has been unwrapped
         >>> assert isinstance(transformed_env.base_env, GymEnv)
 
-    .. note::
-        The first argument was renamed from ``env`` to ``base_env`` for clarity.
-        The old ``env`` argument is still supported for backward compatibility
-        but will be removed in v0.12. A deprecation warning will be shown when
-        using the old argument name.
-
     """
 
     @overload
@@ -938,18 +932,6 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
     ) -> None:
         ...
 
-    @overload
-    def __init__(
-        self,
-        *,
-        env: EnvBase,  # type: ignore[misc]  # deprecated
-        transform: Transform | None = None,
-        cache_specs: bool = True,
-        auto_unwrap: bool | None = None,
-        **kwargs,
-    ) -> None:
-        ...
-
     def __init__(
         self,
         *args,
@@ -963,17 +945,9 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             cache_specs = args[2] if len(args) > 2 else kwargs.pop("cache_specs", True)
             auto_unwrap = kwargs.pop("auto_unwrap", None)
         elif "env" in kwargs:
-            # Old syntax: TransformedEnv(env=..., transform=...)
-            warnings.warn(
-                "The 'env' argument is deprecated and will be removed in v0.12. "
-                "Use 'base_env' instead.",
-                DeprecationWarning,
-                stacklevel=2,
+            raise TypeError(
+                "The 'env' argument has been removed. Use 'base_env' instead."
             )
-            base_env = kwargs.pop("env")
-            transform = kwargs.pop("transform", None)
-            cache_specs = kwargs.pop("cache_specs", True)
-            auto_unwrap = kwargs.pop("auto_unwrap", None)
         elif "base_env" in kwargs:
             # New syntax with keyword arguments: TransformedEnv(base_env=..., transform=...)
             base_env = kwargs.pop("base_env")

@@ -131,7 +131,6 @@ def train_start(
         max_frames_per_traj=-1,
         replay_buffer=data_buffer,
         postproc=postproc,
-        local_init_rb=True,
         weight_sync_schemes=weight_sync_schemes,
     )
 

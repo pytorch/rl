@@ -277,11 +277,6 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             but populate the buffer instead. Defaults to ``None``.
         extend_buffer (bool, optional): if `True`, the replay buffer is extended with entire rollouts and not
             with single steps. Defaults to `True` for multiprocessed data collectors.
-        local_init_rb (bool, optional): if ``False``, the collector will use fake data to initialize
-            the replay buffer in the main process (legacy behavior). If ``True``, the storage-level
-            coordination will handle initialization with real data from worker processes.
-            Defaults to ``None``, which maintains backward compatibility but shows a deprecation warning.
-            This parameter is deprecated and will be removed in v0.12.
         trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
             assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
             and ``False`` otherwise.
@@ -386,7 +381,6 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
         extend_buffer: bool = True,
-        local_init_rb: bool | None = None,
         trust_policy: bool | None = None,
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
@@ -443,7 +437,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         # Set up replay buffer
         self._use_buffers = use_buffers
         self.replay_buffer = replay_buffer
-        self._setup_multi_replay_buffer(local_init_rb, replay_buffer, extend_buffer)
+        self._setup_multi_replay_buffer(replay_buffer, extend_buffer)
 
         # Set up policy and weights
         if trust_policy is None:
@@ -618,21 +612,11 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
 
     def _setup_multi_replay_buffer(
         self,
-        local_init_rb: bool | None,
         replay_buffer: ReplayBuffer | None,
         extend_buffer: bool,
     ) -> None:
         """Set up replay buffer for multi-process collector."""
-        # Handle local_init_rb deprecation
-        if local_init_rb is None:
-            local_init_rb = False
-            if replay_buffer is not None and not local_init_rb:
-                warnings.warn(
-                    "local_init_rb=False is deprecated and will be removed in v0.12. "
-                    "The new storage-level initialization provides better performance.",
-                    FutureWarning,
-                )
-        self.local_init_rb = local_init_rb
+        self.local_init_rb = True
 
         self._check_replay_buffer_init()
 
