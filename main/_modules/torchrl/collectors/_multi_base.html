@@ -1174,7 +1174,8 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">_storage</span><span class="p">,</span> <span class="s2">&quot;initialized&quot;</span><span class="p">,</span> <span class="kc">True</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">is_init</span><span class="p">:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">local_init_rb</span><span class="p">:</span>
+            <span class="n">storage</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">_storage</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">local_init_rb</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="s2">&quot;shared_init&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
                 <span class="c1"># New behavior: storage handles all coordination itself</span>
                 <span class="c1"># Nothing to do here - the storage will coordinate during first write</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">share</span><span class="p">()</span>
