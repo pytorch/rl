@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.envs
+
+
+check_marl_grouping
+===================
+
+.. autofunction:: check_marl_grouping

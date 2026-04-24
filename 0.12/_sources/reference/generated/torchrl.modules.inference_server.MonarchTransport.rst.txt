@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules.inference_server
+
+
+MonarchTransport
+================
+
+.. autoclass:: MonarchTransport
+    :members:

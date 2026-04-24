@@ -1,0 +1,89 @@
+﻿torchrl.modules.mcts.EXP3Score
+==============================
+
+.. currentmodule:: torchrl.modules.mcts
+
+.. autoclass:: EXP3Score
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~EXP3Score.__init__
+      ~EXP3Score.add_module
+      ~EXP3Score.apply
+      ~EXP3Score.bfloat16
+      ~EXP3Score.buffers
+      ~EXP3Score.children
+      ~EXP3Score.compile
+      ~EXP3Score.cpu
+      ~EXP3Score.cuda
+      ~EXP3Score.double
+      ~EXP3Score.eval
+      ~EXP3Score.extra_repr
+      ~EXP3Score.float
+      ~EXP3Score.forward
+      ~EXP3Score.get_buffer
+      ~EXP3Score.get_extra_state
+      ~EXP3Score.get_parameter
+      ~EXP3Score.get_submodule
+      ~EXP3Score.half
+      ~EXP3Score.ipu
+      ~EXP3Score.is_tdmodule_compatible
+      ~EXP3Score.load_state_dict
+      ~EXP3Score.modules
+      ~EXP3Score.mtia
+      ~EXP3Score.named_buffers
+      ~EXP3Score.named_children
+      ~EXP3Score.named_modules
+      ~EXP3Score.named_parameters
+      ~EXP3Score.parameters
+      ~EXP3Score.register_backward_hook
+      ~EXP3Score.register_buffer
+      ~EXP3Score.register_forward_hook
+      ~EXP3Score.register_forward_pre_hook
+      ~EXP3Score.register_full_backward_hook
+      ~EXP3Score.register_full_backward_pre_hook
+      ~EXP3Score.register_load_state_dict_post_hook
+      ~EXP3Score.register_load_state_dict_pre_hook
+      ~EXP3Score.register_module
+      ~EXP3Score.register_parameter
+      ~EXP3Score.register_state_dict_post_hook
+      ~EXP3Score.register_state_dict_pre_hook
+      ~EXP3Score.requires_grad_
+      ~EXP3Score.reset_out_keys
+      ~EXP3Score.reset_parameters_recursive
+      ~EXP3Score.select_out_keys
+      ~EXP3Score.set_extra_state
+      ~EXP3Score.set_submodule
+      ~EXP3Score.share_memory
+      ~EXP3Score.state_dict
+      ~EXP3Score.to
+      ~EXP3Score.to_empty
+      ~EXP3Score.train
+      ~EXP3Score.type
+      ~EXP3Score.update_weights
+      ~EXP3Score.xpu
+      ~EXP3Score.zero_grad
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~EXP3Score.T_destination
+      ~EXP3Score.call_super_init
+      ~EXP3Score.dump_patches
+      ~EXP3Score.in_keys
+      ~EXP3Score.out_keys
+      ~EXP3Score.out_keys_source
+      ~EXP3Score.training
+   
+   

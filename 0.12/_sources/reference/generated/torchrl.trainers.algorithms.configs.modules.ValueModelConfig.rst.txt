@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.modules.ValueModelConfig
+============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.modules
+
+.. autoclass:: ValueModelConfig

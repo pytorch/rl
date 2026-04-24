@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms
+
+
+Stack
+=====
+
+.. autoclass:: Stack
+    :members:

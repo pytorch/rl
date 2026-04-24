@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.transforms.MultiActionConfig
+================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
+
+.. autoclass:: MultiActionConfig

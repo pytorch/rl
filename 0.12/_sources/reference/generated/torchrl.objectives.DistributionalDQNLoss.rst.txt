@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+DistributionalDQNLoss
+=====================
+
+.. autoclass:: DistributionalDQNLoss
+    :members:

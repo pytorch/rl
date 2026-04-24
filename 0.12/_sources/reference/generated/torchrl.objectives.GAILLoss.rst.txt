@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+GAILLoss
+========
+
+.. autoclass:: GAILLoss
+    :members:

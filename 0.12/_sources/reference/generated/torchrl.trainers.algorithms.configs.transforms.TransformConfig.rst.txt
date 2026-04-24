@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.transforms.TransformConfig
+==============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
+
+.. autoclass:: TransformConfig

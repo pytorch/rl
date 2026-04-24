@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+DdpgCnnActor
+============
+
+.. autoclass:: DdpgCnnActor
+    :members:

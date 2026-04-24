@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+A2CLoss
+=======
+
+.. autoclass:: A2CLoss
+    :members:

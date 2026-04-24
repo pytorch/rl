@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.record.loggers
+
+
+get_logger
+==========
+
+.. autofunction:: get_logger
