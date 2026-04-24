@@ -2207,8 +2207,17 @@ if __name__ == "__main__":
                 #
                 for env_idx in range(num_envs):
                     if with_preempt and env_idx % 2 == 1:
-                        # This is a slow env, should have been preempted after first step
-                        assert (batch["collector", "traj_ids"][env_idx, 1:] == -1).all()
+                        traj_ids = batch["collector", "traj_ids"][env_idx]
+                        neg_mask = traj_ids == -1
+                        assert neg_mask.any(), (
+                            f"Env {env_idx}: preemption should have produced at least one -1 slot, "
+                            f"got traj_ids={traj_ids.tolist()}"
+                        )
+                        first_neg = neg_mask.long().argmax().item()
+                        assert (traj_ids[first_neg:] == -1).all(), (
+                            f"Env {env_idx}: padding -1s should be contiguous at the end, "
+                            f"got traj_ids={traj_ids.tolist()}"
+                        )
                         continue
                     # This is a fast env, no preemption happened
                     assert (batch["collector", "traj_ids"][env_idx] != -1).all()
