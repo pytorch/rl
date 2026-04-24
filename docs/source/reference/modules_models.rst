@@ -14,8 +14,11 @@ Modules for model-based reinforcement learning, including world models and dynam
     ObsEncoder
     ObsDecoder
     RSSMPosterior
+    RSSMPosteriorV3
     RSSMPrior
+    RSSMPriorV3
     RSSMRollout
+    RSSMRolloutV3
 
 PILCO
 -----

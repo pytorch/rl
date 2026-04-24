@@ -26,6 +26,7 @@ from .model_based import (
     RSSMPrior,
     RSSMRollout,
 )
+from .model_based_v3 import RSSMPosteriorV3, RSSMPriorV3, RSSMRolloutV3
 from .models import (
     Conv2dNet,
     Conv3dNet,
@@ -81,8 +82,11 @@ __all__ = [
     "QMixer",
     "RBFController",
     "RSSMPosterior",
+    "RSSMPosteriorV3",
     "RSSMPrior",
+    "RSSMPriorV3",
     "RSSMRollout",
+    "RSSMRolloutV3",
     "Squeeze2dLayer",
     "SqueezeLayer",
     "VDNMixer",
