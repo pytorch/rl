@@ -68,7 +68,7 @@ Collectors Deep Dive: Trajectory Assembly
  .. code-block:: none
 
 
-    <torch._C.Generator object at 0x7f838e190c30>
+    <torch._C.Generator object at 0x7f8261398c30>
 
 
 
@@ -926,7 +926,7 @@ Useful next resources
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.286 seconds)
+   **Total running time of the script:** (0 minutes 0.289 seconds)
 
 
 .. _sphx_glr_download_tutorials_collector_trajectory_assembly.py:
