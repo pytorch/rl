@@ -931,7 +931,8 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             self.replay_buffer._storage, "initialized", True
         )
         if not is_init:
-            if self.local_init_rb:
+            storage = self.replay_buffer._storage
+            if self.local_init_rb and getattr(storage, "shared_init", False):
                 # New behavior: storage handles all coordination itself
                 # Nothing to do here - the storage will coordinate during first write
                 self.replay_buffer.share()
