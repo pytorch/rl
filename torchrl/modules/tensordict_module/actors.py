@@ -16,6 +16,7 @@ from tensordict.nn import (
     TensorDictModuleWrapper,
     TensorDictSequential,
 )
+from tensordict.nn.distributions import Delta
 from tensordict.nn.probabilistic import interaction_type, InteractionType
 from tensordict.utils import expand_as_right, NestedKey
 from torch import nn
@@ -123,12 +124,31 @@ class Actor(SafeModule):
             **kwargs,
         )
 
+    def get_dist(self, tensordict: TensorDictBase) -> torch.distributions.Distribution:
+        """Returns a Delta distribution centered at the deterministic action.
+
+        For deterministic actors, this returns a Delta distribution which has
+        log-probability 0 for the exact action and -inf for any other action.
+
+        Args:
+            tensordict (TensorDictBase): input tensordict containing observations.
+
+        Returns:
+            torch.distributions.Distribution: A Delta distribution.
+        """
+        # Forward pass to get the action
+        td_out = self(tensordict)
+        action = td_out.get(self.out_keys[0])
+
+        return Delta(action)
+
 
 class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
     """General class for probabilistic actors in RL.
 
-    The Actor class comes with default values for the out_keys (["action"])
-    and if the spec is provided but not as a Composite object, it will be
+    The ProbabilisticActor class comes with default values for the out_keys (["action"])
+    and if the spec is provided but not as a
+    Composite object, it will be
     automatically translated into :obj:`spec = Composite(action=spec)`
 
     Args:
@@ -356,6 +376,41 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
             is_shared=False)
 
     """
+
+    def __init__(
+        self,
+        module: TensorDictModule,
+        in_keys: NestedKey | Sequence[NestedKey],
+        out_keys: Sequence[NestedKey] | None = None,
+        *,
+        spec: TensorSpec | None = None,
+        **kwargs,
+    ):
+        distribution_class = kwargs.get("distribution_class")
+        if out_keys is None:
+            if distribution_class is CompositeDistribution:
+                if "distribution_map" not in kwargs.get("distribution_kwargs", {}):
+                    raise KeyError(
+                        "'distribution_map' must be provided within "
+                        "distribution_kwargs whenever the distribution is of type CompositeDistribution."
+                    )
+                distribution_map = kwargs["distribution_kwargs"]["distribution_map"]
+                name_map = kwargs["distribution_kwargs"].get("name_map", None)
+                if name_map is not None:
+                    out_keys = list(name_map.values())
+                else:
+                    out_keys = list(distribution_map.keys())
+            else:
+                out_keys = ["action"]
+        if len(out_keys) == 1 and spec is not None and not isinstance(spec, Composite):
+            spec = Composite({out_keys[0]: spec})
+
+        super().__init__(
+            module,
+            SafeProbabilisticModule(
+                in_keys=in_keys, out_keys=out_keys, spec=spec, **kwargs
+            ),
+        )
 
     def __init__(
         self,
@@ -1970,9 +2025,9 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         self._check_tensor_dims(return_to_go, observation, action)
 
         observation[..., : -self.inference_context, :] = 0
-        action[
-            ..., : -(self.inference_context - 1), :
-        ] = 0  # as we add zeros to the end of the action
+        action[..., : -(self.inference_context - 1), :] = (
+            0  # as we add zeros to the end of the action
+        )
         action = torch.cat(
             [
                 action[..., 1:, :],

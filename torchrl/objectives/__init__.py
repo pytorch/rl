@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from torchrl.objectives.a2c import A2CLoss
+from torchrl.objectives.bc import BCLoss
 from torchrl.objectives.common import add_random_module, LossModule
 from torchrl.objectives.cql import CQLLoss, DiscreteCQLLoss
 from torchrl.objectives.crossq import CrossQLoss
@@ -41,6 +42,7 @@ from torchrl.objectives.utils import (
 
 __all__ = [
     "A2CLoss",
+    "BCLoss",
     "CQLLoss",
     "DiffusionBCLoss",
     "ClipPPOLoss",
