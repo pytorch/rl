@@ -16,6 +16,7 @@ from tensordict.nn import (
     TensorDictModuleWrapper,
     TensorDictSequential,
 )
+from tensordict.nn.distributions import Delta
 from tensordict.nn.probabilistic import interaction_type, InteractionType
 from tensordict.utils import expand_as_right, NestedKey
 from torch import nn
@@ -138,9 +139,6 @@ class Actor(SafeModule):
         # Forward pass to get the action
         td_out = self(tensordict)
         action = td_out.get(self.out_keys[0])
-
-        # Import here to avoid circular imports
-        from tensordict.nn.distributions import Delta
 
         return Delta(action)
 

@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable, Literal
 
 import torch
 import torch.nn.functional as F
@@ -24,17 +24,23 @@ class BCLoss(LossModule):
     Minimizes the negative log-likelihood: -E[log π(a_expert | s)] where π is the
     policy being trained and a_expert are the expert actions from the demonstration dataset.
 
-    Works with any actor network that implements get_dist() method, including both
+    Works with any actor network that implements :meth:`~tensordict.nn.TensorDictModule.get_dist`
+    method, including both
     stochastic and deterministic policies.
+
+    Reference:
+        "Integrating Behavior Cloning and Reinforcement Learning for Improved
+        Performance in Dense and Sparse Reward Environments"
+        https://arxiv.org/abs/1910.04281
 
     Args:
         actor_network (TensorDictModule): the actor network to be trained.
 
     Keyword Args:
         reduction (str, optional): Specifies the reduction to apply to the output:
-            "none" | "mean" | "sum". "none": no reduction will be applied,
-            "mean": the sum of the output will be divided by the number of
-            elements in the output, "sum": the output will be summed. Default: "mean".
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     Examples:
         >>> import torch
@@ -63,7 +69,7 @@ class BCLoss(LossModule):
 
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,
-    the expected keyword arguments are the actor's in_keys + ["action"].
+    the expected keyword arguments are the actor's ``in_keys`` + ``["action"]``.
     The return value is a tensor corresponding to the loss.
 
     Examples:
@@ -108,8 +114,10 @@ class BCLoss(LossModule):
         self,
         actor_network: TensorDictModule,
         *,
-        loss_function: callable | None = None,
-        reduction: str | None = None,
+        loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
+        | Literal["l1", "l2", "mse", "smooth_l1", "cross_entropy"]
+        | None = None,
+        reduction: Literal["mean", "sum", "none"] | None = None,
     ) -> None:
         if reduction is None:
             reduction = "mean"
@@ -154,7 +162,7 @@ class BCLoss(LossModule):
         Returns:
             TensorDict with key "loss_bc".
         """
-        tensordict = tensordict.clone(False)
+        tensordict = tensordict.copy()
 
         # Get expert action
         action_expert = tensordict.get(self.tensor_keys.action)
@@ -223,7 +231,7 @@ class BCLoss(LossModule):
 
         loss = _reduce(loss, reduction=self.reduction)
 
-        td_out = TensorDict({"loss_bc": loss}, batch_size=[])
+        td_out = TensorDict({"loss_bc": loss})
         self._clear_weakrefs(
             tensordict,
             td_out,
