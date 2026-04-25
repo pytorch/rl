@@ -169,11 +169,19 @@ class BCLoss(LossModule):
                 if isinstance(self.loss_function, str):
                     if self.loss_function == "l1":
                         loss = F.l1_loss(action_pred, action_expert, reduction="none")
-                    elif self.loss_function == "l2":
+                    elif self.loss_function == "l2" or self.loss_function == "mse":
                         loss = F.mse_loss(action_pred, action_expert, reduction="none")
                     elif self.loss_function == "smooth_l1":
                         loss = F.smooth_l1_loss(
                             action_pred, action_expert, reduction="none"
+                        )
+                    elif self.loss_function == "cross_entropy":
+                        loss = F.cross_entropy(
+                            action_pred,
+                            action_expert.squeeze(-1)
+                            if action_expert.ndim > 1
+                            else action_expert,
+                            reduction="none",
                         )
                     else:
                         raise ValueError(
@@ -182,9 +190,31 @@ class BCLoss(LossModule):
                 else:
                     loss = self.loss_function(action_pred, action_expert)
             elif "action" in tensordict:
-                # Deterministic actor with no loss_function: use MSE loss
+                # Determine loss type based on action dtype and actor structure
                 action_pred = tensordict.get("action")
-                loss = F.mse_loss(action_pred, action_expert, reduction="none")
+
+                # Priority 1: If expert actions are discrete (integers), use cross-entropy
+                if action_expert.dtype in (torch.long, torch.int32, torch.int64):
+                    # For discrete actions: target is 1D class indices, prediction is [batch, num_classes]
+                    loss = F.cross_entropy(
+                        action_pred,
+                        action_expert.squeeze(-1)
+                        if action_expert.ndim > 1
+                        else action_expert,
+                        reduction="none",
+                    )
+                # Priority 2: Check if actor has distributional outputs (stochastic actor)
+                elif hasattr(self.actor_network, "out_keys") and any(
+                    k in self.actor_network.out_keys
+                    for k in ["loc", "scale", "logits", "probs"]
+                ):
+                    # Stochastic actor: use NLL loss
+                    dist = self.actor_network.get_dist(tensordict)
+                    log_prob = dist.log_prob(action_expert)
+                    loss = -log_prob
+                else:
+                    # Default: use MSE for continuous deterministic actions
+                    loss = F.mse_loss(action_pred, action_expert, reduction="none")
             else:
                 # Use distribution-based negative log probability
                 dist = self.actor_network.get_dist(tensordict)
