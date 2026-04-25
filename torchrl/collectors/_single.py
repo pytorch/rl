@@ -839,13 +839,13 @@ class Collector(BaseCollector):
         """Returns the compiled policy, compiling it lazily if needed."""
         if (policy := self._wrapped_policy_maybe_compiled) is None:
             if self.compiled_policy or self.cudagraphed_policy:
-                policy = (
-                    self._wrapped_policy_maybe_compiled
-                ) = self._compile_wrapped_policy(self._wrapped_policy_uncompiled)
+                policy = self._wrapped_policy_maybe_compiled = (
+                    self._compile_wrapped_policy(self._wrapped_policy_uncompiled)
+                )
             else:
-                policy = (
-                    self._wrapped_policy_maybe_compiled
-                ) = self._wrapped_policy_uncompiled
+                policy = self._wrapped_policy_maybe_compiled = (
+                    self._wrapped_policy_uncompiled
+                )
         return policy
 
     @property
@@ -1607,6 +1607,9 @@ class Collector(BaseCollector):
             TensorDictBase containing the computed rollout.
 
         """
+        if self.pre_collect_hook is not None:
+            self.pre_collect_hook()
+
         if self.reset_at_each_iter:
             self._carrier.update(self.env.reset())
 
@@ -1797,7 +1800,12 @@ class Collector(BaseCollector):
                     result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
                     result.refine_names(..., "time")
 
-        return self._maybe_set_truncated(result)
+        result = self._maybe_set_truncated(result)
+
+        if self.post_collect_hook is not None:
+            self.post_collect_hook(result)
+
+        return result
 
     def _maybe_set_truncated(self, final_rollout):
         last_step = (slice(None),) * (final_rollout.ndim - 1) + (-1,)
