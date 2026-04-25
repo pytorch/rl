@@ -6,6 +6,7 @@
 from .brax import BraxEnv, BraxWrapper
 from .dm_control import DMControlEnv, DMControlWrapper
 from .envpool import MultiThreadedEnv, MultiThreadedEnvWrapper
+from .genesis import GenesisEnv, GenesisWrapper
 from .gym import (
     gym_backend,
     GymEnv,
@@ -34,6 +35,8 @@ __all__ = [
     "BraxWrapper",
     "DMControlEnv",
     "DMControlWrapper",
+    "GenesisEnv",
+    "GenesisWrapper",
     "GymEnv",
     "GymWrapper",
     "HabitatEnv",

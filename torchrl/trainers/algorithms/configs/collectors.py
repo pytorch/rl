@@ -53,7 +53,7 @@ class CollectorConfig(BaseCollectorConfig):
     weight_updater: Any = None
     weight_sync_schemes: Any = None
     track_policy_version: bool = False
-    local_init_rb: bool = False
+
     _target_: str = "torchrl.collectors.Collector"
     _partial_: bool = False
 
@@ -102,7 +102,7 @@ class AsyncCollectorConfig(BaseCollectorConfig):
     weight_updater: Any = None
     weight_sync_schemes: Any = None
     track_policy_version: bool = False
-    local_init_rb: bool = False
+
     _target_: str = "torchrl.collectors.AsyncCollector"
     _partial_: bool = False
 
@@ -150,7 +150,7 @@ class MultiSyncCollectorConfig(BaseCollectorConfig):
     weight_updater: Any = None
     weight_sync_schemes: Any = None
     track_policy_version: bool = False
-    local_init_rb: bool = False
+
     _target_: str = "torchrl.collectors.MultiSyncCollector"
     _partial_: bool = False
 
@@ -199,7 +199,7 @@ class MultiAsyncCollectorConfig(BaseCollectorConfig):
     weight_updater: Any = None
     weight_sync_schemes: Any = None
     track_policy_version: bool = False
-    local_init_rb: bool = False
+
     _target_: str = "torchrl.collectors.MultiAsyncCollector"
     _partial_: bool = False
 

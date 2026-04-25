@@ -1174,6 +1174,64 @@ class TestOptimizationStepper:
         assert "optimization_stepper" in sd
 
 
+class TestPostOptimCompleteLog:
+    def _make_trainer(self, loss_module, optimization_stepper=None, optimizer=None):
+        trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=None,
+            frame_skip=None,
+            optim_steps_per_batch=1,
+            loss_module=loss_module,
+            optimizer=optimizer,
+            optimization_stepper=optimization_stepper,
+        )
+        trainer._pbar_str = OrderedDict()
+        return trainer
+
+    def test_hook_receives_optim_steps_and_averaged_losses(self):
+        captured = {}
+
+        def capture_hook(optim_steps, average_losses):
+            captured["optim_steps"] = optim_steps
+            captured["average_losses"] = average_losses
+            return None
+
+        stepper = _CountingStepper()
+        loss_module = _CountingLossModule()
+        trainer = self._make_trainer(
+            loss_module=loss_module,
+            optimization_stepper=stepper,
+        )
+        trainer.register_op("post_optim_complete_log", capture_hook)
+        td = TensorDict({"x": torch.randn(3)}, [])
+        trainer.optim_steps(td)
+
+        assert stepper.calls == 1
+        assert captured["optim_steps"] == trainer._optim_count
+        assert "loss" in captured["average_losses"].keys()
+        assert "optim_steps" in trainer._log_dict
+        assert "loss" in trainer._log_dict
+        assert trainer._log_dict["optim_steps"][-1] == trainer._optim_count
+
+    def test_hook_return_logs_extra_metric(self):
+        def extra_metric_hook(optim_steps, average_losses):
+            return {"custom_metric": 1.0}
+
+        stepper = _CountingStepper()
+        trainer = self._make_trainer(
+            loss_module=_CountingLossModule(),
+            optimization_stepper=stepper,
+        )
+        trainer.register_op("post_optim_complete_log", extra_metric_hook)
+        td = TensorDict({"x": torch.randn(3)}, [])
+        trainer.optim_steps(td)
+
+        assert "custom_metric" in trainer._log_dict
+        assert trainer._log_dict["custom_metric"][-1] == 1.0
+        assert "optim_steps" in trainer._log_dict
+        assert "loss" in trainer._log_dict
+
+
 class TestDefaultOptimizationStepper:
     def test_loss_components_partial(self):
         torch.manual_seed(0)
