@@ -394,10 +394,15 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
         init_fn: Callable[[], None] | None = None,
+        post_collect_hook: Callable[[TensorDictBase], None] | None = None,
     ):
         self.closed = True
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
+        super().__init__(
+            pre_collect_hook=None,
+            post_collect_hook=post_collect_hook,
+        )
         self._worker_trajs_per_batch = None
         # Wrap init_fn with CloudpickleWrapper to support lambdas / closures
         # across the spawn start method.
