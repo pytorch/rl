@@ -450,11 +450,16 @@ class Collector(BaseCollector):
         track_policy_version: bool = False,
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
+        post_collect_hook: Callable[[TensorDictBase], None] | None = None,
         **kwargs,
     ):
         self.closed = True
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
+        super().__init__(
+            pre_collect_hook=None,
+            post_collect_hook=post_collect_hook,
+        )
 
         # Note: weight_sync_schemes can be used to send weights to components
         # within the environment (e.g., RayModuleTransform), not just sub-collectors
