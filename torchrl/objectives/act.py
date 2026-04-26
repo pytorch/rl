@@ -154,8 +154,16 @@ class ACTLoss(LossModule):
             TensorDict with keys ``"loss_act"``, ``"loss_reconstruction"``,
             and ``"loss_kl"``.
         """
+        td_in = TensorDict(
+            {
+                "observation": tensordict.get(self.tensor_keys.observation),
+                "action_chunk": tensordict.get(self.tensor_keys.action_chunk),
+            },
+            batch_size=tensordict.batch_size,
+            device=tensordict.device,
+        )
         with self.actor_network_params.to_module(self.actor_network):
-            td_out = self.actor_network(tensordict.copy())
+            td_out = self.actor_network(td_in)
 
         action_pred = td_out.get(self.tensor_keys.action_pred)
         action_chunk = tensordict.get(self.tensor_keys.action_chunk)

@@ -241,3 +241,47 @@ class TestACTLoss:
         assert (
             final_loss < initial_loss
         ), f"Loss did not decrease: {initial_loss:.4f} -> {final_loss:.4f}"
+
+    def test_set_keys(self):
+        actor = _make_actor()
+        loss_fn = ACTLoss(actor)
+        loss_fn.set_keys(observation="obs", action_chunk="demo_actions")
+        td = TensorDict(
+            {
+                "obs": torch.randn(4, OBS_DIM),
+                "demo_actions": torch.randn(4, CHUNK_SIZE, ACTION_DIM),
+            },
+            batch_size=[4],
+        )
+        loss_td = loss_fn(td)
+        assert loss_td["loss_act"].isfinite()
+
+    def test_reduction_none(self):
+        actor = _make_actor()
+        loss_fn = ACTLoss(actor, reduction="none")
+        td = _make_batch(batch_size=4)
+        loss_td = loss_fn(td)
+        assert loss_td["loss_act"].shape == torch.Size([4])
+        assert loss_td["loss_reconstruction"].shape == torch.Size([4])
+        assert loss_td["loss_kl"].shape == torch.Size([4])
+
+    def test_reset_parameters_recursive(self):
+        actor = _make_actor()
+        loss_fn = ACTLoss(actor)
+        params_before = [p.clone() for p in loss_fn.parameters()]
+        loss_fn.reset_parameters_recursive()
+        params_after = list(loss_fn.parameters())
+        assert any(
+            not torch.equal(a, b) for a, b in zip(params_before, params_after)
+        )
+
+    @pytest.mark.parametrize(
+        "obs_dim,action_dim,chunk_size",
+        [(1, 1, 1), (3, 2, 1), (8, 4, 5), (32, 6, 20)],
+    )
+    def test_edge_case_dims(self, obs_dim, action_dim, chunk_size):
+        actor = _make_actor(obs_dim=obs_dim, action_dim=action_dim, chunk_size=chunk_size)
+        loss_fn = ACTLoss(actor)
+        td = _make_batch(batch_size=2, obs_dim=obs_dim, action_dim=action_dim, chunk_size=chunk_size)
+        loss_td = loss_fn(td)
+        assert loss_td["loss_act"].isfinite()
