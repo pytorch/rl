@@ -102,6 +102,7 @@ jobs:
           git checkout ${{ github.event.pull_request.head.sha }}
           $RUN_BENCHMARK ${{ env.CONTENDER_JSON }}
       - name: Publish results
+        continue-on-error: true
         uses: apbard/pytest-benchmark-commenter@v3
         env:
           GIT_WORK_TREE: /__w/rl/rl

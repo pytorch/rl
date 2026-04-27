@@ -177,7 +177,7 @@ exclude = [
 
 [tool.setuptools.package-data]
 "*" = ["*.txt", "*.md"]
-"torchrl" = ["csrc/*.h"]
+"torchrl" = ["csrc/*.h", "csrc/*.cu"]
 
 [tool.codespell]
 skip = ".git,*.svg,*.png,*.jpg,*.css,*.js,*.tmp,docs/_local_build,docs/source/reference/generated,torchrl/_version.py,.worktrees,0.9"
