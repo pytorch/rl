@@ -2,6 +2,16 @@ name: Unit-tests on Linux
 
 on:
   pull_request:
+    # Docs-only / example-only / tutorial-only PRs don't need the Linux test matrix.
+    # The prepare job below further narrows what runs for PRs that do trigger the workflow.
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - '**.rst'
+      - 'tutorials/**'
+      - 'examples/**'
+      - 'benchmarks/**'
+      - 'sota-implementations/**'
   push:
     branches:
       - nightly
@@ -24,6 +34,81 @@ permissions:
   contents: read
 
 jobs:
+  # Compute selective-CI matrix flags. Consumed by downstream jobs via needs.prepare.outputs.*.
+  # On push / workflow_call / workflow_dispatch / PR with ciflow/full label: full=true -> full matrix.
+  # On PR: tj-actions/changed-files + ciflow/* labels drive which shards and peer tracks run.
+  # See .github/scripts/ci_decide.sh for the precedence logic.
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      full: ${{ steps.decide.outputs.full }}
+      run_cpu_matrix: ${{ steps.decide.outputs.run_cpu_matrix }}
+      run_shard1: ${{ steps.decide.outputs.run_shard1 }}
+      run_shard2: ${{ steps.decide.outputs.run_shard2 }}
+      run_shard3: ${{ steps.decide.outputs.run_shard3 }}
+      run_olddeps: ${{ steps.decide.outputs.run_olddeps }}
+      run_stable: ${{ steps.decide.outputs.run_stable }}
+      run_optdeps: ${{ steps.decide.outputs.run_optdeps }}
+      run_distributed: ${{ steps.decide.outputs.run_distributed }}
+      shards_json: ${{ steps.decide.outputs.shards_json }}
+      cpu_python_versions: ${{ steps.decide.outputs.cpu_python_versions }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: changed
+        if: github.event_name == 'pull_request'
+        uses: tj-actions/changed-files@v45
+        with:
+          files_yaml: |
+            shard1:
+              - torchrl/envs/transforms/**
+              - test/transforms/**
+            shard2:
+              - torchrl/envs/**
+              - torchrl/collectors/**
+              - test/envs/**
+              - test/test_collectors.py
+              - '!torchrl/envs/transforms/**'
+              - '!torchrl/collectors/distributed/**'
+            shard3:
+              - torchrl/**
+              - test/**
+              - setup.py
+              - pyproject.toml
+              - .github/unittest/**
+              - '!torchrl/envs/transforms/**'
+              - '!torchrl/envs/**'
+              - '!torchrl/collectors/**'
+              - '!test/transforms/**'
+              - '!test/envs/**'
+              - '!test/test_collectors.py'
+              - '!test/test_distributed.py'
+              - '!test/test_rb_distributed.py'
+              - '!test/llm/**'
+              - '!test/test_setup.py'
+            distributed:
+              - torchrl/collectors/distributed/**
+              - torchrl/services/**
+              - test/test_distributed.py
+              - test/test_rb_distributed.py
+      - id: decide
+        run: |
+          set -euo pipefail
+          bash .github/scripts/ci_decide.sh \
+            '${{ github.event_name }}' \
+            '${{ github.ref }}' \
+            '${{ toJSON(github.event.pull_request.labels.*.name) }}' \
+            '${{ steps.changed.outputs.shard1_any_changed || 'false' }}' \
+            '${{ steps.changed.outputs.shard2_any_changed || 'false' }}' \
+            '${{ steps.changed.outputs.shard3_any_changed || 'false' }}' \
+            '${{ steps.changed.outputs.distributed_any_changed || 'false' }}' \
+            | tee -a "$GITHUB_OUTPUT"
+          # Emit the CPU python-version matrix as JSON for downstream `fromJSON`.
+          if grep -q '^run_cpu_matrix=true$' "$GITHUB_OUTPUT"; then
+            echo 'cpu_python_versions=["3.10","3.11","3.12","3.13","3.14"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'cpu_python_versions=["3.12"]' >> "$GITHUB_OUTPUT"
+          fi
+
   test-setup-minimal:
     strategy:
       matrix:
@@ -44,9 +129,10 @@ jobs:
         bash .github/unittest/linux/scripts/run_setup_test.sh
 
   tests-cpu:
+    needs: prepare
     strategy:
       matrix:
-        python_version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python_version: ${{ fromJSON(needs.prepare.outputs.cpu_python_versions) }}
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -75,6 +161,8 @@ jobs:
         bash .github/unittest/linux/scripts/run_all.sh
 
   tests-gpu:
+    needs: prepare
+    # prepare.outputs.shards_json is always non-empty (shard 3 safety net), so no extra if: gate.
     strategy:
       matrix:
         python_version: ["3.12"]
@@ -83,7 +171,7 @@ jobs:
         # Shard 1: test/transforms/ (transform tests)
         # Shard 2: test/envs/ + test_collectors.py (multiprocessing-heavy)
         # Shard 3: all other tests
-        shard: ["1", "2", "3"]
+        shard: ${{ fromJSON(needs.prepare.outputs.shards_json) }}
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -124,6 +212,8 @@ jobs:
         bash .github/unittest/linux/scripts/run_all.sh
 
   tests-gpu-distributed:
+    needs: prepare
+    if: needs.prepare.outputs.run_distributed == 'true'
     strategy:
       matrix:
         python_version: ["3.12"]
@@ -163,6 +253,8 @@ jobs:
         bash .github/unittest/linux/scripts/run_all.sh
 
   tests-olddeps:
+    needs: prepare
+    if: needs.prepare.outputs.run_olddeps == 'true'
     strategy:
       matrix:
         python_version: ["3.10"]
@@ -199,6 +291,8 @@ jobs:
         bash .github/unittest/linux_olddeps/scripts_gym_0_13/post_process.sh
 
   tests-optdeps:
+    needs: prepare
+    if: needs.prepare.outputs.run_optdeps == 'true'
     strategy:
       matrix:
         python_version: ["3.12"]
@@ -235,12 +329,14 @@ jobs:
         bash .github/unittest/linux_optdeps/scripts/run_all.sh
 
   tests-stable-gpu:
+    needs: prepare
+    if: needs.prepare.outputs.run_stable == 'true'
     strategy:
       matrix:
         python_version: ["3.12"] # "3.9", "3.10", "3.11"
         cuda_arch_version: ["13.0"] # "11.6", "11.7"
         # Test sharding: split tests into 3 parallel jobs for faster execution
-        shard: ["1", "2", "3"]
+        shard: ${{ fromJSON(needs.prepare.outputs.shards_json) }}
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -283,6 +379,8 @@ jobs:
         bash .github/unittest/linux/scripts/run_all.sh
 
   tests-stable-gpu-distributed:
+    needs: prepare
+    if: needs.prepare.outputs.run_stable == 'true'
     strategy:
       matrix:
         python_version: ["3.12"] # "3.9", "3.10", "3.11"

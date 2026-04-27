@@ -2,6 +2,13 @@ name: SOTA Tests on Linux
 
 on:
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - '**.rst'
+      - 'benchmarks/**'
+      - 'tutorials/**'
+      - 'examples/**'
   push:
     branches:
       - nightly
@@ -24,7 +31,28 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      in_scope: ${{ steps.filter.outputs.any_changed || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        if: github.event_name == 'pull_request'
+        uses: tj-actions/changed-files@v45
+        with:
+          files: |
+            sota-implementations/**
+            torchrl/trainers/**
+
   tests:
+    needs: changes
+    # Skip on PRs unless sota code is touched, or an opt-in label is present.
+    if: >-
+      github.event_name != 'pull_request' ||
+      needs.changes.outputs.in_scope == 'true' ||
+      contains(github.event.pull_request.labels.*.name, 'ciflow/full') ||
+      contains(github.event.pull_request.labels.*.name, 'ciflow/sota')
     strategy:
       matrix:
         python_version: ["3.10"]

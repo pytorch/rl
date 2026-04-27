@@ -3,6 +3,12 @@ name: Tutorials Tests on Linux
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - '**.rst'
+      - 'benchmarks/**'
+      - 'sota-implementations/**'
   push:
     branches:
       - nightly
@@ -20,13 +26,32 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      in_scope: ${{ steps.filter.outputs.any_changed || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        if: github.event_name == 'pull_request'
+        uses: tj-actions/changed-files@v45
+        with:
+          files: |
+            tutorials/**
+
   tests:
+    needs: changes
+    # Skip on PRs unless tutorials are touched, or an opt-in label is present.
+    if: >-
+      github.event_name != 'pull_request' ||
+      needs.changes.outputs.in_scope == 'true' ||
+      contains(github.event.pull_request.labels.*.name, 'ciflow/full') ||
+      contains(github.event.pull_request.labels.*.name, 'ciflow/tutorials')
     strategy:
       matrix:
         python_version: ["3.12"]
         cuda_arch_version: ["12.4"]
       fail-fast: false
-    # Run on all PRs and pushes to main/nightly/release branches
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
