@@ -12161,61 +12161,110 @@ class FlattenTensorDict(Transform):
 
 
 class ExpandAs(Transform):
-    """Expands selected entries to match the shape of a reference entry.
+    """Expands one entry to the right to match a reference entry shape.
+
+    This is a transform wrapper around :func:`tensordict.utils.expand_as_right`.
 
     Args:
-        ref_key (NestedKey): key used to read the reference tensor shape.
-        in_keys (Sequence[NestedKey]): keys to expand.
-        out_keys (Sequence[NestedKey], optional): output keys where expanded
-            tensors are written. Defaults to ``in_keys``.
+        in_key (NestedKey): key to expand.
+        ref_key (NestedKey): key used as shape reference.
+        out_key (NestedKey, optional): output key where the expanded tensor is
+            written. Defaults to ``in_key``.
     """
 
     def __init__(
         self,
+        in_key: NestedKey,
         ref_key: NestedKey,
-        in_keys: Sequence[NestedKey],
-        out_keys: Sequence[NestedKey] | None = None,
+        out_key: NestedKey | None = None,
     ):
-        if out_keys is None:
-            out_keys = copy(in_keys)
-        super().__init__(in_keys=in_keys, out_keys=out_keys)
+        if out_key is None:
+            out_key = in_key
+        super().__init__(in_keys=[in_key], out_keys=[out_key])
+        self.in_key = unravel_key(in_key)
         self.ref_key = unravel_key(ref_key)
-        if len(self.in_keys) != len(self.out_keys):
-            raise ValueError(
-                f"The number of in_keys ({len(self.in_keys)}) should match the number of out_keys ({len(self.out_keys)})."
-            )
+        self.out_key = unravel_key(out_key)
 
     @staticmethod
-    def _expand_to_ref(value: torch.Tensor, ref: torch.Tensor) -> torch.Tensor:
-        if value.ndim > ref.ndim:
-            raise ValueError(
-                "input tensor has more dimensions than reference tensor and cannot be expanded"
-            )
-        try:
-            return expand_as_right(value, ref)
-        except RuntimeError as err:
-            raise ValueError(
-                f"input shape {value.shape} cannot be expanded to reference shape {ref.shape}"
-            ) from err
-
-    def _expand(self, tensordict: TensorDictBase) -> TensorDictBase:
-        ref = tensordict.get(self.ref_key, default=None)
-        if ref is None:
-            raise KeyError(
-                f"{self}: '{self.ref_key}' not found in tensordict {tensordict}"
-            )
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
-            value = tensordict.get(in_key, default=None)
-            if value is not None:
-                tensordict.set(out_key, self._expand_to_ref(value, ref))
-            elif not self.missing_tolerance:
-                raise KeyError(
-                    f"{self}: '{in_key}' not found in tensordict {tensordict}"
-                )
-        return tensordict
+    def _find_key_spec(
+        output_spec: Composite, key: NestedKey
+    ) -> tuple[str, TensorSpec]:
+        for spec_name in (
+            "full_observation_spec",
+            "full_reward_spec",
+            "full_done_spec",
+        ):
+            if spec_name not in output_spec.keys():
+                continue
+            spec = output_spec[spec_name]
+            if key in spec.keys(True, True):
+                return spec_name, spec[key]
+        raise KeyError(f"Key {key} was not found in output specs.")
 
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
-        return self._expand(next_tensordict)
+        ref = next_tensordict.get(self.ref_key, default=None)
+        if ref is None:
+            if self.missing_tolerance:
+                return next_tensordict
+            raise KeyError(
+                f"{self}: '{self.ref_key}' not found in tensordict {next_tensordict}"
+            )
+        value = next_tensordict.get(self.in_key, default=None)
+        if value is None:
+            if self.missing_tolerance:
+                return next_tensordict
+            raise KeyError(
+                f"{self}: '{self.in_key}' not found in tensordict {next_tensordict}"
+            )
+        next_tensordict.set(self.out_key, expand_as_right(value, ref))
+        return next_tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        return self._expand(tensordict)
+        return self._call(tensordict)
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        if self.out_key in tensordict_reset.keys(True, True):
+            return tensordict_reset
+
+        value = tensordict_reset.get(self.in_key, default=None)
+        if value is None:
+            return tensordict_reset
+
+        ref = tensordict_reset.get(self.ref_key, default=None)
+        if ref is None and self.parent is not None:
+            try:
+                _, ref_spec = self._find_key_spec(self.parent.output_spec, self.ref_key)
+            except KeyError:
+                ref_spec = None
+            if ref_spec is not None:
+                ref = torch.empty(
+                    ref_spec.shape,
+                    dtype=value.dtype,
+                    device=value.device,
+                )
+
+        if ref is None:
+            tensordict_reset.set(self.out_key, value)
+        else:
+            tensordict_reset.set(self.out_key, expand_as_right(value, ref))
+        return tensordict_reset
+
+    def transform_output_spec(self, output_spec: Composite) -> Composite:
+        output_spec = output_spec.clone()
+        _, ref_spec = self._find_key_spec(output_spec, self.ref_key)
+        in_spec_name, in_spec = self._find_key_spec(output_spec, self.in_key)
+        target_spec_name = in_spec_name
+        if in_spec_name == "full_done_spec" and self.out_key != self.in_key:
+            target_spec_name = "full_observation_spec"
+
+        while len(in_spec.shape) < len(ref_spec.shape):
+            in_spec = in_spec.unsqueeze(-1)
+
+        spec = output_spec[target_spec_name]
+        spec[self.out_key] = in_spec.expand(ref_spec.shape)
+        output_spec[target_spec_name] = spec
+        return output_spec

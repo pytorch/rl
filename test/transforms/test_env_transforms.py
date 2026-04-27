@@ -66,6 +66,7 @@ from torchrl.testing.mocking_classes import (
     CountingEnvCountPolicy,
     DiscreteActionConvMockEnvNumpy,
     IncrementingEnv,
+    MultiAgentCountingEnv,
     NestedCountingEnv,
 )
 
@@ -2008,51 +2009,187 @@ class TestTargetReturn(TransformBase):
 
 
 class TestExpandAs(TransformBase):
-    def test_expand_as_with_out_keys(self):
-        t = ExpandAs(
-            ref_key=("agents", "reward"),
-            in_keys=["done", "terminated"],
-            out_keys=[("agents", "done"), ("agents", "terminated")],
+    @staticmethod
+    def _make_transform(out_key: str = "env_done_expanded") -> ExpandAs:
+        return ExpandAs(
+            in_key="env_done",
+            ref_key=("agents", "agent_0", "observation"),
+            out_key=out_key,
         )
+
+    def test_single_trans_env_check(self):
+        env = TransformedEnv(MultiAgentCountingEnv(n_agents=4), self._make_transform())
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        def make_env():
+            return TransformedEnv(
+                MultiAgentCountingEnv(n_agents=4), self._make_transform()
+            )
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self, maybe_fork_ParallelEnv):
+        def make_env():
+            return TransformedEnv(
+                MultiAgentCountingEnv(n_agents=4), self._make_transform()
+            )
+
+        env = maybe_fork_ParallelEnv(2, make_env)
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(
+            SerialEnv(2, lambda: MultiAgentCountingEnv(n_agents=4)),
+            self._make_transform(),
+        )
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
+        env = TransformedEnv(
+            maybe_fork_ParallelEnv(2, lambda: MultiAgentCountingEnv(n_agents=4)),
+            self._make_transform(),
+        )
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_transform_no_env(self):
+        t = self._make_transform()
         td = TensorDict(
             {
-                ("agents", "reward"): torch.randn(5, 3),
-                "done": torch.tensor([[False], [True], [False], [True], [False]]),
-                "terminated": torch.tensor([[False], [False], [True], [False], [True]]),
+                ("agents", "agent_0", "observation"): torch.randn(5, 3, 4),
+                "env_done": torch.tensor([[False], [True], [False], [True], [False]]),
             },
             batch_size=[5],
         )
-
         td = t(td)
+        assert (
+            td["env_done_expanded"].shape
+            == td["agents", "agent_0", "observation"].shape
+        )
+        assert (
+            td["env_done_expanded"]
+            == td["env_done"]
+            .unsqueeze(-1)
+            .expand_as(td["agents", "agent_0", "observation"])
+        ).all()
 
-        assert td[("agents", "done")].shape == torch.Size([5, 3])
-        assert td[("agents", "terminated")].shape == torch.Size([5, 3])
-        assert (td[("agents", "done")] == td["done"]).all()
-        assert (td[("agents", "terminated")] == td["terminated"]).all()
+    def test_transform_env(self):
+        env = TransformedEnv(MultiAgentCountingEnv(n_agents=4), self._make_transform())
+        td = env.reset()
+        assert "env_done_expanded" in td.keys(True, True)
+        assert (
+            td["env_done_expanded"].shape
+            == td["agents", "agent_0", "observation"].shape
+        )
+        td = env.rand_step(td)
+        assert (
+            td["next", "env_done_expanded"].shape
+            == td["next", "agents", "agent_0", "observation"].shape
+        )
 
-    def test_expand_as_in_place(self):
-        t = ExpandAs(ref_key=("agents", "reward"), in_keys=["done"])
+    def test_transform_model(self):
+        model = nn.Sequential(self._make_transform(), nn.Identity())
         td = TensorDict(
             {
-                ("agents", "reward"): torch.randn(5, 3),
-                "done": torch.tensor([[False], [True], [False], [True], [False]]),
+                ("agents", "agent_0", "observation"): torch.randn(10, 7),
+                "env_done": torch.tensor(
+                    [
+                        [False],
+                        [True],
+                        [False],
+                        [True],
+                        [False],
+                        [True],
+                        [False],
+                        [True],
+                        [False],
+                        [True],
+                    ]
+                ),
+            },
+            [10],
+        )
+        td = model(td)
+        assert td["env_done_expanded"].shape == torch.Size([10, 7])
+
+    def test_transform_compose(self):
+        t = Compose(self._make_transform())
+        td = TensorDict(
+            {
+                ("agents", "agent_0", "observation"): torch.randn(10, 7),
+                "env_done": torch.tensor(
+                    [
+                        [False],
+                        [True],
+                        [False],
+                        [True],
+                        [False],
+                        [True],
+                        [False],
+                        [True],
+                        [False],
+                        [True],
+                    ]
+                ),
+            },
+            [10],
+        )
+        td = t(td)
+        assert td["env_done_expanded"].shape == torch.Size([10, 7])
+        assert (td["env_done_expanded"] == td["env_done"]).all()
+
+    def test_transform_rb(self):
+        t = self._make_transform()
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        td = TensorDict(
+            {
+                ("agents", "agent_0", "observation"): torch.randn(10, 7),
+                "env_done": torch.tensor(
+                    [
+                        [False],
+                        [True],
+                        [False],
+                        [True],
+                        [False],
+                        [True],
+                        [False],
+                        [True],
+                        [False],
+                        [True],
+                    ]
+                ),
+            },
+            [10],
+        )
+        rb.append_transform(t)
+        rb.extend(td)
+        sample = rb.sample(2)
+        assert sample["env_done_expanded"].shape == torch.Size([2, 7])
+
+    def test_transform_inplace(self):
+        t = self._make_transform(out_key="env_done")
+        td = TensorDict(
+            {
+                ("agents", "agent_0", "observation"): torch.randn(5, 3, 4),
+                "env_done": torch.tensor([[False], [True], [False], [True], [False]]),
             },
             batch_size=[5],
         )
-
         td = t(td)
+        assert td["env_done"].shape == td["agents", "agent_0", "observation"].shape
 
-        assert td["done"].shape == torch.Size([5, 3])
-
-    def test_expand_as_invalid_shape(self):
-        t = ExpandAs(ref_key=("agents", "reward"), in_keys=["done"])
-        td = TensorDict(
-            {
-                ("agents", "reward"): torch.randn(4, 3),
-                "done": torch.zeros(4, 2, dtype=torch.bool),
-            },
-            batch_size=[4],
-        )
-
-        with pytest.raises(ValueError, match="cannot be expanded"):
-            t(td)
+    def test_transform_inverse(self):
+        raise pytest.skip("No inverse method for ExpandAs")
