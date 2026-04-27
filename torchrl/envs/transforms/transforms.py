@@ -12160,57 +12160,62 @@ class FlattenTensorDict(Transform):
         raise RuntimeError(self._ENV_ERROR_MSG)
 
 
-class ExpandDone(Transform):
-    """Expands done entries to match a reward shape.
-
-    This is useful for multi-agent losses that expect done and terminated entries to
-    have the same agent dimension as rewards.
+class ExpandAs(Transform):
+    """Expands selected entries to match the shape of a reference entry.
 
     Args:
-        reward_key (NestedKey): key used to read the reward tensor whose shape is
-            used as reference.
-        done_keys (Sequence[NestedKey]): done-like keys to expand.
-        group_key (NestedKey, optional): destination group for expanded done keys.
-            If provided, each expanded done tensor is written under this group with
-            the original done leaf name (e.g. ``group_key="agents"``, ``done="done"``
-            writes ``("agents", "done")``). If omitted, done keys are overwritten
-            in place.
+        ref_key (NestedKey): key used to read the reference tensor shape.
+        in_keys (Sequence[NestedKey]): keys to expand.
+        out_keys (Sequence[NestedKey], optional): output keys where expanded
+            tensors are written. Defaults to ``in_keys``.
     """
 
     def __init__(
         self,
-        reward_key: NestedKey,
-        done_keys: Sequence[NestedKey],
-        group_key: NestedKey | None = None,
+        ref_key: NestedKey,
+        in_keys: Sequence[NestedKey],
+        out_keys: Sequence[NestedKey] | None = None,
     ):
-        super().__init__()
-        self.reward_key = reward_key
-        self.done_keys = list(done_keys)
-        self.group_key = group_key
+        if out_keys is None:
+            out_keys = copy(in_keys)
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
+        self.ref_key = unravel_key(ref_key)
+        if len(self.in_keys) != len(self.out_keys):
+            raise ValueError(
+                f"The number of in_keys ({len(self.in_keys)}) should match the number of out_keys ({len(self.out_keys)})."
+            )
 
     @staticmethod
-    def _expand_done_to_reward(
-        done: torch.Tensor, reward: torch.Tensor
-    ) -> torch.Tensor:
-        if done.ndim > reward.ndim:
+    def _expand_to_ref(value: torch.Tensor, ref: torch.Tensor) -> torch.Tensor:
+        if value.ndim > ref.ndim:
             raise ValueError(
-                "done tensor has more dimensions than reward tensor and cannot be expanded"
+                "input tensor has more dimensions than reference tensor and cannot be expanded"
             )
-        if done.ndim < reward.ndim:
-            done = done.reshape(*done.shape, *([1] * (reward.ndim - done.ndim)))
         try:
-            return done.expand_as(reward)
+            return expand_as_right(value, ref)
         except RuntimeError as err:
             raise ValueError(
-                f"done shape {done.shape} cannot be expanded to reward shape {reward.shape}"
+                f"input shape {value.shape} cannot be expanded to reference shape {ref.shape}"
             ) from err
 
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        reward = tensordict.get(unravel_key(("next", self.reward_key)))
-        out_root_key = ("next", self.group_key) if self.group_key else ("next",)
-        for done_key in self.done_keys:
-            done = tensordict.get(unravel_key(("next", done_key)))
-            out_key = unravel_key((*out_root_key, done_key))
-
-            tensordict.set(out_key, self._expand_done_to_reward(done, reward))
+    def _expand(self, tensordict: TensorDictBase) -> TensorDictBase:
+        ref = tensordict.get(self.ref_key, default=None)
+        if ref is None:
+            raise KeyError(
+                f"{self}: '{self.ref_key}' not found in tensordict {tensordict}"
+            )
+        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+            value = tensordict.get(in_key, default=None)
+            if value is not None:
+                tensordict.set(out_key, self._expand_to_ref(value, ref))
+            elif not self.missing_tolerance:
+                raise KeyError(
+                    f"{self}: '{in_key}' not found in tensordict {tensordict}"
+                )
         return tensordict
+
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        return self._expand(next_tensordict)
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return self._expand(tensordict)

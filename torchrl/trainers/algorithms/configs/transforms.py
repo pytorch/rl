@@ -956,13 +956,13 @@ class ModuleTransformConfig(TransformConfig):
 
 
 @dataclass
-class ExpandDoneConfig(TransformConfig):
-    """Configuration for ExpandDone transform."""
+class ExpandAsConfig(TransformConfig):
+    """Configuration for ExpandAs transform."""
 
-    reward_key: list[str] | None = None
-    done_keys: list[list[str]] | None = None
-    group_key: list[str] | None = None
-    _target_: str = "torchrl.envs.transforms.transforms.ExpandDone"
+    ref_key: list[str] | None = None
+    in_keys: list[list[str]] | None = None
+    out_keys: list[list[str]] | None = None
+    _target_: str = "torchrl.envs.transforms.transforms.ExpandAs"
 
     def __post_init__(self) -> None:
         super().__post_init__()

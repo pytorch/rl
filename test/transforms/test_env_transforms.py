@@ -30,7 +30,7 @@ from torchrl.envs import (
     EndOfLifeTransform,
     EnvBase,
     EnvCreator,
-    ExpandDone,
+    ExpandAs,
     FrameSkipTransform,
     InitTracker,
     NoopResetEnv,
@@ -2007,57 +2007,49 @@ class TestTargetReturn(TransformBase):
             _ = rb.sample(2)
 
 
-class TestExpandDone(TransformBase):
-    def test_expand_done_in_group(self):
-        t = ExpandDone(
-            reward_key=("agents", "reward"),
-            done_keys=["done", "terminated"],
-            group_key="agents",
+class TestExpandAs(TransformBase):
+    def test_expand_as_with_out_keys(self):
+        t = ExpandAs(
+            ref_key=("agents", "reward"),
+            in_keys=["done", "terminated"],
+            out_keys=[("agents", "done"), ("agents", "terminated")],
         )
         td = TensorDict(
             {
-                ("next", "agents", "reward"): torch.randn(5, 3),
-                ("next", "done"): torch.tensor(
-                    [[False], [True], [False], [True], [False]]
-                ),
-                ("next", "terminated"): torch.tensor(
-                    [[False], [False], [True], [False], [True]]
-                ),
+                ("agents", "reward"): torch.randn(5, 3),
+                "done": torch.tensor([[False], [True], [False], [True], [False]]),
+                "terminated": torch.tensor([[False], [False], [True], [False], [True]]),
             },
             batch_size=[5],
         )
 
         td = t(td)
 
-        assert td[("next", "agents", "done")].shape == torch.Size([5, 3])
-        assert td[("next", "agents", "terminated")].shape == torch.Size([5, 3])
-        assert (td[("next", "agents", "done")] == td[("next", "done")]).all()
-        assert (
-            td[("next", "agents", "terminated")] == td[("next", "terminated")]
-        ).all()
+        assert td[("agents", "done")].shape == torch.Size([5, 3])
+        assert td[("agents", "terminated")].shape == torch.Size([5, 3])
+        assert (td[("agents", "done")] == td["done"]).all()
+        assert (td[("agents", "terminated")] == td["terminated"]).all()
 
-    def test_expand_done_in_place(self):
-        t = ExpandDone(reward_key=("agents", "reward"), done_keys=["done"])
+    def test_expand_as_in_place(self):
+        t = ExpandAs(ref_key=("agents", "reward"), in_keys=["done"])
         td = TensorDict(
             {
-                ("next", "agents", "reward"): torch.randn(5, 3),
-                ("next", "done"): torch.tensor(
-                    [[False], [True], [False], [True], [False]]
-                ),
+                ("agents", "reward"): torch.randn(5, 3),
+                "done": torch.tensor([[False], [True], [False], [True], [False]]),
             },
             batch_size=[5],
         )
 
         td = t(td)
 
-        assert td[("next", "done")].shape == torch.Size([5, 3])
+        assert td["done"].shape == torch.Size([5, 3])
 
-    def test_expand_done_invalid_shape(self):
-        t = ExpandDone(reward_key=("agents", "reward"), done_keys=["done"])
+    def test_expand_as_invalid_shape(self):
+        t = ExpandAs(ref_key=("agents", "reward"), in_keys=["done"])
         td = TensorDict(
             {
-                ("next", "agents", "reward"): torch.randn(4, 3),
-                ("next", "done"): torch.zeros(4, 2, dtype=torch.bool),
+                ("agents", "reward"): torch.randn(4, 3),
+                "done": torch.zeros(4, 2, dtype=torch.bool),
             },
             batch_size=[4],
         )
