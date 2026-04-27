@@ -12170,6 +12170,31 @@ class ExpandAs(Transform):
         ref_key (NestedKey): key used as shape reference.
         out_key (NestedKey, optional): output key where the expanded tensor is
             written. Defaults to ``in_key``.
+
+    Examples:
+        Expanding an environment-level ``done`` signal to the per-agent reward
+        shape in a VMAS environment:
+
+        >>> from torchrl.envs import TransformedEnv
+        >>> from torchrl.envs.libs.vmas import VmasEnv
+        >>> from torchrl.envs.transforms import ExpandAs
+        >>> base_env = VmasEnv(
+        ...     scenario="navigation",
+        ...     num_envs=16,
+        ...     continuous_actions=True,
+        ...     n_agents=3,
+        ... )
+        >>> env = TransformedEnv(
+        ...     base_env,
+        ...     ExpandAs(
+        ...         in_key="done",
+        ...         ref_key=("agents", "reward"),
+        ...     ),
+        ... )
+        >>> td = env.reset()
+        >>> td = env.rand_step(td)
+        >>> td["next", "done"].shape == td["next", "agents", "reward"].shape
+        True
     """
 
     def __init__(
