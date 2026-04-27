@@ -423,11 +423,19 @@ class ReplayBuffer:
 
         if isinstance(self._sampler, PrioritizedSampler) and len(self._storage) > 0:
             # Set default priorities for all existing data
-            indices = torch.arange(len(self._storage), dtype=torch.long)
+            device = getattr(self._storage, "device", None)
+            if device == "auto":
+                device = None
+            indices = torch.arange(len(self._storage), dtype=torch.long, device=device)
             default_priorities = torch.full(
-                (len(self._storage),), self._sampler.default_priority, dtype=torch.float
+                (len(self._storage),),
+                self._sampler.default_priority,
+                dtype=torch.float,
+                device=device,
             )
-            self._sampler.update_priority(indices, default_priorities)
+            self._sampler.update_priority(
+                indices, default_priorities, storage=self._storage
+            )
 
     def _maybe_make_storage(
         self, storage: Storage | Callable[[], Storage] | None, compilable

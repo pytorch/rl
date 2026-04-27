@@ -1466,6 +1466,84 @@ def test_ptdrb(priority_key, contiguous, alpha, device):
     torch.testing.assert_close(td2[idx0].get("a").view(1), s.get("a").unique().view(1))
 
 
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+def test_cuda_segment_tree_parity():
+    ext = pytest.importorskip("torchrl._torchrl")
+    if not hasattr(ext, "CudaSumSegmentTreeFp32"):
+        pytest.skip("TorchRL was not built with CUDA segment tree support")
+    CudaMinSegmentTreeFp32 = ext.CudaMinSegmentTreeFp32
+    CudaSumSegmentTreeFp32 = ext.CudaSumSegmentTreeFp32
+    MinSegmentTreeFp32 = ext.MinSegmentTreeFp32
+    SumSegmentTreeFp32 = ext.SumSegmentTreeFp32
+
+    device = torch.device("cuda:0")
+    size = 16
+    index = torch.tensor([0, 3, 4, 7, 12, 15], device=device)
+    value = torch.tensor([1.0, 2.0, 4.0, 8.0, 16.0, 32.0], device=device)
+
+    cpu_sum = SumSegmentTreeFp32(size)
+    cpu_min = MinSegmentTreeFp32(size)
+    cuda_sum = CudaSumSegmentTreeFp32(size, device)
+    cuda_min = CudaMinSegmentTreeFp32(size, device)
+
+    cpu_sum[index.cpu()] = value.cpu()
+    cpu_min[index.cpu()] = value.cpu()
+    cuda_sum[index] = value
+    cuda_min[index] = value
+
+    left = torch.tensor([0, 3, 4, 7], device=device)
+    right = torch.tensor([16, 8, 13, 16], device=device)
+    torch.testing.assert_close(
+        cuda_sum.query(left, right).cpu(), cpu_sum.query(left.cpu(), right.cpu())
+    )
+    torch.testing.assert_close(
+        cuda_min.query(left, right).cpu(), cpu_min.query(left.cpu(), right.cpu())
+    )
+
+    mass = torch.tensor([0.5, 1.0, 2.9, 7.1, 30.0], device=device)
+    torch.testing.assert_close(
+        cuda_sum.scan_lower_bound(mass).cpu(),
+        cpu_sum.scan_lower_bound(mass.cpu()),
+    )
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+def test_cuda_prioritized_replay_buffer_samples_on_cuda():
+    ext = pytest.importorskip("torchrl._torchrl")
+    if not hasattr(ext, "CudaSumSegmentTreeFp32"):
+        pytest.skip("TorchRL was not built with CUDA segment tree support")
+    device = torch.device("cuda:0")
+    rb = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(32, device=device),
+        sampler=PrioritizedSampler(max_capacity=32, alpha=0.7, beta=0.5),
+        batch_size=8,
+        priority_key="td_error",
+    )
+    data = TensorDict(
+        {
+            "obs": torch.arange(16, device=device).float().unsqueeze(-1),
+            "td_error": torch.linspace(0.1, 1.0, 16, device=device),
+        },
+        batch_size=[16],
+        device=device,
+    )
+
+    rb.extend(data)
+    sample = rb.sample()
+
+    assert sample.device == device
+    assert sample["index"].device == device
+    assert sample["priority_weight"].device == device
+
+    sample["td_error"] = torch.ones_like(sample["td_error"]) * 10
+    rb.update_tensordict_priority(sample)
+    sample = rb.sample()
+    assert sample["index"].device == device
+    assert sample["priority_weight"].device == device
+
+
 @pytest.mark.parametrize("stack", [False, True])
 @pytest.mark.parametrize("datatype", ["tc", "tb"])
 @pytest.mark.parametrize("reduction", ["min", "max", "median", "mean"])
