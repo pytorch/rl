@@ -2008,9 +2008,11 @@ class TestTargetReturn(TransformBase):
 
 
 class TestExpandDone(TransformBase):
-    def test_expand_done(self):
+    def test_expand_done_in_group(self):
         t = ExpandDone(
-            reward_key=("agents", "reward"), done_keys=["done", "terminated"]
+            reward_key=("agents", "reward"),
+            done_keys=["done", "terminated"],
+            group_key="agents",
         )
         td = TensorDict(
             {
@@ -2034,28 +2036,21 @@ class TestExpandDone(TransformBase):
             td[("next", "agents", "terminated")] == td[("next", "terminated")]
         ).all()
 
-    def test_expand_done_keeps_matching_shape_nested_key_input(self):
-        t = ExpandDone(
-            reward_key=("agents", ("group", "reward")),
-            done_keys=[("agents", ("group", "done"))],
-        )
+    def test_expand_done_in_place(self):
+        t = ExpandDone(reward_key=("agents", "reward"), done_keys=["done"])
         td = TensorDict(
             {
-                ("next", "agents", "group", "reward"): torch.randn(4, 2, 1),
-                ("next", "agents", "group", "done"): torch.tensor(
-                    [
-                        [[False], [True]],
-                        [[True], [False]],
-                        [[False], [False]],
-                        [[True], [True]],
-                    ]
+                ("next", "agents", "reward"): torch.randn(5, 3),
+                ("next", "done"): torch.tensor(
+                    [[False], [True], [False], [True], [False]]
                 ),
             },
-            batch_size=[4],
+            batch_size=[5],
         )
 
         td = t(td)
-        assert td[("next", "agents", "group", "done")].shape == torch.Size([4, 2, 1])
+
+        assert td[("next", "done")].shape == torch.Size([5, 3])
 
     def test_expand_done_invalid_shape(self):
         t = ExpandDone(reward_key=("agents", "reward"), done_keys=["done"])

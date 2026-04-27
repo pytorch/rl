@@ -12165,12 +12165,28 @@ class ExpandDone(Transform):
 
     This is useful for multi-agent losses that expect done and terminated entries to
     have the same agent dimension as rewards.
+
+    Args:
+        reward_key (NestedKey): key used to read the reward tensor whose shape is
+            used as reference.
+        done_keys (Sequence[NestedKey]): done-like keys to expand.
+        group_key (NestedKey, optional): destination group for expanded done keys.
+            If provided, each expanded done tensor is written under this group with
+            the original done leaf name (e.g. ``group_key="agents"``, ``done="done"``
+            writes ``("agents", "done")``). If omitted, done keys are overwritten
+            in place.
     """
 
-    def __init__(self, reward_key: NestedKey, done_keys: Sequence[NestedKey]):
+    def __init__(
+        self,
+        reward_key: NestedKey,
+        done_keys: Sequence[NestedKey],
+        group_key: NestedKey | None = None,
+    ):
         super().__init__()
         self.reward_key = reward_key
         self.done_keys = list(done_keys)
+        self.group_key = group_key
 
     @staticmethod
     def _expand_done_to_reward(
@@ -12190,14 +12206,11 @@ class ExpandDone(Transform):
             ) from err
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        reward_key = unravel_key(self.reward_key)
-        reward = tensordict.get(unravel_key(("next", reward_key)))
+        reward = tensordict.get(unravel_key(("next", self.reward_key)))
+        out_root_key = ("next", self.group_key) if self.group_key else ("next",)
         for done_key in self.done_keys:
-            done_key = unravel_key(done_key)
-            new_name = _replace_last(reward_key, _unravel_key_to_tuple(done_key)[-1])
             done = tensordict.get(unravel_key(("next", done_key)))
-            tensordict.set(
-                unravel_key(("next", new_name)),
-                self._expand_done_to_reward(done, reward),
-            )
+            out_key = unravel_key((*out_root_key, done_key))
+
+            tensordict.set(out_key, self._expand_done_to_reward(done, reward))
         return tensordict

@@ -959,8 +959,9 @@ class ModuleTransformConfig(TransformConfig):
 class ExpandDoneConfig(TransformConfig):
     """Configuration for ExpandDone transform."""
 
-    reward_key: Any = None
-    done_keys: Any = None
+    reward_key: list[str] | None = None
+    done_keys: list[list[str]] | None = None
+    group_key: list[str] | None = None
     _target_: str = "torchrl.envs.transforms.transforms.ExpandDone"
 
     def __post_init__(self) -> None:
