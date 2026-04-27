@@ -641,6 +641,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_post_epoch_log_ops</span> <span class="o">=</span> <span class="p">(</span>
             <span class="p">[]</span>
         <span class="p">)</span>  <span class="c1"># After each epoch logging (e.g., epoch completion metrics)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_complete_log_ops</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">[]</span>
+        <span class="p">)</span>  <span class="c1"># After all optimization steps for a batch (e.g., logging average_losses)</span>
 
         <span class="c1"># Regular hook collections for non-logging operations</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_pre_epoch_ops</span> <span class="o">=</span> <span class="p">(</span>
@@ -877,6 +880,7 @@
             <span class="s2">&quot;post_optim_log&quot;</span><span class="p">,</span>
             <span class="s2">&quot;pre_epoch_log&quot;</span><span class="p">,</span>
             <span class="s2">&quot;post_epoch_log&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;post_optim_complete_log&quot;</span><span class="p">,</span>
             <span class="s2">&quot;pre_epoch&quot;</span><span class="p">,</span>
             <span class="s2">&quot;post_epoch&quot;</span><span class="p">,</span>
         <span class="p">],</span>
@@ -986,6 +990,12 @@
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_post_epoch_log_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
+        <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;post_optim_complete_log&quot;</span><span class="p">:</span>
+            <span class="n">_check_input_output_typehint</span><span class="p">(</span>
+                <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">],</span> <span class="n">output</span><span class="o">=</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_complete_log_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
+
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;pre_epoch&quot;</span><span class="p">:</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_pre_epoch_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
@@ -1000,7 +1010,7 @@
                 <span class="sa">f</span><span class="s2">&quot;(batch_process, pre_optim_steps, process_optim_batch, post_loss, &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;process_loss, optimizer, post_steps, post_optim, pre_steps_log, &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;post_steps_log, post_optim_log, pre_epoch_log, post_epoch_log, &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;pre_epoch, post_epoch)&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;post_optim_complete_log, pre_epoch, post_epoch)&quot;</span>
             <span class="p">)</span>
 
     <span class="n">register_hook</span> <span class="o">=</span> <span class="n">register_op</span>
@@ -1113,6 +1123,20 @@
             <span class="n">result</span> <span class="o">=</span> <span class="n">op</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">result</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span><span class="o">**</span><span class="n">result</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_post_optim_complete_log_hook</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">optim_steps</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">average_losses</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Execute logging hooks that run AFTER all steps in the optimization loop.</span>
+
+<span class="sd">        These hooks log metrics that use the total step count and averaged loss TensorDict.</span>
+<span class="sd">        Called once per optimization loop.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_complete_log_ops</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">op</span><span class="p">(</span><span class="n">optim_steps</span><span class="p">,</span> <span class="n">average_losses</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">result</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span><span class="o">**</span><span class="n">result</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span><span class="n">optim_steps</span><span class="o">=</span><span class="n">optim_steps</span><span class="p">,</span> <span class="o">**</span><span class="n">average_losses</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_post_epoch_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Execute regular hooks that run AFTER each epoch of optimization.</span>
@@ -1283,12 +1307,8 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_post_epoch_hook</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="n">j</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="c1"># Log optimization statistics and average losses after completing all optimization steps</span>
-            <span class="c1"># This is the main logging point for training metrics like loss values and optimization step count</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span>
-                <span class="n">optim_steps</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_optim_count</span><span class="p">,</span>
-                <span class="o">**</span><span class="n">average_losses</span><span class="p">,</span>
-            <span class="p">)</span>
+            <span class="c1"># LOGGING POINT 6: After all optimization for this batch (e.g., logging average_losses)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_complete_log_hook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_optim_count</span><span class="p">,</span> <span class="n">average_losses</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_log</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">log_pbar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Main logging method that handles both logger output and progress bar updates.</span>
