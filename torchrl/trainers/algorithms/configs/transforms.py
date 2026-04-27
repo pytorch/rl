@@ -953,3 +953,15 @@ class ModuleTransformConfig(TransformConfig):
     def __post_init__(self) -> None:
         """Post-initialization hook for ModuleTransform configuration."""
         super().__post_init__()
+
+
+@dataclass
+class ExpandDoneConfig(TransformConfig):
+    """Configuration for ExpandDone transform."""
+
+    reward_key: Any = None
+    done_keys: Any = None
+    _target_: str = "torchrl.envs.transforms.transforms.ExpandDone"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()

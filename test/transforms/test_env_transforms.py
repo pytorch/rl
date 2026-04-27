@@ -30,6 +30,7 @@ from torchrl.envs import (
     EndOfLifeTransform,
     EnvBase,
     EnvCreator,
+    ExpandDone,
     FrameSkipTransform,
     InitTracker,
     NoopResetEnv,
@@ -2004,3 +2005,67 @@ class TestTargetReturn(TransformBase):
             NotImplementedError, match="cannot be executed without a parent"
         ):
             _ = rb.sample(2)
+
+
+class TestExpandDone(TransformBase):
+    def test_expand_done(self):
+        t = ExpandDone(
+            reward_key=("agents", "reward"), done_keys=["done", "terminated"]
+        )
+        td = TensorDict(
+            {
+                ("next", "agents", "reward"): torch.randn(5, 3),
+                ("next", "done"): torch.tensor(
+                    [[False], [True], [False], [True], [False]]
+                ),
+                ("next", "terminated"): torch.tensor(
+                    [[False], [False], [True], [False], [True]]
+                ),
+            },
+            batch_size=[5],
+        )
+
+        td = t(td)
+
+        assert td[("next", "agents", "done")].shape == torch.Size([5, 3])
+        assert td[("next", "agents", "terminated")].shape == torch.Size([5, 3])
+        assert (td[("next", "agents", "done")] == td[("next", "done")]).all()
+        assert (
+            td[("next", "agents", "terminated")] == td[("next", "terminated")]
+        ).all()
+
+    def test_expand_done_keeps_matching_shape_nested_key_input(self):
+        t = ExpandDone(
+            reward_key=("agents", ("group", "reward")),
+            done_keys=[("agents", ("group", "done"))],
+        )
+        td = TensorDict(
+            {
+                ("next", "agents", "group", "reward"): torch.randn(4, 2, 1),
+                ("next", "agents", "group", "done"): torch.tensor(
+                    [
+                        [[False], [True]],
+                        [[True], [False]],
+                        [[False], [False]],
+                        [[True], [True]],
+                    ]
+                ),
+            },
+            batch_size=[4],
+        )
+
+        td = t(td)
+        assert td[("next", "agents", "group", "done")].shape == torch.Size([4, 2, 1])
+
+    def test_expand_done_invalid_shape(self):
+        t = ExpandDone(reward_key=("agents", "reward"), done_keys=["done"])
+        td = TensorDict(
+            {
+                ("next", "agents", "reward"): torch.randn(4, 3),
+                ("next", "done"): torch.zeros(4, 2, dtype=torch.bool),
+            },
+            batch_size=[4],
+        )
+
+        with pytest.raises(ValueError, match="cannot be expanded"):
+            t(td)

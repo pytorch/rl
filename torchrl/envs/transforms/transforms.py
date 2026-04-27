@@ -12158,3 +12158,46 @@ class FlattenTensorDict(Transform):
     def transform_done_spec(self, done_spec: TensorSpec) -> TensorSpec:
         """Transform done spec - not supported for environments."""
         raise RuntimeError(self._ENV_ERROR_MSG)
+
+
+class ExpandDone(Transform):
+    """Expands done entries to match a reward shape.
+
+    This is useful for multi-agent losses that expect done and terminated entries to
+    have the same agent dimension as rewards.
+    """
+
+    def __init__(self, reward_key: NestedKey, done_keys: Sequence[NestedKey]):
+        super().__init__()
+        self.reward_key = reward_key
+        self.done_keys = list(done_keys)
+
+    @staticmethod
+    def _expand_done_to_reward(
+        done: torch.Tensor, reward: torch.Tensor
+    ) -> torch.Tensor:
+        if done.ndim > reward.ndim:
+            raise ValueError(
+                "done tensor has more dimensions than reward tensor and cannot be expanded"
+            )
+        if done.ndim < reward.ndim:
+            done = done.reshape(*done.shape, *([1] * (reward.ndim - done.ndim)))
+        try:
+            return done.expand_as(reward)
+        except RuntimeError as err:
+            raise ValueError(
+                f"done shape {done.shape} cannot be expanded to reward shape {reward.shape}"
+            ) from err
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        reward_key = unravel_key(self.reward_key)
+        reward = tensordict.get(unravel_key(("next", reward_key)))
+        for done_key in self.done_keys:
+            done_key = unravel_key(done_key)
+            new_name = _replace_last(reward_key, _unravel_key_to_tuple(done_key)[-1])
+            done = tensordict.get(unravel_key(("next", done_key)))
+            tensordict.set(
+                unravel_key(("next", new_name)),
+                self._expand_done_to_reward(done, reward),
+            )
+        return tensordict
