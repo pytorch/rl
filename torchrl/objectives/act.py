@@ -18,8 +18,11 @@ from torchrl.objectives.common import LossModule
 class ACTLoss(LossModule):
     r"""Loss module for Action Chunking with Transformers (ACT).
 
-    Combines an L1 chunk-reconstruction loss with a KL-divergence penalty on
-    the CVAE latent:
+    Implements the training objective from *Learning Fine-Grained Bimanual
+    Manipulation with Low-Cost Hardware* (`Zhao et al., 2023
+    <https://arxiv.org/abs/2304.13705>`_), pairing an L1
+    chunk-reconstruction term with a KL-divergence penalty on the CVAE
+    latent:
 
     .. math::
 
@@ -154,10 +157,11 @@ class ACTLoss(LossModule):
             TensorDict with keys ``"loss_act"``, ``"loss_reconstruction"``,
             and ``"loss_kl"``.
         """
+        action_chunk = tensordict.get(self.tensor_keys.action_chunk)
         td_in = TensorDict(
             {
                 "observation": tensordict.get(self.tensor_keys.observation),
-                "action_chunk": tensordict.get(self.tensor_keys.action_chunk),
+                "action_chunk": action_chunk,
             },
             batch_size=tensordict.batch_size,
             device=tensordict.device,
@@ -166,7 +170,6 @@ class ACTLoss(LossModule):
             td_out = self.actor_network(td_in)
 
         action_pred = td_out.get(self.tensor_keys.action_pred)
-        action_chunk = tensordict.get(self.tensor_keys.action_chunk)
         mu = td_out.get(self.tensor_keys.mu)
         log_var = td_out.get(self.tensor_keys.log_var)
 

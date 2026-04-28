@@ -128,6 +128,62 @@ class TestACTModel:
         assert mu.shape == (2, 16)
         assert log_var.shape == (2, 16)
 
+    @pytest.mark.parametrize("batch_shape", [(2, 3), (2, 3, 4)])
+    def test_multi_dim_batch(self, batch_shape):
+        """Forward must handle arbitrary leading batch dims via the flat_b path."""
+        model = ACTModel(OBS_DIM, ACTION_DIM, CHUNK_SIZE)
+        obs = torch.randn(*batch_shape, OBS_DIM)
+        chunk = torch.randn(*batch_shape, CHUNK_SIZE, ACTION_DIM)
+        action_pred, mu, log_var = model(obs, chunk)
+        assert action_pred.shape == (*batch_shape, CHUNK_SIZE, ACTION_DIM)
+        assert mu.shape == (*batch_shape, model.latent_dim)
+        assert log_var.shape == (*batch_shape, model.latent_dim)
+        # Inference path through the same shapes
+        action_pred_i, mu_i, log_var_i = model(obs)
+        assert action_pred_i.shape == (*batch_shape, CHUNK_SIZE, ACTION_DIM)
+        assert mu_i.shape == (*batch_shape, model.latent_dim)
+        assert log_var_i.shape == (*batch_shape, model.latent_dim)
+
+    def test_inference_zeros_are_independent(self):
+        """At inference, mu/log_var must not share storage (no aliasing)."""
+        model = ACTModel(OBS_DIM, ACTION_DIM, CHUNK_SIZE)
+        obs = torch.randn(2, OBS_DIM)
+        _, mu, log_var = model(obs)
+        assert mu.data_ptr() != log_var.data_ptr()
+
+    def test_state_dict_roundtrip(self):
+        """save/load must not depend on the non-persistent enc_pos buffer."""
+        torch.manual_seed(0)
+        src = ACTModel(OBS_DIM, ACTION_DIM, CHUNK_SIZE)
+        dst = ACTModel(OBS_DIM, ACTION_DIM, CHUNK_SIZE)
+        # Sanity: parameters differ before load.
+        for p_src, p_dst in zip(src.parameters(), dst.parameters()):
+            if p_src.numel() and not torch.equal(p_src, p_dst):
+                break
+        else:
+            pytest.skip("randomly initialized models happened to match")
+        # state_dict should not contain enc_pos (registered as non-persistent).
+        sd = src.state_dict()
+        assert "enc_pos" not in sd
+        dst.load_state_dict(sd)
+        for p_src, p_dst in zip(src.parameters(), dst.parameters()):
+            torch.testing.assert_close(p_src, p_dst)
+        # And the (non-persistent) enc_pos buffer is still usable on dst.
+        # Use inference mode (z=0, no reparameterisation noise) for a
+        # deterministic comparison.
+        src.eval()
+        dst.eval()
+        obs = torch.randn(2, OBS_DIM)
+        a_src, _, _ = src(obs)
+        a_dst, _, _ = dst(obs)
+        torch.testing.assert_close(a_src, a_dst)
+
+    def test_sinusoidal_pos_enc_rejects_odd_dim(self):
+        from torchrl.modules.models.act import _sinusoidal_pos_enc
+
+        with pytest.raises(ValueError, match="even"):
+            _sinusoidal_pos_enc(4, 7)
+
 
 # ── ACTLoss unit tests ─────────────────────────────────────────────────────────
 
@@ -227,6 +283,9 @@ class TestACTLoss:
         """loss_act should decrease over a few gradient steps on a fixed batch."""
         torch.manual_seed(0)
         actor = _make_actor()
+        # kl_weight=1.0 (vs the 10.0 default) keeps the KL term from
+        # dominating early steps so the total loss decreases monotonically
+        # within the short horizon used here.
         loss_fn = ACTLoss(actor, kl_weight=1.0)
         optimizer = torch.optim.Adam(actor.parameters(), lr=1e-3)
         td = _make_batch(batch_size=16)
@@ -271,17 +330,19 @@ class TestACTLoss:
         params_before = [p.clone() for p in loss_fn.parameters()]
         loss_fn.reset_parameters_recursive()
         params_after = list(loss_fn.parameters())
-        assert any(
-            not torch.equal(a, b) for a, b in zip(params_before, params_after)
-        )
+        assert any(not torch.equal(a, b) for a, b in zip(params_before, params_after))
 
     @pytest.mark.parametrize(
         "obs_dim,action_dim,chunk_size",
         [(1, 1, 1), (3, 2, 1), (8, 4, 5), (32, 6, 20)],
     )
     def test_edge_case_dims(self, obs_dim, action_dim, chunk_size):
-        actor = _make_actor(obs_dim=obs_dim, action_dim=action_dim, chunk_size=chunk_size)
+        actor = _make_actor(
+            obs_dim=obs_dim, action_dim=action_dim, chunk_size=chunk_size
+        )
         loss_fn = ACTLoss(actor)
-        td = _make_batch(batch_size=2, obs_dim=obs_dim, action_dim=action_dim, chunk_size=chunk_size)
+        td = _make_batch(
+            batch_size=2, obs_dim=obs_dim, action_dim=action_dim, chunk_size=chunk_size
+        )
         loss_td = loss_fn(td)
         assert loss_td["loss_act"].isfinite()
