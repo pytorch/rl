@@ -7,39 +7,88 @@ from __future__ import annotations
 import importlib.util
 from types import ModuleType
 
-import numpy as np
 import torch
 
-from torchrl.data.tensor_specs import Composite, Unbounded
-from torchrl.envs.gym_like import default_info_dict_reader
+from torchrl.data.tensor_specs import Unbounded
 from torchrl.envs.libs.gym import GymEnv, GymWrapper, set_gym_backend
 from torchrl.envs.utils import _classproperty
 
 _has_safety_gymnasium = importlib.util.find_spec("safety_gymnasium") is not None
 
 
-def _make_cost_reader() -> default_info_dict_reader:
-    cost_spec = Composite(
-        cost=Unbounded(shape=(), dtype=torch.float64), shape=[]
+def _list_safety_gymnasium_envs() -> list[str]:
+    """Discover task ids exposed by safety-gymnasium.
+
+    safety-gymnasium registers many id variants (``*Gymnasium``,
+    ``*Vision*``, ``*Debug``, ``*FadingEasy*``, ...). We surface the
+    canonical 6-tuple-step ids and skip the ``Gymnasium`` variants because
+    those return the standard 5-tuple and would not match this wrapper's
+    ``_output_transform``.
+    """
+    if not _has_safety_gymnasium:
+        return []
+    import gymnasium
+    import safety_gymnasium  # noqa: F401  -- import side-effect: register envs
+
+    return sorted(
+        env_id
+        for env_id in gymnasium.envs.registry
+        if env_id.startswith("Safety") and "Gymnasium" not in env_id
     )
-    return default_info_dict_reader(["cost"], spec=cost_spec)
 
 
-class SafetyGymnasiumWrapper(GymWrapper):
+class _SafetyGymCostMixin:
+    """Expose safety-gymnasium's per-step ``cost`` signal as a top-level
+    observation key.
+
+    safety-gymnasium's ``step`` returns a 6-tuple
+    ``(obs, reward, cost, terminated, truncated, info)``. We collapse the
+    extra ``cost`` element into a stashed attribute, then write it onto
+    the step/reset tensordict so it travels with the observation rather
+    than through the info-dict-reader machinery.
+    """
+
+    def _post_init_cost(self) -> None:
+        self.observation_spec["cost"] = Unbounded(
+            shape=(), dtype=torch.float64
+        )
+        self._last_cost = torch.zeros((), dtype=torch.float64)
+
+    def _output_transform(self, step_outputs_tuple):
+        observations, reward, cost, terminated, truncated, info = step_outputs_tuple
+        self._last_cost = torch.as_tensor(cost, dtype=torch.float64)
+        return (
+            observations,
+            reward,
+            terminated,
+            truncated,
+            terminated | truncated,
+            info,
+        )
+
+    def _step(self, tensordict):
+        out = super()._step(tensordict)
+        out.set("cost", self._last_cost)
+        return out
+
+    def _reset(self, tensordict=None, **kwargs):
+        out = super()._reset(tensordict, **kwargs)
+        out.set("cost", torch.zeros_like(self._last_cost))
+        return out
+
+
+class SafetyGymnasiumWrapper(_SafetyGymCostMixin, GymWrapper):
     """Safety-Gymnasium environment wrapper.
 
-    Safety-Gymnasium (https://github.com/PKU-Alignment/safety-gymnasium) is the
-    actively-maintained successor to OpenAI's Safety-Gym. It provides
-    constrained-RL benchmarks where each step emits a parallel ``cost`` signal
-    alongside the standard reward, allowing agents to optimize reward subject
-    to a safety budget.
+    Safety-Gymnasium (https://github.com/PKU-Alignment/safety-gymnasium) is
+    the actively-maintained successor to OpenAI's Safety-Gym. It provides
+    constrained-RL benchmarks where each step emits a parallel ``cost``
+    signal alongside the standard reward, allowing agents to optimize
+    reward subject to a safety budget.
 
-    The underlying ``step`` API returns a 6-tuple
-    ``(obs, reward, cost, terminated, truncated, info)``. This wrapper folds
-    ``cost`` into the info dict so that the standard
-    :class:`~torchrl.envs.libs.gym.GymWrapper` machinery can be reused, and
-    registers an info-dict reader that exposes ``cost`` as a top-level key in
-    the returned tensordict.
+    The underlying ``step`` API returns a 6-tuple. This wrapper folds
+    ``cost`` into the output tensordict as a top-level key alongside
+    ``reward``.
 
     Args:
         env (safety_gymnasium.Env): the environment to wrap.
@@ -61,78 +110,20 @@ class SafetyGymnasiumWrapper(GymWrapper):
 
     def __init__(self, env=None, **kwargs):
         super().__init__(env=env, **kwargs)
-        self.set_info_dict_reader(_make_cost_reader())
-
-    def _output_transform(self, step_outputs_tuple):
-        observations, reward, cost, terminated, truncated, info = step_outputs_tuple
-        info = dict(info) if info is not None else {}
-        # The default info_dict_reader expects values with a `.dtype`
-        # attribute. safety-gymnasium emits cost as a Python float, so we
-        # promote it to a numpy scalar of fixed dtype.
-        info["cost"] = np.asarray(cost, dtype=np.float64)
-        return (
-            observations,
-            reward,
-            terminated,
-            truncated,
-            terminated | truncated,
-            info,
-        )
+        self._post_init_cost()
 
     @_classproperty
     def available_envs(cls):
-        if not _has_safety_gymnasium:
-            return []
-        # Curated list of canonical safety-gymnasium task ids. The library
-        # registers more (different difficulty levels, vision variants, etc.);
-        # this list mirrors the ones documented as primary benchmarks.
-        return [
-            # Point robot
-            "SafetyPointGoal0-v0",
-            "SafetyPointGoal1-v0",
-            "SafetyPointGoal2-v0",
-            "SafetyPointButton0-v0",
-            "SafetyPointButton1-v0",
-            "SafetyPointButton2-v0",
-            "SafetyPointPush0-v0",
-            "SafetyPointPush1-v0",
-            "SafetyPointPush2-v0",
-            "SafetyPointCircle0-v0",
-            "SafetyPointCircle1-v0",
-            "SafetyPointRace0-v0",
-            "SafetyPointRace1-v0",
-            "SafetyPointRace2-v0",
-            # Car robot
-            "SafetyCarGoal0-v0",
-            "SafetyCarGoal1-v0",
-            "SafetyCarGoal2-v0",
-            "SafetyCarButton0-v0",
-            "SafetyCarButton1-v0",
-            "SafetyCarButton2-v0",
-            "SafetyCarPush0-v0",
-            "SafetyCarPush1-v0",
-            "SafetyCarPush2-v0",
-            "SafetyCarCircle0-v0",
-            "SafetyCarCircle1-v0",
-            "SafetyCarRace0-v0",
-            "SafetyCarRace1-v0",
-            "SafetyCarRace2-v0",
-            # Mujoco velocity tasks
-            "SafetyAntVelocity-v1",
-            "SafetyHalfCheetahVelocity-v1",
-            "SafetyHopperVelocity-v1",
-            "SafetyHumanoidVelocity-v1",
-            "SafetySwimmerVelocity-v1",
-            "SafetyWalker2dVelocity-v1",
-        ]
+        return _list_safety_gymnasium_envs()
 
 
-class SafetyGymnasiumEnv(GymEnv):
+class SafetyGymnasiumEnv(_SafetyGymCostMixin, GymEnv):
     """Safety-Gymnasium environment built from an env id.
 
-    See :class:`SafetyGymnasiumWrapper` for behavior details. The constructor
-    builds the environment via ``safety_gymnasium.make(env_name)`` and applies
-    the same cost-extraction pipeline.
+    See :class:`SafetyGymnasiumWrapper` for behavior details. The
+    constructor builds the environment via
+    ``safety_gymnasium.make(env_name)`` and applies the same
+    cost-extraction pipeline.
 
     Args:
         env_name (str): the safety-gymnasium task id, e.g.
@@ -149,7 +140,9 @@ class SafetyGymnasiumEnv(GymEnv):
     git_url = "https://github.com/PKU-Alignment/safety-gymnasium"
     libname = "safety-gymnasium"
 
-    available_envs = SafetyGymnasiumWrapper.available_envs
+    @_classproperty
+    def available_envs(cls):
+        return _list_safety_gymnasium_envs()
 
     @property
     def lib(self) -> ModuleType:
@@ -169,20 +162,4 @@ class SafetyGymnasiumEnv(GymEnv):
 
     def __init__(self, env_name=None, **kwargs):
         super().__init__(env_name=env_name, **kwargs)
-        self.set_info_dict_reader(_make_cost_reader())
-
-    def _output_transform(self, step_outputs_tuple):
-        observations, reward, cost, terminated, truncated, info = step_outputs_tuple
-        info = dict(info) if info is not None else {}
-        # The default info_dict_reader expects values with a `.dtype`
-        # attribute. safety-gymnasium emits cost as a Python float, so we
-        # promote it to a numpy scalar of fixed dtype.
-        info["cost"] = np.asarray(cost, dtype=np.float64)
-        return (
-            observations,
-            reward,
-            terminated,
-            truncated,
-            terminated | truncated,
-            info,
-        )
+        self._post_init_cost()

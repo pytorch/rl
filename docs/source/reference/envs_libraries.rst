@@ -105,6 +105,8 @@ Available wrappers
     PettingZooWrapper
     ProcgenWrapper
     RoboHiveEnv
+    SafetyGymnasiumEnv
+    SafetyGymnasiumWrapper
     SMACv2Env
     SMACv2Wrapper
     UnityMLAgentsEnv
