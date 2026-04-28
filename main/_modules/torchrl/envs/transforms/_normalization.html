@@ -1,0 +1,1606 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.envs.transforms._normalization &mdash; torchrl main documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../../_static/pytorch.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+
+  
+  <script src="../../../../_static/js/modernizr.min.js"></script>
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+  <div>
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.12.0) &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/collector_trajectory_assembly.html">Collectors Deep Dive: Trajectory Assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/evaluator.html">Using the Evaluator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.envs.transforms._normalization</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
+        </div>
+
+        <div class="pytorch-content-left">
+    
+    
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" class="pytorch-article">
+              
+  <h1>Source code for torchrl.envs.transforms._normalization</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Plobs_dictnc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">abc</span>
+
+<span class="kn">import</span> <span class="nn">multiprocessing</span> <span class="k">as</span> <span class="nn">mp</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Sequence</span>
+<span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">copy</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span> <span class="nn">tensordict.utils</span> <span class="kn">import</span> <span class="n">_zip_strict</span><span class="p">,</span> <span class="n">NestedKey</span>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
+
+<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">_append_last</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.data.tensor_specs</span> <span class="kn">import</span> <span class="n">Bounded</span><span class="p">,</span> <span class="n">ContinuousBox</span><span class="p">,</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">Unbounded</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">EnvBase</span><span class="p">,</span> <span class="n">make_tensordict</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.transforms.utils</span> <span class="kn">import</span> <span class="n">_set_missing_tolerance</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Self</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">Self</span> <span class="o">=</span> <span class="n">Any</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.envs.transforms._base</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_apply_to_composite</span><span class="p">,</span>
+    <span class="n">_apply_to_composite_inv</span><span class="p">,</span>
+    <span class="n">Compose</span><span class="p">,</span>
+    <span class="n">ObservationTransform</span><span class="p">,</span>
+    <span class="n">Transform</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;ObservationNorm&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;RewardScaling&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;VecNorm&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<div class="viewcode-block" id="ObservationNorm">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ObservationNorm.html#torchrl.envs.transforms.ObservationNorm">[docs]</a>
+<span class="k">class</span> <span class="nc">ObservationNorm</span><span class="p">(</span><span class="n">ObservationTransform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Observation affine transformation layer.</span>
+
+<span class="sd">    Normalizes an observation according to</span>
+
+<span class="sd">    .. math::</span>
+<span class="sd">        obs = obs * scale + loc</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        loc (number or tensor): location of the affine transform</span>
+<span class="sd">        scale (number or tensor): scale of the affine transform</span>
+<span class="sd">        in_keys (sequence of NestedKey, optional): entries to be normalized. Defaults to [&quot;observation&quot;, &quot;pixels&quot;].</span>
+<span class="sd">            All entries will be normalized with the same values: if a different behavior is desired</span>
+<span class="sd">            (e.g. a different normalization for pixels and states) different :obj:`ObservationNorm`</span>
+<span class="sd">            objects should be used.</span>
+<span class="sd">        out_keys (sequence of NestedKey, optional): output entries. Defaults to the value of `in_keys`.</span>
+<span class="sd">        in_keys_inv (sequence of NestedKey, optional): ObservationNorm also supports inverse transforms. This will</span>
+<span class="sd">            only occur if a list of keys is provided to :obj:`in_keys_inv`. If none is provided,</span>
+<span class="sd">            only the forward transform will be called.</span>
+<span class="sd">        out_keys_inv (sequence of NestedKey, optional): output entries for the inverse transform.</span>
+<span class="sd">            Defaults to the value of `in_keys_inv`.</span>
+<span class="sd">        standard_normal (bool, optional): if ``True``, the transform will be</span>
+
+<span class="sd">            .. math::</span>
+<span class="sd">                obs = (obs-loc)/scale</span>
+
+<span class="sd">            as it is done for standardization. Default is `False`.</span>
+
+<span class="sd">        eps (:obj:`float`, optional): epsilon increment for the scale in the ``standard_normal`` case.</span>
+<span class="sd">            Defaults to ``1e-6`` if not recoverable directly from the scale dtype.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; torch.set_default_tensor_type(torch.DoubleTensor)</span>
+<span class="sd">        &gt;&gt;&gt; r = torch.randn(100, 3)*torch.randn(3) + torch.randn(3)</span>
+<span class="sd">        &gt;&gt;&gt; td = TensorDict({&#39;obs&#39;: r}, [100])</span>
+<span class="sd">        &gt;&gt;&gt; transform = ObservationNorm(</span>
+<span class="sd">        ...     loc = td.get(&#39;obs&#39;).mean(0),</span>
+<span class="sd">        ...     scale = td.get(&#39;obs&#39;).std(0),</span>
+<span class="sd">        ...     in_keys=[&quot;obs&quot;],</span>
+<span class="sd">        ...     standard_normal=True)</span>
+<span class="sd">        &gt;&gt;&gt; _ = transform(td)</span>
+<span class="sd">        &gt;&gt;&gt; print(torch.isclose(td.get(&#39;obs&#39;).mean(0),</span>
+<span class="sd">        ...     torch.zeros(3)).all())</span>
+<span class="sd">        tensor(True)</span>
+<span class="sd">        &gt;&gt;&gt; print(torch.isclose(td.get(&#39;next_obs&#39;).std(0),</span>
+<span class="sd">        ...     torch.ones(3)).all())</span>
+<span class="sd">        tensor(True)</span>
+
+<span class="sd">    The normalization stats can be automatically computed:</span>
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs.libs.gym import GymEnv</span>
+<span class="sd">        &gt;&gt;&gt; torch.manual_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt; env = GymEnv(&quot;Pendulum-v1&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; env = TransformedEnv(env, ObservationNorm(in_keys=[&quot;observation&quot;]))</span>
+<span class="sd">        &gt;&gt;&gt; env.set_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt; env.transform.init_stats(100)</span>
+<span class="sd">        &gt;&gt;&gt; print(env.transform.loc, env.transform.scale)</span>
+<span class="sd">        tensor([-1.3752e+01, -6.5087e-03,  2.9294e-03], dtype=torch.float32) tensor([14.9636,  2.5608,  0.6408], dtype=torch.float32)</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_ERR_INIT_MSG</span> <span class="o">=</span> <span class="s2">&quot;Cannot have an mixed initialized and uninitialized loc and scale&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">loc</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">in_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">out_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">in_keys_inv</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">out_keys_inv</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">standard_normal</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">in_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Not passing in_keys to ObservationNorm is a deprecated behavior.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">out_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">out_keys</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">in_keys</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">in_keys_inv</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">in_keys_inv</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">out_keys_inv</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">out_keys_inv</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">in_keys_inv</span><span class="p">)</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">in_keys</span><span class="o">=</span><span class="n">in_keys</span><span class="p">,</span>
+            <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">,</span>
+            <span class="n">in_keys_inv</span><span class="o">=</span><span class="n">in_keys_inv</span><span class="p">,</span>
+            <span class="n">out_keys_inv</span><span class="o">=</span><span class="n">out_keys_inv</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">standard_normal</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">standard_normal</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">standard_normal</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;standard_normal&quot;</span><span class="p">,</span> <span class="n">standard_normal</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eps</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">eps</span>
+            <span class="k">if</span> <span class="n">eps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">finfo</span><span class="p">(</span><span class="n">scale</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">eps</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="ow">and</span> <span class="n">scale</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">is_floating_point</span>
+            <span class="k">else</span> <span class="mf">1e-6</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">loc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">loc</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">loc</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">loc</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">get_default_dtype</span><span class="p">())</span>
+        <span class="k">elif</span> <span class="n">loc</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">scale</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ERR_INIT_MSG</span><span class="p">)</span>
+            <span class="n">loc</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">UninitializedBuffer</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">scale</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">get_default_dtype</span><span class="p">())</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="n">scale</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">scale</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># check that loc is None too</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">loc</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">UninitializedBuffer</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ERR_INIT_MSG</span><span class="p">)</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">UninitializedBuffer</span><span class="p">()</span>
+
+        <span class="c1"># self.observation_spec_key = observation_spec_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="n">loc</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;scale&quot;</span><span class="p">,</span> <span class="n">scale</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">initialized</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">loc</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">UninitializedBuffer</span><span class="p">)</span>
+
+<div class="viewcode-block" id="ObservationNorm.init_stats">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ObservationNorm.html#torchrl.envs.transforms.ObservationNorm.init_stats">[docs]</a>
+    <span class="k">def</span> <span class="nf">init_stats</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">num_iter</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">reduce_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">cat_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">keep_dims</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initializes the loc and scale stats of the parent environment.</span>
+
+<span class="sd">        Normalization constant should ideally make the observation statistics approach</span>
+<span class="sd">        those of a standard Gaussian distribution. This method computes a location</span>
+<span class="sd">        and scale tensor that will empirically compute the mean and standard</span>
+<span class="sd">        deviation of a Gaussian distribution fitted on data generated randomly with</span>
+<span class="sd">        the parent environment for a given number of steps.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            num_iter (int): number of random iterations to run in the environment.</span>
+<span class="sd">            reduce_dim (int or tuple of int, optional): dimension to compute the mean and std over.</span>
+<span class="sd">                Defaults to 0.</span>
+<span class="sd">            cat_dim (int, optional): dimension along which the batches collected will be concatenated.</span>
+<span class="sd">                It must be part equal to reduce_dim (if integer) or part of the reduce_dim tuple.</span>
+<span class="sd">                Defaults to the same value as reduce_dim.</span>
+<span class="sd">            key (NestedKey, optional): if provided, the summary statistics will be</span>
+<span class="sd">                retrieved from that key in the resulting tensordicts.</span>
+<span class="sd">                Otherwise, the first key in :obj:`ObservationNorm.in_keys` will be used.</span>
+<span class="sd">            keep_dims (tuple of int, optional): the dimensions to keep in the loc and scale.</span>
+<span class="sd">                For instance, one may want the location and scale to have shape [C, 1, 1]</span>
+<span class="sd">                when normalizing a 3D tensor over the last two dimensions, but not the</span>
+<span class="sd">                third. Defaults to None.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">cat_dim</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">cat_dim</span> <span class="o">=</span> <span class="n">reduce_dim</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cat_dim</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;cat_dim must be specified if reduce_dim is not an integer.&quot;</span>
+                <span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">reduce_dim</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">and</span> <span class="n">cat_dim</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">reduce_dim</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="n">reduce_dim</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">and</span> <span class="n">cat_dim</span> <span class="o">!=</span> <span class="n">reduce_dim</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;cat_dim must be part of or equal to reduce_dim.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Loc/Scale are already initialized: (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">loc</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="si">}</span><span class="s2">)&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Transform has multiple in_keys but no specific key was passed as an argument&quot;</span>
+            <span class="p">)</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">key</span>
+
+        <span class="k">def</span> <span class="nf">raise_initialization_exception</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">ObservationNorm</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">module</span><span class="o">.</span><span class="n">initialized</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;ObservationNorms need to be initialized in the right order.&quot;</span>
+                    <span class="s2">&quot;Trying to initialize an ObservationNorm &quot;</span>
+                    <span class="s2">&quot;while a parent ObservationNorm transform is still uninitialized&quot;</span>
+                <span class="p">)</span>
+
+        <span class="n">parent</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span>
+        <span class="k">if</span> <span class="n">parent</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot initialize the transform if parent env is not defined.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">parent</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">raise_initialization_exception</span><span class="p">)</span>
+
+        <span class="n">collected_frames</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">while</span> <span class="n">collected_frames</span> <span class="o">&lt;</span> <span class="n">num_iter</span><span class="p">:</span>
+            <span class="n">tensordict</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="n">max_steps</span><span class="o">=</span><span class="n">num_iter</span><span class="p">)</span>
+            <span class="n">collected_frames</span> <span class="o">+=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">))</span>
+
+        <span class="n">data</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">cat_dim</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reduce_dim</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="n">reduce_dim</span> <span class="o">=</span> <span class="p">[</span><span class="n">reduce_dim</span><span class="p">]</span>
+        <span class="c1"># make all reduce_dim and keep_dims negative</span>
+        <span class="n">reduce_dim</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">dim</span> <span class="k">if</span> <span class="n">dim</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">dim</span> <span class="o">-</span> <span class="n">data</span><span class="o">.</span><span class="n">ndim</span> <span class="k">for</span> <span class="n">dim</span> <span class="ow">in</span> <span class="n">reduce_dim</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">keep_dims</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">keep_dims</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">dim</span> <span class="k">if</span> <span class="n">dim</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">dim</span> <span class="o">-</span> <span class="n">data</span><span class="o">.</span><span class="n">ndim</span> <span class="k">for</span> <span class="n">dim</span> <span class="ow">in</span> <span class="n">keep_dims</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="n">k</span> <span class="ow">in</span> <span class="n">reduce_dim</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">keep_dims</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;keep_dim elements must be part of reduce_dim list.&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">keep_dims</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">loc</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">reduce_dim</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">scale</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">reduce_dim</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">reduce_dim</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">r</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">keep_dims</span><span class="p">:</span>
+                <span class="n">loc</span> <span class="o">=</span> <span class="n">loc</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+                <span class="n">scale</span> <span class="o">=</span> <span class="n">scale</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">standard_normal</span><span class="p">:</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">scale</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span>
+            <span class="n">loc</span> <span class="o">=</span> <span class="o">-</span><span class="n">loc</span> <span class="o">*</span> <span class="n">scale</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">loc</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Non-finite values found in loc&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">scale</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Non-finite values found in scale&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">loc</span><span class="o">.</span><span class="n">materialize</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">loc</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">loc</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">loc</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">loc</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="o">.</span><span class="n">materialize</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">scale</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">scale</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">scale</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">))</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Loc/Scale have not been initialized. Either pass in values in the constructor &quot;</span>
+                <span class="s2">&quot;or call the init_stats method&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">standard_normal</span><span class="p">:</span>
+            <span class="n">loc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span>
+            <span class="k">return</span> <span class="p">(</span><span class="n">obs</span> <span class="o">-</span> <span class="n">loc</span><span class="p">)</span> <span class="o">/</span> <span class="n">scale</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span>
+            <span class="n">loc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span>
+            <span class="k">return</span> <span class="n">obs</span> <span class="o">*</span> <span class="n">scale</span> <span class="o">+</span> <span class="n">loc</span>
+
+    <span class="k">def</span> <span class="nf">_inv_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Loc/Scale have not been initialized. Either pass in values in the constructor &quot;</span>
+                <span class="s2">&quot;or call the init_stats method&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">standard_normal</span><span class="p">:</span>
+            <span class="n">loc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span>
+            <span class="k">return</span> <span class="p">(</span><span class="n">state</span> <span class="o">-</span> <span class="n">loc</span><span class="p">)</span> <span class="o">/</span> <span class="n">scale</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span>
+            <span class="n">loc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span>
+            <span class="k">return</span> <span class="n">state</span> <span class="o">*</span> <span class="n">scale</span> <span class="o">+</span> <span class="n">loc</span>
+
+<div class="viewcode-block" id="ObservationNorm.transform_observation_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ObservationNorm.html#torchrl.envs.transforms.ObservationNorm.transform_observation_spec">[docs]</a>
+    <span class="nd">@_apply_to_composite</span>
+    <span class="k">def</span> <span class="nf">transform_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="n">space</span> <span class="o">=</span> <span class="n">observation_spec</span><span class="o">.</span><span class="n">space</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">space</span><span class="p">,</span> <span class="n">ContinuousBox</span><span class="p">):</span>
+            <span class="n">space</span><span class="o">.</span><span class="n">low</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_transform</span><span class="p">(</span><span class="n">space</span><span class="o">.</span><span class="n">low</span><span class="p">)</span>
+            <span class="n">space</span><span class="o">.</span><span class="n">high</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_transform</span><span class="p">(</span><span class="n">space</span><span class="o">.</span><span class="n">high</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">observation_spec</span></div>
+
+
+    <span class="c1"># @_apply_to_composite_inv</span>
+    <span class="c1"># def transform_input_spec(self, input_spec: TensorSpec) -&gt; TensorSpec:</span>
+    <span class="c1">#     space = input_spec.space</span>
+    <span class="c1">#     if isinstance(space, ContinuousBox):</span>
+    <span class="c1">#         space.low = self._apply_transform(space.low)</span>
+    <span class="c1">#         space.high = self._apply_transform(space.high)</span>
+    <span class="c1">#     return input_spec</span>
+
+<div class="viewcode-block" id="ObservationNorm.transform_action_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ObservationNorm.html#torchrl.envs.transforms.ObservationNorm.transform_action_spec">[docs]</a>
+    <span class="nd">@_apply_to_composite_inv</span>
+    <span class="k">def</span> <span class="nf">transform_action_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="n">space</span> <span class="o">=</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">space</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">space</span><span class="p">,</span> <span class="n">ContinuousBox</span><span class="p">):</span>
+            <span class="n">space</span><span class="o">.</span><span class="n">low</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_transform</span><span class="p">(</span><span class="n">space</span><span class="o">.</span><span class="n">low</span><span class="p">)</span>
+            <span class="n">space</span><span class="o">.</span><span class="n">high</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_transform</span><span class="p">(</span><span class="n">space</span><span class="o">.</span><span class="n">high</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">action_spec</span></div>
+
+
+<div class="viewcode-block" id="ObservationNorm.transform_state_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ObservationNorm.html#torchrl.envs.transforms.ObservationNorm.transform_state_spec">[docs]</a>
+    <span class="nd">@_apply_to_composite_inv</span>
+    <span class="k">def</span> <span class="nf">transform_state_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="n">space</span> <span class="o">=</span> <span class="n">state_spec</span><span class="o">.</span><span class="n">space</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">space</span><span class="p">,</span> <span class="n">ContinuousBox</span><span class="p">):</span>
+            <span class="n">space</span><span class="o">.</span><span class="n">low</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_transform</span><span class="p">(</span><span class="n">space</span><span class="o">.</span><span class="n">low</span><span class="p">)</span>
+            <span class="n">space</span><span class="o">.</span><span class="n">high</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_transform</span><span class="p">(</span><span class="n">space</span><span class="o">.</span><span class="n">high</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">state_spec</span></div>
+
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span> <span class="ow">and</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">loc</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;loc=</span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">loc</span><span class="p">)</span><span class="si">:</span><span class="s2">4.4f</span><span class="si">}</span><span class="s2">, scale&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;=</span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span><span class="si">:</span><span class="s2">4.4f</span><span class="si">}</span><span class="s2">, keys=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="si">}</span><span class="s2">)&quot;</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__repr__</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">with</span> <span class="n">_set_missing_tolerance</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="n">tensordict_reset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call</span><span class="p">(</span><span class="n">tensordict_reset</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict_reset</span></div>
+
+
+
+<div class="viewcode-block" id="RewardScaling">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.RewardScaling.html#torchrl.envs.transforms.RewardScaling">[docs]</a>
+<span class="k">class</span> <span class="nc">RewardScaling</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Affine transform of the reward.</span>
+
+<span class="sd">     The reward is transformed according to:</span>
+
+<span class="sd">    .. math::</span>
+<span class="sd">        reward = reward * scale + loc</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        loc (number or torch.Tensor): location of the affine transform</span>
+<span class="sd">        scale (number or torch.Tensor): scale of the affine transform</span>
+<span class="sd">        standard_normal (bool, optional): if ``True``, the transform will be</span>
+
+<span class="sd">            .. math::</span>
+<span class="sd">                reward = (reward-loc)/scale</span>
+
+<span class="sd">            as it is done for standardization. Default is `False`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">loc</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">in_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">out_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">standard_normal</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">in_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;reward&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">out_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">out_keys</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">in_keys</span><span class="p">)</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">standard_normal</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">standard_normal</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">standard_normal</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;standard_normal&quot;</span><span class="p">,</span> <span class="n">standard_normal</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">loc</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">loc</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">loc</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">scale</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="n">loc</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;scale&quot;</span><span class="p">,</span> <span class="n">scale</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">1e-6</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">standard_normal</span><span class="p">:</span>
+            <span class="n">loc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span>
+            <span class="n">reward</span> <span class="o">=</span> <span class="p">(</span><span class="n">reward</span> <span class="o">-</span> <span class="n">loc</span><span class="p">)</span> <span class="o">/</span> <span class="n">scale</span>
+            <span class="k">return</span> <span class="n">reward</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span>
+            <span class="n">loc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span>
+            <span class="n">reward</span> <span class="o">=</span> <span class="n">reward</span> <span class="o">*</span> <span class="n">scale</span> <span class="o">+</span> <span class="n">loc</span>
+            <span class="k">return</span> <span class="n">reward</span>
+
+<div class="viewcode-block" id="RewardScaling.transform_reward_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.RewardScaling.html#torchrl.envs.transforms.RewardScaling.transform_reward_spec">[docs]</a>
+    <span class="nd">@_apply_to_composite</span>
+    <span class="k">def</span> <span class="nf">transform_reward_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reward_spec</span><span class="p">,</span> <span class="n">Unbounded</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">reward_spec</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.transform_reward_spec not &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;implemented for tensor spec of type&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">reward_spec</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;loc=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">loc</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">4.4f</span><span class="si">}</span><span class="s2">, scale=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">4.4f</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;keys=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span></div>
+
+
+
+<span class="k">def</span> <span class="nf">_sum_left</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">dest</span><span class="p">):</span>
+    <span class="k">while</span> <span class="n">val</span><span class="o">.</span><span class="n">ndimension</span><span class="p">()</span> <span class="o">&gt;</span> <span class="n">dest</span><span class="o">.</span><span class="n">ndimension</span><span class="p">():</span>
+        <span class="n">val</span> <span class="o">=</span> <span class="n">val</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">val</span>
+
+
+<span class="k">class</span> <span class="nc">_VecNormMeta</span><span class="p">(</span><span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">new_api</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;new_api&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">new_api</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;The VecNorm class is to be deprecated in favor of `torchrl.envs.VecNormV2` and will be replaced by &quot;</span>
+                <span class="s2">&quot;that class in v0.10. You can adapt to these changes by using the `new_api` argument or importing &quot;</span>
+                <span class="s2">&quot;the `VecNormV2` class from `torchrl.envs`.&quot;</span><span class="p">,</span>
+                <span class="n">category</span><span class="o">=</span><span class="ne">FutureWarning</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">new_api</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">new_api</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">VecNormV2</span>
+
+            <span class="k">return</span> <span class="n">VecNormV2</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="VecNorm">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm">[docs]</a>
+<span class="k">class</span> <span class="nc">VecNorm</span><span class="p">(</span><span class="n">Transform</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_VecNormMeta</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Moving average normalization layer for torchrl environments.</span>
+
+<span class="sd">    .. warning:: This class is to be deprecated in favor of :class:`~torchrl.envs.VecNormV2` and will be replaced by</span>
+<span class="sd">        that class in v0.10. You can adapt to these changes by using the `new_api` argument or importing the</span>
+<span class="sd">        `VecNormV2` class from `torchrl.envs`.</span>
+
+<span class="sd">    VecNorm keeps track of the summary statistics of a dataset to standardize</span>
+<span class="sd">    it on-the-fly. If the transform is in &#39;eval&#39; mode, the running</span>
+<span class="sd">    statistics are not updated.</span>
+
+<span class="sd">    If multiple processes are running a similar environment, one can pass a</span>
+<span class="sd">    TensorDictBase instance that is placed in shared memory: if so, every time</span>
+<span class="sd">    the normalization layer is queried it will update the values for all</span>
+<span class="sd">    processes that share the same reference.</span>
+
+<span class="sd">    To use VecNorm at inference time and avoid updating the values with the new</span>
+<span class="sd">    observations, one should substitute this layer by :meth:`~.to_observation_norm`.</span>
+<span class="sd">    This will provide a static version of `VecNorm` which will not be updated</span>
+<span class="sd">    when the source transform is updated.</span>
+<span class="sd">    To get a frozen copy of the VecNorm layer, see :meth:`~.frozen_copy`.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        in_keys (sequence of NestedKey, optional): keys to be updated.</span>
+<span class="sd">            default: [&quot;observation&quot;, &quot;reward&quot;]</span>
+<span class="sd">        out_keys (sequence of NestedKey, optional): destination keys.</span>
+<span class="sd">            Defaults to ``in_keys``.</span>
+<span class="sd">        shared_td (TensorDictBase, optional): A shared tensordict containing the</span>
+<span class="sd">            keys of the transform.</span>
+<span class="sd">        lock (mp.Lock): a lock to prevent race conditions between processes.</span>
+<span class="sd">            Defaults to None (lock created during init).</span>
+<span class="sd">        decay (number, optional): decay rate of the moving average.</span>
+<span class="sd">            default: 0.99</span>
+<span class="sd">        eps (number, optional): lower bound of the running standard</span>
+<span class="sd">            deviation (for numerical underflow). Default is 1e-4.</span>
+<span class="sd">        shapes (List[torch.Size], optional): if provided, represents the shape</span>
+<span class="sd">            of each in_keys. Its length must match the one of ``in_keys``.</span>
+<span class="sd">            Each shape must match the trailing dimension of the corresponding</span>
+<span class="sd">            entry.</span>
+<span class="sd">            If not, the feature dimensions of the entry (ie all dims that do</span>
+<span class="sd">            not belong to the tensordict batch-size) will be considered as</span>
+<span class="sd">            feature dimension.</span>
+<span class="sd">        new_api (bool or None, optional): if ``True``, an instance of VecNormV2 will be returned.</span>
+<span class="sd">            If not passed, a warning will be raised.</span>
+<span class="sd">            Defaults to ``False``.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs.libs.gym import GymEnv</span>
+<span class="sd">        &gt;&gt;&gt; t = VecNorm(decay=0.9)</span>
+<span class="sd">        &gt;&gt;&gt; env = GymEnv(&quot;Pendulum-v0&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; env = TransformedEnv(env, t)</span>
+<span class="sd">        &gt;&gt;&gt; tds = []</span>
+<span class="sd">        &gt;&gt;&gt; for _ in range(1000):</span>
+<span class="sd">        ...     td = env.rand_step()</span>
+<span class="sd">        ...     if td.get(&quot;done&quot;):</span>
+<span class="sd">        ...         _ = env.reset()</span>
+<span class="sd">        ...     tds += [td]</span>
+<span class="sd">        &gt;&gt;&gt; tds = torch.stack(tds, 0)</span>
+<span class="sd">        &gt;&gt;&gt; print((abs(tds.get((&quot;next&quot;, &quot;observation&quot;)).mean(0))&lt;0.2).all())</span>
+<span class="sd">        tensor(True)</span>
+<span class="sd">        &gt;&gt;&gt; print((abs(tds.get((&quot;next&quot;, &quot;observation&quot;)).std(0)-1)&lt;0.2).all())</span>
+<span class="sd">        tensor(True)</span>
+
+<span class="sd">    To recover the original (denormalized) values from normalized data, use :meth:`~.denorm`:</span>
+
+<span class="sd">        &gt;&gt;&gt; denormed = t.denorm(tds)</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">in_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">out_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">shared_td</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">lock</span><span class="p">:</span> <span class="n">mp</span><span class="o">.</span><span class="n">Lock</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">decay</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.9999</span><span class="p">,</span>
+        <span class="n">eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-4</span><span class="p">,</span>
+        <span class="n">shapes</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">new_api</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;This class is to be deprecated in favor of :class:`~torchrl.envs.VecNormV2`.&quot;</span><span class="p">,</span>
+            <span class="n">category</span><span class="o">=</span><span class="ne">FutureWarning</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Warn about shared memory limitations on older PyTorch</span>
+        <span class="kn">from</span> <span class="nn">packaging.version</span> <span class="kn">import</span> <span class="n">parse</span> <span class="k">as</span> <span class="n">parse_version</span>
+
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">parse_version</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">__version__</span><span class="p">)</span><span class="o">.</span><span class="n">base_version</span> <span class="o">&lt;</span> <span class="s2">&quot;2.8.0&quot;</span>
+            <span class="ow">and</span> <span class="n">shared_td</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">):</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;VecNorm with shared memory (shared_td) may not synchronize correctly &quot;</span>
+                <span class="s2">&quot;across processes on PyTorch &lt; 2.8 when using the &#39;spawn&#39; multiprocessing &quot;</span>
+                <span class="s2">&quot;start method. This is due to limitations in PyTorch&#39;s shared memory &quot;</span>
+                <span class="s2">&quot;implementation with the &#39;file_system&#39; sharing strategy. &quot;</span>
+                <span class="s2">&quot;Consider upgrading to PyTorch &gt;= 2.8 for full shared memory support.&quot;</span><span class="p">,</span>
+                <span class="n">category</span><span class="o">=</span><span class="ne">UserWarning</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">lock</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">lock</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">in_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">out_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">out_keys</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">in_keys</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_td</span> <span class="o">=</span> <span class="n">shared_td</span>
+        <span class="k">if</span> <span class="n">shared_td</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span>
+            <span class="n">shared_td</span><span class="o">.</span><span class="n">is_shared</span><span class="p">()</span> <span class="ow">or</span> <span class="n">shared_td</span><span class="o">.</span><span class="n">is_memmap</span><span class="p">()</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;shared_td must be either in shared memory or a memmap &quot;</span> <span class="s2">&quot;tensordict.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">shared_td</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">in_keys</span><span class="p">:</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="p">(</span><span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_sum&quot;</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">shared_td</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+                    <span class="ow">or</span> <span class="p">(</span><span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_ssq&quot;</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">shared_td</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+                    <span class="ow">or</span> <span class="p">(</span><span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_count&quot;</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">shared_td</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+                <span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;key </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2"> not present in the shared tensordict &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;with keys </span><span class="si">{</span><span class="n">shared_td</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">lock</span> <span class="o">=</span> <span class="n">lock</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">decay</span> <span class="o">=</span> <span class="n">decay</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shapes</span> <span class="o">=</span> <span class="n">shapes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eps</span> <span class="o">=</span> <span class="n">eps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frozen</span> <span class="o">=</span> <span class="kc">False</span>
+
+<div class="viewcode-block" id="VecNorm.freeze">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm.freeze">[docs]</a>
+    <span class="k">def</span> <span class="nf">freeze</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VecNorm</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Freezes the VecNorm, avoiding the stats to be updated when called.</span>
+
+<span class="sd">        See :meth:`~.unfreeze`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frozen</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+
+<div class="viewcode-block" id="VecNorm.unfreeze">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm.unfreeze">[docs]</a>
+    <span class="k">def</span> <span class="nf">unfreeze</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VecNorm</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Unfreezes the VecNorm.</span>
+
+<span class="sd">        See :meth:`~.freeze`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frozen</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+
+<div class="viewcode-block" id="VecNorm.frozen_copy">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm.frozen_copy">[docs]</a>
+    <span class="k">def</span> <span class="nf">frozen_copy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VecNorm</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns a copy of the Transform that keeps track of the stats but does not update them.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Make sure the VecNorm has been initialized before creating a frozen copy.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">clone</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+        <span class="c1"># replace values</span>
+        <span class="n">clone</span><span class="o">.</span><span class="n">_td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="c1"># freeze</span>
+        <span class="k">return</span> <span class="n">clone</span><span class="o">.</span><span class="n">freeze</span><span class="p">()</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="c1"># TODO: remove this decorator when trackers are in data</span>
+        <span class="k">with</span> <span class="n">_set_missing_tolerance</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call</span><span class="p">(</span><span class="n">tensordict_reset</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict_reset</span>
+
+    <span class="k">def</span> <span class="nf">_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lock</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">lock</span><span class="o">.</span><span class="n">acquire</span><span class="p">()</span>
+
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">key_out</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+                <span class="c1"># TODO: init missing rewards with this</span>
+                <span class="c1"># for key_suffix in [_append_last(key, suffix) for suffix in (&quot;_sum&quot;, &quot;_ssq&quot;, &quot;_count&quot;)]:</span>
+                <span class="c1">#     tensordict.set(key_suffix, self.container.observation_spec[key_suffix].zero())</span>
+                <span class="k">continue</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">(</span><span class="n">next_tensordict</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+            <span class="c1"># update and standardize</span>
+            <span class="n">new_val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_update</span><span class="p">(</span>
+                <span class="n">key</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">),</span> <span class="n">N</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>
+            <span class="p">)</span>
+
+            <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key_out</span><span class="p">,</span> <span class="n">new_val</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lock</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">lock</span><span class="o">.</span><span class="n">release</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">next_tensordict</span>
+
+    <span class="n">forward</span> <span class="o">=</span> <span class="n">_call</span>
+
+    <span class="k">def</span> <span class="nf">_init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_sum&quot;</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">key</span> <span class="ow">and</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Conflicting key names: </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2"> from VecNorm and input tensordict keys.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">shapes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">td_view</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                <span class="n">td_select</span> <span class="o">=</span> <span class="n">td_view</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="n">item</span> <span class="o">=</span> <span class="n">td_select</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+                <span class="n">d</span> <span class="o">=</span> <span class="p">{</span><span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_sum&quot;</span><span class="p">):</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">item</span><span class="p">)}</span>
+                <span class="n">d</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_ssq&quot;</span><span class="p">):</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">item</span><span class="p">)})</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">idx</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="k">for</span> <span class="n">in_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">in_key</span> <span class="o">!=</span> <span class="n">key</span><span class="p">:</span>
+                        <span class="n">idx</span> <span class="o">+=</span> <span class="mi">1</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="k">break</span>
+                <span class="n">shape</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">shapes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+                <span class="n">item</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+                <span class="n">d</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_sum&quot;</span><span class="p">):</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                        <span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">item</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">item</span><span class="o">.</span><span class="n">dtype</span>
+                    <span class="p">)</span>
+                <span class="p">}</span>
+                <span class="n">d</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                    <span class="p">{</span>
+                        <span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_ssq&quot;</span><span class="p">):</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                            <span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">item</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">item</span><span class="o">.</span><span class="n">dtype</span>
+                        <span class="p">)</span>
+                    <span class="p">}</span>
+                <span class="p">)</span>
+
+            <span class="n">d</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_count&quot;</span><span class="p">):</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                        <span class="mi">1</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">item</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span>
+                    <span class="p">)</span>
+                <span class="p">}</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_td</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+    <span class="k">def</span> <span class="nf">_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">N</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="c1"># TODO: we should revert this and have _td be like: TensorDict{&quot;sum&quot;: ..., &quot;ssq&quot;: ..., &quot;count&quot;...})</span>
+        <span class="c1">#  to facilitate the computation of the stats using TD internals.</span>
+        <span class="c1">#  Moreover, _td can be locked so these ops will be very fast on CUDA.</span>
+        <span class="n">_sum</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_sum&quot;</span><span class="p">))</span>
+        <span class="n">_ssq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_ssq&quot;</span><span class="p">))</span>
+        <span class="n">_count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_count&quot;</span><span class="p">))</span>
+
+        <span class="n">value_sum</span> <span class="o">=</span> <span class="n">_sum_left</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">_sum</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">frozen</span><span class="p">:</span>
+            <span class="n">_sum</span> <span class="o">*=</span> <span class="bp">self</span><span class="o">.</span><span class="n">decay</span>
+            <span class="n">_sum</span> <span class="o">+=</span> <span class="n">value_sum</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_td</span><span class="o">.</span><span class="n">set_</span><span class="p">(</span>
+                <span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_sum&quot;</span><span class="p">),</span>
+                <span class="n">_sum</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="n">_ssq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_ssq&quot;</span><span class="p">))</span>
+        <span class="n">value_ssq</span> <span class="o">=</span> <span class="n">_sum_left</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">_ssq</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">frozen</span><span class="p">:</span>
+            <span class="n">_ssq</span> <span class="o">*=</span> <span class="bp">self</span><span class="o">.</span><span class="n">decay</span>
+            <span class="n">_ssq</span> <span class="o">+=</span> <span class="n">value_ssq</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_td</span><span class="o">.</span><span class="n">set_</span><span class="p">(</span>
+                <span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_ssq&quot;</span><span class="p">),</span>
+                <span class="n">_ssq</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="n">_count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_count&quot;</span><span class="p">))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">frozen</span><span class="p">:</span>
+            <span class="n">_count</span> <span class="o">*=</span> <span class="bp">self</span><span class="o">.</span><span class="n">decay</span>
+            <span class="n">_count</span> <span class="o">+=</span> <span class="n">N</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_td</span><span class="o">.</span><span class="n">set_</span><span class="p">(</span>
+                <span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_count&quot;</span><span class="p">),</span>
+                <span class="n">_count</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="n">mean</span> <span class="o">=</span> <span class="n">_sum</span> <span class="o">/</span> <span class="n">_count</span>
+        <span class="n">std</span> <span class="o">=</span> <span class="p">(</span><span class="n">_ssq</span> <span class="o">/</span> <span class="n">_count</span> <span class="o">-</span> <span class="n">mean</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">value</span> <span class="o">-</span> <span class="n">mean</span><span class="p">)</span> <span class="o">/</span> <span class="n">std</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span>
+
+<div class="viewcode-block" id="VecNorm.denorm">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm.denorm">[docs]</a>
+    <span class="k">def</span> <span class="nf">denorm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Denormalize a tensordict using the inverse of the normalization transform.</span>
+
+<span class="sd">        Applies the inverse of the normalization: ``original = normalized * scale + loc``.</span>
+
+<span class="sd">        Reads normalized values from ``out_keys`` and writes denormalized values to ``in_keys``.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordict (TensorDictBase): the tensordict containing normalized values.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A shallow copy of the tensordict with denormalized values written to ``in_keys``.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            RuntimeError: if the transform has not been initialized (no data seen yet).</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.envs import GymEnv, VecNorm</span>
+<span class="sd">            &gt;&gt;&gt; env = GymEnv(&quot;Pendulum-v1&quot;)</span>
+<span class="sd">            &gt;&gt;&gt; vecnorm = VecNorm(in_keys=[&quot;observation&quot;], out_keys=[&quot;observation_norm&quot;])</span>
+<span class="sd">            &gt;&gt;&gt; env = env.append_transform(vecnorm)</span>
+<span class="sd">            &gt;&gt;&gt; # Collect some data to initialize statistics</span>
+<span class="sd">            &gt;&gt;&gt; rollout = env.rollout(10)</span>
+<span class="sd">            &gt;&gt;&gt; # Denormalize the normalized observations</span>
+<span class="sd">            &gt;&gt;&gt; denormed = vecnorm.denorm(rollout)</span>
+<span class="sd">            &gt;&gt;&gt; # denormed[&quot;observation&quot;] now contains the original scale values</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;VecNorm must be initialized before calling denorm.&quot;</span><span class="p">)</span>
+
+        <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">loc</span><span class="p">,</span> <span class="n">scale</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_loc_scale</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">in_key</span><span class="p">,</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">out_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">out_key</span><span class="p">)</span>
+            <span class="c1"># Denormalize: value * scale + loc</span>
+            <span class="n">original_value</span> <span class="o">=</span> <span class="n">value</span> <span class="o">*</span> <span class="n">scale</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">in_key</span><span class="p">)</span> <span class="o">+</span> <span class="n">loc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">in_key</span><span class="p">)</span>
+            <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">in_key</span><span class="p">,</span> <span class="n">original_value</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict</span></div>
+
+
+<div class="viewcode-block" id="VecNorm.to_observation_norm">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm.to_observation_norm">[docs]</a>
+    <span class="k">def</span> <span class="nf">to_observation_norm</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Compose</span> <span class="o">|</span> <span class="n">ObservationNorm</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Converts VecNorm into an ObservationNorm class that can be used at inference time.</span>
+
+<span class="sd">        The :class:`~torchrl.envs.ObservationNorm` layer can be updated using the :meth:`~torch.nn.Module.state_dict`</span>
+<span class="sd">        API.</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.envs import GymEnv, VecNorm</span>
+<span class="sd">            &gt;&gt;&gt; vecnorm = VecNorm(in_keys=[&quot;observation&quot;])</span>
+<span class="sd">            &gt;&gt;&gt; train_env = GymEnv(&quot;CartPole-v1&quot;, device=None).append_transform(</span>
+<span class="sd">            ...     vecnorm)</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; r = train_env.rollout(4)</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; eval_env = GymEnv(&quot;CartPole-v1&quot;).append_transform(</span>
+<span class="sd">            ...     vecnorm.to_observation_norm())</span>
+<span class="sd">            &gt;&gt;&gt; print(eval_env.transform.loc, eval_env.transform.scale)</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; r = train_env.rollout(4)</span>
+<span class="sd">            &gt;&gt;&gt; # Update entries with state_dict</span>
+<span class="sd">            &gt;&gt;&gt; eval_env.transform.load_state_dict(</span>
+<span class="sd">            ...     vecnorm.to_observation_norm().state_dict())</span>
+<span class="sd">            &gt;&gt;&gt; print(eval_env.transform.loc, eval_env.transform.scale)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">loc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span>
+        <span class="n">scale</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">key_out</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">):</span>
+            <span class="n">_out</span> <span class="o">=</span> <span class="n">ObservationNorm</span><span class="p">(</span>
+                <span class="n">loc</span><span class="o">=</span><span class="n">loc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">),</span>
+                <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">),</span>
+                <span class="n">standard_normal</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">in_keys</span><span class="o">=</span><span class="n">key</span><span class="p">,</span>
+                <span class="n">out_keys</span><span class="o">=</span><span class="n">key_out</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">out</span> <span class="o">+=</span> <span class="p">[</span><span class="n">_out</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Compose</span><span class="p">(</span><span class="o">*</span><span class="n">out</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_out</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_get_loc_scale</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">loc_only</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">scale_only</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">TensorDict</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">TensorDict</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+        <span class="n">loc</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">scale</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">:</span>
+            <span class="n">_sum</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_sum&quot;</span><span class="p">))</span>
+            <span class="n">_ssq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_ssq&quot;</span><span class="p">))</span>
+            <span class="n">_count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_count&quot;</span><span class="p">))</span>
+            <span class="n">loc</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_sum</span> <span class="o">/</span> <span class="n">_count</span>
+            <span class="n">scale</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">_ssq</span> <span class="o">/</span> <span class="n">_count</span> <span class="o">-</span> <span class="n">loc</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">scale_only</span><span class="p">:</span>
+            <span class="n">loc</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">loc</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">loc</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">loc_only</span><span class="p">:</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">scale</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">loc</span><span class="p">,</span> <span class="n">scale</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">standard_normal</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether the affine transform given by `loc` and `scale` follows the standard normal equation.</span>
+
+<span class="sd">        Similar to :class:`~torchrl.envs.ObservationNorm` standard_normal attribute.</span>
+
+<span class="sd">        Always returns ``True``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">loc</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns a TensorDict with the loc to be used for an affine transform.&quot;&quot;&quot;</span>
+        <span class="c1"># We can&#39;t cache that value bc the summary stats could be updated by a different process</span>
+        <span class="n">loc</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_loc_scale</span><span class="p">(</span><span class="n">loc_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">loc</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">scale</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns a TensorDict with the scale to be used for an affine transform.&quot;&quot;&quot;</span>
+        <span class="c1"># We can&#39;t cache that value bc the summary stats could be updated by a different process</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">scale</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_loc_scale</span><span class="p">(</span><span class="n">scale_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">scale</span>
+
+<div class="viewcode-block" id="VecNorm.build_td_for_shared_vecnorm">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm.build_td_for_shared_vecnorm">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">build_td_for_shared_vecnorm</span><span class="p">(</span>
+        <span class="n">env</span><span class="p">:</span> <span class="n">EnvBase</span><span class="p">,</span>
+        <span class="n">keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">memmap</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Creates a shared tensordict for normalization across processes.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            env (EnvBase): example environment to be used to create the</span>
+<span class="sd">                tensordict</span>
+<span class="sd">            keys (sequence of NestedKey, optional): keys that</span>
+<span class="sd">                have to be normalized. Default is `[&quot;next&quot;, &quot;reward&quot;]`</span>
+<span class="sd">            memmap (bool): if ``True``, the resulting tensordict will be cast into</span>
+<span class="sd">                memory map (using `memmap_()`). Otherwise, the tensordict</span>
+<span class="sd">                will be placed in shared memory.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A memory in shared memory to be sent to each process.</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            &gt;&gt;&gt; from torch import multiprocessing as mp</span>
+<span class="sd">            &gt;&gt;&gt; queue = mp.Queue()</span>
+<span class="sd">            &gt;&gt;&gt; env = make_env()</span>
+<span class="sd">            &gt;&gt;&gt; td_shared = VecNorm.build_td_for_shared_vecnorm(env,</span>
+<span class="sd">            ...     [&quot;next&quot;, &quot;reward&quot;])</span>
+<span class="sd">            &gt;&gt;&gt; assert td_shared.is_shared()</span>
+<span class="sd">            &gt;&gt;&gt; queue.put(td_shared)</span>
+<span class="sd">            &gt;&gt;&gt; # on workers</span>
+<span class="sd">            &gt;&gt;&gt; v = VecNorm(shared_td=queue.get())</span>
+<span class="sd">            &gt;&gt;&gt; env = TransformedEnv(make_env(), v)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;this feature is currently put on hold.&quot;</span><span class="p">)</span>
+        <span class="n">sep</span> <span class="o">=</span> <span class="s2">&quot;.-|-.&quot;</span>
+        <span class="k">if</span> <span class="n">keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">]</span>
+        <span class="n">td</span> <span class="o">=</span> <span class="n">make_tensordict</span><span class="p">(</span><span class="n">env</span><span class="p">)</span>
+        <span class="n">keys</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">}</span>
+        <span class="n">td_select</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">keys</span><span class="p">)</span>
+        <span class="n">td_select</span> <span class="o">=</span> <span class="n">td_select</span><span class="o">.</span><span class="n">flatten_keys</span><span class="p">(</span><span class="n">sep</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">td</span><span class="o">.</span><span class="n">batch_dims</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;VecNorm should be used with non-batched environments. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Got batch_size=</span><span class="si">{</span><span class="n">td</span><span class="o">.</span><span class="n">batch_size</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="n">keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">td_select</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">:</span>
+            <span class="n">td_select</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_ssq&quot;</span><span class="p">),</span> <span class="n">td_select</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+            <span class="n">td_select</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                <span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_count&quot;</span><span class="p">),</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                    <span class="o">*</span><span class="n">td</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+                    <span class="mi">1</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">td_select</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+            <span class="n">td_select</span><span class="o">.</span><span class="n">rename_key_</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">_append_last</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;_sum&quot;</span><span class="p">))</span>
+        <span class="n">td_select</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="o">*</span><span class="n">keys</span><span class="p">)</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
+        <span class="n">td_select</span> <span class="o">=</span> <span class="n">td_select</span><span class="o">.</span><span class="n">unflatten_keys</span><span class="p">(</span><span class="n">sep</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">memmap</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">td_select</span><span class="o">.</span><span class="n">memmap_</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">td_select</span><span class="o">.</span><span class="n">share_memory_</span><span class="p">()</span></div>
+
+
+    <span class="c1"># We use a different separator to ensure that keys can have points within them.</span>
+    <span class="n">SEP</span> <span class="o">=</span> <span class="s2">&quot;-&lt;.&gt;-&quot;</span>
+
+<div class="viewcode-block" id="VecNorm.get_extra_state">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm.get_extra_state">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_extra_state</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OrderedDict</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;Querying state_dict on an uninitialized VecNorm transform will &quot;</span>
+                <span class="s2">&quot;return a `None` value for the summary statistics. &quot;</span>
+                <span class="s2">&quot;Loading such a state_dict on an initialized VecNorm will result in &quot;</span>
+                <span class="s2">&quot;an error.&quot;</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td</span><span class="o">.</span><span class="n">flatten_keys</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">SEP</span><span class="p">)</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="VecNorm.set_extra_state">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm.set_extra_state">[docs]</a>
+    <span class="k">def</span> <span class="nf">set_extra_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">OrderedDict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">state</span><span class="p">)</span><span class="o">.</span><span class="n">unflatten_keys</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">SEP</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">td</span><span class="o">.</span><span class="n">is_shared</span><span class="p">():</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="s2">&quot;VecNorm wasn&#39;t initialized and the tensordict is not shared. In single &quot;</span>
+                    <span class="s2">&quot;process settings, this is ok, but if you need to share the statistics &quot;</span>
+                    <span class="s2">&quot;between workers this should require some attention. &quot;</span>
+                    <span class="s2">&quot;Make sure that the content of VecNorm is transmitted to the workers &quot;</span>
+                    <span class="s2">&quot;after calling load_state_dict and not before, as other workers &quot;</span>
+                    <span class="s2">&quot;may not have access to the loaded TensorDict.&quot;</span>
+                <span class="p">)</span>
+                <span class="n">td</span><span class="o">.</span><span class="n">share_memory_</span><span class="p">()</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_td</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_td</span> <span class="o">=</span> <span class="n">td</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s2">&quot;Could not find a tensordict in the state_dict.&quot;</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(decay=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">decay</span><span class="si">:</span><span class="s2">4.4f</span><span class="si">}</span><span class="s2">,&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;eps=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="si">:</span><span class="s2">4.4f</span><span class="si">}</span><span class="s2">, in_keys=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="si">}</span><span class="s2">, out_keys=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__getstate__</span><span class="p">()</span>
+        <span class="n">_lock</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;lock&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">_lock</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">state</span><span class="p">[</span><span class="s2">&quot;lock_placeholder&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">state</span>
+
+    <span class="k">def</span> <span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]):</span>
+        <span class="k">if</span> <span class="s2">&quot;lock_placeholder&quot;</span> <span class="ow">in</span> <span class="n">state</span><span class="p">:</span>
+            <span class="n">state</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;lock_placeholder&quot;</span><span class="p">)</span>
+            <span class="n">_lock</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+            <span class="n">state</span><span class="p">[</span><span class="s2">&quot;lock&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_lock</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__setstate__</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+
+<div class="viewcode-block" id="VecNorm.transform_observation_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm.transform_observation_spec">[docs]</a>
+    <span class="nd">@_apply_to_composite</span>
+    <span class="k">def</span> <span class="nf">transform_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observation_spec</span><span class="p">,</span> <span class="n">Bounded</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">Unbounded</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">observation_spec</span></div>
+</div>
+
+
+    <span class="c1"># TODO: incorporate this when trackers are part of the data</span>
+    <span class="c1"># def transform_output_spec(self, output_spec: TensorSpec) -&gt; TensorSpec:</span>
+    <span class="c1">#     observation_spec = output_spec[&quot;full_observation_spec&quot;]</span>
+    <span class="c1">#     reward_spec = output_spec[&quot;full_reward_spec&quot;]</span>
+    <span class="c1">#     for key in list(observation_spec.keys(True, True)):</span>
+    <span class="c1">#         if key in self.in_keys:</span>
+    <span class="c1">#             observation_spec[_append_last(key, &quot;_sum&quot;)] = observation_spec[key].clone()</span>
+    <span class="c1">#             observation_spec[_append_last(key, &quot;_ssq&quot;)] = observation_spec[key].clone()</span>
+    <span class="c1">#             observation_spec[_append_last(key, &quot;_count&quot;)] = observation_spec[key].clone()</span>
+    <span class="c1">#     for key in list(reward_spec.keys(True, True)):</span>
+    <span class="c1">#         if key in self.in_keys:</span>
+    <span class="c1">#             observation_spec[_append_last(key, &quot;_sum&quot;)] = reward_spec[key].clone()</span>
+    <span class="c1">#             observation_spec[_append_last(key, &quot;_ssq&quot;)] = reward_spec[key].clone()</span>
+    <span class="c1">#             observation_spec[_append_last(key, &quot;_count&quot;)] = reward_spec[key].clone()</span>
+    <span class="c1">#     return output_spec</span>
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../../../',
+            VERSION:'main',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../../../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+      <script type="text/javascript" src="../../../../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../../../../_static/sg-tags.js"></script>
+      <script type="text/javascript" src="../../../../_static/design-tabs.js"></script>
+
+  
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="#">Get Started</a>
+          </li>
+
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+    })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
+  </script>
+</body>
+</html>

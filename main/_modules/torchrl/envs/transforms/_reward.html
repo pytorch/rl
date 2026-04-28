@@ -1,0 +1,1577 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.envs.transforms._reward &mdash; torchrl main documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../../_static/pytorch.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+
+  
+  <script src="../../../../_static/js/modernizr.min.js"></script>
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+  <div>
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.12.0) &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/collector_trajectory_assembly.html">Collectors Deep Dive: Trajectory Assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/evaluator.html">Using the Evaluator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.envs.transforms._reward</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
+        </div>
+
+        <div class="pytorch-content-left">
+    
+    
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" class="pytorch-article">
+              
+  <h1>Source code for torchrl.envs.transforms._reward</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Plobs_dictnc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Sequence</span>
+<span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">copy</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">unravel_key</span>
+<span class="kn">from</span> <span class="nn">tensordict.utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_unravel_key_to_tuple</span><span class="p">,</span>
+    <span class="n">_zip_strict</span><span class="p">,</span>
+    <span class="n">expand_as_right</span><span class="p">,</span>
+    <span class="n">NestedKey</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">Tensor</span>
+
+<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">_replace_last</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.data.tensor_specs</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Binary</span><span class="p">,</span>
+    <span class="n">Bounded</span><span class="p">,</span>
+    <span class="n">BoundedContinuous</span><span class="p">,</span>
+    <span class="n">Composite</span><span class="p">,</span>
+    <span class="n">TensorSpec</span><span class="p">,</span>
+    <span class="n">Unbounded</span><span class="p">,</span>
+    <span class="n">UnboundedContinuous</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">EnvBase</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.transforms.utils</span> <span class="kn">import</span> <span class="n">_get_reset</span><span class="p">,</span> <span class="n">_set_missing_tolerance</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Self</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">Self</span> <span class="o">=</span> <span class="n">Any</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.envs.transforms._base</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_apply_to_composite</span><span class="p">,</span>
+    <span class="n">FORWARD_NOT_IMPLEMENTED</span><span class="p">,</span>
+    <span class="n">Transform</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;BinarizeReward&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;LineariseRewards&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Reward2GoTransform&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;RewardClipping&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;RewardSum&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;SignTransform&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;TargetReturn&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<div class="viewcode-block" id="TargetReturn">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.TargetReturn.html#torchrl.envs.transforms.TargetReturn">[docs]</a>
+<span class="k">class</span> <span class="nc">TargetReturn</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sets a target return for the agent to achieve in the environment.</span>
+
+<span class="sd">    In goal-conditioned RL, the :class:`~.TargetReturn` is defined as the</span>
+<span class="sd">    expected cumulative reward obtained from the current state to the goal state</span>
+<span class="sd">    or the end of the episode. It is used as input for the policy to guide its behavior.</span>
+<span class="sd">    For a trained policy typically the maximum return in the environment is</span>
+<span class="sd">    chosen as the target return.</span>
+<span class="sd">    However, as it is used as input to the policy module, it should be scaled</span>
+<span class="sd">    accordingly.</span>
+<span class="sd">    With the :class:`~.TargetReturn` transform, the tensordict can be updated</span>
+<span class="sd">    to include the user-specified target return.</span>
+<span class="sd">    The ``mode`` parameter can be used to specify</span>
+<span class="sd">    whether the target return gets updated at every step by subtracting the</span>
+<span class="sd">    reward achieved at each step or remains constant.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        target_return (:obj:`float`): target return to be achieved by the agent.</span>
+<span class="sd">        mode (str): mode to be used to update the target return. Can be either &quot;reduce&quot; or &quot;constant&quot;. Default: &quot;reduce&quot;.</span>
+<span class="sd">        in_keys (sequence of NestedKey, optional): keys pointing to the reward</span>
+<span class="sd">            entries. Defaults to the reward keys of the parent env.</span>
+<span class="sd">        out_keys (sequence of NestedKey, optional): keys pointing to the</span>
+<span class="sd">            target keys. Defaults to a copy of in_keys where the last element</span>
+<span class="sd">            has been substituted by ``&quot;target_return&quot;``, and raises an exception</span>
+<span class="sd">            if these keys aren&#39;t unique.</span>
+<span class="sd">        reset_key (NestedKey, optional): the reset key to be used as partial</span>
+<span class="sd">            reset indicator. Must be unique. If not provided, defaults to the</span>
+<span class="sd">            only reset key of the parent environment (if it has only one)</span>
+<span class="sd">            and raises an exception otherwise.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import GymEnv</span>
+<span class="sd">        &gt;&gt;&gt; env = TransformedEnv(</span>
+<span class="sd">        ...     GymEnv(&quot;CartPole-v1&quot;),</span>
+<span class="sd">        ...     TargetReturn(10.0, mode=&quot;reduce&quot;))</span>
+<span class="sd">        &gt;&gt;&gt; env.set_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt; torch.manual_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt; env.rollout(20)[&#39;target_return&#39;].squeeze()</span>
+<span class="sd">        tensor([10.,  9.,  8.,  7.,  6.,  5.,  4.,  3.,  2.,  1.,  0., -1., -2., -3.])</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">MODES</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;reduce&quot;</span><span class="p">,</span> <span class="s2">&quot;constant&quot;</span><span class="p">]</span>
+    <span class="n">MODE_ERR</span> <span class="o">=</span> <span class="s2">&quot;Mode can only be &#39;reduce&#39; or &#39;constant&#39;.&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">target_return</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;reduce&quot;</span><span class="p">,</span>
+        <span class="n">in_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">out_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">reset_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">mode</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">MODES</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">MODE_ERR</span><span class="p">)</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">target_return</span> <span class="o">=</span> <span class="n">target_return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="n">mode</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reset_key</span> <span class="o">=</span> <span class="n">reset_key</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">reset_key</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NestedKey</span><span class="p">:</span>
+        <span class="n">reset_key</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_reset_key&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">reset_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">reset_key</span>
+        <span class="n">reset_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">reset_keys</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">reset_keys</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Got more than one reset key in env </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">container</span><span class="si">}</span><span class="s2">, cannot infer which one to use. Consider providing the reset key in the </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="si">}</span><span class="s2"> constructor.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">reset_key</span> <span class="o">=</span> <span class="n">reset_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reset_key</span> <span class="o">=</span> <span class="n">reset_key</span>
+        <span class="k">return</span> <span class="n">reset_key</span>
+
+    <span class="nd">@reset_key</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">reset_key</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reset_key</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">in_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]:</span>
+        <span class="n">in_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_in_keys&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">in_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">in_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">reward_keys</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_in_keys</span> <span class="o">=</span> <span class="n">in_keys</span>
+        <span class="k">return</span> <span class="n">in_keys</span>
+
+    <span class="nd">@in_keys</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">in_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_in_keys</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">out_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]:</span>
+        <span class="n">out_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_out_keys&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">out_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">_replace_last</span><span class="p">(</span><span class="n">in_key</span><span class="p">,</span> <span class="s2">&quot;target_return&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">in_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span>
+            <span class="p">]</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">out_keys</span><span class="p">))</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">out_keys</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Could not infer the target_return because multiple rewards are located at the same level.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_out_keys</span> <span class="o">=</span> <span class="n">out_keys</span>
+        <span class="k">return</span> <span class="n">out_keys</span>
+
+    <span class="nd">@out_keys</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">out_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_out_keys</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">):</span>
+        <span class="n">_reset</span> <span class="o">=</span> <span class="n">_get_reset</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reset_key</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">:</span>
+            <span class="n">target_return</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">out_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">target_return</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">target_return</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+                    <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="o">*</span><span class="n">tensordict</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+                    <span class="n">fill_value</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">target_return</span><span class="p">,</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">tensordict</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">target_return</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+                    <span class="n">expand_as_right</span><span class="p">(</span><span class="o">~</span><span class="n">_reset</span><span class="p">,</span> <span class="n">target_return</span><span class="p">),</span>
+                    <span class="n">target_return</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">target_return</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="n">tensordict_reset</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                <span class="n">out_key</span><span class="p">,</span>
+                <span class="n">target_return</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict_reset</span>
+
+    <span class="k">def</span> <span class="nf">_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDict</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">in_key</span><span class="p">,</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">):</span>
+            <span class="n">val_in</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">in_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">val_out</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">out_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">val_in</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">target_return</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_transform</span><span class="p">(</span>
+                    <span class="n">val_in</span><span class="p">,</span>
+                    <span class="n">val_out</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">out_key</span><span class="p">,</span> <span class="n">target_return</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">missing_tolerance</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">in_key</span><span class="si">}</span><span class="s2">&#39; not found in tensordict </span><span class="si">{</span><span class="n">next_tensordict</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">next_tensordict</span>
+
+    <span class="k">def</span> <span class="nf">_step</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">:</span>
+            <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">out_key</span><span class="p">,</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">out_key</span><span class="p">))</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_step</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_apply_transform</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">reward</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">target_return</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">target_return</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">reward</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;The shape of the reward (</span><span class="si">{</span><span class="n">reward</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">) and target return (</span><span class="si">{</span><span class="n">target_return</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">) must match.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;reduce&quot;</span><span class="p">:</span>
+            <span class="n">target_return</span> <span class="o">=</span> <span class="n">target_return</span> <span class="o">-</span> <span class="n">reward</span>
+            <span class="k">return</span> <span class="n">target_return</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;constant&quot;</span><span class="p">:</span>
+            <span class="n">target_return</span> <span class="o">=</span> <span class="n">target_return</span>
+            <span class="k">return</span> <span class="n">target_return</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown mode: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="TargetReturn.forward">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.TargetReturn.html#torchrl.envs.transforms.TargetReturn.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="n">FORWARD_NOT_IMPLEMENTED</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="TargetReturn.transform_observation_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.TargetReturn.html#torchrl.envs.transforms.TargetReturn.transform_observation_spec">[docs]</a>
+    <span class="k">def</span> <span class="nf">transform_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">in_key</span><span class="p">,</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">in_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">):</span>
+                <span class="n">target</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="p">[</span><span class="n">in_key</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="n">in_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">full_reward_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">):</span>
+                <span class="n">target</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">full_reward_spec</span><span class="p">[</span><span class="n">in_key</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="n">in_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">full_done_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">):</span>
+                <span class="c1"># we account for this for completeness but it should never be the case</span>
+                <span class="n">target</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">full_done_spec</span><span class="p">[</span><span class="n">in_key</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;in_key </span><span class="si">{</span><span class="n">in_key</span><span class="si">}</span><span class="s2"> not found in output_spec.&quot;</span><span class="p">)</span>
+            <span class="n">target_return_spec</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">target</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">target</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">target</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="c1"># because all reward keys are discarded from the data during calls</span>
+            <span class="c1"># to step_mdp, we must put this in observation_spec</span>
+            <span class="n">observation_spec</span><span class="p">[</span><span class="n">out_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">target_return_spec</span>
+        <span class="k">return</span> <span class="n">observation_spec</span></div>
+
+
+<div class="viewcode-block" id="TargetReturn.transform_input_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.TargetReturn.html#torchrl.envs.transforms.TargetReturn.transform_input_spec">[docs]</a>
+    <span class="k">def</span> <span class="nf">transform_input_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="c1"># we must add the target return to the input spec</span>
+        <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_state_spec&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transform_observation_spec</span><span class="p">(</span>
+            <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_state_spec&quot;</span><span class="p">]</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">input_spec</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="RewardClipping">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.RewardClipping.html#torchrl.envs.transforms.RewardClipping">[docs]</a>
+<span class="k">class</span> <span class="nc">RewardClipping</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Clips the reward between `clamp_min` and `clamp_max`.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        clip_min (scalar): minimum value of the resulting reward.</span>
+<span class="sd">        clip_max (scalar): maximum value of the resulting reward.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">clamp_min</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">clamp_max</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">in_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">out_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">in_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;reward&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">out_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">out_keys</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">in_keys</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">)</span>
+        <span class="n">clamp_min_tensor</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">clamp_min</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">clamp_min</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">)</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">clamp_min</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">clamp_max_tensor</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">clamp_max</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">clamp_max</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">)</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">clamp_max</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;clamp_min&quot;</span><span class="p">,</span> <span class="n">clamp_min_tensor</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;clamp_max&quot;</span><span class="p">,</span> <span class="n">clamp_max_tensor</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">clamp_max</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">clamp_min</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">reward</span> <span class="o">=</span> <span class="n">reward</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">clamp_max</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">clamp_min</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">reward</span> <span class="o">=</span> <span class="n">reward</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">clamp_max</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">reward</span> <span class="o">=</span> <span class="n">reward</span><span class="o">.</span><span class="n">clamp_max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">clamp_max</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">reward</span>
+
+<div class="viewcode-block" id="RewardClipping.transform_reward_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.RewardClipping.html#torchrl.envs.transforms.RewardClipping.transform_reward_spec">[docs]</a>
+    <span class="nd">@_apply_to_composite</span>
+    <span class="k">def</span> <span class="nf">transform_reward_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reward_spec</span><span class="p">,</span> <span class="n">Unbounded</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">Bounded</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">clamp_max</span><span class="p">,</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">reward_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">reward_spec</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">reward_spec</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.transform_reward_spec not &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;implemented for tensor spec of type&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">reward_spec</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;clamp_min=</span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">)</span><span class="si">:</span><span class="s2">4.4f</span><span class="si">}</span><span class="s2">, clamp_max&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;=</span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">clamp_max</span><span class="p">)</span><span class="si">:</span><span class="s2">4.4f</span><span class="si">}</span><span class="s2">, keys=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="BinarizeReward">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.BinarizeReward.html#torchrl.envs.transforms.BinarizeReward">[docs]</a>
+<span class="k">class</span> <span class="nc">BinarizeReward</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Maps the reward to a binary value (0 or 1) if the reward is null or non-null, respectively.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        in_keys (List[NestedKey]): input keys</span>
+<span class="sd">        out_keys (List[NestedKey], optional): output keys. Defaults to value</span>
+<span class="sd">            of ``in_keys``.</span>
+<span class="sd">        dtype (torch.dtype, optional): the dtype of the binerized reward.</span>
+<span class="sd">            Defaults to ``torch.int8``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">in_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">out_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">in_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;reward&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">out_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">out_keys</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">in_keys</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">reward</span><span class="o">.</span><span class="n">shape</span> <span class="ow">or</span> <span class="n">reward</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Reward shape last dimension must be singleton, got reward of shape </span><span class="si">{</span><span class="n">reward</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">reward</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int8</span><span class="p">)</span>
+
+<div class="viewcode-block" id="BinarizeReward.transform_reward_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.BinarizeReward.html#torchrl.envs.transforms.BinarizeReward.transform_reward_spec">[docs]</a>
+    <span class="nd">@_apply_to_composite</span>
+    <span class="k">def</span> <span class="nf">transform_reward_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">Binary</span><span class="p">(</span>
+            <span class="n">n</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">reward_spec</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">shape</span><span class="o">=</span><span class="n">reward_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="RewardSum">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.RewardSum.html#torchrl.envs.transforms.RewardSum">[docs]</a>
+<span class="k">class</span> <span class="nc">RewardSum</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Tracks episode cumulative rewards.</span>
+
+<span class="sd">    This transform accepts a list of tensordict reward keys (i.e. &#39;in_keys&#39;) and tracks their cumulative</span>
+<span class="sd">    value along the time dimension for each episode.</span>
+
+<span class="sd">    When called, the transform writes a new tensordict entry for each ``in_key`` named</span>
+<span class="sd">    ``episode_{in_key}`` where the cumulative values are written.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        in_keys (list of NestedKeys, optional): Input reward keys.</span>
+<span class="sd">            All &#39;in_keys&#39; should be part of the environment reward_spec.</span>
+<span class="sd">            If no ``in_keys`` are specified, this transform assumes ``&quot;reward&quot;`` to be the input key.</span>
+<span class="sd">            However, multiple rewards (e.g. ``&quot;reward1&quot;`` and ``&quot;reward2&quot;&quot;``) can also be specified.</span>
+<span class="sd">        out_keys (list of NestedKeys, optional): The output sum keys, should be one per each input key.</span>
+<span class="sd">        reset_keys (list of NestedKeys, optional): the list of reset_keys to be</span>
+<span class="sd">            used, if the parent environment cannot be found. If provided, this</span>
+<span class="sd">            value will prevail over the environment ``reset_keys``.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        reward_spec (bool, optional): if ``True``, the new reward entry will be registered in the</span>
+<span class="sd">            reward specs. Defaults to ``False`` (registered in ``observation_specs``).</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs.transforms import RewardSum, TransformedEnv</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs.libs.gym import GymEnv</span>
+<span class="sd">        &gt;&gt;&gt; env = TransformedEnv(GymEnv(&quot;CartPole-v1&quot;), RewardSum())</span>
+<span class="sd">        &gt;&gt;&gt; env.set_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt; torch.manual_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt; td = env.reset()</span>
+<span class="sd">        &gt;&gt;&gt; print(td[&quot;episode_reward&quot;])</span>
+<span class="sd">        tensor([0.])</span>
+<span class="sd">        &gt;&gt;&gt; td = env.rollout(3)</span>
+<span class="sd">        &gt;&gt;&gt; print(td[&quot;next&quot;, &quot;episode_reward&quot;])</span>
+<span class="sd">        tensor([[1.],</span>
+<span class="sd">                [2.],</span>
+<span class="sd">                [3.]])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">in_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">out_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">reset_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">reward_spec</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialises the transform. Filters out non-reward input keys and defines output keys.&quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reset_keys</span> <span class="o">=</span> <span class="n">reset_keys</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_keys_checked</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reward_spec</span> <span class="o">=</span> <span class="n">reward_spec</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">in_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]:</span>
+        <span class="n">in_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_in_keys&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">in_keys</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="p">[]):</span>
+            <span class="c1"># retrieve rewards from parent env</span>
+            <span class="n">parent</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span>
+            <span class="k">if</span> <span class="n">parent</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;reward&quot;</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">in_keys</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">parent</span><span class="o">.</span><span class="n">reward_keys</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_in_keys</span> <span class="o">=</span> <span class="n">in_keys</span>
+        <span class="k">return</span> <span class="n">in_keys</span>
+
+    <span class="nd">@in_keys</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">in_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="p">[</span><span class="n">value</span><span class="p">]</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="p">[</span><span class="n">unravel_key</span><span class="p">(</span><span class="n">val</span><span class="p">)</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">value</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_in_keys</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">out_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]:</span>
+        <span class="n">out_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_out_keys&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">out_keys</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="p">[]):</span>
+            <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">_replace_last</span><span class="p">(</span><span class="n">in_key</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;episode_</span><span class="si">{</span><span class="n">_unravel_key_to_tuple</span><span class="p">(</span><span class="n">in_key</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">in_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span>
+            <span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_out_keys</span> <span class="o">=</span> <span class="n">out_keys</span>
+        <span class="k">return</span> <span class="n">out_keys</span>
+
+    <span class="nd">@out_keys</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">out_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="c1"># we must access the private attribute because this check occurs before</span>
+        <span class="c1"># the parent env is defined</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_in_keys</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;RewardSum expects the same number of input and output keys&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="p">[</span><span class="n">value</span><span class="p">]</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="p">[</span><span class="n">unravel_key</span><span class="p">(</span><span class="n">val</span><span class="p">)</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">value</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_out_keys</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">reset_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]:</span>
+        <span class="n">reset_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_reset_keys&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">reset_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">parent</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span>
+            <span class="k">if</span> <span class="n">parent</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">&quot;reset_keys not provided but parent env not found. &quot;</span>
+                    <span class="s2">&quot;Make sure that the reset_keys are provided during &quot;</span>
+                    <span class="s2">&quot;construction if the transform does not have a container env.&quot;</span>
+                <span class="p">)</span>
+            <span class="c1"># let&#39;s try to match the reset keys with the in_keys.</span>
+            <span class="c1"># We take the filtered reset keys, which are the only keys that really</span>
+            <span class="c1"># matter when calling reset, and check that they match the in_keys root.</span>
+            <span class="n">reset_keys</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">_filtered_reset_keys</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">reset_keys</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">reset_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">reset_keys</span><span class="p">)</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">)</span>
+
+            <span class="k">def</span> <span class="nf">_check_match</span><span class="p">(</span><span class="n">reset_keys</span><span class="p">,</span> <span class="n">in_keys</span><span class="p">):</span>
+                <span class="c1"># if this is called, the length of reset_keys and in_keys must match</span>
+                <span class="k">for</span> <span class="n">reset_key</span><span class="p">,</span> <span class="n">in_key</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="n">reset_keys</span><span class="p">,</span> <span class="n">in_keys</span><span class="p">):</span>
+                    <span class="c1"># having _reset at the root and the reward_key (&quot;agent&quot;, &quot;reward&quot;) is allowed</span>
+                    <span class="c1"># but having (&quot;agent&quot;, &quot;_reset&quot;) and &quot;reward&quot; isn&#39;t</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reset_key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">in_key</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                        <span class="k">return</span> <span class="kc">False</span>
+                    <span class="k">if</span> <span class="p">(</span>
+                        <span class="nb">isinstance</span><span class="p">(</span><span class="n">reset_key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span>
+                        <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">in_key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span>
+                        <span class="ow">and</span> <span class="n">in_key</span><span class="p">[:</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">reset_key</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">!=</span> <span class="n">reset_key</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                    <span class="p">):</span>
+                        <span class="k">return</span> <span class="kc">False</span>
+                <span class="k">return</span> <span class="kc">True</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">_check_match</span><span class="p">(</span><span class="n">reset_keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Could not match the env reset_keys </span><span class="si">{</span><span class="n">reset_keys</span><span class="si">}</span><span class="s2"> with the </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="si">}</span><span class="s2"> in_keys </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="si">}</span><span class="s2">. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Please provide the reset_keys manually. Reset entries can be &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;non-unique and must be right-expandable to the shape of &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;the input entries.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">reset_keys</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">reset_keys</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_reset_keys</span> <span class="o">=</span> <span class="n">reset_keys</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_keys_checked</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">reset_keys</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Could not match the env reset_keys </span><span class="si">{</span><span class="n">reset_keys</span><span class="si">}</span><span class="s2"> with the in_keys </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="s2">&quot;Please make sure that these have the same length.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_keys_checked</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="k">return</span> <span class="n">reset_keys</span>
+
+    <span class="nd">@reset_keys</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">reset_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="p">[</span><span class="n">value</span><span class="p">]</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="p">[</span><span class="n">unravel_key</span><span class="p">(</span><span class="n">val</span><span class="p">)</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">value</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reset_keys</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resets episode rewards.&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">in_key</span><span class="p">,</span> <span class="n">reset_key</span><span class="p">,</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">reset_keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span>
+        <span class="p">):</span>
+            <span class="n">_reset</span> <span class="o">=</span> <span class="n">_get_reset</span><span class="p">(</span><span class="n">reset_key</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">)</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">out_key</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">full_reward_spec</span><span class="p">[</span><span class="n">in_key</span><span class="p">]</span><span class="o">.</span><span class="n">zero</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">expand_as_right</span><span class="p">(</span><span class="o">~</span><span class="n">_reset</span><span class="p">,</span> <span class="n">value</span><span class="p">),</span> <span class="n">value</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+            <span class="n">tensordict_reset</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">out_key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict_reset</span>
+
+    <span class="k">def</span> <span class="nf">_step</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Updates the episode rewards with the step rewards.&quot;&quot;&quot;</span>
+        <span class="c1"># Update episode rewards</span>
+        <span class="k">for</span> <span class="n">in_key</span><span class="p">,</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">in_key</span> <span class="ow">in</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+                <span class="n">reward</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">in_key</span><span class="p">)</span>
+                <span class="n">prev_reward</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">out_key</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+                <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">out_key</span><span class="p">,</span> <span class="n">prev_reward</span> <span class="o">+</span> <span class="n">reward</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">missing_tolerance</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">in_key</span><span class="si">}</span><span class="s2">&#39; not found in tensordict </span><span class="si">{</span><span class="n">tensordict</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">next_tensordict</span>
+
+<div class="viewcode-block" id="RewardSum.transform_input_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.RewardSum.html#torchrl.envs.transforms.RewardSum.transform_input_spec">[docs]</a>
+    <span class="k">def</span> <span class="nf">transform_input_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="n">state_spec</span> <span class="o">=</span> <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_state_spec&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">state_spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">state_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">input_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">input_spec</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">state_spec</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_generate_episode_reward_spec</span><span class="p">())</span>
+        <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_state_spec&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">state_spec</span>
+        <span class="k">return</span> <span class="n">input_spec</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_generate_episode_reward_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
+        <span class="n">episode_reward_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">()</span>
+        <span class="n">reward_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">full_reward_spec</span>
+        <span class="n">reward_spec_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">reward_keys</span>
+        <span class="c1"># Define episode specs for all out_keys</span>
+        <span class="k">for</span> <span class="n">in_key</span><span class="p">,</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">):</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">in_key</span> <span class="ow">in</span> <span class="n">reward_spec_keys</span>
+            <span class="p">):</span>  <span class="c1"># if this out_key has a corresponding key in reward_spec</span>
+                <span class="n">out_key</span> <span class="o">=</span> <span class="n">_unravel_key_to_tuple</span><span class="p">(</span><span class="n">out_key</span><span class="p">)</span>
+                <span class="n">temp_episode_reward_spec</span> <span class="o">=</span> <span class="n">episode_reward_spec</span>
+                <span class="n">temp_rew_spec</span> <span class="o">=</span> <span class="n">reward_spec</span>
+                <span class="k">for</span> <span class="n">sub_key</span> <span class="ow">in</span> <span class="n">out_key</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+                    <span class="k">if</span> <span class="p">(</span>
+                        <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">temp_rew_spec</span><span class="p">,</span> <span class="n">Composite</span><span class="p">)</span>
+                        <span class="ow">or</span> <span class="n">sub_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">temp_rew_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+                    <span class="p">):</span>
+                        <span class="k">break</span>
+                    <span class="k">if</span> <span class="n">sub_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">temp_episode_reward_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                        <span class="n">temp_episode_reward_spec</span><span class="p">[</span><span class="n">sub_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">temp_rew_spec</span><span class="p">[</span>
+                            <span class="n">sub_key</span>
+                        <span class="p">]</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+                    <span class="n">temp_rew_spec</span> <span class="o">=</span> <span class="n">temp_rew_spec</span><span class="p">[</span><span class="n">sub_key</span><span class="p">]</span>
+                    <span class="n">temp_episode_reward_spec</span> <span class="o">=</span> <span class="n">temp_episode_reward_spec</span><span class="p">[</span><span class="n">sub_key</span><span class="p">]</span>
+                <span class="n">episode_reward_spec</span><span class="p">[</span><span class="n">out_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">reward_spec</span><span class="p">[</span><span class="n">in_key</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;The in_key: </span><span class="si">{</span><span class="n">in_key</span><span class="si">}</span><span class="s2"> is not present in the reward spec </span><span class="si">{</span><span class="n">reward_spec</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="n">episode_reward_spec</span>
+
+<div class="viewcode-block" id="RewardSum.transform_observation_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.RewardSum.html#torchrl.envs.transforms.RewardSum.transform_observation_spec">[docs]</a>
+    <span class="k">def</span> <span class="nf">transform_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Transforms the observation spec, adding the new keys generated by RewardSum.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reward_spec</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">observation_spec</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observation_spec</span><span class="p">,</span> <span class="n">Composite</span><span class="p">):</span>
+            <span class="n">observation_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+                <span class="n">observation</span><span class="o">=</span><span class="n">observation_spec</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">batch_size</span>
+            <span class="p">)</span>
+        <span class="n">observation_spec</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_generate_episode_reward_spec</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">observation_spec</span></div>
+
+
+<div class="viewcode-block" id="RewardSum.transform_reward_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.RewardSum.html#torchrl.envs.transforms.RewardSum.transform_reward_spec">[docs]</a>
+    <span class="k">def</span> <span class="nf">transform_reward_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">reward_spec</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">reward_spec</span>
+        <span class="n">reward_spec</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_generate_episode_reward_spec</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">reward_spec</span></div>
+
+
+<div class="viewcode-block" id="RewardSum.forward">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.RewardSum.html#torchrl.envs.transforms.RewardSum.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">time_dim</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">names</span><span class="p">)</span> <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;time&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">time_dim</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;At least one dimension of the tensordict must be named &#39;time&#39; in offline mode&quot;</span>
+            <span class="p">)</span>
+        <span class="n">time_dim</span> <span class="o">=</span> <span class="n">time_dim</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="k">for</span> <span class="n">in_key</span><span class="p">,</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">):</span>
+            <span class="n">reward</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="n">in_key</span><span class="p">]</span>
+            <span class="n">cumsum</span> <span class="o">=</span> <span class="n">reward</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">time_dim</span><span class="p">)</span>
+            <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">out_key</span><span class="p">,</span> <span class="n">cumsum</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="Reward2GoTransform">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.Reward2GoTransform.html#torchrl.envs.transforms.Reward2GoTransform">[docs]</a>
+<span class="k">class</span> <span class="nc">Reward2GoTransform</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Calculates the reward to go based on the episode reward and a discount factor.</span>
+
+<span class="sd">    As the :class:`~.Reward2GoTransform` is only an inverse transform the ``in_keys`` will be directly used for the ``in_keys_inv``.</span>
+<span class="sd">    The reward-to-go can be only calculated once the episode is finished. Therefore, the transform should be applied to the replay buffer</span>
+<span class="sd">    and not to the collector or within an environment.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        gamma (:obj:`float` or torch.Tensor): the discount factor. Defaults to 1.0.</span>
+<span class="sd">        in_keys (sequence of NestedKey): the entries to rename. Defaults to</span>
+<span class="sd">            ``(&quot;next&quot;, &quot;reward&quot;)`` if none is provided.</span>
+<span class="sd">        out_keys (sequence of NestedKey): the entries to rename. Defaults to</span>
+<span class="sd">            the values of ``in_keys`` if none is provided.</span>
+<span class="sd">        done_key (NestedKey): the done entry. Defaults to ``&quot;done&quot;``.</span>
+<span class="sd">        truncated_key (NestedKey): the truncated entry. Defaults to ``&quot;truncated&quot;``.</span>
+<span class="sd">            If no truncated entry is found, only the ``&quot;done&quot;`` will be used.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; # Using this transform as part of a replay buffer</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import ReplayBuffer, LazyTensorStorage</span>
+<span class="sd">        &gt;&gt;&gt; torch.manual_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt; r2g = Reward2GoTransform(gamma=0.99, out_keys=[&quot;reward_to_go&quot;])</span>
+<span class="sd">        &gt;&gt;&gt; rb = ReplayBuffer(storage=LazyTensorStorage(100), transform=r2g)</span>
+<span class="sd">        &gt;&gt;&gt; batch, timesteps = 4, 5</span>
+<span class="sd">        &gt;&gt;&gt; done = torch.zeros(batch, timesteps, 1, dtype=torch.bool)</span>
+<span class="sd">        &gt;&gt;&gt; for i in range(batch):</span>
+<span class="sd">        ...     while not done[i].any():</span>
+<span class="sd">        ...         done[i] = done[i].bernoulli_(0.1)</span>
+<span class="sd">        &gt;&gt;&gt; reward = torch.ones(batch, timesteps, 1)</span>
+<span class="sd">        &gt;&gt;&gt; td = TensorDict(</span>
+<span class="sd">        ...     {&quot;next&quot;: {&quot;done&quot;: done, &quot;reward&quot;: reward}},</span>
+<span class="sd">        ...     [batch, timesteps],</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; rb.extend(td)</span>
+<span class="sd">        &gt;&gt;&gt; sample = rb.sample(1)</span>
+<span class="sd">        &gt;&gt;&gt; print(sample[&quot;next&quot;, &quot;reward&quot;])</span>
+<span class="sd">        tensor([[[1.],</span>
+<span class="sd">                 [1.],</span>
+<span class="sd">                 [1.],</span>
+<span class="sd">                 [1.],</span>
+<span class="sd">                 [1.]]])</span>
+<span class="sd">        &gt;&gt;&gt; print(sample[&quot;reward_to_go&quot;])</span>
+<span class="sd">        tensor([[[4.9010],</span>
+<span class="sd">                 [3.9404],</span>
+<span class="sd">                 [2.9701],</span>
+<span class="sd">                 [1.9900],</span>
+<span class="sd">                 [1.0000]]])</span>
+
+<span class="sd">    One can also use this transform directly with a collector: make sure to</span>
+<span class="sd">    append the `inv` method of the transform.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules import RandomPolicy        &gt;&gt;&gt;         &gt;&gt;&gt;         &gt;&gt;&gt; from torchrl.collectors import Collector</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs.libs.gym import GymEnv</span>
+<span class="sd">        &gt;&gt;&gt; t = Reward2GoTransform(gamma=0.99, out_keys=[&quot;reward_to_go&quot;])</span>
+<span class="sd">        &gt;&gt;&gt; env = GymEnv(&quot;Pendulum-v1&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; collector = Collector(</span>
+<span class="sd">        ...     env,</span>
+<span class="sd">        ...     RandomPolicy(env.action_spec),</span>
+<span class="sd">        ...     frames_per_batch=200,</span>
+<span class="sd">        ...     total_frames=-1,</span>
+<span class="sd">        ...     postproc=t.inv</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; for data in collector:</span>
+<span class="sd">        ...     break</span>
+<span class="sd">        &gt;&gt;&gt; print(data)</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                collector: TensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        traj_ids: Tensor(shape=torch.Size([200]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
+<span class="sd">                    batch_size=torch.Size([200]),</span>
+<span class="sd">                    device=cpu,</span>
+<span class="sd">                    is_shared=False),</span>
+<span class="sd">                done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                next: TensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                        reward: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
+<span class="sd">                    batch_size=torch.Size([200]),</span>
+<span class="sd">                    device=cpu,</span>
+<span class="sd">                    is_shared=False),</span>
+<span class="sd">                observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                reward: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                reward_to_go: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([200]),</span>
+<span class="sd">            device=cpu,</span>
+<span class="sd">            is_shared=False)</span>
+
+<span class="sd">    Using this transform as part of an env will raise an exception</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; t = Reward2GoTransform(gamma=0.99)</span>
+<span class="sd">        &gt;&gt;&gt; TransformedEnv(GymEnv(&quot;Pendulum-v1&quot;), t)  # crashes</span>
+
+<span class="sd">    .. note:: In settings where multiple done entries are present, one should build</span>
+<span class="sd">        a single :class:`~Reward2GoTransform` for each done-reward pair.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">ENV_ERR</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">&quot;The Reward2GoTransform is only an inverse transform and can &quot;</span>
+        <span class="s2">&quot;only be applied to the replay buffer.&quot;</span>
+    <span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">in_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">out_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">done_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;done&quot;</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">in_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">)]</span>
+        <span class="k">if</span> <span class="n">out_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">out_keys</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">in_keys</span><span class="p">)</span>
+        <span class="c1"># out_keys = [&quot;reward_to_go&quot;]</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">in_keys</span><span class="o">=</span><span class="n">in_keys</span><span class="p">,</span>
+            <span class="n">in_keys_inv</span><span class="o">=</span><span class="n">in_keys</span><span class="p">,</span>
+            <span class="n">out_keys_inv</span><span class="o">=</span><span class="n">out_keys</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">done_key</span> <span class="o">=</span> <span class="n">done_key</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">gamma</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">gamma</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">gamma</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;gamma&quot;</span><span class="p">,</span> <span class="n">gamma</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_inv_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ENV_ERR</span><span class="p">)</span>
+        <span class="n">done</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_key</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">done</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;No episode ends found to calculate the reward to go. Make sure that the number of frames_per_batch is larger than number of steps per episode.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">found</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">for</span> <span class="n">in_key</span><span class="p">,</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys_inv</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys_inv</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">in_key</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+                <span class="n">found</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="n">item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inv_apply_transform</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">in_key</span><span class="p">),</span> <span class="n">done</span><span class="p">)</span>
+                <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">out_key</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">found</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not find any of the input keys </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict</span>
+
+<div class="viewcode-block" id="Reward2GoTransform.forward">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.Reward2GoTransform.html#torchrl.envs.transforms.Reward2GoTransform.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">tensordict</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ENV_ERR</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_inv_apply_transform</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">reward</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">done</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="kn">from</span> <span class="nn">torchrl.objectives.value.functional</span> <span class="kn">import</span> <span class="n">reward2go</span>
+
+        <span class="k">return</span> <span class="n">reward2go</span><span class="p">(</span><span class="n">reward</span><span class="p">,</span> <span class="n">done</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">gamma</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">set_container</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">container</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">container</span><span class="p">,</span> <span class="n">EnvBase</span><span class="p">)</span> <span class="ow">or</span> <span class="n">container</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ENV_ERR</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="SignTransform">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.SignTransform.html#torchrl.envs.transforms.SignTransform">[docs]</a>
+<span class="k">class</span> <span class="nc">SignTransform</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A transform to compute the signs of TensorDict values.</span>
+
+<span class="sd">    This transform reads the tensors in ``in_keys`` and ``in_keys_inv``, computes the</span>
+<span class="sd">    signs of their elements and writes the resulting sign tensors to ``out_keys`` and</span>
+<span class="sd">    ``out_keys_inv`` respectively.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        in_keys (list of NestedKeys): input entries (read)</span>
+<span class="sd">        out_keys (list of NestedKeys): input entries (write)</span>
+<span class="sd">        in_keys_inv (list of NestedKeys): input entries (read) during ``inv`` calls.</span>
+<span class="sd">        out_keys_inv (list of NestedKeys): input entries (write) during ``inv`` calls.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import GymEnv, TransformedEnv, SignTransform</span>
+<span class="sd">        &gt;&gt;&gt; base_env = GymEnv(&quot;Pendulum-v1&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; env = TransformedEnv(base_env, SignTransform(in_keys=[&#39;observation&#39;]))</span>
+<span class="sd">        &gt;&gt;&gt; r = env.rollout(100)</span>
+<span class="sd">        &gt;&gt;&gt; obs = r[&quot;observation&quot;]</span>
+<span class="sd">        &gt;&gt;&gt; assert (torch.logical_or(torch.logical_or(obs == -1, obs == 1), obs == 0.0)).all()</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">in_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">out_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">in_keys_inv</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">out_keys_inv</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">in_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">out_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">out_keys</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">in_keys</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">in_keys_inv</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">in_keys_inv</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">out_keys_inv</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">out_keys_inv</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">in_keys_inv</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="p">,</span> <span class="n">in_keys_inv</span><span class="p">,</span> <span class="n">out_keys_inv</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">obs</span><span class="o">.</span><span class="n">sign</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_inv_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">sign</span><span class="p">()</span>
+
+<div class="viewcode-block" id="SignTransform.transform_observation_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.SignTransform.html#torchrl.envs.transforms.SignTransform.transform_observation_spec">[docs]</a>
+    <span class="nd">@_apply_to_composite</span>
+    <span class="k">def</span> <span class="nf">transform_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">Bounded</span><span class="p">(</span>
+            <span class="n">shape</span><span class="o">=</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="n">high</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">low</span><span class="o">=-</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SignTransform.transform_reward_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.SignTransform.html#torchrl.envs.transforms.SignTransform.transform_reward_spec">[docs]</a>
+    <span class="k">def</span> <span class="nf">transform_reward_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">reward_keys</span><span class="p">:</span>
+                <span class="n">spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">][</span><span class="n">key</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span>
+                    <span class="n">shape</span><span class="o">=</span><span class="n">spec</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">spec</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">spec</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                    <span class="n">high</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+                    <span class="n">low</span><span class="o">=-</span><span class="mf">1.0</span><span class="p">,</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">]</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">with</span> <span class="n">_set_missing_tolerance</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="n">tensordict_reset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call</span><span class="p">(</span><span class="n">tensordict_reset</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict_reset</span></div>
+
+
+
+<div class="viewcode-block" id="LineariseRewards">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.LineariseRewards.html#torchrl.envs.transforms.LineariseRewards">[docs]</a>
+<span class="k">class</span> <span class="nc">LineariseRewards</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Transforms a multi-objective reward signal to a single-objective one via a weighted sum.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        in_keys (List[NestedKey]): The keys under which the multi-objective rewards are found.</span>
+<span class="sd">        out_keys (List[NestedKey], optional): The keys under which single-objective rewards should be written. Defaults to :attr:`in_keys`.</span>
+<span class="sd">        weights (List[float], Tensor, optional): Dictates how to weight each reward when summing them. Defaults to `[1.0, 1.0, ...]`.</span>
+
+<span class="sd">    .. warning::</span>
+<span class="sd">        If a sequence of `in_keys` of length strictly greater than one is passed (e.g. one group for each agent in a</span>
+<span class="sd">        multi-agent set-up), the same weights will be applied for each entry. If you need to aggregate rewards</span>
+<span class="sd">        differently for each group, use several :class:`~torchrl.envs.LineariseRewards` in a row.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; import mo_gymnasium as mo_gym</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import MOGymWrapper</span>
+<span class="sd">        &gt;&gt;&gt; mo_env = MOGymWrapper(mo_gym.make(&quot;deep-sea-treasure-v0&quot;))</span>
+<span class="sd">        &gt;&gt;&gt; mo_env.reward_spec</span>
+<span class="sd">        BoundedContinuous(</span>
+<span class="sd">            shape=torch.Size([2]),</span>
+<span class="sd">            space=ContinuousBox(</span>
+<span class="sd">            low=Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, contiguous=True),</span>
+<span class="sd">            high=Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, contiguous=True)),</span>
+<span class="sd">            ...)</span>
+<span class="sd">        &gt;&gt;&gt; so_env = TransformedEnv(mo_env, LineariseRewards(in_keys=(&quot;reward&quot;,)))</span>
+<span class="sd">        &gt;&gt;&gt; so_env.reward_spec</span>
+<span class="sd">        BoundedContinuous(</span>
+<span class="sd">            shape=torch.Size([1]),</span>
+<span class="sd">            space=ContinuousBox(</span>
+<span class="sd">                low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),</span>
+<span class="sd">                high=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),</span>
+<span class="sd">            ...)</span>
+<span class="sd">        &gt;&gt;&gt; td = so_env.rollout(5)</span>
+<span class="sd">        &gt;&gt;&gt; td[&quot;next&quot;, &quot;reward&quot;].shape</span>
+<span class="sd">        torch.Size([5, 1])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">in_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">],</span>
+        <span class="n">out_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">out_keys</span> <span class="o">=</span> <span class="n">in_keys</span> <span class="k">if</span> <span class="n">out_keys</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">out_keys</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="n">weights</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">)</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+
+            <span class="c1"># This transform should only receive vectorial weights (all batch dimensions will be aggregated similarly).</span>
+            <span class="k">if</span> <span class="n">weights</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Expected weights to be a unidimensional tensor. Got </span><span class="si">{</span><span class="n">weights</span><span class="o">.</span><span class="n">ndim</span><span class="si">}</span><span class="s2"> dimension.&quot;</span>
+                <span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;weights&quot;</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">weights</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="LineariseRewards.transform_reward_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.LineariseRewards.html#torchrl.envs.transforms.LineariseRewards.transform_reward_spec">[docs]</a>
+    <span class="nd">@_apply_to_composite</span>
+    <span class="k">def</span> <span class="nf">transform_reward_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">reward_spec</span><span class="o">.</span><span class="n">domain</span> <span class="o">==</span> <span class="s2">&quot;continuous&quot;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;Aggregation of rewards that take discrete values is not supported.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="o">*</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">num_rewards</span> <span class="o">=</span> <span class="n">reward_spec</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">num_rewards</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">reward_spec</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">reward_spec</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">weights</span>
+        <span class="p">)</span>
+
+        <span class="n">num_weights</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">numel</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">num_weights</span> <span class="o">!=</span> <span class="n">num_rewards</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;The number of rewards and weights should match. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Got: </span><span class="si">{</span><span class="n">num_rewards</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="n">num_weights</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reward_spec</span><span class="p">,</span> <span class="n">UnboundedContinuous</span><span class="p">):</span>
+            <span class="n">reward_spec</span><span class="o">.</span><span class="n">shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="o">*</span><span class="n">batch_size</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+            <span class="k">return</span> <span class="n">reward_spec</span>
+
+        <span class="n">weights_pos</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="nb">min</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">weights_neg</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="nb">max</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="n">low_pos</span> <span class="o">=</span> <span class="p">(</span><span class="n">weights_pos</span> <span class="o">*</span> <span class="n">reward_spec</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">low</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">low_neg</span> <span class="o">=</span> <span class="p">(</span><span class="n">weights_neg</span> <span class="o">*</span> <span class="n">reward_spec</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">high</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="n">high_pos</span> <span class="o">=</span> <span class="p">(</span><span class="n">weights_pos</span> <span class="o">*</span> <span class="n">reward_spec</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">high</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">high_neg</span> <span class="o">=</span> <span class="p">(</span><span class="n">weights_neg</span> <span class="o">*</span> <span class="n">reward_spec</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">low</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">BoundedContinuous</span><span class="p">(</span>
+            <span class="n">low</span><span class="o">=</span><span class="n">low_pos</span> <span class="o">+</span> <span class="n">low_neg</span><span class="p">,</span>
+            <span class="n">high</span><span class="o">=</span><span class="n">high_pos</span> <span class="o">+</span> <span class="n">high_neg</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">reward_spec</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">reward_spec</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">reward</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="o">*</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">num_rewards</span> <span class="o">=</span> <span class="n">reward</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">num_weights</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">numel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">weights</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">num_weights</span> <span class="o">!=</span> <span class="n">num_rewards</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;The number of rewards and weights should match. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Got: </span><span class="si">{</span><span class="n">num_rewards</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="n">num_weights</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">weights</span> <span class="o">*</span> <span class="n">reward</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../../../',
+            VERSION:'main',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../../../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+      <script type="text/javascript" src="../../../../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../../../../_static/sg-tags.js"></script>
+      <script type="text/javascript" src="../../../../_static/design-tabs.js"></script>
+
+  
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="#">Get Started</a>
+          </li>
+
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+    })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
+  </script>
+</body>
+</html>

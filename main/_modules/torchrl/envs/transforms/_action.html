@@ -1,0 +1,1429 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.envs.transforms._action &mdash; torchrl main documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../../_static/pytorch.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+
+  
+  <script src="../../../../_static/js/modernizr.min.js"></script>
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+  <div>
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.12.0) &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/collector_trajectory_assembly.html">Collectors Deep Dive: Trajectory Assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/evaluator.html">Using the Evaluator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.envs.transforms._action</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
+        </div>
+
+        <div class="pytorch-content-left">
+    
+    
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" class="pytorch-article">
+              
+  <h1>Source code for torchrl.envs.transforms._action</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Plobs_dictnc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">copy</span>
+<span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">IntEnum</span>
+<span class="kn">from</span> <span class="nn">textwrap</span> <span class="kn">import</span> <span class="n">indent</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span> <span class="nn">tensordict.utils</span> <span class="kn">import</span> <span class="n">NestedKey</span>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.data.tensor_specs</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Bounded</span><span class="p">,</span>
+    <span class="n">Categorical</span><span class="p">,</span>
+    <span class="n">Composite</span><span class="p">,</span>
+    <span class="n">MultiCategorical</span><span class="p">,</span>
+    <span class="n">MultiOneHot</span><span class="p">,</span>
+    <span class="n">OneHot</span><span class="p">,</span>
+    <span class="n">TensorSpec</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Self</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">Self</span> <span class="o">=</span> <span class="n">Any</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.envs.transforms._base</span> <span class="kn">import</span> <span class="n">FORWARD_NOT_IMPLEMENTED</span><span class="p">,</span> <span class="n">Transform</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;ActionDiscretizer&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;ActionMask&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;DiscreteActionProjection&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;MultiAction&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<div class="viewcode-block" id="DiscreteActionProjection">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.DiscreteActionProjection.html#torchrl.envs.transforms.DiscreteActionProjection">[docs]</a>
+<span class="k">class</span> <span class="nc">DiscreteActionProjection</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Projects discrete actions from a high dimensional space to a low dimensional space.</span>
+
+<span class="sd">    Given a discrete action (from 1 to N) encoded as a one-hot vector and a</span>
+<span class="sd">    maximum action index num_actions (with num_actions &lt; N), transforms the action such that</span>
+<span class="sd">    action_out is at most num_actions.</span>
+
+<span class="sd">    If the input action is &gt; num_actions, it is being replaced by a random value</span>
+<span class="sd">    between 0 and num_actions-1. Otherwise the same action is kept.</span>
+<span class="sd">    This is intended to be used with policies applied over multiple discrete</span>
+<span class="sd">    control environments with different action space.</span>
+
+<span class="sd">    A call to DiscreteActionProjection.forward (eg from a replay buffer or in a</span>
+<span class="sd">    sequence of nn.Modules) will call the transform num_actions_effective -&gt; max_actions</span>
+<span class="sd">    on the :obj:`&quot;in_keys&quot;`, whereas a call to _call will be ignored. Indeed,</span>
+<span class="sd">    transformed envs are instructed to update the input keys only for the inner</span>
+<span class="sd">    base_env, but the original input keys will remain unchanged.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        num_actions_effective (int): max number of action considered.</span>
+<span class="sd">        max_actions (int): maximum number of actions that this module can read.</span>
+<span class="sd">        action_key (NestedKey, optional): key name of the action. Defaults to &quot;action&quot;.</span>
+<span class="sd">        include_forward (bool, optional): if ``True``, a call to forward will also</span>
+<span class="sd">            map the action from one domain to the other when the module is called</span>
+<span class="sd">            by a replay buffer or an nn.Module chain. Defaults to `True`.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; torch.manual_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt; N = 3</span>
+<span class="sd">        &gt;&gt;&gt; M = 2</span>
+<span class="sd">        &gt;&gt;&gt; action = torch.zeros(N, dtype=torch.long)</span>
+<span class="sd">        &gt;&gt;&gt; action[-1] = 1</span>
+<span class="sd">        &gt;&gt;&gt; td = TensorDict({&quot;action&quot;: action}, [])</span>
+<span class="sd">        &gt;&gt;&gt; transform = DiscreteActionProjection(num_actions_effective=M, max_actions=N)</span>
+<span class="sd">        &gt;&gt;&gt; _ = transform.inv(td)</span>
+<span class="sd">        &gt;&gt;&gt; print(td.get(&quot;action&quot;))</span>
+<span class="sd">        tensor([1])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">num_actions_effective</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">max_actions</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span><span class="p">,</span>
+        <span class="n">include_forward</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="n">in_keys_inv</span> <span class="o">=</span> <span class="p">[</span><span class="n">action_key</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">include_forward</span><span class="p">:</span>
+            <span class="n">in_keys</span> <span class="o">=</span> <span class="n">in_keys_inv</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">in_keys_inv</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">in_keys_inv</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">in_keys</span><span class="o">=</span><span class="n">in_keys</span><span class="p">,</span>
+            <span class="n">out_keys</span><span class="o">=</span><span class="n">copy</span><span class="p">(</span><span class="n">in_keys</span><span class="p">),</span>
+            <span class="n">in_keys_inv</span><span class="o">=</span><span class="n">in_keys_inv</span><span class="p">,</span>
+            <span class="n">out_keys_inv</span><span class="o">=</span><span class="n">copy</span><span class="p">(</span><span class="n">in_keys_inv</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_actions_effective</span> <span class="o">=</span> <span class="n">num_actions_effective</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_actions</span> <span class="o">=</span> <span class="n">max_actions</span>
+        <span class="k">if</span> <span class="n">max_actions</span> <span class="o">&lt;</span> <span class="n">num_actions_effective</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;The `max_actions` int must be greater or equal to `num_actions_effective`.&quot;</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="c1"># We don&#39;t do anything here because the action is modified by the inv</span>
+        <span class="c1"># method but we don&#39;t need to map it back as it won&#39;t be updated in the original</span>
+        <span class="c1"># tensordict</span>
+        <span class="k">return</span> <span class="n">next_tensordict</span>
+
+    <span class="k">def</span> <span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="c1"># We still need to code the forward transform for replay buffers and models</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="n">action</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># bool to int</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">one_hot</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_actions</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">action</span>
+
+    <span class="k">def</span> <span class="nf">_inv_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_actions</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;action.shape[-1]=</span><span class="si">{</span><span class="n">action</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2"> must match self.max_actions=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">max_actions</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="n">action</span><span class="o">.</span><span class="n">long</span><span class="p">()</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># bool to int</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="n">action</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_actions_effective</span>
+        <span class="k">if</span> <span class="n">idx</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="n">action</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_actions_effective</span><span class="p">,</span> <span class="p">(</span><span class="n">idx</span><span class="o">.</span><span class="n">sum</span><span class="p">(),))</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">one_hot</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_actions_effective</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">action</span>
+
+<div class="viewcode-block" id="DiscreteActionProjection.transform_input_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.DiscreteActionProjection.html#torchrl.envs.transforms.DiscreteActionProjection.transform_input_spec">[docs]</a>
+    <span class="k">def</span> <span class="nf">transform_input_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_spec</span><span class="p">:</span> <span class="n">Composite</span><span class="p">):</span>
+        <span class="n">input_spec</span> <span class="o">=</span> <span class="n">input_spec</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_action_spec&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;full_action_spec&quot;</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+            <span class="k">break</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s2">&quot;key not found in action_spec.&quot;</span><span class="p">)</span>
+        <span class="n">input_spec</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">OneHot</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">max_actions</span><span class="p">,</span>
+            <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">*</span><span class="n">input_spec</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_actions</span><span class="p">),</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">input_spec</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">input_spec</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">input_spec</span></div>
+
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(num_actions_effective=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">num_actions_effective</span><span class="si">}</span><span class="s2">, max_actions=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">max_actions</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;in_keys_inv=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys_inv</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="ActionMask">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ActionMask.html#torchrl.envs.transforms.ActionMask">[docs]</a>
+<span class="k">class</span> <span class="nc">ActionMask</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;An adaptive action masker.</span>
+
+<span class="sd">    This transform is useful to ensure that randomly generated actions</span>
+<span class="sd">    respect legal actions, by masking the action specs.</span>
+<span class="sd">    It reads the mask from the input tensordict after the step is executed,</span>
+<span class="sd">    and adapts the mask of the finite action spec.</span>
+
+<span class="sd">    .. note:: This transform will fail when used without an environment.</span>
+
+<span class="sd">    .. note:: **MultiDiscrete action spaces with 2D masks (e.g., board games)**</span>
+
+<span class="sd">        When wrapping a Gym environment with a ``MultiDiscrete`` action space</span>
+<span class="sd">        (e.g., ``MultiDiscrete([5, 5])``) and an ``action_mask`` observation whose</span>
+<span class="sd">        shape matches the ``nvec`` (e.g., shape ``(5, 5)``), the :class:`~torchrl.envs.GymWrapper`</span>
+<span class="sd">        automatically converts the action space to a flattened ``Categorical(n=25)``</span>
+<span class="sd">        or ``OneHot(n=25)``. This allows the mask to represent all possible action</span>
+<span class="sd">        combinations (25 in this example) rather than independent sub-actions.</span>
+
+<span class="sd">        This is particularly useful for grid-based games where the mask indicates</span>
+<span class="sd">        which (row, column) positions are valid moves.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        action_key (NestedKey, optional): the key where the action tensor can be found.</span>
+<span class="sd">            Defaults to ``&quot;action&quot;``.</span>
+<span class="sd">        mask_key (NestedKey, optional): the key where the action mask can be found.</span>
+<span class="sd">            Defaults to ``&quot;action_mask&quot;``.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data.tensor_specs import Categorical, Binary, Unbounded, Composite</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs.transforms import ActionMask, TransformedEnv</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs.common import EnvBase</span>
+<span class="sd">        &gt;&gt;&gt; class MaskedEnv(EnvBase):</span>
+<span class="sd">        ...     def __init__(self, *args, **kwargs):</span>
+<span class="sd">        ...         super().__init__(*args, **kwargs)</span>
+<span class="sd">        ...         self.action_spec = Categorical(4)</span>
+<span class="sd">        ...         self.state_spec = Composite(action_mask=Binary(4, dtype=torch.bool))</span>
+<span class="sd">        ...         self.observation_spec = Composite(obs=Unbounded(3))</span>
+<span class="sd">        ...         self.reward_spec = Unbounded(1)</span>
+<span class="sd">        ...</span>
+<span class="sd">        ...     def _reset(self, tensordict=None):</span>
+<span class="sd">        ...         td = self.observation_spec.rand()</span>
+<span class="sd">        ...         td.update(torch.ones_like(self.state_spec.rand()))</span>
+<span class="sd">        ...         return td</span>
+<span class="sd">        ...</span>
+<span class="sd">        ...     def _step(self, data):</span>
+<span class="sd">        ...         td = self.observation_spec.rand()</span>
+<span class="sd">        ...         mask = data.get(&quot;action_mask&quot;)</span>
+<span class="sd">        ...         action = data.get(&quot;action&quot;)</span>
+<span class="sd">        ...         mask = mask.scatter(-1, action.unsqueeze(-1), 0)</span>
+<span class="sd">        ...</span>
+<span class="sd">        ...         td.set(&quot;action_mask&quot;, mask)</span>
+<span class="sd">        ...         td.set(&quot;reward&quot;, self.reward_spec.rand())</span>
+<span class="sd">        ...         td.set(&quot;done&quot;, ~mask.any().view(1))</span>
+<span class="sd">        ...         return td</span>
+<span class="sd">        ...</span>
+<span class="sd">        ...     def _set_seed(self, seed) -&gt; None:</span>
+<span class="sd">        ...         pass</span>
+<span class="sd">        ...</span>
+<span class="sd">        &gt;&gt;&gt; torch.manual_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt; base_env = MaskedEnv()</span>
+<span class="sd">        &gt;&gt;&gt; env = TransformedEnv(base_env, ActionMask())</span>
+<span class="sd">        &gt;&gt;&gt; r = env.rollout(10)</span>
+<span class="sd">        &gt;&gt;&gt; r[&quot;action_mask&quot;]</span>
+<span class="sd">        tensor([[ True,  True,  True,  True],</span>
+<span class="sd">                [ True,  True, False,  True],</span>
+<span class="sd">                [ True,  True, False, False],</span>
+<span class="sd">                [ True, False, False, False]])</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">ACCEPTED_SPECS</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">OneHot</span><span class="p">,</span>
+        <span class="n">Categorical</span><span class="p">,</span>
+        <span class="n">MultiOneHot</span><span class="p">,</span>
+        <span class="n">MultiCategorical</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">SPEC_TYPE_ERROR</span> <span class="o">=</span> <span class="s2">&quot;The action spec must be one of </span><span class="si">{}</span><span class="s2">. Got </span><span class="si">{}</span><span class="s2"> instead.&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span><span class="p">,</span> <span class="n">mask_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action_mask&quot;</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action_key</span><span class="p">,</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">str</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;The action key must be a nested key. Got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">action_key</span><span class="p">)</span><span class="si">}</span><span class="s2"> instead.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">mask_key</span><span class="p">,</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">str</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;The mask key must be a nested key. Got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">mask_key</span><span class="p">)</span><span class="si">}</span><span class="s2"> instead.&quot;</span>
+            <span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="n">action_key</span><span class="p">,</span> <span class="n">mask_key</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[],</span> <span class="n">in_keys_inv</span><span class="o">=</span><span class="p">[],</span> <span class="n">out_keys_inv</span><span class="o">=</span><span class="p">[]</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="ActionMask.forward">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ActionMask.html#torchrl.envs.transforms.ActionMask.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">FORWARD_NOT_IMPLEMENTED</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)))</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">action_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="n">action_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">container</span><span class="o">.</span><span class="n">full_action_spec</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action_spec</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ACCEPTED_SPECS</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">SPEC_TYPE_ERROR</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ACCEPTED_SPECS</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">action_spec</span><span class="p">))</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">action_spec</span>
+
+    <span class="k">def</span> <span class="nf">_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="si">}</span><span class="s2">.parent cannot be None: make sure this transform is executed within an environment.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">update_mask</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">device</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">next_tensordict</span>
+
+    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call</span><span class="p">(</span><span class="n">tensordict_reset</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="ActionDiscretizer">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ActionDiscretizer.html#torchrl.envs.transforms.ActionDiscretizer">[docs]</a>
+<span class="k">class</span> <span class="nc">ActionDiscretizer</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A transform to discretize a continuous action space.</span>
+
+<span class="sd">    This transform makes it possible to use an algorithm designed for discrete</span>
+<span class="sd">    action spaces such as DQN over environments with a continuous action space.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        num_intervals (int or torch.Tensor): the number of discrete values</span>
+<span class="sd">            for each element of the action space. If a single integer is provided,</span>
+<span class="sd">            all action items are sliced with the same number of elements.</span>
+<span class="sd">            If a tensor is provided, it must have the same number of elements</span>
+<span class="sd">            as the action space (ie, the length of the ``num_intervals`` tensor</span>
+<span class="sd">            must match the last dimension of the action space).</span>
+<span class="sd">        action_key (NestedKey, optional): the action key to use. Points to</span>
+<span class="sd">            the action of the parent env (the floating point action).</span>
+<span class="sd">            Defaults to ``&quot;action&quot;``.</span>
+<span class="sd">        out_action_key (NestedKey, optional): the key where the discrete</span>
+<span class="sd">            action should be written. If ``None`` is provided, it defaults to</span>
+<span class="sd">            the value of ``action_key``. If both keys do not match, the</span>
+<span class="sd">            continuous action_spec is moved from the ``full_action_spec``</span>
+<span class="sd">            environment attribute to the ``full_state_spec`` container,</span>
+<span class="sd">            as only the discrete action should be sampled for an action to</span>
+<span class="sd">            be taken. Providing ``out_action_key`` can ensure that the</span>
+<span class="sd">            floating point action is available to be recorded.</span>
+<span class="sd">        sampling (ActionDiscretizer.SamplingStrategy, optinoal): an element</span>
+<span class="sd">            of the ``ActionDiscretizer.SamplingStrategy`` ``IntEnum`` object</span>
+<span class="sd">            (``MEDIAN``, ``LOW``, ``HIGH`` or ``RANDOM``). Indicates how the</span>
+<span class="sd">            continuous action should be sampled in the provided interval.</span>
+<span class="sd">        categorical (bool, optional): if ``False``, one-hot encoding is used.</span>
+<span class="sd">            Defaults to ``True``.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import GymEnv, check_env_specs</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; base_env = GymEnv(&quot;HalfCheetah-v4&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; num_intervals = torch.arange(5, 11)</span>
+<span class="sd">        &gt;&gt;&gt; categorical = True</span>
+<span class="sd">        &gt;&gt;&gt; sampling = ActionDiscretizer.SamplingStrategy.MEDIAN</span>
+<span class="sd">        &gt;&gt;&gt; t = ActionDiscretizer(</span>
+<span class="sd">        ...     num_intervals=num_intervals,</span>
+<span class="sd">        ...     categorical=categorical,</span>
+<span class="sd">        ...     sampling=sampling,</span>
+<span class="sd">        ...     out_action_key=&quot;action_disc&quot;,</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; env = base_env.append_transform(t)</span>
+<span class="sd">        TransformedEnv(</span>
+<span class="sd">            env=GymEnv(env=HalfCheetah-v4, batch_size=torch.Size([]), device=cpu),</span>
+<span class="sd">            transform=ActionDiscretizer(</span>
+<span class="sd">                num_intervals=tensor([ 5,  6,  7,  8,  9, 10]),</span>
+<span class="sd">                action_key=action,</span>
+<span class="sd">                out_action_key=action_disc,,</span>
+<span class="sd">                sampling=0,</span>
+<span class="sd">                categorical=True))</span>
+<span class="sd">        &gt;&gt;&gt; check_env_specs(env)</span>
+<span class="sd">        &gt;&gt;&gt; # Produce a rollout</span>
+<span class="sd">        &gt;&gt;&gt; r = env.rollout(4)</span>
+<span class="sd">        &gt;&gt;&gt; print(r)</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: Tensor(shape=torch.Size([4, 6]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                action_disc: Tensor(shape=torch.Size([4, 6]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                done: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                next: TensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        done: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        observation: Tensor(shape=torch.Size([4, 17]), device=cpu, dtype=torch.float64, is_shared=False),</span>
+<span class="sd">                        reward: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                        terminated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        truncated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                    batch_size=torch.Size([4]),</span>
+<span class="sd">                    device=cpu,</span>
+<span class="sd">                    is_shared=False),</span>
+<span class="sd">                observation: Tensor(shape=torch.Size([4, 17]), device=cpu, dtype=torch.float64, is_shared=False),</span>
+<span class="sd">                terminated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                truncated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([4]),</span>
+<span class="sd">            device=cpu,</span>
+<span class="sd">            is_shared=False)</span>
+<span class="sd">        &gt;&gt;&gt; assert r[&quot;action&quot;].dtype == torch.float</span>
+<span class="sd">        &gt;&gt;&gt; assert r[&quot;action_disc&quot;].dtype == torch.int64</span>
+<span class="sd">        &gt;&gt;&gt; assert (r[&quot;action&quot;] &lt; base_env.action_spec.high).all()</span>
+<span class="sd">        &gt;&gt;&gt; assert (r[&quot;action&quot;] &gt; base_env.action_spec.low).all()</span>
+
+<span class="sd">    .. note:: Custom Sampling Strategies</span>
+
+<span class="sd">        To implement a custom sampling strategy beyond the built-in options</span>
+<span class="sd">        (``MEDIAN``, ``LOW``, ``HIGH``, ``RANDOM``), subclass ``ActionDiscretizer``</span>
+<span class="sd">        and override the :meth:`~ActionDiscretizer.custom_arange` method. This</span>
+<span class="sd">        method computes the normalized interval positions (values in ``[0, 1)``)</span>
+<span class="sd">        that determine where each discrete action maps within the continuous</span>
+<span class="sd">        action interval.</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            &gt;&gt;&gt; class LogSpacedActionDiscretizer(ActionDiscretizer):</span>
+<span class="sd">            ...     def custom_arange(self, nint, device):</span>
+<span class="sd">            ...         # Use logarithmic spacing instead of linear</span>
+<span class="sd">            ...         return torch.logspace(-2, 0, nint, device=device) - 0.01</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="ActionDiscretizer.SamplingStrategy">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ActionDiscretizer.html#torchrl.envs.transforms.ActionDiscretizer.SamplingStrategy">[docs]</a>
+    <span class="k">class</span> <span class="nc">SamplingStrategy</span><span class="p">(</span><span class="n">IntEnum</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The sampling strategies for ActionDiscretizer.&quot;&quot;&quot;</span>
+
+        <span class="n">MEDIAN</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">LOW</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">HIGH</span> <span class="o">=</span> <span class="mi">2</span>
+        <span class="n">RANDOM</span> <span class="o">=</span> <span class="mi">3</span></div>
+
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">num_intervals</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span><span class="p">,</span>
+        <span class="n">out_action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">sampling</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">categorical</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">out_action_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">out_action_key</span> <span class="o">=</span> <span class="n">action_key</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_keys_inv</span><span class="o">=</span><span class="p">[</span><span class="n">action_key</span><span class="p">],</span> <span class="n">out_keys_inv</span><span class="o">=</span><span class="p">[</span><span class="n">out_action_key</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_key</span> <span class="o">=</span> <span class="n">action_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_action_key</span> <span class="o">=</span> <span class="n">out_action_key</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">num_intervals</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">num_intervals</span> <span class="o">=</span> <span class="n">num_intervals</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;num_intervals&quot;</span><span class="p">,</span> <span class="n">num_intervals</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">sampling</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">sampling</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">SamplingStrategy</span><span class="o">.</span><span class="n">MEDIAN</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sampling</span> <span class="o">=</span> <span class="n">sampling</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">categorical</span> <span class="o">=</span> <span class="n">categorical</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">def</span> <span class="nf">_indent</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">indent</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="mi">4</span> <span class="o">*</span> <span class="s2">&quot; &quot;</span><span class="p">)</span>
+
+        <span class="n">num_intervals</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;num_intervals=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">num_intervals</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">action_key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;action_key=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">action_key</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">out_action_key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;out_action_key=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">out_action_key</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">sampling</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;sampling=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">sampling</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">categorical</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;categorical=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">categorical</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(</span><span class="se">\n</span><span class="si">{</span><span class="n">_indent</span><span class="p">(</span><span class="n">num_intervals</span><span class="p">)</span><span class="si">}</span><span class="s2">,</span><span class="se">\n</span><span class="si">{</span><span class="n">_indent</span><span class="p">(</span><span class="n">action_key</span><span class="p">)</span><span class="si">}</span><span class="s2">,&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="si">{</span><span class="n">_indent</span><span class="p">(</span><span class="n">out_action_key</span><span class="p">)</span><span class="si">}</span><span class="s2">,</span><span class="se">\n</span><span class="si">{</span><span class="n">_indent</span><span class="p">(</span><span class="n">sampling</span><span class="p">)</span><span class="si">}</span><span class="s2">,</span><span class="se">\n</span><span class="si">{</span><span class="n">_indent</span><span class="p">(</span><span class="n">categorical</span><span class="p">)</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="ActionDiscretizer.custom_arange">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ActionDiscretizer.html#torchrl.envs.transforms.ActionDiscretizer.custom_arange">[docs]</a>
+    <span class="k">def</span> <span class="nf">custom_arange</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nint</span><span class="p">,</span> <span class="n">device</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the normalized interval positions for discretization.</span>
+
+<span class="sd">        This method generates values in the range [0, 1) that determine where</span>
+<span class="sd">        each discrete action maps within the continuous action interval.</span>
+
+<span class="sd">        Override this method in a subclass to implement custom sampling</span>
+<span class="sd">        strategies beyond the built-in ``MEDIAN``, ``LOW``, ``HIGH``, and</span>
+<span class="sd">        ``RANDOM`` strategies.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            nint (int): the number of intervals (discrete actions) for this</span>
+<span class="sd">                action dimension.</span>
+<span class="sd">            device (torch.device): the device on which to create the tensor.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            torch.Tensor: a 1D tensor of shape ``(nint,)`` with values in</span>
+<span class="sd">                ``[0, 1)`` representing the normalized positions within each</span>
+<span class="sd">                interval.</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            &gt;&gt;&gt; class CustomActionDiscretizer(ActionDiscretizer):</span>
+<span class="sd">            ...     def custom_arange(self, nint, device):</span>
+<span class="sd">            ...         # Custom sampling: use logarithmic spacing</span>
+<span class="sd">            ...         return torch.logspace(-2, 0, nint, device=device) - 0.01</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span>
+            <span class="n">start</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+            <span class="n">end</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">step</span><span class="o">=</span><span class="mi">1</span> <span class="o">/</span> <span class="n">nint</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">result_</span> <span class="o">=</span> <span class="n">result</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampling</span> <span class="ow">in</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">SamplingStrategy</span><span class="o">.</span><span class="n">HIGH</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">SamplingStrategy</span><span class="o">.</span><span class="n">MEDIAN</span><span class="p">,</span>
+        <span class="p">):</span>
+            <span class="n">result_</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">result</span><span class="p">)</span><span class="o">.</span><span class="n">flip</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampling</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">SamplingStrategy</span><span class="o">.</span><span class="n">MEDIAN</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="p">(</span><span class="n">result</span> <span class="o">+</span> <span class="n">result_</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">result_</span>
+        <span class="k">return</span> <span class="n">result</span></div>
+
+
+<div class="viewcode-block" id="ActionDiscretizer.transform_input_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ActionDiscretizer.html#torchrl.envs.transforms.ActionDiscretizer.transform_input_spec">[docs]</a>
+    <span class="k">def</span> <span class="nf">transform_input_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_spec</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">action_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">full_action_spec_unbatched</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys_inv</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action_spec</span><span class="p">,</span> <span class="n">Bounded</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;action spec type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">action_spec</span><span class="p">)</span><span class="si">}</span><span class="s2"> is not supported. The action spec type must be Bounded.&quot;</span>
+                <span class="p">)</span>
+
+            <span class="n">n_act</span> <span class="o">=</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">shape</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">n_act</span><span class="p">:</span>
+                <span class="n">n_act</span> <span class="o">=</span> <span class="p">()</span>
+                <span class="n">empty_shape</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">n_act</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_act</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],)</span>
+                <span class="n">empty_shape</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">n_act</span> <span class="o">=</span> <span class="n">n_act</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">dtype</span>
+            <span class="n">interval</span> <span class="o">=</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">high</span> <span class="o">-</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">low</span>
+
+            <span class="n">num_intervals</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_intervals</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">empty_shape</span><span class="p">:</span>
+                <span class="n">interval</span> <span class="o">=</span> <span class="n">interval</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">num_intervals</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                <span class="n">num_intervals</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">num_intervals</span><span class="o">.</span><span class="n">squeeze</span><span class="p">())</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">num_intervals</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">num_intervals</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">num_intervals</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+                <span class="n">arange</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">custom_arange</span><span class="p">(</span><span class="n">num_intervals</span><span class="p">,</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span>
+                        <span class="p">(</span><span class="o">*</span><span class="n">n_act</span><span class="p">,</span> <span class="n">num_intervals</span><span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="o">*</span> <span class="n">interval</span>
+                <span class="p">)</span>
+                <span class="n">low</span> <span class="o">=</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">low</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">empty_shape</span><span class="p">:</span>
+                    <span class="n">low</span> <span class="o">=</span> <span class="n">low</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;intervals&quot;</span><span class="p">,</span> <span class="n">low</span> <span class="o">+</span> <span class="n">arange</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">arange</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">custom_arange</span><span class="p">(</span><span class="n">_num_intervals</span><span class="p">,</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> <span class="o">*</span> <span class="n">interval</span>
+                    <span class="k">for</span> <span class="n">_num_intervals</span><span class="p">,</span> <span class="n">interval</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+                        <span class="n">num_intervals</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span> <span class="n">interval</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">)</span>
+                    <span class="p">)</span>
+                <span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">intervals</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">low</span> <span class="o">+</span> <span class="n">arange</span>
+                    <span class="k">for</span> <span class="n">low</span><span class="p">,</span> <span class="n">arange</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+                        <span class="n">action_spec</span><span class="o">.</span><span class="n">low</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">),</span> <span class="n">arange</span>
+                    <span class="p">)</span>
+                <span class="p">]</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">num_intervals</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                <span class="n">nvec</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">num_intervals</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">action_spec</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">nvec</span> <span class="o">=</span> <span class="n">num_intervals</span>
+            <span class="k">if</span> <span class="n">nvec</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cannot use num_intervals with shape </span><span class="si">{</span><span class="n">nvec</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">nvec</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">nvec</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">empty_shape</span><span class="p">:</span>
+                    <span class="n">nvec</span> <span class="o">=</span> <span class="n">nvec</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">action_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">nvec</span> <span class="o">=</span> <span class="n">nvec</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;nvec&quot;</span><span class="p">,</span> <span class="n">nvec</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampling</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">SamplingStrategy</span><span class="o">.</span><span class="n">RANDOM</span><span class="p">:</span>
+                <span class="c1"># compute jitters</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">jitters</span> <span class="o">=</span> <span class="n">interval</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">nvec</span>
+            <span class="n">shape</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">action_spec</span><span class="o">.</span><span class="n">shape</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">categorical</span>
+                <span class="k">else</span> <span class="p">(</span><span class="o">*</span><span class="n">action_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">nvec</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+            <span class="p">)</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">empty_shape</span><span class="p">:</span>
+                <span class="bp">cls</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">MultiCategorical</span><span class="p">,</span> <span class="n">remove_singleton</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">categorical</span>
+                    <span class="k">else</span> <span class="n">MultiOneHot</span>
+                <span class="p">)</span>
+                <span class="n">action_spec</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span><span class="n">nvec</span><span class="o">=</span><span class="n">nvec</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">action_spec</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">cls</span> <span class="o">=</span> <span class="n">Categorical</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">categorical</span> <span class="k">else</span> <span class="n">OneHot</span>
+                <span class="n">action_spec</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">nvec</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">action_spec</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+            <span class="n">batch_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">batch_size</span>
+            <span class="k">if</span> <span class="n">batch_size</span><span class="p">:</span>
+                <span class="n">action_spec</span> <span class="o">=</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">batch_size</span> <span class="o">+</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_action_spec&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys_inv</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">=</span> <span class="n">action_spec</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys_inv</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys_inv</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+                <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_state_spec&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys_inv</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">=</span> <span class="n">input_spec</span><span class="p">[</span>
+                    <span class="s2">&quot;full_action_spec&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys_inv</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                <span class="k">del</span> <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_action_spec&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys_inv</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+            <span class="k">return</span> <span class="n">input_spec</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="c1"># To avoid silent AttributeErrors</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">))</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># We just need to access the action spec for everything to be initialized</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">container</span><span class="o">.</span><span class="n">full_action_spec</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Cannot execute transform </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> without a parent env.&quot;</span>
+            <span class="p">)</span>
+
+<div class="viewcode-block" id="ActionDiscretizer.inv">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ActionDiscretizer.html#torchrl.envs.transforms.ActionDiscretizer.inv">[docs]</a>
+    <span class="k">def</span> <span class="nf">inv</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys_inv</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys_inv</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+        <span class="c1"># We re-write this because we don&#39;t want to clone the TD here</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inv_call</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_inv_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+        <span class="c1"># action is categorical, map it to desired dtype</span>
+        <span class="n">intervals</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;intervals&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">intervals</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">()</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inv_call</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys_inv</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">categorical</span><span class="p">:</span>
+            <span class="n">action</span> <span class="o">=</span> <span class="n">action</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">intervals</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                <span class="n">shape</span> <span class="o">=</span> <span class="n">action</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span> <span class="o">-</span><span class="n">intervals</span><span class="o">.</span><span class="n">ndim</span><span class="p">]</span>
+                <span class="n">intervals</span> <span class="o">=</span> <span class="n">intervals</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">shape</span> <span class="o">+</span> <span class="n">intervals</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                <span class="n">action</span> <span class="o">=</span> <span class="n">intervals</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">action</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">action</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+                    <span class="p">[</span>
+                        <span class="n">interval</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">action</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                        <span class="k">for</span> <span class="n">interval</span><span class="p">,</span> <span class="n">action</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">intervals</span><span class="p">,</span> <span class="n">action</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">))</span>
+                    <span class="p">],</span>
+                    <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+                <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">nvec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">nvec</span>
+            <span class="n">empty_shape</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">nvec</span><span class="o">.</span><span class="n">ndim</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">empty_shape</span><span class="p">:</span>
+                <span class="n">nvec</span> <span class="o">=</span> <span class="n">nvec</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">intervals</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                    <span class="n">shape</span> <span class="o">=</span> <span class="n">action</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span> <span class="p">(</span><span class="o">-</span><span class="n">intervals</span><span class="o">.</span><span class="n">ndim</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)]</span>
+                    <span class="n">intervals</span> <span class="o">=</span> <span class="n">intervals</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">shape</span> <span class="o">+</span> <span class="n">intervals</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                    <span class="n">intervals</span> <span class="o">=</span> <span class="n">intervals</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">)</span>
+                <span class="n">action</span> <span class="o">=</span> <span class="n">action</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">nvec</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+                <span class="n">action</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+                    <span class="p">[</span>
+                        <span class="n">intervals</span><span class="p">[</span><span class="n">action</span><span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">action</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+                        <span class="k">for</span> <span class="p">(</span><span class="n">intervals</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">intervals</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+                    <span class="p">],</span>
+                    <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">shape</span> <span class="o">=</span> <span class="n">action</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span> <span class="o">-</span><span class="n">intervals</span><span class="o">.</span><span class="n">ndim</span><span class="p">]</span>
+                <span class="n">intervals</span> <span class="o">=</span> <span class="n">intervals</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">shape</span> <span class="o">+</span> <span class="n">intervals</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                <span class="n">action</span> <span class="o">=</span> <span class="n">intervals</span><span class="p">[</span><span class="n">action</span><span class="p">]</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampling</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">SamplingStrategy</span><span class="o">.</span><span class="n">RANDOM</span><span class="p">:</span>
+            <span class="n">action</span> <span class="o">=</span> <span class="n">action</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">jitters</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">jitters</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys_inv</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">action</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="MultiAction">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.MultiAction.html#torchrl.envs.transforms.MultiAction">[docs]</a>
+<span class="k">class</span> <span class="nc">MultiAction</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A transform to execute multiple actions in the parent environment.</span>
+
+<span class="sd">    This transform unbinds the actions along a specific dimension and passes each action independently.</span>
+<span class="sd">    The returned transform can be either a stack of the observations gathered during the steps or only the</span>
+<span class="sd">    last observation (and similarly for the rewards, see args below).</span>
+
+<span class="sd">    By default, the actions must be stacked along the first dimension after the root tensordict batch-dims, i.e.</span>
+
+<span class="sd">        &gt;&gt;&gt; td = policy(td)</span>
+<span class="sd">        &gt;&gt;&gt; actions = td.select(*env.action_keys)</span>
+<span class="sd">        &gt;&gt;&gt; # Adapt the batch-size</span>
+<span class="sd">        &gt;&gt;&gt; actions = actions.auto_batch_size_(td.ndim + 1)</span>
+<span class="sd">        &gt;&gt;&gt; # Step-wise actions</span>
+<span class="sd">        &gt;&gt;&gt; actions = actions.unbind(-1)</span>
+
+<span class="sd">    If a `&quot;done&quot;` entry is encountered, the next steps are skipped for the env that has reached that state.</span>
+
+<span class="sd">    .. note:: If a transform is appended before the MultiAction, it will be called multiple times. If it is appended</span>
+<span class="sd">        after, it will be called once per macro-step.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        dim (int, optional): the stack dimension with respect to the tensordict ``ndim`` attribute.</span>
+<span class="sd">            Must be greater than 0. Defaults to ``1`` (the first dimension after the batch-dims).</span>
+<span class="sd">        stack_rewards (bool, optional): if ``True``, each step&#39;s reward will be stack in the output tensordict.</span>
+<span class="sd">            If ``False``, only the last reward will be returned. The reward spec is adapted accordingly. The</span>
+<span class="sd">            stack dimension is the same as the action stack dimension. Defaults to ``True``.</span>
+<span class="sd">        stack_observations (bool, optional): if ``True``, each step&#39;s observation will be stack in the output tensordict.</span>
+<span class="sd">            If ``False``, only the last observation will be returned. The observation spec is adapted accordingly. The</span>
+<span class="sd">            stack dimension is the same as the action stack dimension. Defaults to ``False``.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">stack_rewards</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">stack_observations</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stack_rewards</span> <span class="o">=</span> <span class="n">stack_rewards</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stack_observations</span> <span class="o">=</span> <span class="n">stack_observations</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="o">=</span> <span class="n">dim</span>
+
+    <span class="k">def</span> <span class="nf">_stack_tds</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td_list</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">,</span> <span class="n">keys</span><span class="p">):</span>
+        <span class="n">td</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">td_list</span> <span class="o">+</span> <span class="p">[</span><span class="n">next_tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">keys</span><span class="p">)],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">d</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span>
+            <span class="n">td</span><span class="o">.</span><span class="n">auto_batch_size_</span><span class="p">(</span><span class="n">d</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)</span>
+            <span class="n">td</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">d</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">td</span>
+
+    <span class="k">def</span> <span class="nf">_step</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="c1"># Collect the stacks if needed</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_rewards</span><span class="p">:</span>
+            <span class="n">reward_td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rewards</span>
+            <span class="n">reward_td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stack_tds</span><span class="p">(</span>
+                <span class="n">reward_td</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">reward_keys</span>
+            <span class="p">)</span>
+            <span class="n">next_tensordict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">reward_td</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_observations</span><span class="p">:</span>
+            <span class="n">obs_td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs</span>
+            <span class="n">obs_td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stack_tds</span><span class="p">(</span>
+                <span class="n">obs_td</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">observation_keys</span>
+            <span class="p">)</span>
+            <span class="n">next_tensordict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">obs_td</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">next_tensordict</span>
+
+    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">tensordict_reset</span>
+
+    <span class="k">def</span> <span class="nf">_inv_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="c1"># Get the actions</span>
+        <span class="n">parent</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span>
+        <span class="n">action_keys</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">action_keys</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">action_keys</span><span class="p">)</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="n">actions</span><span class="o">.</span><span class="n">auto_batch_size_</span><span class="p">(</span><span class="n">batch_dims</span><span class="o">=</span><span class="n">tensordict</span><span class="o">.</span><span class="n">ndim</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="n">actions</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">td</span> <span class="o">=</span> <span class="n">tensordict</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">global_idx</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">reset</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_rewards</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">rewards</span> <span class="o">=</span> <span class="n">rewards</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_observations</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">obs</span> <span class="o">=</span> <span class="n">obs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">actions</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="n">global_idx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">a</span> <span class="o">=</span> <span class="n">a</span><span class="p">[</span><span class="n">global_idx</span><span class="p">]</span>
+            <span class="n">td</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+            <span class="n">td</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+
+            <span class="c1"># Save rewards and done states</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_rewards</span><span class="p">:</span>
+                <span class="n">reward_td</span> <span class="o">=</span> <span class="n">td</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">reward_keys</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">global_idx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">reward_td_expand</span> <span class="o">=</span> <span class="n">reward_td</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span>
+                        <span class="n">global_idx</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="n">reward_td</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">global_idx</span><span class="o">.</span><span class="n">ndim</span> <span class="p">:]</span>
+                    <span class="p">)</span>
+                    <span class="n">reward_td_expand</span><span class="p">[</span><span class="n">global_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">reward_td</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">reward_td_expand</span> <span class="o">=</span> <span class="n">reward_td</span>
+
+                <span class="n">rewards</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">reward_td_expand</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_observations</span><span class="p">:</span>
+                <span class="n">obs_td</span> <span class="o">=</span> <span class="n">td</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">observation_keys</span><span class="p">)</span>
+                <span class="c1"># obs_td = td.select(&quot;next&quot;, *self.parent.observation_keys).set(&quot;next&quot;, obs_td)</span>
+                <span class="k">if</span> <span class="n">global_idx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">obs_td</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">global_idx</span><span class="p">,</span> <span class="n">obs_td</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+                <span class="n">obs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obs_td</span><span class="p">)</span>
+
+            <span class="n">td</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">step_mdp</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_rewards</span><span class="p">:</span>
+                <span class="n">td</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">reward_td</span><span class="p">)</span>
+
+            <span class="n">any_done</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">any_done</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">any_done</span><span class="p">:</span>
+                <span class="c1"># Intersect the resets to avoid making any step after reset has been called</span>
+                <span class="n">reset</span> <span class="o">=</span> <span class="n">reset</span> <span class="o">|</span> <span class="n">td</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;_reset&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">reset</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+                    <span class="c1"># Skip step for all</span>
+                    <span class="n">td</span><span class="p">[</span><span class="s2">&quot;_step&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="o">~</span><span class="n">reset</span>
+                    <span class="k">break</span>
+                <span class="k">elif</span> <span class="n">parent</span><span class="o">.</span><span class="n">batch_locked</span><span class="p">:</span>
+                    <span class="n">td</span><span class="p">[</span><span class="s2">&quot;_step&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="o">~</span><span class="n">reset</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># we can simply index the tensordict</span>
+                    <span class="n">idx</span> <span class="o">=</span> <span class="o">~</span><span class="n">reset</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">global_idx</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">global_idx</span> <span class="o">=</span> <span class="n">idx</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                        <span class="n">td_out</span> <span class="o">=</span> <span class="n">td</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">td_out</span><span class="p">[</span><span class="n">global_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">td</span>
+                        <span class="n">global_idx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">masked_scatter</span><span class="p">(</span><span class="n">global_idx</span><span class="p">,</span> <span class="n">global_idx</span><span class="p">,</span> <span class="n">idx</span><span class="p">)</span>
+                    <span class="n">td</span> <span class="o">=</span> <span class="n">td</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+                    <span class="n">reset</span> <span class="o">=</span> <span class="n">reset</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>  <span class="c1"># Should be all False</span>
+
+        <span class="k">if</span> <span class="n">global_idx</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">td_out</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">actions</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+            <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">stack_rewards</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_observations</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="s2">&quot;_step&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="n">td_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">td_out</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">td_out</span><span class="p">[</span><span class="n">global_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">actions</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="n">global_idx</span><span class="p">])</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_rewards</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_observations</span><span class="p">:</span>
+                <span class="n">td_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">td_out</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_rewards</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">rewards</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
+                        <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rewards</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)[</span><span class="n">global_idx</span><span class="p">]</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                    <span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_observations</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">obs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obs</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)[</span><span class="n">global_idx</span><span class="p">]</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+
+            <span class="n">td_out</span><span class="p">[</span><span class="s2">&quot;_step&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">global_idx</span>
+
+        <span class="k">return</span> <span class="n">td_out</span>
+
+<div class="viewcode-block" id="MultiAction.transform_input_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.MultiAction.html#torchrl.envs.transforms.MultiAction.transform_input_spec">[docs]</a>
+    <span class="k">def</span> <span class="nf">transform_input_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">action_spec</span> <span class="o">=</span> <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_action_spec&quot;</span><span class="p">]</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> requires an action spec to be present.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">):</span>
+            <span class="n">action_spec</span> <span class="o">=</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="n">input_spec</span><span class="o">.</span><span class="n">ndim</span><span class="p">)</span>
+        <span class="c1"># Make the dim dynamic</span>
+        <span class="n">action_spec</span> <span class="o">=</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span>
+            <span class="nb">tuple</span><span class="p">(</span>
+                <span class="n">d</span> <span class="k">if</span> <span class="n">i</span> <span class="o">!=</span> <span class="p">(</span><span class="n">input_spec</span><span class="o">.</span><span class="n">ndim</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="k">else</span> <span class="o">-</span><span class="mi">1</span>
+                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">d</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">action_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_action_spec&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">action_spec</span>
+        <span class="k">return</span> <span class="n">input_spec</span></div>
+
+
+<div class="viewcode-block" id="MultiAction.transform_output_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.MultiAction.html#torchrl.envs.transforms.MultiAction.transform_output_spec">[docs]</a>
+    <span class="k">def</span> <span class="nf">transform_output_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output_spec</span><span class="p">:</span> <span class="n">Composite</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
+        <span class="k">if</span> <span class="s2">&quot;full_reward_spec&quot;</span> <span class="ow">in</span> <span class="n">output_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform_reward_spec</span><span class="p">(</span>
+                <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">],</span> <span class="n">output_spec</span><span class="o">.</span><span class="n">ndim</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="s2">&quot;full_observation_spec&quot;</span> <span class="ow">in</span> <span class="n">output_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_observation_spec&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform_observation_spec</span><span class="p">(</span>
+                <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_observation_spec&quot;</span><span class="p">],</span> <span class="n">output_spec</span><span class="o">.</span><span class="n">ndim</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">output_spec</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_transform_reward_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">ndim</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_rewards</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">reward_spec</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">):</span>
+            <span class="n">reward_spec</span> <span class="o">=</span> <span class="n">reward_spec</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="n">ndim</span><span class="p">)</span>
+        <span class="c1"># Make the dim dynamic</span>
+        <span class="n">reward_spec</span> <span class="o">=</span> <span class="n">reward_spec</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span>
+            <span class="nb">tuple</span><span class="p">(</span>
+                <span class="n">d</span> <span class="k">if</span> <span class="n">i</span> <span class="o">!=</span> <span class="p">(</span><span class="n">ndim</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="k">else</span> <span class="o">-</span><span class="mi">1</span>
+                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">d</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">reward_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">reward_spec</span>
+
+    <span class="k">def</span> <span class="nf">_transform_observation_spec</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">ndim</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_observations</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">observation_spec</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">):</span>
+            <span class="n">observation_spec</span> <span class="o">=</span> <span class="n">observation_spec</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="n">ndim</span><span class="p">)</span>
+        <span class="c1"># Make the dim dynamic</span>
+        <span class="n">observation_spec</span> <span class="o">=</span> <span class="n">observation_spec</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span>
+            <span class="nb">tuple</span><span class="p">(</span>
+                <span class="n">d</span> <span class="k">if</span> <span class="n">i</span> <span class="o">!=</span> <span class="p">(</span><span class="n">ndim</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="k">else</span> <span class="o">-</span><span class="mi">1</span>
+                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">d</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">observation_spec</span></div>
+
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../../../',
+            VERSION:'main',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../../../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+      <script type="text/javascript" src="../../../../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../../../../_static/sg-tags.js"></script>
+      <script type="text/javascript" src="../../../../_static/design-tabs.js"></script>
+
+  
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="#">Get Started</a>
+          </li>
+
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+    })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
+  </script>
+</body>
+</html>
