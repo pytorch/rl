@@ -30,8 +30,9 @@ class ACTModel(nn.Module):
 
     The architecture uses a standard :class:`~torch.nn.TransformerEncoder`
     as the CVAE encoder and a DETR-style
-    :class:`~torch.nn.TransformerDecoder` for action prediction.  Learned
-    positional embeddings are used throughout.
+    :class:`~torch.nn.TransformerDecoder` for action prediction.  The encoder
+    inputs receive sinusoidal positional encodings; the decoder uses learned
+    action queries (one per chunk timestep).
 
     Args:
         obs_dim (int): Proprioceptive / state observation dimension.
@@ -165,6 +166,7 @@ class ACTModel(nn.Module):
         )
 
         obs_flat = observation.reshape(flat_b, self.obs_dim)
+        obs_tok = self.obs_proj(obs_flat).unsqueeze(1)  # (B, 1, D), shared
 
         if action_chunk is not None:
             # ── CVAE encoder ──────────────────────────────────────────────
@@ -172,7 +174,6 @@ class ACTModel(nn.Module):
 
             cls_tok = self.cls_embed.weight.unsqueeze(0).expand(flat_b, -1, -1)
             act_tok = self.action_proj(acts_flat)  # (B, T, D)
-            obs_tok = self.obs_proj(obs_flat).unsqueeze(1)  # (B, 1, D)
 
             # [CLS | actions | obs] — total length T+2
             enc_in = torch.cat([cls_tok, act_tok, obs_tok], dim=1)
@@ -185,11 +186,13 @@ class ACTModel(nn.Module):
             mu, log_var = params.chunk(2, dim=-1)
             z = _reparameterise(mu, log_var)  # (B, latent_dim)
         else:
-            # ── Prior (inference) ─────────────────────────────────────────
-            mu = log_var = z = obs_flat.new_zeros(flat_b, self.latent_dim)
+            # ── Prior (inference): allocate three independent zero tensors
+            # so callers can mutate one without affecting the others.
+            mu = obs_flat.new_zeros(flat_b, self.latent_dim)
+            log_var = obs_flat.new_zeros(flat_b, self.latent_dim)
+            z = obs_flat.new_zeros(flat_b, self.latent_dim)
 
         # ── Transformer decoder ───────────────────────────────────────────
-        obs_tok = self.obs_proj(obs_flat).unsqueeze(1)  # (B, 1, D)
         z_tok = self.latent_out_proj(z).unsqueeze(1)  # (B, 1, D)
         memory = torch.cat([obs_tok, z_tok], dim=1)  # (B, 2, D)
 
@@ -216,11 +219,13 @@ def _reparameterise(mu: torch.Tensor, log_var: torch.Tensor) -> torch.Tensor:
 
 def _sinusoidal_pos_enc(length: int, dim: int) -> torch.Tensor:
     """Return a ``(length, dim)`` sinusoidal positional encoding tensor."""
+    if dim % 2:
+        raise ValueError(f"_sinusoidal_pos_enc requires an even `dim`, got {dim}.")
     pos = torch.arange(length, dtype=torch.float32).unsqueeze(1)
     div = torch.exp(
         torch.arange(0, dim, 2, dtype=torch.float32) * (-math.log(10000.0) / dim)
     )
     enc = torch.zeros(length, dim)
     enc[:, 0::2] = torch.sin(pos * div)
-    enc[:, 1::2] = torch.cos(pos * div[: dim // 2])
+    enc[:, 1::2] = torch.cos(pos * div)
     return enc

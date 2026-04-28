@@ -10,6 +10,7 @@ Additional loss modules for specialized algorithms.
     :template: rl_template_noinherit.rst
 
     ACTLoss
+    BCLoss
     DiffusionBCLoss
     GAILLoss
     DTLoss
