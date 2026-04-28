@@ -30,7 +30,6 @@ from torchrl.trainers.trainers import (
 )
 
 
-
 class PPOTrainer(Trainer):
     """PPO (Proximal Policy Optimization) trainer implementation.
 
