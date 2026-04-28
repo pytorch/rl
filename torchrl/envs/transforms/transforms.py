@@ -12158,3 +12158,138 @@ class FlattenTensorDict(Transform):
     def transform_done_spec(self, done_spec: TensorSpec) -> TensorSpec:
         """Transform done spec - not supported for environments."""
         raise RuntimeError(self._ENV_ERROR_MSG)
+
+
+class ExpandAs(Transform):
+    """Expands one entry to the right to match a reference entry shape.
+
+    This is a transform wrapper around :func:`tensordict.utils.expand_as_right`.
+
+    Args:
+        in_key (NestedKey): key to expand.
+        ref_key (NestedKey): key used as shape reference.
+        out_key (NestedKey, optional): output key where the expanded tensor is
+            written. Defaults to ``in_key``.
+
+    Examples:
+        Expanding an environment-level ``done`` signal to the per-agent reward
+        shape in a VMAS environment:
+
+        >>> from torchrl.envs import TransformedEnv
+        >>> from torchrl.envs.libs.vmas import VmasEnv
+        >>> from torchrl.envs.transforms import ExpandAs
+        >>> base_env = VmasEnv(
+        ...     scenario="navigation",
+        ...     num_envs=16,
+        ...     continuous_actions=True,
+        ...     n_agents=3,
+        ... )
+        >>> env = TransformedEnv(
+        ...     base_env,
+        ...     ExpandAs(
+        ...         in_key="done",
+        ...         ref_key=("agents", "reward"),
+        ...     ),
+        ... )
+        >>> td = env.reset()
+        >>> td = env.rand_step(td)
+        >>> td["next", "done"].shape == td["next", "agents", "reward"].shape
+        True
+    """
+
+    def __init__(
+        self,
+        in_key: NestedKey,
+        ref_key: NestedKey,
+        out_key: NestedKey | None = None,
+    ):
+        if out_key is None:
+            out_key = in_key
+        super().__init__(in_keys=[in_key], out_keys=[out_key])
+        self.in_key = unravel_key(in_key)
+        self.ref_key = unravel_key(ref_key)
+        self.out_key = unravel_key(out_key)
+
+    @staticmethod
+    def _find_key_spec(
+        output_spec: Composite, key: NestedKey
+    ) -> tuple[str, TensorSpec]:
+        for spec_name in (
+            "full_observation_spec",
+            "full_reward_spec",
+            "full_done_spec",
+        ):
+            if spec_name not in output_spec.keys():
+                continue
+            spec = output_spec[spec_name]
+            if key in spec.keys(True, True):
+                return spec_name, spec[key]
+        raise KeyError(f"Key {key} was not found in output specs.")
+
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        ref = next_tensordict.get(self.ref_key, default=None)
+        if ref is None:
+            if self.missing_tolerance:
+                return next_tensordict
+            raise KeyError(
+                f"{self}: '{self.ref_key}' not found in tensordict {next_tensordict}"
+            )
+        value = next_tensordict.get(self.in_key, default=None)
+        if value is None:
+            if self.missing_tolerance:
+                return next_tensordict
+            raise KeyError(
+                f"{self}: '{self.in_key}' not found in tensordict {next_tensordict}"
+            )
+        next_tensordict.set(self.out_key, expand_as_right(value, ref))
+        return next_tensordict
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return self._call(tensordict)
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        if self.out_key in tensordict_reset.keys(True, True):
+            return tensordict_reset
+
+        value = tensordict_reset.get(self.in_key, default=None)
+        if value is None:
+            return tensordict_reset
+
+        ref = tensordict_reset.get(self.ref_key, default=None)
+        if ref is None and self.parent is not None:
+            try:
+                _, ref_spec = self._find_key_spec(self.parent.output_spec, self.ref_key)
+            except KeyError:
+                ref_spec = None
+            if ref_spec is not None:
+                ref = torch.empty(
+                    ref_spec.shape,
+                    dtype=value.dtype,
+                    device=value.device,
+                )
+
+        if ref is None:
+            tensordict_reset.set(self.out_key, value)
+        else:
+            tensordict_reset.set(self.out_key, expand_as_right(value, ref))
+        return tensordict_reset
+
+    def transform_output_spec(self, output_spec: Composite) -> Composite:
+        output_spec = output_spec.clone()
+        _, ref_spec = self._find_key_spec(output_spec, self.ref_key)
+        in_spec_name, in_spec = self._find_key_spec(output_spec, self.in_key)
+        target_spec_name = in_spec_name
+        if in_spec_name == "full_done_spec" and self.out_key != self.in_key:
+            target_spec_name = "full_observation_spec"
+
+        while len(in_spec.shape) < len(ref_spec.shape):
+            in_spec = in_spec.unsqueeze(-1)
+
+        spec = output_spec[target_spec_name]
+        spec[self.out_key] = in_spec.expand(ref_spec.shape)
+        output_spec[target_spec_name] = spec
+        return output_spec

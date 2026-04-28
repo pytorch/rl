@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import functools
+import os
 
 import pytest
 import torch
@@ -127,6 +128,15 @@ class create_prioritized_sampler:
         return ((sampler, storage, self.batch_size), {})
 
 
+def _prioritized_sampler_benchmark_devices():
+    device = os.getenv("TORCHRL_BENCHMARK_DEVICE")
+    if device == "CPU":
+        return ["cpu"]
+    if device == "GPU":
+        return ["cuda"]
+    return ["cpu", "cuda"]
+
+
 @pytest.mark.parametrize(
     "rb,storage,sampler,size",
     [
@@ -165,7 +175,7 @@ def test_rb_sample(benchmark, rb, storage, sampler, size):
     benchmark(sample, rb)
 
 
-@pytest.mark.parametrize("device", ["cpu", "cuda"])
+@pytest.mark.parametrize("device", _prioritized_sampler_benchmark_devices())
 @pytest.mark.parametrize("size", [1_000_000, 10_000_000])
 def test_prioritized_sampler_sample_scale(benchmark, size, device):
     batch_size = 65_536
