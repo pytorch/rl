@@ -29,19 +29,6 @@ from torchrl.trainers.trainers import (
     UpdateWeights,
 )
 
-try:
-    pass
-
-    _has_tqdm = True
-except ImportError:
-    _has_tqdm = False
-
-try:
-    pass
-
-    _has_ts = True
-except ImportError:
-    _has_ts = False
 
 
 class PPOTrainer(Trainer):
@@ -140,8 +127,8 @@ class PPOTrainer(Trainer):
         num_epochs: int = 4,
         replay_buffer: ReplayBuffer | None = None,
         batch_size: int | None = None,
-        gamma: float = 0.9,
-        lmbda: float = 0.99,
+        gamma: float = 0.99,
+        lmbda: float = 0.95,
         enable_logging: bool = True,
         log_rewards: bool = True,
         log_actions: bool = True,
