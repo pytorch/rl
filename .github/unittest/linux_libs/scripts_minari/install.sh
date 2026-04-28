@@ -42,7 +42,8 @@ else
   exit 1
 fi
 
-# install tensordict
+# install tensordict and its deps
+uv pip install cloudpickle packaging importlib_metadata orjson "pyvers>=0.1.0,<0.2.0"
 if [[ "$RELEASE" == 0 ]]; then
   uv pip install --no-deps git+https://github.com/pytorch/tensordict.git
 else

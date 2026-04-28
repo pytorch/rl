@@ -392,6 +392,9 @@ class Trainer:
         self._post_epoch_log_ops = (
             []
         )  # After each epoch logging (e.g., epoch completion metrics)
+        self._post_optim_complete_log_ops = (
+            []
+        )  # After all optimization steps for a batch (e.g., logging average_losses)
 
         # Regular hook collections for non-logging operations
         self._pre_epoch_ops = (
@@ -625,6 +628,7 @@ class Trainer:
             "post_optim_log",
             "pre_epoch_log",
             "post_epoch_log",
+            "post_optim_complete_log",
             "pre_epoch",
             "post_epoch",
         ],
@@ -734,6 +738,12 @@ class Trainer:
             )
             self._post_epoch_log_ops.append((timed_op, kwargs))
 
+        elif dest == "post_optim_complete_log":
+            _check_input_output_typehint(
+                op, input=[int, TensorDictBase | None], output=tuple[str, float]
+            )
+            self._post_optim_complete_log_ops.append((timed_op, kwargs))
+
         elif dest == "pre_epoch":
             _check_input_output_typehint(op, input=None, output=None)
             self._pre_epoch_ops.append((timed_op, kwargs))
@@ -748,7 +758,7 @@ class Trainer:
                 f"(batch_process, pre_optim_steps, process_optim_batch, post_loss, "
                 f"process_loss, optimizer, post_steps, post_optim, pre_steps_log, "
                 f"post_steps_log, post_optim_log, pre_epoch_log, post_epoch_log, "
-                f"pre_epoch, post_epoch)"
+                f"post_optim_complete_log, pre_epoch, post_epoch)"
             )
 
     register_hook = register_op
@@ -861,6 +871,20 @@ class Trainer:
             result = op(batch, **kwargs)
             if result is not None:
                 self._log(**result)
+
+    def _post_optim_complete_log_hook(
+        self, optim_steps: int, average_losses: TensorDictBase | None
+    ) -> None:
+        """Execute logging hooks that run AFTER all steps in the optimization loop.
+
+        These hooks log metrics that use the total step count and averaged loss TensorDict.
+        Called once per optimization loop.
+        """
+        for op, kwargs in self._post_optim_complete_log_ops:
+            result = op(optim_steps, average_losses, **kwargs)
+            if result is not None:
+                self._log(**result)
+        self._log(optim_steps=optim_steps, **average_losses)
 
     def _post_epoch_hook(self) -> None:
         """Execute regular hooks that run AFTER each epoch of optimization.
@@ -1031,12 +1055,8 @@ class Trainer:
             self._post_epoch_hook()
 
         if j >= 0:
-            # Log optimization statistics and average losses after completing all optimization steps
-            # This is the main logging point for training metrics like loss values and optimization step count
-            self._log(
-                optim_steps=self._optim_count,
-                **average_losses,
-            )
+            # LOGGING POINT 6: After all optimization for this batch (e.g., logging average_losses)
+            self._post_optim_complete_log_hook(self._optim_count, average_losses)
 
     def _log(self, log_pbar=False, **kwargs) -> None:
         """Main logging method that handles both logger output and progress bar updates.

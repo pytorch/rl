@@ -906,12 +906,6 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         >>> # The inner env has been unwrapped
         >>> assert isinstance(transformed_env.base_env, GymEnv)
 
-    .. note::
-        The first argument was renamed from ``env`` to ``base_env`` for clarity.
-        The old ``env`` argument is still supported for backward compatibility
-        but will be removed in v0.12. A deprecation warning will be shown when
-        using the old argument name.
-
     """
 
     @overload
@@ -938,18 +932,6 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
     ) -> None:
         ...
 
-    @overload
-    def __init__(
-        self,
-        *,
-        env: EnvBase,  # type: ignore[misc]  # deprecated
-        transform: Transform | None = None,
-        cache_specs: bool = True,
-        auto_unwrap: bool | None = None,
-        **kwargs,
-    ) -> None:
-        ...
-
     def __init__(
         self,
         *args,
@@ -963,17 +945,9 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             cache_specs = args[2] if len(args) > 2 else kwargs.pop("cache_specs", True)
             auto_unwrap = kwargs.pop("auto_unwrap", None)
         elif "env" in kwargs:
-            # Old syntax: TransformedEnv(env=..., transform=...)
-            warnings.warn(
-                "The 'env' argument is deprecated and will be removed in v0.12. "
-                "Use 'base_env' instead.",
-                DeprecationWarning,
-                stacklevel=2,
+            raise TypeError(
+                "The 'env' argument has been removed. Use 'base_env' instead."
             )
-            base_env = kwargs.pop("env")
-            transform = kwargs.pop("transform", None)
-            cache_specs = kwargs.pop("cache_specs", True)
-            auto_unwrap = kwargs.pop("auto_unwrap", None)
         elif "base_env" in kwargs:
             # New syntax with keyword arguments: TransformedEnv(base_env=..., transform=...)
             base_env = kwargs.pop("base_env")
@@ -8085,6 +8059,214 @@ class StepCounter(Transform):
         )
 
 
+class RandomTruncationTransform(Transform):
+    """Randomly truncate episodes to decorrelate synchronized batched envs.
+
+    When many batched environments share the same ``max_episode_steps``, all
+    environments hit truncation at nearly the same step, creating correlated
+    waves of start-of-episode data in the replay buffer.  This transform
+    breaks that synchronisation by assigning each environment a random horizon.
+
+    On the **first reset** every environment receives a horizon drawn from
+    ``Uniform(1, max_horizon)`` so they immediately spread across different
+    phases of the episode.  On **subsequent resets**, with probability
+    ``prob`` a new horizon is sampled from ``Uniform(min_horizon, max_horizon)``;
+    otherwise the full ``max_horizon`` is used.
+
+    ``first_episode_prob`` controls the truncation probability for each
+    environment's first episode after the initial spread. By default it matches
+    ``prob`` so that ``prob=0.0`` disables all subsequent random truncation
+    after the initial spread. Setting it higher than ``prob`` can accelerate
+    decorrelation when batch sizes are large relative to ``max_horizon``.
+
+    .. note:: This transform must be placed **after** :class:`~torchrl.envs.StepCounter`
+        in the transform chain, as it relies on the ``"step_count"`` key.
+
+    Args:
+        min_horizon (int): minimum horizon for random truncation
+            (inclusive).
+        max_horizon (int): maximum horizon for random truncation
+            (inclusive). Also used as the full-length horizon when no random
+            truncation is applied. This should typically match the
+            environment's ``max_episode_steps``, which unfortunately cannot
+            be retrieved automatically in general.
+        prob (float, optional): probability of sampling a random horizon on
+            each subsequent reset. Defaults to ``0.0`` (only the initial
+            spread is applied). When nonzero, a low value (e.g. ``0.01``) is
+            recommended -- frequent truncation can negatively impact training.
+        first_episode_prob (float, optional): truncation probability for each
+            environment's first episode after the initial spread. Defaults to
+            ``prob`` when omitted.
+
+    Examples:
+        >>> from torchrl.envs import GymEnv, TransformedEnv, StepCounter
+        >>> base_env = GymEnv("Pendulum-v1")
+        >>> env = TransformedEnv(
+        ...     base_env,
+        ...     Compose(
+        ...         StepCounter(),
+        ...         RandomTruncationTransform(
+        ...             prob=0.1, min_horizon=50, max_horizon=200
+        ...         ),
+        ...     ),
+        ... )
+        >>> rollout = env.rollout(300)
+        >>> # Episode length will be at most 200 steps
+        >>> print(rollout.shape)
+        torch.Size([...])
+    """
+
+    invertible = False
+
+    def __init__(
+        self,
+        min_horizon: int,
+        max_horizon: int,
+        prob: float = 0.0,
+        first_episode_prob: float | None = None,
+    ):
+        super().__init__()
+        if first_episode_prob is None:
+            first_episode_prob = prob
+        if not 0.0 <= prob <= 1.0:
+            raise ValueError(f"prob must be in [0, 1], got {prob}")
+        if not 0.0 <= first_episode_prob <= 1.0:
+            raise ValueError(
+                f"first_episode_prob must be in [0, 1], got {first_episode_prob}"
+            )
+        if min_horizon < 1:
+            raise ValueError(f"min_horizon must be >= 1, got {min_horizon}")
+        if max_horizon < 1:
+            raise ValueError(f"max_horizon must be >= 1, got {max_horizon}")
+        if min_horizon > max_horizon:
+            raise ValueError(
+                f"min_horizon ({min_horizon}) must be <= max_horizon ({max_horizon})"
+            )
+        self.prob = prob
+        self.first_episode_prob = first_episode_prob
+        self.min_horizon = min_horizon
+        self.max_horizon = max_horizon
+        self._horizons: torch.Tensor | None = None
+        self._first_episode: torch.Tensor | None = None
+        self._initialized = False
+
+    def set_container(self, container: Transform | EnvBase) -> None:
+        super().set_container(container)
+        self._validate_step_counter_registration()
+
+    def _validate_step_counter_registration(self) -> None:
+        parent = self.parent
+        if parent is None:
+            return
+        observation_spec = getattr(parent, "observation_spec", None)
+        if observation_spec is None:
+            return
+        keys = observation_spec.keys(True, True)
+        has_step_count = any(
+            key == "step_count" or (isinstance(key, tuple) and key[-1] == "step_count")
+            for key in keys
+        )
+        if not has_step_count:
+            raise RuntimeError(
+                "RandomTruncationTransform requires a StepCounter earlier in the "
+                "transform chain. Use:\n"
+                "  Compose(StepCounter(), RandomTruncationTransform(...))\n"
+                "or add StepCounter() before RandomTruncationTransform in your "
+                "transform pipeline."
+            )
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        step_count = next_tensordict.get("step_count", None)
+        if step_count is None or self._horizons is None:
+            return next_tensordict
+
+        should_truncate = step_count >= self._horizons
+        truncated = next_tensordict.get("truncated", torch.zeros_like(should_truncate))
+        done = next_tensordict.get("done", torch.zeros_like(should_truncate))
+        next_tensordict.set("truncated", truncated | should_truncate)
+        next_tensordict.set("done", done | should_truncate)
+        return next_tensordict
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        step_count = tensordict_reset.get("step_count", None)
+        if step_count is None:
+            return tensordict_reset
+
+        # Ensure truncated is False after reset
+        done = tensordict_reset.get("done", None)
+        if done is not None:
+            tensordict_reset.set(
+                "truncated",
+                torch.zeros_like(done),
+            )
+
+        if not self._initialized:
+            # First reset: uniform spread for immediate decorrelation
+            self._horizons = torch.randint(
+                1,
+                self.max_horizon + 1,
+                step_count.shape,
+                device=step_count.device,
+            )
+            self._first_episode = torch.ones(
+                step_count.shape, dtype=torch.bool, device=step_count.device
+            )
+            self._initialized = True
+            return tensordict_reset
+
+        # Resample horizons for envs that just reset
+        reset_mask = tensordict.get("_reset", None)
+        if reset_mask is not None:
+            mask = reset_mask.view_as(self._horizons).bool()
+            if mask.any():
+                if self.prob == 0.0 and self.first_episode_prob == 0.0:
+                    self._horizons[mask] = self.max_horizon
+                    self._first_episode[mask] = False
+                    return tensordict_reset
+                n = int(mask.sum())
+                new_h = torch.randint(
+                    self.min_horizon,
+                    self.max_horizon + 1,
+                    (n,),
+                    device=self._horizons.device,
+                )
+                # Use first_episode_prob for envs still in their first
+                # episode, prob for all subsequent episodes
+                first_ep = self._first_episode[mask]
+                effective_prob = torch.where(
+                    first_ep,
+                    torch.tensor(self.first_episode_prob, device=self._horizons.device),
+                    torch.tensor(self.prob, device=self._horizons.device),
+                )
+                keep_full = torch.rand(n, device=self._horizons.device) > effective_prob
+                new_h[keep_full] = self.max_horizon
+                self._horizons[mask] = new_h.view_as(self._horizons[mask])
+                # First episode is over for these envs
+                self._first_episode[mask] = False
+        return tensordict_reset
+
+    def transform_output_spec(self, output_spec: Composite) -> Composite:
+        full_done_spec = self.parent.output_spec["full_done_spec"]
+        # Ensure truncated and done keys exist in the spec
+        if "truncated" not in full_done_spec.keys():
+            done_shape = full_done_spec["done"].shape
+            full_done_spec["truncated"] = Categorical(
+                2, dtype=torch.bool, device=output_spec.device, shape=done_shape
+            )
+        output_spec["full_done_spec"] = full_done_spec
+        return super().transform_output_spec(output_spec)
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        raise NotImplementedError(
+            "RandomTruncationTransform cannot be called independently, only its "
+            "step and reset methods are functional."
+        )
+
+
 class ExcludeTransform(Transform):
     """Excludes keys from the data.
 
@@ -11976,3 +12158,138 @@ class FlattenTensorDict(Transform):
     def transform_done_spec(self, done_spec: TensorSpec) -> TensorSpec:
         """Transform done spec - not supported for environments."""
         raise RuntimeError(self._ENV_ERROR_MSG)
+
+
+class ExpandAs(Transform):
+    """Expands one entry to the right to match a reference entry shape.
+
+    This is a transform wrapper around :func:`tensordict.utils.expand_as_right`.
+
+    Args:
+        in_key (NestedKey): key to expand.
+        ref_key (NestedKey): key used as shape reference.
+        out_key (NestedKey, optional): output key where the expanded tensor is
+            written. Defaults to ``in_key``.
+
+    Examples:
+        Expanding an environment-level ``done`` signal to the per-agent reward
+        shape in a VMAS environment:
+
+        >>> from torchrl.envs import TransformedEnv
+        >>> from torchrl.envs.libs.vmas import VmasEnv
+        >>> from torchrl.envs.transforms import ExpandAs
+        >>> base_env = VmasEnv(
+        ...     scenario="navigation",
+        ...     num_envs=16,
+        ...     continuous_actions=True,
+        ...     n_agents=3,
+        ... )
+        >>> env = TransformedEnv(
+        ...     base_env,
+        ...     ExpandAs(
+        ...         in_key="done",
+        ...         ref_key=("agents", "reward"),
+        ...     ),
+        ... )
+        >>> td = env.reset()
+        >>> td = env.rand_step(td)
+        >>> td["next", "done"].shape == td["next", "agents", "reward"].shape
+        True
+    """
+
+    def __init__(
+        self,
+        in_key: NestedKey,
+        ref_key: NestedKey,
+        out_key: NestedKey | None = None,
+    ):
+        if out_key is None:
+            out_key = in_key
+        super().__init__(in_keys=[in_key], out_keys=[out_key])
+        self.in_key = unravel_key(in_key)
+        self.ref_key = unravel_key(ref_key)
+        self.out_key = unravel_key(out_key)
+
+    @staticmethod
+    def _find_key_spec(
+        output_spec: Composite, key: NestedKey
+    ) -> tuple[str, TensorSpec]:
+        for spec_name in (
+            "full_observation_spec",
+            "full_reward_spec",
+            "full_done_spec",
+        ):
+            if spec_name not in output_spec.keys():
+                continue
+            spec = output_spec[spec_name]
+            if key in spec.keys(True, True):
+                return spec_name, spec[key]
+        raise KeyError(f"Key {key} was not found in output specs.")
+
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        ref = next_tensordict.get(self.ref_key, default=None)
+        if ref is None:
+            if self.missing_tolerance:
+                return next_tensordict
+            raise KeyError(
+                f"{self}: '{self.ref_key}' not found in tensordict {next_tensordict}"
+            )
+        value = next_tensordict.get(self.in_key, default=None)
+        if value is None:
+            if self.missing_tolerance:
+                return next_tensordict
+            raise KeyError(
+                f"{self}: '{self.in_key}' not found in tensordict {next_tensordict}"
+            )
+        next_tensordict.set(self.out_key, expand_as_right(value, ref))
+        return next_tensordict
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return self._call(tensordict)
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        if self.out_key in tensordict_reset.keys(True, True):
+            return tensordict_reset
+
+        value = tensordict_reset.get(self.in_key, default=None)
+        if value is None:
+            return tensordict_reset
+
+        ref = tensordict_reset.get(self.ref_key, default=None)
+        if ref is None and self.parent is not None:
+            try:
+                _, ref_spec = self._find_key_spec(self.parent.output_spec, self.ref_key)
+            except KeyError:
+                ref_spec = None
+            if ref_spec is not None:
+                ref = torch.empty(
+                    ref_spec.shape,
+                    dtype=value.dtype,
+                    device=value.device,
+                )
+
+        if ref is None:
+            tensordict_reset.set(self.out_key, value)
+        else:
+            tensordict_reset.set(self.out_key, expand_as_right(value, ref))
+        return tensordict_reset
+
+    def transform_output_spec(self, output_spec: Composite) -> Composite:
+        output_spec = output_spec.clone()
+        _, ref_spec = self._find_key_spec(output_spec, self.ref_key)
+        in_spec_name, in_spec = self._find_key_spec(output_spec, self.in_key)
+        target_spec_name = in_spec_name
+        if in_spec_name == "full_done_spec" and self.out_key != self.in_key:
+            target_spec_name = "full_observation_spec"
+
+        while len(in_spec.shape) < len(ref_spec.shape):
+            in_spec = in_spec.unsqueeze(-1)
+
+        spec = output_spec[target_spec_name]
+        spec[self.out_key] = in_spec.expand(ref_spec.shape)
+        output_spec[target_spec_name] = spec
+        return output_spec

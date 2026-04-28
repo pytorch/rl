@@ -51,7 +51,7 @@ atari = ["gymnasium[atari]"]
 dm_control = ["dm_control"]
 replay_buffer = ["torch>=2.7.0"]
 gym_continuous = ["gymnasium<1.0", "mujoco"]
-rendering = ["moviepy<2.0.0", "torchcodec>=0.10.0"]
+rendering = ["moviepy", "torchcodec>=0.10.0"]
 tests = [
     "pytest",
     "pyyaml",
@@ -92,7 +92,8 @@ offline-data = [
 marl = ["vmas>=1.2.10", "pettingzoo>=1.24.1", "dm-meltingpot; python_version>='3.11'"]
 open_spiel = ["open_spiel>=1.5"]
 brax = ["jax>=0.7.0; python_version>='3.11'", "brax; python_version>='3.11'"]
-procgen = ["procgen"]
+genesis = ["genesis-world"]
+procgen = ["procgen; python_version<'3.10'"]
 pilco = [
     "botorch",
     "gpytorch",

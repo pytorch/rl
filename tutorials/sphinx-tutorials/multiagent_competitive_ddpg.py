@@ -111,7 +111,7 @@ from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import multiprocessing
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyMemmapStorage, RandomSampler, ReplayBuffer
 
 from torchrl.envs import (
@@ -639,7 +639,7 @@ for group, _agents in env.group_map.items():
 # Put exploration policies from each group in a sequence
 agents_exploration_policy = TensorDictSequential(*exploration_policies.values())
 
-collector = SyncDataCollector(
+collector = Collector(
     env,
     agents_exploration_policy,
     device=device,

@@ -808,9 +808,9 @@ if device == torch.device("cpu"):
 # GPU, number of workers, and so on).
 #
 # Here we will use
-# :class:`~torchrl.collectors.SyncDataCollector`, a simple, single-process
+# :class:`~torchrl.collectors.Collector`, a simple, single-process
 # data collector. TorchRL offers other collectors, such as
-# :class:`~torchrl.collectors.MultiaSyncDataCollector`, which executed the
+# :class:`~torchrl.collectors.MultiAsyncCollector`, which executed the
 # rollouts in an asynchronous manner (for example, data will be collected while
 # the policy is being optimized, thereby decoupling the training and
 # data collection).
@@ -855,10 +855,10 @@ frames_per_batch = env_per_collector * traj_len
 init_random_frames = 5000
 num_collectors = 2
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.envs import ExplorationType
 
-collector = SyncDataCollector(
+collector = Collector(
     parallel_env,
     policy=actor_model_explore,
     total_frames=total_frames,

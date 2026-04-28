@@ -3543,6 +3543,242 @@ class TestSamplers:
         )
 
 
+class TestStalenessAwareSampler:
+    """Tests for StalenessAwareSampler."""
+
+    def _make_buffer_with_versions(self, n_entries=100, version_range=(0, 5)):
+        """Create a replay buffer populated with data containing policy_version."""
+        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
+
+        sampler = StalenessAwareSampler(max_staleness=-1)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(n_entries),
+            sampler=sampler,
+            batch_size=16,
+        )
+        # Fill with data having varying policy versions
+        for v in range(version_range[0], version_range[1] + 1):
+            batch = TensorDict(
+                {
+                    "observation": torch.randn(20, 4),
+                    "action": torch.randn(20, 2),
+                    "policy_version": torch.full((20,), float(v)),
+                },
+                batch_size=[20],
+            )
+            rb.extend(batch)
+        return rb, sampler
+
+    def test_basic_sampling(self):
+        """Test that StalenessAwareSampler can sample from a buffer."""
+        rb, sampler = self._make_buffer_with_versions()
+        sampler.consumer_version = 5
+        batch = rb.sample()
+        assert batch is not None
+        assert batch.shape[0] == 16
+
+    def test_freshness_weighting(self):
+        """Test that fresher entries are sampled more frequently."""
+        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
+
+        sampler = StalenessAwareSampler(max_staleness=-1)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(200),
+            sampler=sampler,
+            batch_size=32,
+        )
+        # Add 100 entries at version 0 (stale) and 100 at version 9 (fresh)
+        stale = TensorDict(
+            {
+                "observation": torch.zeros(100, 4),
+                "policy_version": torch.full((100,), 0.0),
+            },
+            batch_size=[100],
+        )
+        fresh = TensorDict(
+            {
+                "observation": torch.ones(100, 4),
+                "policy_version": torch.full((100,), 9.0),
+            },
+            batch_size=[100],
+        )
+        rb.extend(stale)
+        rb.extend(fresh)
+        sampler.consumer_version = 10
+
+        # Sample many times and count how often fresh vs stale entries appear
+        fresh_count = 0
+        total = 0
+        for _ in range(100):
+            batch = rb.sample()
+            # Fresh entries have observation == 1, stale have observation == 0
+            fresh_count += (batch["observation"][:, 0] > 0.5).sum().item()
+            total += batch.shape[0]
+
+        fresh_ratio = fresh_count / total
+        # Fresh entries (staleness=1) should be sampled ~10x more than stale (staleness=10)
+        # So fresh_ratio should be significantly above 0.5
+        assert (
+            fresh_ratio > 0.7
+        ), f"Expected fresh entries to dominate, got {fresh_ratio:.2f}"
+
+    def test_hard_staleness_gate(self):
+        """Test that entries beyond max_staleness are never sampled."""
+        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
+
+        sampler = StalenessAwareSampler(max_staleness=3)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(200),
+            sampler=sampler,
+            batch_size=32,
+        )
+        # Add entries at version 0 (stale) and version 8 (fresh)
+        stale = TensorDict(
+            {
+                "observation": torch.zeros(100, 4),
+                "policy_version": torch.full((100,), 0.0),
+            },
+            batch_size=[100],
+        )
+        fresh = TensorDict(
+            {
+                "observation": torch.ones(100, 4),
+                "policy_version": torch.full((100,), 8.0),
+            },
+            batch_size=[100],
+        )
+        rb.extend(stale)
+        rb.extend(fresh)
+        sampler.consumer_version = 10
+
+        # All sampled entries should be fresh (staleness=2 <= 3)
+        # Stale entries have staleness=10 > 3, so they're excluded
+        for _ in range(50):
+            batch = rb.sample()
+            assert (
+                batch["observation"][:, 0] > 0.5
+            ).all(), (
+                "Stale entries should never be sampled when max_staleness is exceeded"
+            )
+
+    def test_all_stale_raises(self):
+        """Test that an error is raised when all entries exceed max_staleness."""
+        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
+
+        sampler = StalenessAwareSampler(max_staleness=2)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(50),
+            sampler=sampler,
+            batch_size=8,
+        )
+        data = TensorDict(
+            {
+                "observation": torch.randn(50, 4),
+                "policy_version": torch.full((50,), 0.0),
+            },
+            batch_size=[50],
+        )
+        rb.extend(data)
+        sampler.consumer_version = 100  # Everything is very stale
+
+        with pytest.raises(RuntimeError, match="max_staleness"):
+            rb.sample()
+
+    def test_consumer_version_increment(self):
+        """Test consumer version tracking."""
+        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
+
+        sampler = StalenessAwareSampler()
+        assert sampler.consumer_version == 0
+        sampler.increment_consumer_version()
+        assert sampler.consumer_version == 1
+        sampler.consumer_version = 42
+        assert sampler.consumer_version == 42
+
+    def test_staleness_in_info(self):
+        """Test that staleness values are returned in sample info."""
+        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
+
+        sampler = StalenessAwareSampler(max_staleness=-1)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(50),
+            sampler=sampler,
+            batch_size=8,
+        )
+        data = TensorDict(
+            {
+                "observation": torch.randn(50, 4),
+                "policy_version": torch.full((50,), 3.0),
+            },
+            batch_size=[50],
+        )
+        rb.extend(data)
+        sampler.consumer_version = 5
+
+        index, info = sampler.sample(rb._storage, 8)
+        assert "staleness" in info
+        assert (info["staleness"] == 2.0).all()  # consumer=5 - version=3 = 2
+
+    def test_missing_version_key_raises(self):
+        """Test that a clear error is raised when version key is missing."""
+        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
+
+        sampler = StalenessAwareSampler()
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(50),
+            sampler=sampler,
+            batch_size=8,
+        )
+        data = TensorDict(
+            {"observation": torch.randn(50, 4)},
+            batch_size=[50],
+        )
+        rb.extend(data)
+
+        with pytest.raises(KeyError, match="policy_version"):
+            rb.sample()
+
+    def test_state_dict_roundtrip(self):
+        """Test that state_dict/load_state_dict preserves sampler state."""
+        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
+
+        sampler = StalenessAwareSampler(max_staleness=7)
+        sampler.consumer_version = 42
+
+        sd = sampler.state_dict()
+        assert sd["consumer_version"] == 42
+        assert sd["max_staleness"] == 7
+
+        sampler2 = StalenessAwareSampler()
+        sampler2.load_state_dict(sd)
+        assert sampler2.consumer_version == 42
+        assert sampler2.max_staleness == 7
+
+    def test_no_staleness_limit(self):
+        """Test sampling with max_staleness=-1 (no limit)."""
+        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
+
+        sampler = StalenessAwareSampler(max_staleness=-1)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(50),
+            sampler=sampler,
+            batch_size=8,
+        )
+        data = TensorDict(
+            {
+                "observation": torch.randn(50, 4),
+                "policy_version": torch.full((50,), 0.0),
+            },
+            batch_size=[50],
+        )
+        rb.extend(data)
+        sampler.consumer_version = 1000  # Very stale, but no limit
+
+        # Should not raise
+        batch = rb.sample()
+        assert batch.shape[0] == 8
+
+
 def test_prioritized_slice_sampler_doc_example():
     sampler = PrioritizedSliceSampler(max_capacity=9, num_slices=3, alpha=0.7, beta=0.9)
     rb = TensorDictReplayBuffer(

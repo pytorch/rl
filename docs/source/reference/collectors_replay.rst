@@ -28,7 +28,7 @@ will work:
     ...     storage=LazyTensorStorage(N),
     ...     sampler=SliceSampler(num_slices=4, trajectory_key=("collector", "traj_ids"))
     ... )
-    >>> collector = SyncDataCollector(env, policy, frames_per_batch=N, total_frames=-1)
+    >>> collector = Collector(env, policy, frames_per_batch=N, total_frames=-1)
     >>> for data in collector:
     ...     memory.extend(data)
     >>> # Batched environments: a multi-dim buffer is required
@@ -37,27 +37,27 @@ will work:
     ...     sampler=SliceSampler(num_slices=4, trajectory_key=("collector", "traj_ids"))
     ... )
     >>> env = ParallelEnv(4, make_env)
-    >>> collector = SyncDataCollector(env, policy, frames_per_batch=N, total_frames=-1)
+    >>> collector = Collector(env, policy, frames_per_batch=N, total_frames=-1)
     >>> for data in collector:
     ...     memory.extend(data)
-    >>> # MultiSyncDataCollector + regular env: behaves like a ParallelEnv if cat_results="stack"
+    >>> # MultiSyncCollector + regular env: behaves like a ParallelEnv if cat_results="stack"
     >>> memory = ReplayBuffer(
     ...     storage=LazyTensorStorage(N, ndim=2),
     ...     sampler=SliceSampler(num_slices=4, trajectory_key=("collector", "traj_ids"))
     ... )
-    >>> collector = MultiSyncDataCollector([make_env] * 4,
+    >>> collector = MultiSyncCollector([make_env] * 4,
     ...     policy,
     ...     frames_per_batch=N,
     ...     total_frames=-1,
     ...     cat_results="stack")
     >>> for data in collector:
     ...     memory.extend(data)
-    >>> # MultiSyncDataCollector + parallel env: the ndim must be adapted accordingly
+    >>> # MultiSyncCollector + parallel env: the ndim must be adapted accordingly
     >>> memory = ReplayBuffer(
     ...     storage=LazyTensorStorage(N, ndim=3),
     ...     sampler=SliceSampler(num_slices=4, trajectory_key=("collector", "traj_ids"))
     ... )
-    >>> collector = MultiSyncDataCollector([ParallelEnv(2, make_env)] * 4,
+    >>> collector = MultiSyncCollector([ParallelEnv(2, make_env)] * 4,
     ...     policy,
     ...     frames_per_batch=N,
     ...     total_frames=-1,

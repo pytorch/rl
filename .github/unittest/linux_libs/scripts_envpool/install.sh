@@ -27,17 +27,29 @@ fi
 git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with cu128"
-if [ "${CU_VERSION:-}" == cpu ] ; then
-    pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
+if [[ "$RELEASE" == 0 ]]; then
+    if [ "${CU_VERSION:-}" == cpu ] ; then
+        pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
+    else
+        pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128 -U
+    fi
 else
-    pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128 -U
+    if [ "${CU_VERSION:-}" == cpu ] ; then
+        pip3 install torch --index-url https://download.pytorch.org/whl/cpu -U
+    else
+        pip3 install torch -U
+    fi
 fi
 
 # smoke test
 python -c "import functorch"
 
 # install tensordict
-pip install git+https://github.com/pytorch/tensordict
+if [[ "$RELEASE" == 0 ]]; then
+    pip install git+https://github.com/pytorch/tensordict
+else
+    pip install tensordict
+fi
 
 printf "* Installing torchrl\n"
 python -m pip install -e . --no-build-isolation

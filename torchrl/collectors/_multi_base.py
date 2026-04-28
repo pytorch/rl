@@ -277,11 +277,6 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             but populate the buffer instead. Defaults to ``None``.
         extend_buffer (bool, optional): if `True`, the replay buffer is extended with entire rollouts and not
             with single steps. Defaults to `True` for multiprocessed data collectors.
-        local_init_rb (bool, optional): if ``False``, the collector will use fake data to initialize
-            the replay buffer in the main process (legacy behavior). If ``True``, the storage-level
-            coordination will handle initialization with real data from worker processes.
-            Defaults to ``None``, which maintains backward compatibility but shows a deprecation warning.
-            This parameter is deprecated and will be removed in v0.12.
         trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
             assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
             and ``False`` otherwise.
@@ -386,7 +381,6 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
         extend_buffer: bool = True,
-        local_init_rb: bool | None = None,
         trust_policy: bool | None = None,
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
@@ -399,11 +393,17 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         track_policy_version: bool = False,
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
+        init_fn: Callable[[], None] | None = None,
     ):
         self.closed = True
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
         self._worker_trajs_per_batch = None
+        # Wrap init_fn with CloudpickleWrapper to support lambdas / closures
+        # across the spawn start method.
+        self._worker_init_fn = (
+            CloudpickleWrapper(init_fn) if init_fn is not None else None
+        )
 
         # Set up workers and environment functions
         create_env_fn, total_frames_per_batch = self._setup_workers_and_env_fns(
@@ -437,7 +437,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         # Set up replay buffer
         self._use_buffers = use_buffers
         self.replay_buffer = replay_buffer
-        self._setup_multi_replay_buffer(local_init_rb, replay_buffer, extend_buffer)
+        self._setup_multi_replay_buffer(replay_buffer, extend_buffer)
 
         # Set up policy and weights
         if trust_policy is None:
@@ -466,17 +466,20 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             and not weight_sync_schemes
             and weight_updater is None
         ):
-            if isinstance(policy, nn.Module) or has_uniform_policy_factory:
-                # Set up a default local shared-memory sync scheme for the policy.
-                # This is used to propagate weights from the orchestrator policy
-                # (possibly combined with a policy_factory) down to worker policies.
+            if isinstance(policy, nn.Module):
                 weight_sync_schemes["policy"] = SharedMemWeightSyncScheme()
+            elif has_uniform_policy_factory:
+                _probe = policy_factory[0]()
+                if isinstance(_probe, nn.Module):
+                    weight_sync_schemes["policy"] = SharedMemWeightSyncScheme()
+                del _probe
             elif has_distinct_policy_factory:
-                # Distinct factories: set up per-worker weight sync scheme.
-                # Each worker maintains independent weights that can be updated individually.
-                weight_sync_schemes["policy"] = SharedMemWeightSyncScheme(
-                    per_worker_weights=True
-                )
+                _probe = next(f() for f in policy_factory if f is not None)
+                if isinstance(_probe, nn.Module):
+                    weight_sync_schemes["policy"] = SharedMemWeightSyncScheme(
+                        per_worker_weights=True
+                    )
+                del _probe
 
         self._setup_multi_weight_sync(weight_updater, weight_sync_schemes)
 
@@ -503,7 +506,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             total_frames, total_frames_per_batch, frames_per_batch
         )
         self.reset_at_each_iter = reset_at_each_iter
-        self.postprocs = postproc
+        self.postproc = postproc
         self.max_frames_per_traj = (
             int(max_frames_per_traj) if max_frames_per_traj is not None else 0
         )
@@ -538,6 +541,27 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
 
         # Validate cat_results
         self._validate_cat_results(cat_results)
+
+    @property
+    def postprocs(self):
+        """Deprecated: use :attr:`postproc` instead. Will be removed in v0.14."""
+        warnings.warn(
+            "MultiCollector.postprocs is deprecated, use .postproc instead. "
+            "This will be removed in v0.14.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        return self.postproc
+
+    @postprocs.setter
+    def postprocs(self, value):
+        warnings.warn(
+            "MultiCollector.postprocs is deprecated, use .postproc instead. "
+            "This will be removed in v0.14.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        self.postproc = value
 
     def _setup_workers_and_env_fns(
         self,
@@ -588,21 +612,11 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
 
     def _setup_multi_replay_buffer(
         self,
-        local_init_rb: bool | None,
         replay_buffer: ReplayBuffer | None,
         extend_buffer: bool,
     ) -> None:
         """Set up replay buffer for multi-process collector."""
-        # Handle local_init_rb deprecation
-        if local_init_rb is None:
-            local_init_rb = False
-            if replay_buffer is not None and not local_init_rb:
-                warnings.warn(
-                    "local_init_rb=False is deprecated and will be removed in v0.12. "
-                    "The new storage-level initialization provides better performance.",
-                    FutureWarning,
-                )
-        self.local_init_rb = local_init_rb
+        self.local_init_rb = True
 
         self._check_replay_buffer_init()
 
@@ -917,7 +931,8 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             self.replay_buffer._storage, "initialized", True
         )
         if not is_init:
-            if self.local_init_rb:
+            storage = self.replay_buffer._storage
+            if self.local_init_rb and getattr(storage, "shared_init", False):
                 # New behavior: storage handles all coordination itself
                 # Nothing to do here - the storage will coordinate during first write
                 self.replay_buffer.share()
@@ -1221,13 +1236,14 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "no_cuda_sync": self.no_cuda_sync,
                     "collector_class": self.collector_class,
                     "postproc": (
-                        self.postprocs if self.replay_buffer is not None else None
+                        self.postproc if self.replay_buffer is not None else None
                     ),
                     "weight_sync_schemes": self._weight_sync_schemes,
                     "worker_idx": i,  # Worker index for queue-based weight distribution
                     "init_random_frames": self.init_random_frames,
                     "profile_config": self._profile_config,
                     "trajs_per_batch": self._worker_trajs_per_batch,
+                    "init_fn": self._worker_init_fn,
                 }
                 proc = _ProcessNoWarnCtx(
                     target=_main_async_collector,
