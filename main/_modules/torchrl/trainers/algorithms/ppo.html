@@ -270,19 +270,6 @@
     <span class="n">UpdateWeights</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="k">try</span><span class="p">:</span>
-    <span class="k">pass</span>
-
-    <span class="n">_has_tqdm</span> <span class="o">=</span> <span class="kc">True</span>
-<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="n">_has_tqdm</span> <span class="o">=</span> <span class="kc">False</span>
-
-<span class="k">try</span><span class="p">:</span>
-    <span class="k">pass</span>
-
-    <span class="n">_has_ts</span> <span class="o">=</span> <span class="kc">True</span>
-<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="n">_has_ts</span> <span class="o">=</span> <span class="kc">False</span>
 
 
 <div class="viewcode-block" id="PPOTrainer">
@@ -383,8 +370,8 @@
         <span class="n">num_epochs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
         <span class="n">replay_buffer</span><span class="p">:</span> <span class="n">ReplayBuffer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.9</span><span class="p">,</span>
-        <span class="n">lmbda</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.99</span><span class="p">,</span>
+        <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.99</span><span class="p">,</span>
+        <span class="n">lmbda</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.95</span><span class="p">,</span>
         <span class="n">enable_logging</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">log_rewards</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">log_actions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
