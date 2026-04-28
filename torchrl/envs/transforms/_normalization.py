@@ -14,36 +14,17 @@ from collections.abc import Sequence
 from copy import copy
 from typing import Any, TYPE_CHECKING
 
-
 import torch
 
-from tensordict import (
-    TensorDict,
-    TensorDictBase,
-)
-from tensordict.utils import (
-    _zip_strict,
-    NestedKey,
-)
+from tensordict import TensorDict, TensorDictBase
+from tensordict.utils import _zip_strict, NestedKey
 from torch import nn
 
-from torchrl._utils import (
-    _append_last,
-)
+from torchrl._utils import _append_last
 
-from torchrl.data.tensor_specs import (
-    Bounded,
-    ContinuousBox,
-    TensorSpec,
-    Unbounded,
-)
-from torchrl.envs.common import (
-    EnvBase,
-    make_tensordict,
-)
-from torchrl.envs.transforms.utils import (
-    _set_missing_tolerance,
-)
+from torchrl.data.tensor_specs import Bounded, ContinuousBox, TensorSpec, Unbounded
+from torchrl.envs.common import EnvBase, make_tensordict
+from torchrl.envs.transforms.utils import _set_missing_tolerance
 
 if TYPE_CHECKING:
     pass
@@ -54,18 +35,19 @@ else:
     Self = Any
 
 from torchrl.envs.transforms._base import (
+    _apply_to_composite,
+    _apply_to_composite_inv,
     Compose,
     ObservationTransform,
     Transform,
-    _apply_to_composite,
-    _apply_to_composite_inv,
 )
 
 __all__ = [
-    'ObservationNorm',
-    'RewardScaling',
-    'VecNorm',
+    "ObservationNorm",
+    "RewardScaling",
+    "VecNorm",
 ]
+
 
 class ObservationNorm(ObservationTransform):
     """Observation affine transformation layer.
@@ -1037,5 +1019,3 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
     #             observation_spec[_append_last(key, "_ssq")] = reward_spec[key].clone()
     #             observation_spec[_append_last(key, "_count")] = reward_spec[key].clone()
     #     return output_spec
-
-

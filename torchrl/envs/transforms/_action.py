@@ -5,24 +5,17 @@
 
 from __future__ import annotations
 
-
 import functools
 from copy import copy
 from enum import IntEnum
 from textwrap import indent
 from typing import Any, TYPE_CHECKING
 
-
 import torch
 
-from tensordict import (
-    TensorDictBase,
-)
-from tensordict.utils import (
-    NestedKey,
-)
+from tensordict import TensorDictBase
+from tensordict.utils import NestedKey
 from torch import nn
-
 
 from torchrl.data.tensor_specs import (
     Bounded,
@@ -42,17 +35,15 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
-from torchrl.envs.transforms._base import (
-    FORWARD_NOT_IMPLEMENTED,
-    Transform,
-)
+from torchrl.envs.transforms._base import FORWARD_NOT_IMPLEMENTED, Transform
 
 __all__ = [
-    'ActionDiscretizer',
-    'ActionMask',
-    'DiscreteActionProjection',
-    'MultiAction',
+    "ActionDiscretizer",
+    "ActionMask",
+    "DiscreteActionProjection",
+    "MultiAction",
 ]
+
 
 class DiscreteActionProjection(Transform):
     """Projects discrete actions from a high dimensional space to a low dimensional space.
@@ -866,5 +857,3 @@ class MultiAction(Transform):
             )
         )
         return observation_spec
-
-

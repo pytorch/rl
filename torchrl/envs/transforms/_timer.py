@@ -5,26 +5,16 @@
 
 from __future__ import annotations
 
-
 import time
 from collections.abc import Sequence
 from typing import Any, TYPE_CHECKING
 
-
 import torch
 
-from tensordict import (
-    TensorDictBase,
-)
-from tensordict.utils import (
-    NestedKey,
-)
+from tensordict import TensorDictBase
+from tensordict.utils import NestedKey
 
-
-from torchrl.data.tensor_specs import (
-    TensorSpec,
-    Unbounded,
-)
+from torchrl.data.tensor_specs import TensorSpec, Unbounded
 
 if TYPE_CHECKING:
     pass
@@ -34,14 +24,12 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
-from torchrl.envs.transforms._base import (
-    FORWARD_NOT_IMPLEMENTED,
-    Transform,
-)
+from torchrl.envs.transforms._base import FORWARD_NOT_IMPLEMENTED, Transform
 
 __all__ = [
-    'Timer',
+    "Timer",
 ]
+
 
 class Timer(Transform):
     """A transform that measures the time intervals between `inv` and `call` operations in an environment.
@@ -175,5 +163,3 @@ class Timer(Transform):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         raise NotImplementedError(FORWARD_NOT_IMPLEMENTED)
-
-

@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-
 import warnings
 from collections.abc import Callable, Sequence
 from copy import copy
@@ -15,32 +14,17 @@ import numpy as np
 
 import torch
 
-from tensordict import (
-    TensorDict,
-    TensorDictBase,
-    unravel_key,
-)
-from tensordict.utils import (
-    _zip_strict,
-    expand_as_right,
-    NestedKey,
-)
+from tensordict import TensorDict, TensorDictBase, unravel_key
+from tensordict.utils import _zip_strict, expand_as_right, NestedKey
 
-
-from torchrl.data.tensor_specs import (
-    TensorSpec,
-)
-from torchrl.envs.common import (
-    EnvBase,
-)
+from torchrl.data.tensor_specs import TensorSpec
+from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms.utils import (
     _get_reset,
     _set_missing_tolerance,
     check_finite,
 )
-from torchrl.envs.utils import (
-    _terminated_or_truncated,
-)
+from torchrl.envs.utils import _terminated_or_truncated
 
 if TYPE_CHECKING:
     pass
@@ -51,21 +35,22 @@ else:
     Self = Any
 
 from torchrl.envs.transforms._base import (
+    _apply_to_composite,
     FORWARD_NOT_IMPLEMENTED,
     Transform,
     TransformedEnv,
-    _apply_to_composite,
 )
 
 __all__ = [
-    'ConditionalPolicySwitch',
-    'ConditionalSkip',
-    'FiniteTensorDictCheck',
-    'PinMemoryTransform',
-    'RandomCropTensorDict',
-    'TimeMaxPool',
-    'VecGymEnvTransform',
+    "ConditionalPolicySwitch",
+    "ConditionalSkip",
+    "FiniteTensorDictCheck",
+    "PinMemoryTransform",
+    "RandomCropTensorDict",
+    "TimeMaxPool",
+    "VecGymEnvTransform",
 ]
+
 
 class FiniteTensorDictCheck(Transform):
     """This transform will check that all the items of the tensordict are finite, and raise an exception if they are not."""
@@ -984,5 +969,3 @@ class ConditionalPolicySwitch(Transform):
         raise RuntimeError(
             "ConditionalPolicySwitch cannot be called independently, only its step and reset methods are functional."
         )
-
-

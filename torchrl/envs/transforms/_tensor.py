@@ -5,44 +5,23 @@
 
 from __future__ import annotations
 
-
 import hashlib
 from collections.abc import Callable, Sequence
 from copy import copy
 from typing import Any, TYPE_CHECKING
 
-
 import torch
 
-from tensordict import (
-    NonTensorData,
-    NonTensorStack,
-    TensorDictBase,
-)
+from tensordict import NonTensorData, NonTensorStack, TensorDictBase
 from tensordict.nn import dispatch
-from tensordict.utils import (
-    _zip_strict,
-    NestedKey,
-)
+from tensordict.utils import _zip_strict, NestedKey
 from torch import Tensor
 
-from torchrl._utils import (
-    _replace_last,
-)
+from torchrl._utils import _replace_last
 
-from torchrl.data.tensor_specs import (
-    Bounded,
-    Composite,
-    TensorSpec,
-    Unbounded,
-)
-from torchrl.envs.transforms.utils import (
-    _set_missing_tolerance,
-)
-from torchrl.envs.utils import (
-    _sort_keys,
-    make_composite_from_td,
-)
+from torchrl.data.tensor_specs import Bounded, Composite, TensorSpec, Unbounded
+from torchrl.envs.transforms.utils import _set_missing_tolerance
+from torchrl.envs.utils import _sort_keys, make_composite_from_td
 
 if TYPE_CHECKING:
     import transformers
@@ -52,17 +31,16 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
-from torchrl.envs.transforms._base import (
-    Transform,
-)
+from torchrl.envs.transforms._base import Transform
 
 __all__ = [
-    'CatTensors',
-    'Hash',
-    'Stack',
-    'Tokenizer',
-    'UnaryTransform',
+    "CatTensors",
+    "Hash",
+    "Stack",
+    "Tokenizer",
+    "UnaryTransform",
 ]
+
 
 class CatTensors(Transform):
     """Concatenates several keys in a single tensor.
@@ -1219,5 +1197,3 @@ class Stack(Transform):
             f"dim={self.dim}"
             ")"
         )
-
-

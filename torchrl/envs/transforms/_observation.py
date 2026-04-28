@@ -5,37 +5,19 @@
 
 from __future__ import annotations
 
-
 import warnings
 from collections.abc import Sequence
 from copy import copy
 from typing import Any, TYPE_CHECKING
 
-
 import torch
 
-from tensordict import (
-    set_lazy_legacy,
-    TensorDictBase,
-    unravel_key,
-)
-from tensordict.utils import (
-    _zip_strict,
-    expand_as_right,
-    expand_right,
-    NestedKey,
-)
+from tensordict import set_lazy_legacy, TensorDictBase, unravel_key
+from tensordict.utils import _zip_strict, expand_as_right, expand_right, NestedKey
 
-
-from torchrl.data.tensor_specs import (
-    ContinuousBox,
-    TensorSpec,
-)
+from torchrl.data.tensor_specs import ContinuousBox, TensorSpec
 from torchrl.envs.transforms import functional as F
-from torchrl.envs.transforms.utils import (
-    _get_reset,
-    _set_missing_tolerance,
-)
+from torchrl.envs.transforms.utils import _get_reset, _set_missing_tolerance
 
 if TYPE_CHECKING:
     pass
@@ -46,30 +28,29 @@ else:
     Self = Any
 
 from torchrl.envs.transforms._base import (
+    _apply_to_composite,
+    _apply_to_composite_inv,
+    _has_tv,
     Compose,
     IMAGE_KEYS,
     ObservationTransform,
     Transform,
-    _apply_to_composite,
-    _apply_to_composite_inv,
-    _has_tv,
 )
-from torchrl.envs.transforms._keys import (
-    ExcludeTransform,
-)
+from torchrl.envs.transforms._keys import ExcludeTransform
 
 __all__ = [
-    'CatFrames',
-    'CenterCrop',
-    'Crop',
-    'FlattenObservation',
-    'GrayScale',
-    'PermuteTransform',
-    'Resize',
-    'SqueezeTransform',
-    'ToTensorImage',
-    'UnsqueezeTransform',
+    "CatFrames",
+    "CenterCrop",
+    "Crop",
+    "FlattenObservation",
+    "GrayScale",
+    "PermuteTransform",
+    "Resize",
+    "SqueezeTransform",
+    "ToTensorImage",
+    "UnsqueezeTransform",
 ]
+
 
 class ToTensorImage(ObservationTransform):
     """Transforms a numpy-like image (W x H x C) to a pytorch image (C x W x H).
@@ -1438,5 +1419,3 @@ class CatFrames(ObservationTransform):
             f"{self.__class__.__name__}(N={self.N}, dim"
             f"={self.dim}, keys={self.in_keys})"
         )
-
-

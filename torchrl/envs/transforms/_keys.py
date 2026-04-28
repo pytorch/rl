@@ -5,11 +5,8 @@
 
 from __future__ import annotations
 
-
 from copy import copy
 from typing import Any, TYPE_CHECKING
-
-
 
 from tensordict import (
     is_tensor_collection,
@@ -18,19 +15,10 @@ from tensordict import (
     unravel_key,
     unravel_key_list,
 )
-from tensordict.utils import (
-    _zip_strict,
-    NestedKey,
-)
+from tensordict.utils import _zip_strict, NestedKey
 
-
-from torchrl.data.tensor_specs import (
-    Composite,
-    TensorSpec,
-)
-from torchrl.envs.transforms.utils import (
-    _set_missing_tolerance,
-)
+from torchrl.data.tensor_specs import Composite, TensorSpec
+from torchrl.envs.transforms.utils import _set_missing_tolerance
 
 if TYPE_CHECKING:
     pass
@@ -40,17 +28,16 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
-from torchrl.envs.transforms._base import (
-    Transform,
-)
+from torchrl.envs.transforms._base import Transform
 
 __all__ = [
-    'ExcludeTransform',
-    'FlattenTensorDict',
-    'RemoveEmptySpecs',
-    'RenameTransform',
-    'SelectTransform',
+    "ExcludeTransform",
+    "FlattenTensorDict",
+    "RemoveEmptySpecs",
+    "RenameTransform",
+    "SelectTransform",
 ]
+
 
 class ExcludeTransform(Transform):
     """Excludes keys from the data.
@@ -806,5 +793,3 @@ class FlattenTensorDict(Transform):
     def transform_done_spec(self, done_spec: TensorSpec) -> TensorSpec:
         """Transform done spec - not supported for environments."""
         raise RuntimeError(self._ENV_ERROR_MSG)
-
-

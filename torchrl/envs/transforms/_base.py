@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-
 import importlib.util
 import warnings
 import weakref
@@ -16,43 +15,21 @@ from functools import wraps
 from textwrap import indent
 from typing import Any, overload, TYPE_CHECKING, TypeVar, Union
 
-
 import torch
 
-from tensordict import (
-    TensorDict,
-    TensorDictBase,
-    unravel_key,
-)
+from tensordict import TensorDict, TensorDictBase, unravel_key
 from tensordict.base import _is_leaf_nontensor
 from tensordict.nn import dispatch
-from tensordict.utils import (
-    _zip_strict,
-    NestedKey,
-)
+from tensordict.utils import _zip_strict, NestedKey
 from torch import nn
 from torch.utils._pytree import tree_map
 
-from torchrl._utils import (
-    auto_unwrap_transformed_env,
-    logger as torchrl_logger,
-)
+from torchrl._utils import auto_unwrap_transformed_env, logger as torchrl_logger
 
-from torchrl.data.tensor_specs import (
-    Composite,
-    TensorSpec,
-)
-from torchrl.envs.common import (
-    _EnvPostInit,
-    _maybe_unlock,
-    EnvBase,
-)
-from torchrl.envs.transforms.utils import (
-    _set_missing_tolerance,
-)
-from torchrl.envs.utils import (
-    _update_during_reset,
-)
+from torchrl.data.tensor_specs import Composite, TensorSpec
+from torchrl.envs.common import _EnvPostInit, _maybe_unlock, EnvBase
+from torchrl.envs.transforms.utils import _set_missing_tolerance
+from torchrl.envs.utils import _update_during_reset
 
 if TYPE_CHECKING:
     pass
@@ -73,13 +50,12 @@ else:
     Self = Any
 
 __all__ = [
-    'AutoResetEnv',
-    'Compose',
-    'ObservationTransform',
-    'Transform',
-    'TransformedEnv',
+    "AutoResetEnv",
+    "Compose",
+    "ObservationTransform",
+    "Transform",
+    "TransformedEnv",
 ]
-
 
 
 def _apply_to_composite(function):
@@ -1901,5 +1877,3 @@ class AutoResetEnv(TransformedEnv):
 
     def insert_transform(self, index: int, transform: Transform) -> None:
         raise RuntimeError(f"Cannot insert a transform in {self.__class_.__name__}.")
-
-

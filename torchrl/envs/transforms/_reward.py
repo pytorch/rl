@@ -5,19 +5,13 @@
 
 from __future__ import annotations
 
-
 from collections.abc import Sequence
 from copy import copy
 from typing import Any, TYPE_CHECKING
 
-
 import torch
 
-from tensordict import (
-    TensorDict,
-    TensorDictBase,
-    unravel_key,
-)
+from tensordict import TensorDict, TensorDictBase, unravel_key
 from tensordict.utils import (
     _unravel_key_to_tuple,
     _zip_strict,
@@ -26,9 +20,7 @@ from tensordict.utils import (
 )
 from torch import Tensor
 
-from torchrl._utils import (
-    _replace_last,
-)
+from torchrl._utils import _replace_last
 
 from torchrl.data.tensor_specs import (
     Binary,
@@ -39,13 +31,8 @@ from torchrl.data.tensor_specs import (
     Unbounded,
     UnboundedContinuous,
 )
-from torchrl.envs.common import (
-    EnvBase,
-)
-from torchrl.envs.transforms.utils import (
-    _get_reset,
-    _set_missing_tolerance,
-)
+from torchrl.envs.common import EnvBase
+from torchrl.envs.transforms.utils import _get_reset, _set_missing_tolerance
 
 if TYPE_CHECKING:
     pass
@@ -56,20 +43,21 @@ else:
     Self = Any
 
 from torchrl.envs.transforms._base import (
+    _apply_to_composite,
     FORWARD_NOT_IMPLEMENTED,
     Transform,
-    _apply_to_composite,
 )
 
 __all__ = [
-    'BinarizeReward',
-    'LineariseRewards',
-    'Reward2GoTransform',
-    'RewardClipping',
-    'RewardSum',
-    'SignTransform',
-    'TargetReturn',
+    "BinarizeReward",
+    "LineariseRewards",
+    "Reward2GoTransform",
+    "RewardClipping",
+    "RewardSum",
+    "SignTransform",
+    "TargetReturn",
 ]
+
 
 class TargetReturn(Transform):
     """Sets a target return for the agent to achieve in the environment.
@@ -993,5 +981,3 @@ class LineariseRewards(Transform):
             )
 
         return (self.weights * reward).sum(dim=-1, keepdim=True)
-
-

@@ -5,42 +5,23 @@
 
 from __future__ import annotations
 
-
 import functools
 from collections.abc import Sequence
 from copy import copy
 from textwrap import indent
 from typing import Any, TYPE_CHECKING
 
-
 import torch
 
-from tensordict import (
-    TensorDictBase,
-    unravel_key,
-)
+from tensordict import TensorDictBase, unravel_key
 from tensordict.nn import dispatch
-from tensordict.utils import (
-    _zip_strict,
-    NestedKey,
-)
+from tensordict.utils import _zip_strict, NestedKey
 
-from torchrl._utils import (
-    _make_ordinal_device,
-)
+from torchrl._utils import _make_ordinal_device
 
-from torchrl.data.tensor_specs import (
-    Composite,
-    ContinuousBox,
-    TensorSpec,
-)
-from torchrl.envs.common import (
-    _do_nothing,
-    EnvBase,
-)
-from torchrl.envs.transforms.utils import (
-    _set_missing_tolerance,
-)
+from torchrl.data.tensor_specs import Composite, ContinuousBox, TensorSpec
+from torchrl.envs.common import _do_nothing, EnvBase
+from torchrl.envs.transforms.utils import _set_missing_tolerance
 
 if TYPE_CHECKING:
     pass
@@ -50,15 +31,14 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
-from torchrl.envs.transforms._base import (
-    Transform,
-)
+from torchrl.envs.transforms._base import Transform
 
 __all__ = [
-    'DTypeCastTransform',
-    'DeviceCastTransform',
-    'DoubleToFloat',
+    "DTypeCastTransform",
+    "DeviceCastTransform",
+    "DoubleToFloat",
 ]
+
 
 class DTypeCastTransform(Transform):
     """Casts one dtype to another for selected keys.
@@ -802,5 +782,3 @@ class DeviceCastTransform(Transform):
         in_keys_inv = indent(4 * " ", f"in_keys_inv={self.in_keys_inv}")
         out_keys_inv = indent(4 * " ", f"out_keys_inv={self.out_keys_inv}")
         return f"{self.__class__.__name__}(\n{device},\n{orig_device},\n{in_keys},\n{out_keys},\n{in_keys_inv},\n{out_keys_inv})"
-
-
