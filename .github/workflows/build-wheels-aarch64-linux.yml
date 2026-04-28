@@ -61,7 +61,7 @@ jobs:
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
       # aarch64 only supports CPU builds
       with-cuda: disable
-      with-cpu: ${{ github.event_name == 'workflow_dispatch' && (inputs.build-cpu && 'enable' || 'disable') || inputs.with-cpu || 'enable' }}
+      with-cpu: ${{ inputs.with-cpu || (github.event_name == 'workflow_dispatch' && (inputs.build-cpu && 'enable' || 'disable')) || 'enable' }}
       channel: ${{ inputs.channel || '' }}
       use-only-dl-pytorch-org: ${{ inputs.channel == 'release' && 'true' || 'false' }}
   build:

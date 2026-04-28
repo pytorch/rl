@@ -13,10 +13,7 @@ from typing import Literal
 import torch
 from tensordict import lazy_stack, TensorDictBase
 
-from torchrl._utils import (
-    _maybe_record_function_decorator,
-    logger as torchrl_logger,
-)
+from torchrl._utils import _maybe_record_function_decorator, logger as torchrl_logger
 from torchrl.collectors._base import BaseCollector
 from torchrl.envs import AsyncEnvPool, EnvBase
 from torchrl.modules.inference_server import InferenceServer, ThreadingTransport

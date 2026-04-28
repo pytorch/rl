@@ -18,7 +18,7 @@
 #
 # Wheel Variants (selectable via checkboxes):
 # - build_cpu (default: true): Recommended for torchrl - pure Python library
-# - build_cuda (default: false): CUDA builds (Linux, Windows)
+# - build_cuda (default: true): CUDA builds (Linux only in the initial rollout)
 # - build_rocm (default: false): ROCm builds (Linux only)
 #
 # NOTE: This workflow is NOT automatically triggered on tag push to avoid
@@ -63,10 +63,10 @@ on:
         type: boolean
         default: true
       build_cuda:
-        description: 'Build CUDA wheels'
+        description: 'Build Linux CUDA wheels'
         required: false
         type: boolean
-        default: false
+        default: true
       build_rocm:
         description: 'Build ROCm wheels (Linux only)'
         required: false
@@ -281,7 +281,7 @@ jobs:
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
       with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
-      with-cuda: ${{ inputs.build_cuda && 'enable' || 'disable' }}
+      with-cuda: disable
     secrets: inherit
 
   build-macos:

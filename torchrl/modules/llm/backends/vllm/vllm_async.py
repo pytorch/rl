@@ -24,7 +24,7 @@ from typing import Any, Literal, TYPE_CHECKING
 
 import torch
 
-from torchrl._utils import logger as torchrl_logger
+from torchrl._utils import implement_for, logger as torchrl_logger
 
 # Import RLvLLMEngine and shared utilities
 from .base import RLvLLMEngine
@@ -46,6 +46,22 @@ try:
 except ImportError:
     vllm = None
     _has_vllm = False
+
+
+if _has_vllm:
+
+    @implement_for("vllm", None, "0.18.0")
+    def _compilation_config(level: int) -> dict:
+        return {"level": level}
+
+    @implement_for("vllm", "0.18.0")
+    def _compilation_config(level: int) -> dict:  # noqa: F811
+        return {"mode": level}
+
+else:
+
+    def _compilation_config(level: int) -> dict:
+        return {"mode": level}
 
 
 def _get_ray():
@@ -1980,9 +1996,9 @@ def make_async_vllm_engine(
     # Disabled by default in GRPO since it can cause issues during training
     if "compilation_config" not in kwargs:
         if compile:
-            kwargs["compilation_config"] = {"level": 3}  # PIECEWISE compilation
+            kwargs["compilation_config"] = _compilation_config(3)
         else:
-            kwargs["compilation_config"] = {"level": 0}  # NO_COMPILATION
+            kwargs["compilation_config"] = _compilation_config(0)
 
     engine_args = AsyncEngineArgs(
         model=model_name,

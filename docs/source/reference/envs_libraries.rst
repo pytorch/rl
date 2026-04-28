@@ -84,6 +84,8 @@ Available wrappers
     BraxWrapper
     DMControlEnv
     DMControlWrapper
+    GenesisEnv
+    GenesisWrapper
     GymEnv
     GymWrapper
     HabitatEnv

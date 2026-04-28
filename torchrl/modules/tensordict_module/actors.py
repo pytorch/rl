@@ -16,6 +16,7 @@ from tensordict.nn import (
     TensorDictModuleWrapper,
     TensorDictSequential,
 )
+from tensordict.nn.distributions import Delta
 from tensordict.nn.probabilistic import interaction_type, InteractionType
 from tensordict.utils import expand_as_right, NestedKey
 from torch import nn
@@ -123,12 +124,31 @@ class Actor(SafeModule):
             **kwargs,
         )
 
+    def get_dist(self, tensordict: TensorDictBase) -> torch.distributions.Distribution:
+        """Returns a Delta distribution centered at the deterministic action.
+
+        For deterministic actors, this returns a Delta distribution which has
+        log-probability 0 for the exact action and -inf for any other action.
+
+        Args:
+            tensordict (TensorDictBase): input tensordict containing observations.
+
+        Returns:
+            torch.distributions.Distribution: A Delta distribution.
+        """
+        # Forward pass to get the action
+        td_out = self(tensordict)
+        action = td_out.get(self.out_keys[0])
+
+        return Delta(action)
+
 
 class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
     """General class for probabilistic actors in RL.
 
-    The Actor class comes with default values for the out_keys (["action"])
-    and if the spec is provided but not as a Composite object, it will be
+    The ProbabilisticActor class comes with default values for the out_keys (["action"])
+    and if the spec is provided but not as a
+    Composite object, it will be
     automatically translated into :obj:`spec = Composite(action=spec)`
 
     Args:
