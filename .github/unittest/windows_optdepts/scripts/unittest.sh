@@ -98,13 +98,14 @@ fi
 
 #python -m pip install pip --upgrade
 
+# install build dependencies (needed for torchrl C++ extensions)
+echo "=== Installing build dependencies ==="
+conda install anaconda::cmake -y
+python -m pip install "pybind11[global]"
+
 # install tensordict
 echo "=== Installing tensordict ==="
 if [[ "$RELEASE" == 0 ]]; then
-  conda install anaconda::cmake -y
-
-  python -m pip install "pybind11[global]"
-
   python -m pip install git+https://github.com/pytorch/tensordict
 else
   pip3 install tensordict
