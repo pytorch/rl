@@ -12,7 +12,7 @@ loop the optimization steps.
 Key Features
 ------------
 
-- **Modular hook system**: Customize training at 10 different points in the loop
+- **Modular hook system**: Customize training at 18 different points in the loop
 - **Checkpointing support**: Save and restore training state with ``torch``, ``torchsnapshot``, or ``memmap`` (set via the ``CKPT_BACKEND`` environment variable)
 - **Algorithm trainers**: High-level trainers for PPO, SAC, DQN, DDPG, IQL, CQL with Hydra configuration
 - **Builder helpers**: Utilities for constructing collectors, losses, and replay buffers

@@ -88,6 +88,19 @@ class MockingCollector:
         pass
 
 
+class MockingIterableCollector(MockingCollector):
+    def __init__(self, batches):
+        self._batches = batches
+        self.init_random_frames = 10**9
+        self.shutdown_calls = 0
+
+    def __iter__(self):
+        return iter(self._batches)
+
+    def shutdown(self):
+        self.shutdown_calls += 1
+
+
 class MockingLossModule(nn.Module):
     pass
 
@@ -1345,6 +1358,50 @@ class TestProcessLossHook:
         trainer.register_op("process_loss", WeightedLoss())
         td_out = trainer._process_loss_hook(td_sub_batch, td_loss.clone())
         assert torch.allclose(td_out["loss_a"], torch.tensor(0.5))
+
+
+class TestSetupShutdownHooks:
+    @staticmethod
+    def _make_trainer(collector):
+        trainer = Trainer(
+            collector=collector,
+            total_frames=2,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=MockingLossModule(),
+            optimizer=None,
+            progress_bar=False,
+        )
+        trainer._pbar_str = OrderedDict()
+        return trainer
+
+    def test_setup_and_shutdown_hooks_order(self):
+        batches = [
+            TensorDict({"x": torch.zeros(1)}, [1]),
+            TensorDict({"x": torch.ones(1)}, [1]),
+        ]
+        collector = MockingIterableCollector(batches)
+        trainer = self._make_trainer(collector)
+
+        call_order = []
+
+        def setup_hook():
+            call_order.append("setup")
+
+        def pre_steps_hook(_batch):
+            call_order.append("pre_steps")
+
+        def shutdown_hook():
+            call_order.append("shutdown")
+
+        trainer.register_op("setup", setup_hook)
+        trainer.register_op("pre_steps_log", pre_steps_hook)
+        trainer.register_op("shutdown", shutdown_hook)
+
+        trainer.train()
+
+        assert call_order == ["setup", "pre_steps", "pre_steps", "shutdown"]
+        assert collector.shutdown_calls == 1
 
 
 if __name__ == "__main__":
