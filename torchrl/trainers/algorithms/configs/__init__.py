@@ -74,6 +74,16 @@ from torchrl.trainers.algorithms.configs.envs_libs import (
     UnityMLAgentsEnvConfig,
     VmasEnvConfig,
 )
+from torchrl.trainers.algorithms.configs.hooks import (
+    BatchSubSamplerConfig,
+    ClearCudaCacheConfig,
+    CountFramesLogConfig,
+    HookConfig,
+    LogScalarConfig,
+    LogTimingConfig,
+    RewardNormalizerConfig,
+    SelectKeysConfig,
+)
 from torchrl.trainers.algorithms.configs.logging import (
     CSVLoggerConfig,
     LoggerConfig,
@@ -389,6 +399,15 @@ __all__ = [
     "SACTrainerConfig",
     "TD3TrainerConfig",
     "TrainerConfig",
+    # Hooks
+    "HookConfig",
+    "BatchSubSamplerConfig",
+    "ClearCudaCacheConfig",
+    "CountFramesLogConfig",
+    "LogScalarConfig",
+    "LogTimingConfig",
+    "RewardNormalizerConfig",
+    "SelectKeysConfig",
     # Loggers
     "CSVLoggerConfig",
     "LoggerConfig",
@@ -648,6 +667,18 @@ def _register_configs():
     cs.store(group="trainer", name="ppo", node=PPOTrainerConfig)
     cs.store(group="trainer", name="sac", node=SACTrainerConfig)
     cs.store(group="trainer", name="td3", node=TD3TrainerConfig)
+
+    # =============================================================================
+    # Hook Configurations
+    # =============================================================================
+
+    cs.store(group="hook", name="batch_subsampler", node=BatchSubSamplerConfig)
+    cs.store(group="hook", name="clear_cuda_cache", node=ClearCudaCacheConfig)
+    cs.store(group="hook", name="count_frames_log", node=CountFramesLogConfig)
+    cs.store(group="hook", name="log_scalar", node=LogScalarConfig)
+    cs.store(group="hook", name="log_timing", node=LogTimingConfig)
+    cs.store(group="hook", name="reward_normalizer", node=RewardNormalizerConfig)
+    cs.store(group="hook", name="select_keys", node=SelectKeysConfig)
 
     # =============================================================================
     # Optimizer Configurations
