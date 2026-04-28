@@ -271,17 +271,19 @@ class TestACTLoss:
         params_before = [p.clone() for p in loss_fn.parameters()]
         loss_fn.reset_parameters_recursive()
         params_after = list(loss_fn.parameters())
-        assert any(
-            not torch.equal(a, b) for a, b in zip(params_before, params_after)
-        )
+        assert any(not torch.equal(a, b) for a, b in zip(params_before, params_after))
 
     @pytest.mark.parametrize(
         "obs_dim,action_dim,chunk_size",
         [(1, 1, 1), (3, 2, 1), (8, 4, 5), (32, 6, 20)],
     )
     def test_edge_case_dims(self, obs_dim, action_dim, chunk_size):
-        actor = _make_actor(obs_dim=obs_dim, action_dim=action_dim, chunk_size=chunk_size)
+        actor = _make_actor(
+            obs_dim=obs_dim, action_dim=action_dim, chunk_size=chunk_size
+        )
         loss_fn = ACTLoss(actor)
-        td = _make_batch(batch_size=2, obs_dim=obs_dim, action_dim=action_dim, chunk_size=chunk_size)
+        td = _make_batch(
+            batch_size=2, obs_dim=obs_dim, action_dim=action_dim, chunk_size=chunk_size
+        )
         loss_td = loss_fn(td)
         assert loss_td["loss_act"].isfinite()
