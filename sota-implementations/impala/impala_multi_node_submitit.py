@@ -24,7 +24,7 @@ def main(cfg: DictConfig):  # noqa: F821
     import tqdm
 
     from tensordict import TensorDict
-    from torchrl.collectors import SyncDataCollector
+    from torchrl.collectors import Collector
     from torchrl.collectors.distributed import DistributedDataCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -87,7 +87,7 @@ def main(cfg: DictConfig):  # noqa: F821
         num_workers_per_collector=1,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
-        collector_class=SyncDataCollector,
+        collector_class=Collector,
         collector_kwargs=collector_kwargs,
         slurm_kwargs=slurm_kwargs,
         storing_device="cuda:0" if cfg.collector.backend == "nccl" else "cpu",

@@ -14,7 +14,7 @@ import pytest
 import torch
 
 from tensordict import LazyStackedTensorDict, TensorDict
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.modules import RandomPolicy
 from torchrl.testing import FastImageEnv
@@ -201,7 +201,7 @@ class TestCollectorIntegrationBenchmark:
         env = FastImageEnv(img_shape=img_shape)
         rb = ReplayBuffer(storage=LazyTensorStorage(frames_per_batch * 20))
 
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             RandomPolicy(env.action_spec),
             frames_per_batch=frames_per_batch,
@@ -230,7 +230,7 @@ class TestCollectorIntegrationBenchmark:
         env = FastImageEnv(img_shape=img_shape)
         rb = ReplayBuffer(storage=LazyTensorStorage(frames_per_batch * 20))
 
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             RandomPolicy(env.action_spec),
             frames_per_batch=frames_per_batch,
@@ -262,7 +262,7 @@ class TestCollectorIntegrationBenchmark:
             storage=LazyTensorStorage(frames_per_batch * 20, device=device)
         )
 
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             RandomPolicy(env.action_spec),
             frames_per_batch=frames_per_batch,
@@ -296,7 +296,7 @@ class TestCollectorIntegrationBenchmark:
             storage=LazyTensorStorage(frames_per_batch * 20, device=device)
         )
 
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             RandomPolicy(env.action_spec),
             frames_per_batch=frames_per_batch,

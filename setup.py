@@ -124,7 +124,7 @@ def get_extensions():
         extra_compile_args = {
             "cxx": [
                 "/O2",  # Optimization level 2 (equivalent to -O3)
-                "/std:c++17",  # C++17 standard
+                "/std:c++20",  # C++20 standard
                 "/EHsc",  # Exception handling model
             ]
         }
@@ -135,7 +135,7 @@ def get_extensions():
                 "cxx": [
                     "/Od",  # No optimization (equivalent to -O0)
                     "/Zi",  # Generate debug info
-                    "/std:c++17",  # C++17 standard
+                    "/std:c++20",  # C++20 standard
                     "/EHsc",  # Exception handling model
                 ]
             }

@@ -22,7 +22,7 @@ Collectors Deep Dive: Trajectory Assembly
 
       * `TorchRL <https://github.com/pytorch/rl>`_ and
         `gymnasium <https://gymnasium.farama.org>`_ installed
-      * Familiarity with :class:`~torchrl.collectors.SyncDataCollector`
+      * Familiarity with :class:`~torchrl.collectors.Collector`
         (see :ref:`the data-collection tutorial <gs_storage_collector>`)
 """
 
@@ -33,7 +33,7 @@ warnings.filterwarnings("ignore")
 # sphinx_gallery_end_ignore
 
 import torch
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.envs import GymEnv
@@ -58,7 +58,7 @@ env = GymEnv("CartPole-v1")
 env.set_seed(0)
 
 policy = RandomPolicy(env.action_spec)
-collector = SyncDataCollector(env, policy, frames_per_batch=200, total_frames=-1)
+collector = Collector(env, policy, frames_per_batch=200, total_frames=-1)
 
 for data in collector:
     print(data)
@@ -162,7 +162,7 @@ print(f"Nested result: {type(nested).__name__}, batch_size={nested.batch_size}")
 # and yield only once it has accumulated the requested number of
 # finished episodes.
 
-collector_trajs = SyncDataCollector(
+collector_trajs = Collector(
     env,
     policy,
     frames_per_batch=200,
@@ -239,7 +239,7 @@ print(f"Unique trajectories in sample: {traj_ids.unique().numel()}")
 #
 # .. code-block:: python
 #
-#     collector = SyncDataCollector(env, policy, frames_per_batch=200, ...)
+#     collector = Collector(env, policy, frames_per_batch=200, ...)
 #     rb = ReplayBuffer(
 #         storage=LazyTensorStorage(max_size=100_000),
 #         sampler=SliceSampler(slice_len=16, end_key=("next", "done")),
