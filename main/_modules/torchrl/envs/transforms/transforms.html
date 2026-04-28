@@ -13077,6 +13077,150 @@
     <span class="k">def</span> <span class="nf">transform_done_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">done_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Transform done spec - not supported for environments.&quot;&quot;&quot;</span>
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ENV_ERROR_MSG</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="ExpandAs">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ExpandAs.html#torchrl.envs.transforms.ExpandAs">[docs]</a>
+<span class="k">class</span> <span class="nc">ExpandAs</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Expands one entry to the right to match a reference entry shape.</span>
+
+<span class="sd">    This is a transform wrapper around :func:`tensordict.utils.expand_as_right`.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        in_key (NestedKey): key to expand.</span>
+<span class="sd">        ref_key (NestedKey): key used as shape reference.</span>
+<span class="sd">        out_key (NestedKey, optional): output key where the expanded tensor is</span>
+<span class="sd">            written. Defaults to ``in_key``.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        Expanding an environment-level ``done`` signal to the per-agent reward</span>
+<span class="sd">        shape in a VMAS environment:</span>
+
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import TransformedEnv</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs.libs.vmas import VmasEnv</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs.transforms import ExpandAs</span>
+<span class="sd">        &gt;&gt;&gt; base_env = VmasEnv(</span>
+<span class="sd">        ...     scenario=&quot;navigation&quot;,</span>
+<span class="sd">        ...     num_envs=16,</span>
+<span class="sd">        ...     continuous_actions=True,</span>
+<span class="sd">        ...     n_agents=3,</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; env = TransformedEnv(</span>
+<span class="sd">        ...     base_env,</span>
+<span class="sd">        ...     ExpandAs(</span>
+<span class="sd">        ...         in_key=&quot;done&quot;,</span>
+<span class="sd">        ...         ref_key=(&quot;agents&quot;, &quot;reward&quot;),</span>
+<span class="sd">        ...     ),</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; td = env.reset()</span>
+<span class="sd">        &gt;&gt;&gt; td = env.rand_step(td)</span>
+<span class="sd">        &gt;&gt;&gt; td[&quot;next&quot;, &quot;done&quot;].shape == td[&quot;next&quot;, &quot;agents&quot;, &quot;reward&quot;].shape</span>
+<span class="sd">        True</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">in_key</span><span class="p">:</span> <span class="n">NestedKey</span><span class="p">,</span>
+        <span class="n">ref_key</span><span class="p">:</span> <span class="n">NestedKey</span><span class="p">,</span>
+        <span class="n">out_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">out_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">out_key</span> <span class="o">=</span> <span class="n">in_key</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="n">in_key</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="n">out_key</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">in_key</span> <span class="o">=</span> <span class="n">unravel_key</span><span class="p">(</span><span class="n">in_key</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ref_key</span> <span class="o">=</span> <span class="n">unravel_key</span><span class="p">(</span><span class="n">ref_key</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_key</span> <span class="o">=</span> <span class="n">unravel_key</span><span class="p">(</span><span class="n">out_key</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_find_key_spec</span><span class="p">(</span>
+        <span class="n">output_spec</span><span class="p">:</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">NestedKey</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorSpec</span><span class="p">]:</span>
+        <span class="k">for</span> <span class="n">spec_name</span> <span class="ow">in</span> <span class="p">(</span>
+            <span class="s2">&quot;full_observation_spec&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;full_reward_spec&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;full_done_spec&quot;</span><span class="p">,</span>
+        <span class="p">):</span>
+            <span class="k">if</span> <span class="n">spec_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">output_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                <span class="k">continue</span>
+            <span class="n">spec</span> <span class="o">=</span> <span class="n">output_spec</span><span class="p">[</span><span class="n">spec_name</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">spec_name</span><span class="p">,</span> <span class="n">spec</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Key </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2"> was not found in output specs.&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">ref</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ref_key</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">ref</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">missing_tolerance</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">next_tensordict</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="si">}</span><span class="s2">: &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ref_key</span><span class="si">}</span><span class="s2">&#39; not found in tensordict </span><span class="si">{</span><span class="n">next_tensordict</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_key</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">missing_tolerance</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">next_tensordict</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="si">}</span><span class="s2">: &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">in_key</span><span class="si">}</span><span class="s2">&#39; not found in tensordict </span><span class="si">{</span><span class="n">next_tensordict</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_key</span><span class="p">,</span> <span class="n">expand_as_right</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">ref</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">next_tensordict</span>
+
+<div class="viewcode-block" id="ExpandAs.forward">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ExpandAs.html#torchrl.envs.transforms.ExpandAs.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">with</span> <span class="n">_set_missing_tolerance</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="n">tensordict_reset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call</span><span class="p">(</span><span class="n">tensordict_reset</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_key</span> <span class="ow">in</span> <span class="n">tensordict_reset</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">tensordict_reset</span>
+
+        <span class="n">value</span> <span class="o">=</span> <span class="n">tensordict_reset</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_key</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">tensordict_reset</span>
+
+        <span class="n">ref</span> <span class="o">=</span> <span class="n">tensordict_reset</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ref_key</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">ref</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">_</span><span class="p">,</span> <span class="n">ref_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_find_key_spec</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">output_spec</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_key</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                <span class="n">ref_spec</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">ref_spec</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">ref</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span>
+                    <span class="n">ref_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">value</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">value</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">ref</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">tensordict_reset</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">tensordict_reset</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_key</span><span class="p">,</span> <span class="n">expand_as_right</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">ref</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">tensordict_reset</span>
+
+<div class="viewcode-block" id="ExpandAs.transform_output_spec">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ExpandAs.html#torchrl.envs.transforms.ExpandAs.transform_output_spec">[docs]</a>
+    <span class="k">def</span> <span class="nf">transform_output_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output_spec</span><span class="p">:</span> <span class="n">Composite</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
+        <span class="n">output_spec</span> <span class="o">=</span> <span class="n">output_spec</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">ref_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_find_key_spec</span><span class="p">(</span><span class="n">output_spec</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_key</span><span class="p">)</span>
+        <span class="n">in_spec_name</span><span class="p">,</span> <span class="n">in_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_find_key_spec</span><span class="p">(</span><span class="n">output_spec</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_key</span><span class="p">)</span>
+        <span class="n">target_spec_name</span> <span class="o">=</span> <span class="n">in_spec_name</span>
+        <span class="k">if</span> <span class="n">in_spec_name</span> <span class="o">==</span> <span class="s2">&quot;full_done_spec&quot;</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_key</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_key</span><span class="p">:</span>
+            <span class="n">target_spec_name</span> <span class="o">=</span> <span class="s2">&quot;full_observation_spec&quot;</span>
+
+        <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">in_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">ref_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">):</span>
+            <span class="n">in_spec</span> <span class="o">=</span> <span class="n">in_spec</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">spec</span> <span class="o">=</span> <span class="n">output_spec</span><span class="p">[</span><span class="n">target_spec_name</span><span class="p">]</span>
+        <span class="n">spec</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">out_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">in_spec</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">ref_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        <span class="n">output_spec</span><span class="p">[</span><span class="n">target_spec_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">spec</span>
+        <span class="k">return</span> <span class="n">output_spec</span></div>
+</div>
+
 </pre></div>
 
              </article>

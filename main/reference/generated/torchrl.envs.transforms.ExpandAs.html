@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>ExcludeTransform &mdash; torchrl main documentation</title>
+  <title>ExpandAs &mdash; torchrl main documentation</title>
   
 
   
@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="ExpandAs" href="torchrl.envs.transforms.ExpandAs.html" />
-    <link rel="prev" title="EndOfLifeTransform" href="torchrl.envs.transforms.EndOfLifeTransform.html" /> 
+    <link rel="next" title="FiniteTensorDictCheck" href="torchrl.envs.transforms.FiniteTensorDictCheck.html" />
+    <link rel="prev" title="ExcludeTransform" href="torchrl.envs.transforms.ExcludeTransform.html" /> 
 
   
   <script src="../../_static/js/modernizr.min.js"></script>
@@ -218,13 +218,13 @@
         
           <li><a href="../envs_transforms.html">Transforms</a> &gt;</li>
         
-      <li>ExcludeTransform</li>
+      <li>ExpandAs</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="../../_sources/reference/generated/torchrl.envs.transforms.ExcludeTransform.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+            <a href="../../_sources/reference/generated/torchrl.envs.transforms.ExpandAs.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -249,51 +249,51 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" class="pytorch-article">
               
-  <section id="excludetransform">
-<h1>ExcludeTransform<a class="headerlink" href="#excludetransform" title="Link to this heading">¶</a></h1>
+  <section id="expandas">
+<h1>ExpandAs<a class="headerlink" href="#expandas" title="Link to this heading">¶</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="torchrl.envs.transforms.ExcludeTransform">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.transforms.</span></span><span class="sig-name descname"><span class="pre">ExcludeTransform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">excluded_keys</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inverse</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#ExcludeTransform"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.ExcludeTransform" title="Link to this definition">¶</a></dt>
-<dd><p>Excludes keys from the data.</p>
+<dt class="sig sig-object py" id="torchrl.envs.transforms.ExpandAs">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.transforms.</span></span><span class="sig-name descname"><span class="pre">ExpandAs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ref_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#ExpandAs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.ExpandAs" title="Link to this definition">¶</a></dt>
+<dd><p>Expands one entry to the right to match a reference entry shape.</p>
+<p>This is a transform wrapper around <code class="xref py py-func docutils literal notranslate"><span class="pre">tensordict.utils.expand_as_right()</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>*excluded_keys</strong> (<em>iterable</em><em> of </em><em>NestedKey</em>) – The name of the keys to exclude. If the key is
-not present, it is simply ignored.</p></li>
-<li><p><strong>inverse</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the exclusion will occur during the <code class="docutils literal notranslate"><span class="pre">inv</span></code> call.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>in_key</strong> (<em>NestedKey</em>) – key to expand.</p></li>
+<li><p><strong>ref_key</strong> (<em>NestedKey</em>) – key used as shape reference.</p></li>
+<li><p><strong>out_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – output key where the expanded tensor is
+written. Defaults to <code class="docutils literal notranslate"><span class="pre">in_key</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">gymnasium</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">GymWrapper</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">TransformedEnv</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">GymWrapper</span><span class="p">(</span><span class="n">gymnasium</span><span class="o">.</span><span class="n">make</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)),</span>
-<span class="gp">... </span>    <span class="n">ExcludeTransform</span><span class="p">(</span><span class="s2">&quot;truncated&quot;</span><span class="p">)</span>
+<p>Expanding an environment-level <code class="docutils literal notranslate"><span class="pre">done</span></code> signal to the per-agent reward
+shape in a VMAS environment:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">TransformedEnv</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs.libs.vmas</span> <span class="kn">import</span> <span class="n">VmasEnv</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs.transforms</span> <span class="kn">import</span> <span class="n">ExpandAs</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">base_env</span> <span class="o">=</span> <span class="n">VmasEnv</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">scenario</span><span class="o">=</span><span class="s2">&quot;navigation&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">num_envs</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">continuous_actions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">n_agents</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
 <span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        action: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">        next: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">                observation: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">                reward: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([3]),</span>
-<span class="go">            device=cpu,</span>
-<span class="go">            is_shared=False),</span>
-<span class="go">        observation: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([3]),</span>
-<span class="go">    device=cpu,</span>
-<span class="go">    is_shared=False)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">TransformedEnv</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">base_env</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">ExpandAs</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="n">in_key</span><span class="o">=</span><span class="s2">&quot;done&quot;</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="n">ref_key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;agents&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="p">),</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">rand_step</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">td</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;agents&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">True</span>
 </pre></div>
 </div>
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.envs.transforms.ExcludeTransform.forward">
-<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">next_tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.12)"><span class="pre">TensorDictBase</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.12)"><span class="pre">TensorDictBase</span></a></span></span><a class="headerlink" href="#torchrl.envs.transforms.ExcludeTransform.forward" title="Link to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="torchrl.envs.transforms.ExpandAs.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.12)"><span class="pre">TensorDictBase</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.12)"><span class="pre">TensorDictBase</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#ExpandAs.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.ExpandAs.forward" title="Link to this definition">¶</a></dt>
 <dd><p>Reads the input tensordict, and for the selected keys, applies the transform.</p>
 <p>By default, this method:</p>
 <ul class="simple">
@@ -325,8 +325,8 @@ names to the keys.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.envs.transforms.ExcludeTransform.transform_output_spec">
-<span class="sig-name descname"><span class="pre">transform_output_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#ExcludeTransform.transform_output_spec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.ExcludeTransform.transform_output_spec" title="Link to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="torchrl.envs.transforms.ExpandAs.transform_output_spec">
+<span class="sig-name descname"><span class="pre">transform_output_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#ExpandAs.transform_output_spec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.ExpandAs.transform_output_spec" title="Link to this definition">¶</a></dt>
 <dd><p>Transforms the output spec such that the resulting spec matches transform mapping.</p>
 <p>This method should generally be left untouched. Changes should be implemented using
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">transform_observation_spec()</span></code>, <code class="xref py py-meth docutils literal notranslate"><span class="pre">transform_reward_spec()</span></code> and <code class="xref py py-meth docutils literal notranslate"><span class="pre">transform_full_done_spec()</span></code>.
@@ -351,10 +351,10 @@ names to the keys.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.envs.transforms.ExpandAs.html" class="btn btn-neutral float-right" title="ExpandAs" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.envs.transforms.FiniteTensorDictCheck.html" class="btn btn-neutral float-right" title="FiniteTensorDictCheck" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.envs.transforms.EndOfLifeTransform.html" class="btn btn-neutral" title="EndOfLifeTransform" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.envs.transforms.ExcludeTransform.html" class="btn btn-neutral" title="ExcludeTransform" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -380,10 +380,10 @@ names to the keys.</p>
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">ExcludeTransform</a><ul>
-<li><a class="reference internal" href="#torchrl.envs.transforms.ExcludeTransform"><code class="docutils literal notranslate"><span class="pre">ExcludeTransform</span></code></a><ul>
-<li><a class="reference internal" href="#torchrl.envs.transforms.ExcludeTransform.forward"><code class="docutils literal notranslate"><span class="pre">ExcludeTransform.forward()</span></code></a></li>
-<li><a class="reference internal" href="#torchrl.envs.transforms.ExcludeTransform.transform_output_spec"><code class="docutils literal notranslate"><span class="pre">ExcludeTransform.transform_output_spec()</span></code></a></li>
+<li><a class="reference internal" href="#">ExpandAs</a><ul>
+<li><a class="reference internal" href="#torchrl.envs.transforms.ExpandAs"><code class="docutils literal notranslate"><span class="pre">ExpandAs</span></code></a><ul>
+<li><a class="reference internal" href="#torchrl.envs.transforms.ExpandAs.forward"><code class="docutils literal notranslate"><span class="pre">ExpandAs.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.envs.transforms.ExpandAs.transform_output_spec"><code class="docutils literal notranslate"><span class="pre">ExpandAs.transform_output_spec()</span></code></a></li>
 </ul>
 </li>
 </ul>

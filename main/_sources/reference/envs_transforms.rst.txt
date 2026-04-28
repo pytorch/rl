@@ -266,6 +266,7 @@ Available Transforms
     DoubleToFloat
     EndOfLifeTransform
     ExcludeTransform
+    ExpandAs
     FiniteTensorDictCheck
     FlattenObservation
     FrameSkipTransform
