@@ -17,12 +17,16 @@ jobs:
     runs-on: linux.g5.4xlarge.nvidia.gpu
     strategy:
       matrix:
-        device: [CPU, GPU]
+        include:
+          - device: CPU
+            image: nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
+          - device: GPU
+            image: nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04
     defaults:
       run:
         shell: bash -l {0}
     container:
-      image: nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+      image: ${{ matrix.image }}
       options: --gpus all
     steps:
       - name: Set GITHUB_BRANCH environment variable
@@ -91,7 +95,9 @@ jobs:
 
           if [ "${{ matrix.device }}" = "GPU" ]; then
             # test import and fail early if the GPU runner did not expose CUDA
+            nvcc --version
             python -c "import torch; assert torch.cuda.device_count()"
+            python -c "import torchrl._torchrl as ext; assert hasattr(ext, 'CudaSumSegmentTreeFp32')"
           fi
 
           REPO_ROOT="$(pwd)"
@@ -99,7 +105,7 @@ jobs:
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export COMPOSITE_LP_AGGREGATE=0
           export TD_GET_DEFAULTS_TO_NONE=1
-          RUN_BENCHMARK="python -m pytest -vvv --rank 0 --ignore test_collectors_benchmark.py --ignore test_llm.py --benchmark-json "
+          RUN_BENCHMARK="python -m pytest -vvv --rank 0 test_replaybuffer_benchmark.py::test_prioritized_sampler_sample_scale --benchmark-json "
           $RUN_BENCHMARK ${{ env.CONTENDER_JSON }}
           cp ${{ env.CONTENDER_JSON }} ${{ env.BASELINE_JSON }}
       - name: Publish results

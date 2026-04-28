@@ -96,6 +96,12 @@ class StorageView:
         return self.size
 
 
+def _skip_or_fail_unavailable(message):
+    if os.getenv("TORCHRL_BENCHMARK_DEVICE") in {"CPU", "GPU"}:
+        pytest.fail(message)
+    pytest.skip(message)
+
+
 class create_prioritized_sampler:
     def __init__(self, size, device, batch_size, alpha=0.7, beta=0.5):
         self.size = size
@@ -107,12 +113,14 @@ class create_prioritized_sampler:
     def __call__(self):
         ext = pytest.importorskip("torchrl._torchrl")
         if not hasattr(ext, "SumSegmentTreeFp32"):
-            pytest.skip("TorchRL was not built with segment tree support")
+            _skip_or_fail_unavailable("TorchRL was not built with segment tree support")
         if self.device.type == "cuda":
             if not torch.cuda.is_available():
-                pytest.skip("CUDA is not available")
+                _skip_or_fail_unavailable("CUDA is not available")
             if not hasattr(ext, "CudaSumSegmentTreeFp32"):
-                pytest.skip("TorchRL was not built with CUDA segment tree support")
+                _skip_or_fail_unavailable(
+                    "TorchRL was not built with CUDA segment tree support"
+                )
         storage = StorageView(self.size, self.device)
         sampler = PrioritizedSampler(
             max_capacity=self.size,

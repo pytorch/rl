@@ -1544,6 +1544,105 @@ def test_cuda_prioritized_replay_buffer_samples_on_cuda():
     assert sample["priority_weight"].device == device
 
 
+def test_tensordict_prioritized_replay_buffer_device_sampler_cpu():
+    rb = TensorDictPrioritizedReplayBuffer(
+        alpha=0.7,
+        beta=0.5,
+        storage=LazyTensorStorage(32),
+        device_sampler="cpu",
+        batch_size=8,
+        priority_key="td_error",
+    )
+    data = TensorDict(
+        {
+            "obs": torch.arange(16).float().unsqueeze(-1),
+            "td_error": torch.linspace(0.1, 1.0, 16),
+        },
+        batch_size=[16],
+    )
+
+    rb.extend(data)
+    sample = rb.sample()
+
+    assert rb._sampler.device == torch.device("cpu")
+    assert sample["index"].device == torch.device("cpu")
+    assert sample["priority_weight"].device == torch.device("cpu")
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+def test_tensordict_prioritized_replay_buffer_memmap_storage_cuda_sampler(tmpdir):
+    ext = pytest.importorskip("torchrl._torchrl")
+    if not hasattr(ext, "CudaSumSegmentTreeFp32"):
+        pytest.skip("TorchRL was not built with CUDA segment tree support")
+
+    rb = TensorDictPrioritizedReplayBuffer(
+        alpha=0.7,
+        beta=0.5,
+        storage=LazyMemmapStorage(32, scratch_dir=tmpdir),
+        device_sampler="cuda:0",
+        batch_size=8,
+        priority_key="td_error",
+    )
+    data = TensorDict(
+        {
+            "obs": torch.arange(16).float().unsqueeze(-1),
+            "td_error": torch.linspace(0.1, 1.0, 16),
+        },
+        batch_size=[16],
+    )
+
+    rb.extend(data)
+    sample = rb.sample()
+
+    assert rb._sampler.device == torch.device("cuda:0")
+    assert sample["obs"].device.type == "cpu"
+    assert sample["index"].device.type == "cpu"
+    assert sample["priority_weight"].device.type == "cpu"
+
+    sample["td_error"] = torch.ones_like(sample["td_error"]) * 10
+    rb.update_tensordict_priority(sample)
+    sample = rb.sample()
+    assert sample["index"].device.type == "cpu"
+    assert rb._sampler.device == torch.device("cuda:0")
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+def test_tensordict_prioritized_replay_buffer_cuda_storage_cpu_sampler():
+    device = torch.device("cuda:0")
+    rb = TensorDictPrioritizedReplayBuffer(
+        alpha=0.7,
+        beta=0.5,
+        storage=LazyTensorStorage(32, device=device),
+        device_sampler="cpu",
+        batch_size=8,
+        priority_key="td_error",
+    )
+    data = TensorDict(
+        {
+            "obs": torch.arange(16, device=device).float().unsqueeze(-1),
+            "td_error": torch.linspace(0.1, 1.0, 16, device=device),
+        },
+        batch_size=[16],
+        device=device,
+    )
+
+    rb.extend(data)
+    sample = rb.sample()
+
+    assert rb._sampler.device == torch.device("cpu")
+    assert sample.device == device
+    assert sample["index"].device == device
+    assert sample["priority_weight"].device == device
+
+    sample["td_error"] = torch.ones_like(sample["td_error"]) * 10
+    rb.update_tensordict_priority(sample)
+    sample = rb.sample()
+    assert sample.device == device
+    assert rb._sampler.device == torch.device("cpu")
+
+
 @pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
 def test_cuda_prioritized_replay_buffer_weight_matches_cpu_formula():

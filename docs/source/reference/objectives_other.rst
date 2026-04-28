@@ -9,6 +9,7 @@ Additional loss modules for specialized algorithms.
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
+    BCLoss
     DiffusionBCLoss
     GAILLoss
     DTLoss
