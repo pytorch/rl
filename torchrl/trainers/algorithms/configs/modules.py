@@ -425,11 +425,8 @@ def _make_tensordict_sequential(*args, **kwargs):
     modules = kwargs.pop("modules")
     shared = kwargs.pop("shared", False)
     partial_tolerant = kwargs.pop("partial_tolerant", False)
-    selected_out_keys = kwargs.pop("selected_out_keys", None)
+    selected_out_keys = _normalize_hydra_keys(kwargs.pop("selected_out_keys", None))
     inplace = kwargs.pop("inplace", None)
-
-    if isinstance(selected_out_keys, ListConfig):
-        selected_out_keys = _normalize_hydra_keys(list(selected_out_keys))
 
     def _instantiate_module(module):
         if hasattr(module, "_target_"):
