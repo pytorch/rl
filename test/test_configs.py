@@ -1427,6 +1427,63 @@ class TestTrainerConfigs:
         assert cfg.frame_skip == 1
         assert cfg.clip_grad_norm is True
 
+    def test_hook_config(self):
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.hooks import CountFramesLogConfig
+        from torchrl.trainers.trainers import CountFramesLog
+
+        cfg = CountFramesLogConfig(frame_skip=2, log_pbar=True)
+        assert cfg._target_ == "torchrl.trainers.trainers.CountFramesLog"
+        hook = instantiate(cfg)
+        assert isinstance(hook, CountFramesLog)
+        assert hook.frame_skip == 2
+        assert hook.log_pbar is True
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    @pytest.mark.parametrize(
+        "config_cls, kwargs, hook_cls",
+        [
+            (
+                "BatchSubSamplerConfig",
+                {"batch_size": 8, "sub_traj_len": 2, "min_sub_traj_len": 1},
+                "BatchSubSampler",
+            ),
+            ("ClearCudaCacheConfig", {"interval": 10}, "ClearCudaCache"),
+            (
+                "LogScalarConfig",
+                {
+                    "key": ["next", "reward"],
+                    "logname": "train_reward",
+                    "reduction": "max",
+                },
+                "LogScalar",
+            ),
+            (
+                "LogTimingConfig",
+                {"prefix": "perf", "percall": False, "erase": True},
+                "LogTiming",
+            ),
+            (
+                "RewardNormalizerConfig",
+                {"decay": 0.99, "scale": 0.5},
+                "RewardNormalizer",
+            ),
+            (
+                "SelectKeysConfig",
+                {"keys": ["observation", "action"]},
+                "SelectKeys",
+            ),
+        ],
+    )
+    def test_individual_hook_configs(self, config_cls, kwargs, hook_cls):
+        from hydra.utils import instantiate
+        from torchrl import trainers as trainers_module
+        from torchrl.trainers.algorithms import configs as configs_module
+
+        cfg = getattr(configs_module, config_cls)(**kwargs)
+        hook = instantiate(cfg)
+        assert isinstance(hook, getattr(trainers_module, hook_cls))
+
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_ddpg_trainer_config(self):
         from torchrl.trainers.algorithms.configs.trainers import DDPGTrainerConfig
@@ -2166,6 +2223,135 @@ trainer:
         test_code = """
     trainer = hydra.utils.instantiate(cfg.trainer)
     assert isinstance(trainer, torchrl.trainers.algorithms.dqn.DQNTrainer)
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_dqn_trainer_parsing_with_hook_config(self, tmpdir):
+        """Test DQN trainer parsing with hook configs."""
+        yaml_config = """
+defaults:
+  - transform@transform0: step_counter
+  - transform@transform1: reward_sum
+  - env@training_env: batched_env
+  - env@training_env.create_env_fn: transformed_env
+  - env@training_env.create_env_fn.base_env: gym
+  - transform@training_env.create_env_fn.transform: compose
+  - model@models.qvalue_model: qvalue
+  - network@networks.qvalue_network: mlp
+  - collector@collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@replay_buffer.storage: lazy_tensor
+  - writer@replay_buffer.writer: round_robin
+  - sampler@replay_buffer.sampler: random
+  - trainer@trainer: dqn
+  - optimizer@optimizer: adam
+  - loss@loss: dqn
+  - target_net_updater@target_net_updater: hard
+  - logger@logger: csv
+  - hook@hook0: count_frames_log
+  - _self_
+
+networks:
+  qvalue_network:
+    out_features: 2
+    in_features: 4
+    num_cells: [64, 64]
+
+models:
+  qvalue_model:
+    in_keys: ["observation"]
+    action_space: "one-hot"
+    network: ${networks.qvalue_network}
+
+transform0:
+  max_steps: 500
+  step_count_key: "step_count"
+
+transform1:
+  in_keys: ["reward"]
+  out_keys: ["reward_sum"]
+
+training_env:
+  num_workers: 1
+  create_env_fn:
+    base_env:
+      env_name: CartPole-v1
+    transform:
+      transforms:
+        - ${transform0}
+        - ${transform1}
+    _partial_: true
+
+loss:
+  value_network: ${models.qvalue_model}
+  loss_function: l2
+  delay_value: true
+  action_space: "one-hot"
+
+target_net_updater:
+  value_network_update_interval: 50
+
+optimizer:
+  lr: 2.5e-4
+
+collector:
+  create_env_fn: ${training_env}
+  policy: ${models.qvalue_model}
+  total_frames: 500
+  frames_per_batch: 100
+  init_random_frames: 100
+  _partial_: true
+
+replay_buffer:
+  storage:
+    max_size: 1000
+    device: cpu
+    ndim: 1
+  sampler:
+  writer:
+    compilable: false
+  batch_size: 32
+
+logger:
+  exp_name: test_dqn_with_hook
+
+hook0:
+  frame_skip: 1
+  log_pbar: false
+
+trainer:
+  collector: ${collector}
+  optimizer: ${optimizer}
+  replay_buffer: ${replay_buffer}
+  target_net_updater: ${target_net_updater}
+  loss_module: ${loss}
+  value_network: ${models.qvalue_model}
+  logger: ${logger}
+  total_frames: ${collector.total_frames}
+  frame_skip: 1
+  clip_grad_norm: true
+  clip_norm: 10.0
+  progress_bar: false
+  seed: 42
+  save_trainer_interval: 10000
+  log_interval: 10000
+  save_trainer_file: null
+  optim_steps_per_batch: 2
+  async_collection: false
+  hooks:
+    - ${hook0}
+"""
+
+        test_code = """
+    trainer = hydra.utils.instantiate(cfg.trainer)
+    assert isinstance(trainer, torchrl.trainers.algorithms.dqn.DQNTrainer)
+    assert any(
+        isinstance(module, torchrl.trainers.CountFramesLog)
+        for module in trainer._modules.values()
+    )
+    trainer.collector.shutdown()
 """
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
