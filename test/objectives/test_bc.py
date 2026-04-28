@@ -20,9 +20,8 @@ class TestBCLoss:
         return Actor(module=module, spec=spec)
 
     def _make_stochastic_actor(self, action_dim=2, obs_dim=4):
-        from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
-        from torchrl.modules.tensordict_module.common import SafeModule
         from tensordict.nn import TensorDictModule
+        from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
 
         spec = Bounded(-torch.ones(action_dim), torch.ones(action_dim), (action_dim,))
         net = torch.nn.Sequential(
@@ -215,9 +214,9 @@ class TestBCLoss:
             optimizer.step()
 
         final_loss = loss_fn(td)["loss_bc"].item()
-        assert final_loss < initial_loss, (
-            f"Loss did not decrease: {initial_loss:.4f} -> {final_loss:.4f}"
-        )
+        assert (
+            final_loss < initial_loss
+        ), f"Loss did not decrease: {initial_loss:.4f} -> {final_loss:.4f}"
 
     def test_loss_changes_with_training_stochastic(self):
         """Loss should decrease after a few gradient steps on a fixed batch (stochastic)."""
@@ -236,6 +235,6 @@ class TestBCLoss:
             optimizer.step()
 
         final_loss = loss_fn(td)["loss_bc"].item()
-        assert final_loss < initial_loss, (
-            f"Loss did not decrease: {initial_loss:.4f} -> {final_loss:.4f}"
-        )
+        assert (
+            final_loss < initial_loss
+        ), f"Loss did not decrease: {initial_loss:.4f} -> {final_loss:.4f}"

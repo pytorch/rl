@@ -412,41 +412,6 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
             ),
         )
 
-    def __init__(
-        self,
-        module: TensorDictModule,
-        in_keys: NestedKey | Sequence[NestedKey],
-        out_keys: Sequence[NestedKey] | None = None,
-        *,
-        spec: TensorSpec | None = None,
-        **kwargs,
-    ):
-        distribution_class = kwargs.get("distribution_class")
-        if out_keys is None:
-            if distribution_class is CompositeDistribution:
-                if "distribution_map" not in kwargs.get("distribution_kwargs", {}):
-                    raise KeyError(
-                        "'distribution_map' must be provided within "
-                        "distribution_kwargs whenever the distribution is of type CompositeDistribution."
-                    )
-                distribution_map = kwargs["distribution_kwargs"]["distribution_map"]
-                name_map = kwargs["distribution_kwargs"].get("name_map", None)
-                if name_map is not None:
-                    out_keys = list(name_map.values())
-                else:
-                    out_keys = list(distribution_map.keys())
-            else:
-                out_keys = ["action"]
-        if len(out_keys) == 1 and spec is not None and not isinstance(spec, Composite):
-            spec = Composite({out_keys[0]: spec})
-
-        super().__init__(
-            module,
-            SafeProbabilisticModule(
-                in_keys=in_keys, out_keys=out_keys, spec=spec, **kwargs
-            ),
-        )
-
 
 class ValueOperator(TensorDictModule):
     """General class for value functions in RL.
@@ -2025,9 +1990,9 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         self._check_tensor_dims(return_to_go, observation, action)
 
         observation[..., : -self.inference_context, :] = 0
-        action[..., : -(self.inference_context - 1), :] = (
-            0  # as we add zeros to the end of the action
-        )
+        action[
+            ..., : -(self.inference_context - 1), :
+        ] = 0  # as we add zeros to the end of the action
         action = torch.cat(
             [
                 action[..., 1:, :],

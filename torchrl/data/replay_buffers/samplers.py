@@ -39,6 +39,19 @@ except ImportError:
     SumSegmentTreeFp32 = None
     SumSegmentTreeFp64 = None
 
+try:
+    from torchrl._torchrl import (
+        CudaMinSegmentTreeFp32,
+        CudaMinSegmentTreeFp64,
+        CudaSumSegmentTreeFp32,
+        CudaSumSegmentTreeFp64,
+    )
+except ImportError:
+    CudaMinSegmentTreeFp32 = None
+    CudaMinSegmentTreeFp64 = None
+    CudaSumSegmentTreeFp32 = None
+    CudaSumSegmentTreeFp64 = None
+
 _EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
 
 
@@ -545,6 +558,10 @@ class PrioritizedSampler(Sampler):
         max_priority_within_buffer (bool, optional): if ``True``, the max-priority
             is tracked within the buffer. When ``False``, the max-priority tracks
             the maximum value since the instantiation of the sampler.
+        device (torch.device or str, optional): device that holds the priority
+            trees. Defaults to ``None``, in which case CUDA storage selects a CUDA
+            tree when the installed TorchRL extension was built with CUDA support,
+            and CPU storage keeps the existing CPU tree.
 
     **Parameter Guidelines**:
 
@@ -620,6 +637,7 @@ class PrioritizedSampler(Sampler):
         dtype: torch.dtype = torch.float,
         reduction: str = "max",
         max_priority_within_buffer: bool = False,
+        device: torch.device | str | None = None,
     ) -> None:
         if alpha < 0:
             raise ValueError(
@@ -635,6 +653,7 @@ class PrioritizedSampler(Sampler):
         self.reduction = reduction
         self.dtype = dtype
         self._max_priority_within_buffer = max_priority_within_buffer
+        self._device = torch.device(device) if device is not None else None
         self._init()
         if rl_warnings() and SumSegmentTreeFp32 is None:
             logger.warning(EXTENSION_WARNING)
@@ -645,6 +664,15 @@ class PrioritizedSampler(Sampler):
     @property
     def max_size(self):
         return self._max_capacity
+
+    @property
+    def device(self) -> torch.device:
+        tree_device = getattr(self._sum_tree, "device", None)
+        if tree_device is not None:
+            return torch.device(tree_device)
+        if self._device is not None:
+            return self._device
+        return torch.device("cpu")
 
     @property
     def alpha(self):
@@ -669,6 +697,25 @@ class PrioritizedSampler(Sampler):
             )
         return super().__getstate__()
 
+    def _tree_device_from_storage(self, storage: Storage | None) -> torch.device | None:
+        if self._device is not None:
+            return self._device
+        if storage is None:
+            return None
+        device = getattr(storage, "device", None)
+        if device is None or device == "auto":
+            return None
+        device = torch.device(device)
+        if device.type == "cuda":
+            return device
+        return None
+
+    def _maybe_init_from_storage(self, storage: Storage | None) -> None:
+        device = self._tree_device_from_storage(storage)
+        if device is not None and device != self.device:
+            self._device = device
+            self._init()
+
     def _init(self) -> None:
         if SumSegmentTreeFp32 is None:
             raise RuntimeError(
@@ -686,6 +733,31 @@ class PrioritizedSampler(Sampler):
             raise RuntimeError(
                 "MinSegmentTreeFp64 is not available. See warning above."
             )
+        device = self._device
+        if device is not None and device.type == "cuda":
+            if (
+                CudaSumSegmentTreeFp32 is None
+                or CudaMinSegmentTreeFp32 is None
+                or CudaSumSegmentTreeFp64 is None
+                or CudaMinSegmentTreeFp64 is None
+            ):
+                raise RuntimeError(
+                    "CUDA prioritized replay buffers require a TorchRL CUDA wheel. "
+                    "Install a TorchRL wheel matching your PyTorch CUDA variant or "
+                    "rebuild TorchRL with FORCE_CUDA=1."
+                )
+            if self.dtype in (torch.float, torch.FloatType, torch.float32):
+                self._sum_tree = CudaSumSegmentTreeFp32(self._max_capacity, device)
+                self._min_tree = CudaMinSegmentTreeFp32(self._max_capacity, device)
+            elif self.dtype in (torch.double, torch.DoubleTensor, torch.float64):
+                self._sum_tree = CudaSumSegmentTreeFp64(self._max_capacity, device)
+                self._min_tree = CudaMinSegmentTreeFp64(self._max_capacity, device)
+            else:
+                raise NotImplementedError(
+                    f"dtype {self.dtype} not supported by PrioritizedSampler"
+                )
+            self._max_priority = None
+            return
         if self.dtype in (torch.float, torch.FloatType, torch.float32):
             self._sum_tree = SumSegmentTreeFp32(self._max_capacity)
             self._min_tree = MinSegmentTreeFp32(self._max_capacity)
@@ -745,6 +817,11 @@ class PrioritizedSampler(Sampler):
             return is_overwritten
 
         is_overwritten = check_index()
+        if isinstance(is_overwritten, torch.Tensor):
+            if is_overwritten.device.type == "cuda":
+                self._max_priority = None
+                return
+            is_overwritten = bool(is_overwritten.item())
         if is_overwritten:
             self._max_priority = None
 
@@ -753,21 +830,36 @@ class PrioritizedSampler(Sampler):
         mp = self._max_priority[0]
         if mp is None:
             mp = 1
+        if isinstance(mp, torch.Tensor):
+            mp = mp.to(self.device)
         return (mp + self._eps) ** self._alpha
 
     def sample(self, storage: Storage, batch_size: int) -> torch.Tensor:
+        self._maybe_init_from_storage(storage)
         if len(storage) == 0:
             raise RuntimeError(_EMPTY_STORAGE_ERROR)
-        p_sum = self._sum_tree.query(0, len(storage))
-        p_min = self._min_tree.query(0, len(storage))
+        tree_device = self.device
+        is_cuda = tree_device.type == "cuda"
+        if is_cuda:
+            left = torch.zeros((), dtype=torch.long, device=tree_device)
+            right = torch.full((), len(storage), dtype=torch.long, device=tree_device)
+            p_sum = self._sum_tree.query(left, right)
+            p_min = self._min_tree.query(left, right)
+        else:
+            p_sum = self._sum_tree.query(0, len(storage))
+            p_min = self._min_tree.query(0, len(storage))
 
-        if p_sum <= 0:
-            raise RuntimeError("non-positive p_sum")
-        if p_min <= 0:
-            raise RuntimeError("non-positive p_min")
+        if not is_cuda:
+            if p_sum <= 0:
+                raise RuntimeError("non-positive p_sum")
+            if p_min <= 0:
+                raise RuntimeError("non-positive p_min")
         # For some undefined reason, only np.random works here.
         # All PT attempts fail, even when subsequently transformed into numpy
-        if self._rng is None:
+        if is_cuda:
+            mass = torch.rand(batch_size, device=tree_device, generator=self._rng)
+            mass = mass * p_sum
+        elif self._rng is None:
             mass = np.random.uniform(0.0, p_sum, size=batch_size)
         else:
             mass = torch.rand(batch_size, generator=self._rng) * p_sum
@@ -776,19 +868,21 @@ class PrioritizedSampler(Sampler):
         # mass = torch.rand(batch_size).mul_(p_sum)
         index = self._sum_tree.scan_lower_bound(mass)
         index = torch.as_tensor(index)
+        if index.device != tree_device:
+            index = index.to(tree_device)
         if not index.ndim:
             index = index.unsqueeze(0)
         index.clamp_max_(len(storage) - 1)
-        weight = torch.as_tensor(self._sum_tree[index])
-        # get indices where weight is 0
-        zero_weight = weight == 0
-        index = index
-        while zero_weight.any():
-            index = torch.where(zero_weight, index - 1, index)
-            if (index < 0).any():
-                raise RuntimeError("Failed to find a suitable index")
-            weight = torch.as_tensor(self._sum_tree[index])
+        weight = torch.as_tensor(self._sum_tree[index], device=tree_device)
+        if not is_cuda:
+            # get indices where weight is 0
             zero_weight = weight == 0
+            while zero_weight.any():
+                index = torch.where(zero_weight, index - 1, index)
+                if (index < 0).any():
+                    raise RuntimeError("Failed to find a suitable index")
+                weight = torch.as_tensor(self._sum_tree[index])
+                zero_weight = weight == 0
 
         # Importance sampling weight formula:
         #   w_i = (p_i / sum(p) * N) ^ (-beta)
@@ -833,8 +927,10 @@ class PrioritizedSampler(Sampler):
                 ``index.ndim > 2``.
 
         """
-        priority = torch.as_tensor(priority, device=torch.device("cpu")).detach()
-        index = torch.as_tensor(index, dtype=torch.long, device=torch.device("cpu"))
+        self._maybe_init_from_storage(storage)
+        tree_device = self.device
+        priority = torch.as_tensor(priority, device=tree_device).detach()
+        index = torch.as_tensor(index, dtype=torch.long, device=tree_device)
         # we need to reshape priority if it has more than one element or if it has
         # a different shape than index
         if priority.numel() > 1 and priority.shape != index.shape:
@@ -851,10 +947,14 @@ class PrioritizedSampler(Sampler):
 
         # MaxValueWriter will set -1 for items in the data that we don't want
         # to update. We therefore have to keep only the non-negative indices.
-        if _is_int(index):
+        if _is_int(index) and not isinstance(index, torch.Tensor):
             if index == -1:
                 return
         else:
+            if index.ndim == 0:
+                index = index.view(1)
+                if priority.ndim == 0:
+                    priority = priority.view(1)
             if index.ndim > 1:
                 if storage is None:
                     raise RuntimeError(
@@ -868,18 +968,49 @@ class PrioritizedSampler(Sampler):
                         "Could not retrieve the storage shape. If your storage is not a TensorStorage subclass "
                         "or its shape isn't accessible via the shape attribute, submit an issue on GitHub."
                     )
-                index = torch.as_tensor(np.ravel_multi_index(index.unbind(-1), shape))
+                if tree_device.type == "cuda":
+                    multipliers = torch.ones(
+                        index.shape[-1], dtype=torch.long, device=tree_device
+                    )
+                    for dim in range(index.shape[-1] - 2, -1, -1):
+                        multipliers[dim] = multipliers[dim + 1] * shape[dim + 1]
+                    index = (index * multipliers).sum(-1)
+                else:
+                    index = torch.as_tensor(
+                        np.ravel_multi_index(index.unbind(-1), shape)
+                    )
             valid_index = index >= 0
-            if not valid_index.any():
+            if tree_device.type == "cuda":
+                index = index[valid_index]
+                if priority.ndim:
+                    priority = priority[valid_index]
+                if index.numel() == 0:
+                    return
+            elif not valid_index.any():
                 return
-            if not valid_index.all():
+            elif not valid_index.all():
                 index = index[valid_index]
                 if priority.ndim:
                     priority = priority[valid_index]
 
         max_p, max_p_idx = priority.max(dim=0)
         cur_max_priority, cur_max_priority_index = self._max_priority
-        if cur_max_priority is None or max_p > cur_max_priority:
+        if cur_max_priority is None:
+            cur_max_priority, cur_max_priority_index = self._max_priority = (
+                max_p,
+                index[max_p_idx] if index.ndim else index,
+            )
+        elif tree_device.type == "cuda":
+            if self._max_priority_within_buffer:
+                cur_max_priority, cur_max_priority_index = max_p, (
+                    index[max_p_idx] if index.ndim else index
+                )
+            else:
+                cur_max_priority = torch.maximum(
+                    max_p, torch.as_tensor(cur_max_priority, device=tree_device)
+                )
+                self._max_priority = (cur_max_priority, cur_max_priority_index)
+        elif max_p > cur_max_priority:
             cur_max_priority, cur_max_priority_index = self._max_priority = (
                 max_p,
                 index[max_p_idx] if index.ndim else index,
@@ -887,14 +1018,18 @@ class PrioritizedSampler(Sampler):
         priority = torch.pow(priority + self._eps, self._alpha)
         self._sum_tree[index] = priority
         self._min_tree[index] = priority
-        if (
-            self._max_priority_within_buffer
-            and cur_max_priority_index is not None
-            and (index == cur_max_priority_index).any()
-        ):
-            maxval, maxidx = torch.tensor(
-                [self._sum_tree[i] for i in range(self._max_capacity)]
-            ).max(0)
+        if self._max_priority_within_buffer and cur_max_priority_index is not None:
+            if tree_device.type == "cuda":
+                all_indices = torch.arange(
+                    self._max_capacity, dtype=torch.long, device=tree_device
+                )
+                maxval, maxidx = self._sum_tree[all_indices].max(0)
+            elif (index == cur_max_priority_index).any():
+                maxval, maxidx = torch.tensor(
+                    [self._sum_tree[i] for i in range(self._max_capacity)]
+                ).max(0)
+            else:
+                return
             self._max_priority = (maxval, maxidx)
 
     def mark_update(
