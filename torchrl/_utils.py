@@ -1394,6 +1394,23 @@ def as_remote(cls, remote_config: dict[str, Any] | None = None):
 
     if remote_config is None:
         remote_config = {}
+    else:
+        remote_config = dict(remote_config)
+
+    # Propagate TORCHRL_PROFILING to the remote actor so ``_maybe_record_function_decorator``
+    # is armed inside it. We must ensure the env var is set in the actor's process before
+    # torchrl is imported there — the decorator captures ``_PROFILING_ALLOWED`` at import.
+    profiling = os.environ.get("TORCHRL_PROFILING")
+    if profiling:
+        runtime_env = remote_config.get("runtime_env") or {}
+        if not isinstance(runtime_env, dict):
+            runtime_env = dict(runtime_env)
+        env_vars = runtime_env.get("env_vars") or {}
+        if not isinstance(env_vars, dict):
+            env_vars = dict(env_vars)
+        env_vars.setdefault("TORCHRL_PROFILING", profiling)
+        runtime_env["env_vars"] = env_vars
+        remote_config["runtime_env"] = runtime_env
 
     remote_collector = ray.remote(**remote_config)(cls)
     remote_collector.is_remote = True
@@ -1502,7 +1519,7 @@ def merge_ray_runtime_env(ray_init_config: dict[str, Any]) -> dict[str, Any]:
         runtime_env["env_vars"] = dict(runtime_env["env_vars"])
 
     # Auto-propagate common env vars to Ray workers
-    for key in ("WANDB_API_KEY", "HF_TOKEN", "HF_HOME"):
+    for key in ("WANDB_API_KEY", "HF_TOKEN", "HF_HOME", "TORCHRL_PROFILING"):
         val = os.environ.get(key)
         if val and key not in runtime_env["env_vars"]:
             runtime_env["env_vars"][key] = val

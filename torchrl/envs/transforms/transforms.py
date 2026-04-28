@@ -53,6 +53,7 @@ from torchrl._utils import (
     _append_last,
     _ends_with,
     _make_ordinal_device,
+    _maybe_record_function_decorator,
     _replace_last,
     auto_unwrap_transformed_env,
     logger as torchrl_logger,
@@ -1219,6 +1220,7 @@ but got an object of type {type(transform)}."""
             return self.base_env.rand_action(tensordict)
         return super().rand_action(tensordict)
 
+    @_maybe_record_function_decorator("TransformedEnv._step")
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         # No need to clone here because inv does it already
         # tensordict = tensordict.clone(False)
@@ -1299,6 +1301,7 @@ but got an object of type {type(transform)}."""
     def _set_seed(self, seed: int | None) -> None:
         """This method is not used in transformed envs."""
 
+    @_maybe_record_function_decorator("TransformedEnv._reset")
     def _reset(self, tensordict: TensorDictBase | None = None, **kwargs):
         if tensordict is not None:
             # We must avoid modifying the original tensordict so a shallow copy is necessary.

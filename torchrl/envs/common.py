@@ -28,6 +28,7 @@ from tensordict.utils import is_non_tensor, NestedKey
 from torchrl._utils import (
     _ends_with,
     _make_ordinal_device,
+    _maybe_record_function_decorator,
     _replace_last,
     implement_for,
     prod,
@@ -2194,6 +2195,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         result.update(next_tensordict.exclude(*keys).filter_empty_())
         return result
 
+    @_maybe_record_function_decorator("EnvBase.step")
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
 
@@ -2961,6 +2963,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         raise NotImplementedError
 
+    @_maybe_record_function_decorator("EnvBase.reset")
     def reset(
         self,
         tensordict: TensorDictBase | None = None,
@@ -3212,6 +3215,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def _has_dynamic_specs(self) -> bool:
         return _has_dynamic_specs(self.specs)
 
+    @_maybe_record_function_decorator("EnvBase.rollout")
     def rollout(
         self,
         max_steps: int,
@@ -3779,6 +3783,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         return tensordicts
 
+    @_maybe_record_function_decorator("EnvBase.step_and_maybe_reset")
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase
     ) -> tuple[TensorDictBase, TensorDictBase]:

@@ -18,6 +18,8 @@ from torchrl import compile_with_warmup
 from torchrl._utils import (
     _ends_with,
     _make_ordinal_device,
+    _maybe_record_function,
+    _maybe_record_function_decorator,
     _replace_last,
     accept_remote_rref_udf_invocation,
     prod,
@@ -1269,6 +1271,7 @@ class Collector(BaseCollector):
         return super().next()
 
     # for RPC
+    @_maybe_record_function_decorator("Collector.update_policy_weights_")
     def update_policy_weights_(
         self,
         policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
@@ -1613,6 +1616,7 @@ class Collector(BaseCollector):
             self._carrier.set(("collector", "traj_ids"), traj_ids)
 
     @torch.no_grad()
+    @_maybe_record_function_decorator("Collector.rollout")
     def rollout(self) -> TensorDictBase:
         """Computes a rollout in the environment using the provided policy.
 
@@ -1672,7 +1676,8 @@ class Collector(BaseCollector):
                     # we still do the assignment for security
                     if self.compiled_policy:
                         cudagraph_mark_step_begin()
-                    policy_output = self._wrapped_policy(policy_input)
+                    with _maybe_record_function("Collector.policy"):
+                        policy_output = self._wrapped_policy(policy_input)
                     if self.compiled_policy:
                         policy_output = policy_output.clone()
                     if self._carrier is not policy_output:
