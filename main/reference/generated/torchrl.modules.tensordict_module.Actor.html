@@ -319,6 +319,25 @@ method. Default is <code class="docutils literal notranslate"><span class="pre">
 <span class="go">        [-0.2916,  0.2160,  0.5337, -0.5193]], grad_fn=&lt;AddmmBackward0&gt;)</span>
 </pre></div>
 </div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.modules.tensordict_module.Actor.get_dist">
+<span class="sig-name descname"><span class="pre">get_dist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.12)"><span class="pre">TensorDictBase</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution" title="(in PyTorch v2.11)"><span class="pre">Distribution</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/modules/tensordict_module/actors.html#Actor.get_dist"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.tensordict_module.Actor.get_dist" title="Link to this definition">¶</a></dt>
+<dd><p>Returns a Delta distribution centered at the deterministic action.</p>
+<p>For deterministic actors, this returns a Delta distribution which has
+log-probability 0 for the exact action and -inf for any other action.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tensordict</strong> (<em>TensorDictBase</em>) – input tensordict containing observations.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A Delta distribution.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.distributions.Distribution</p>
+</dd>
+</dl>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -361,7 +380,10 @@ method. Default is <code class="docutils literal notranslate"><span class="pre">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">Actor</a><ul>
-<li><a class="reference internal" href="#torchrl.modules.tensordict_module.Actor"><code class="docutils literal notranslate"><span class="pre">Actor</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.modules.tensordict_module.Actor"><code class="docutils literal notranslate"><span class="pre">Actor</span></code></a><ul>
+<li><a class="reference internal" href="#torchrl.modules.tensordict_module.Actor.get_dist"><code class="docutils literal notranslate"><span class="pre">Actor.get_dist()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>

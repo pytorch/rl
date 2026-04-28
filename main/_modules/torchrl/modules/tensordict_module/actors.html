@@ -257,6 +257,7 @@
     <span class="n">TensorDictModuleWrapper</span><span class="p">,</span>
     <span class="n">TensorDictSequential</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">tensordict.nn.distributions</span> <span class="kn">import</span> <span class="n">Delta</span>
 <span class="kn">from</span> <span class="nn">tensordict.nn.probabilistic</span> <span class="kn">import</span> <span class="n">interaction_type</span><span class="p">,</span> <span class="n">InteractionType</span>
 <span class="kn">from</span> <span class="nn">tensordict.utils</span> <span class="kn">import</span> <span class="n">expand_as_right</span><span class="p">,</span> <span class="n">NestedKey</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
@@ -364,7 +365,28 @@
             <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">,</span>
             <span class="n">spec</span><span class="o">=</span><span class="n">spec</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-        <span class="p">)</span></div>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="Actor.get_dist">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.tensordict_module.Actor.html#torchrl.modules.Actor.get_dist">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">distributions</span><span class="o">.</span><span class="n">Distribution</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns a Delta distribution centered at the deterministic action.</span>
+
+<span class="sd">        For deterministic actors, this returns a Delta distribution which has</span>
+<span class="sd">        log-probability 0 for the exact action and -inf for any other action.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordict (TensorDictBase): input tensordict containing observations.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            torch.distributions.Distribution: A Delta distribution.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Forward pass to get the action</span>
+        <span class="n">td_out</span> <span class="o">=</span> <span class="bp">self</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+        <span class="k">return</span> <span class="n">Delta</span><span class="p">(</span><span class="n">action</span><span class="p">)</span></div>
+</div>
 
 
 
@@ -373,8 +395,9 @@
 <span class="k">class</span> <span class="nc">ProbabilisticActor</span><span class="p">(</span><span class="n">SafeProbabilisticTensorDictSequential</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;General class for probabilistic actors in RL.</span>
 
-<span class="sd">    The Actor class comes with default values for the out_keys ([&quot;action&quot;])</span>
-<span class="sd">    and if the spec is provided but not as a Composite object, it will be</span>
+<span class="sd">    The ProbabilisticActor class comes with default values for the out_keys ([&quot;action&quot;])</span>
+<span class="sd">    and if the spec is provided but not as a</span>
+<span class="sd">    Composite object, it will be</span>
 <span class="sd">    automatically translated into :obj:`spec = Composite(action=spec)`</span>
 
 <span class="sd">    Args:</span>
@@ -602,6 +625,41 @@
 <span class="sd">            is_shared=False)</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">module</span><span class="p">:</span> <span class="n">TensorDictModule</span><span class="p">,</span>
+        <span class="n">in_keys</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">],</span>
+        <span class="n">out_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">spec</span><span class="p">:</span> <span class="n">TensorSpec</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="n">distribution_class</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;distribution_class&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">out_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">distribution_class</span> <span class="ow">is</span> <span class="n">CompositeDistribution</span><span class="p">:</span>
+                <span class="k">if</span> <span class="s2">&quot;distribution_map&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;distribution_kwargs&quot;</span><span class="p">,</span> <span class="p">{}):</span>
+                    <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                        <span class="s2">&quot;&#39;distribution_map&#39; must be provided within &quot;</span>
+                        <span class="s2">&quot;distribution_kwargs whenever the distribution is of type CompositeDistribution.&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">distribution_map</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;distribution_kwargs&quot;</span><span class="p">][</span><span class="s2">&quot;distribution_map&quot;</span><span class="p">]</span>
+                <span class="n">name_map</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;distribution_kwargs&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name_map&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">name_map</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">out_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">name_map</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">out_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">distribution_map</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">out_keys</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">spec</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">Composite</span><span class="p">):</span>
+            <span class="n">spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">({</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span> <span class="n">spec</span><span class="p">})</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">module</span><span class="p">,</span>
+            <span class="n">SafeProbabilisticModule</span><span class="p">(</span>
+                <span class="n">in_keys</span><span class="o">=</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">,</span> <span class="n">spec</span><span class="o">=</span><span class="n">spec</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -2277,9 +2335,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_check_tensor_dims</span><span class="p">(</span><span class="n">return_to_go</span><span class="p">,</span> <span class="n">observation</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
 
         <span class="n">observation</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">inference_context</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="n">action</span><span class="p">[</span>
-            <span class="o">...</span><span class="p">,</span> <span class="p">:</span> <span class="o">-</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">inference_context</span> <span class="o">-</span> <span class="mi">1</span><span class="p">),</span> <span class="p">:</span>
-        <span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># as we add zeros to the end of the action</span>
+        <span class="n">action</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span> <span class="o">-</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">inference_context</span> <span class="o">-</span> <span class="mi">1</span><span class="p">),</span> <span class="p">:]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="mi">0</span>  <span class="c1"># as we add zeros to the end of the action</span>
+        <span class="p">)</span>
         <span class="n">action</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
             <span class="p">[</span>
                 <span class="n">action</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">:,</span> <span class="p">:],</span>

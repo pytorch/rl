@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>DiffusionBCLoss &mdash; torchrl main documentation</title>
+  <title>BCLoss &mdash; torchrl main documentation</title>
   
 
   
@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="GAILLoss" href="torchrl.objectives.GAILLoss.html" />
-    <link rel="prev" title="BCLoss" href="torchrl.objectives.BCLoss.html" /> 
+    <link rel="next" title="DiffusionBCLoss" href="torchrl.objectives.DiffusionBCLoss.html" />
+    <link rel="prev" title="Other Loss Modules" href="../objectives_other.html" /> 
 
   
   <script src="../../_static/js/modernizr.min.js"></script>
@@ -218,13 +218,13 @@
         
           <li><a href="../objectives_other.html">Other Loss Modules</a> &gt;</li>
         
-      <li>DiffusionBCLoss</li>
+      <li>BCLoss</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="../../_sources/reference/generated/torchrl.objectives.DiffusionBCLoss.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+            <a href="../../_sources/reference/generated/torchrl.objectives.BCLoss.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -249,78 +249,100 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" class="pytorch-article">
               
-  <section id="diffusionbcloss">
-<h1>DiffusionBCLoss<a class="headerlink" href="#diffusionbcloss" title="Link to this heading">¶</a></h1>
+  <section id="bcloss">
+<h1>BCLoss<a class="headerlink" href="#bcloss" title="Link to this heading">¶</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="torchrl.objectives.DiffusionBCLoss">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.objectives.</span></span><span class="sig-name descname"><span class="pre">DiffusionBCLoss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/objectives/diffusion_bc.html#DiffusionBCLoss"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.DiffusionBCLoss" title="Link to this definition">¶</a></dt>
-<dd><p>Behavioural Cloning loss for diffusion-based policies.</p>
-<p>Implements the ε-prediction (noise-prediction) denoising loss from
-<a class="reference external" href="https://arxiv.org/abs/2303.04137">Diffusion Policy: Visuomotor Policy Learning via Action Diffusion</a> (Chi et al., RSS 2023).</p>
-<p>Given a batch of (observation, clean_action) pairs from a demonstration
-dataset, the loss:</p>
-<ol class="arabic simple">
-<li><p>Samples a random diffusion timestep <code class="docutils literal notranslate"><span class="pre">t</span></code> for each item in the batch.</p></li>
-<li><p>Corrupts the clean action with Gaussian noise via the DDPM forward
-process: <code class="docutils literal notranslate"><span class="pre">noisy_action</span> <span class="pre">=</span> <span class="pre">sqrt(ᾱ_t)</span> <span class="pre">*</span> <span class="pre">action</span> <span class="pre">+</span> <span class="pre">sqrt(1</span> <span class="pre">-</span> <span class="pre">ᾱ_t)</span> <span class="pre">*</span> <span class="pre">ε</span></code>.</p></li>
-<li><p>Asks the score network to predict the noise <code class="docutils literal notranslate"><span class="pre">ε</span></code>.</p></li>
-<li><p>Returns the MSE between the predicted and actual noise.</p></li>
-</ol>
-<p>This loss is designed to be used together with
-<code class="xref py py-class docutils literal notranslate"><span class="pre">DiffusionActor</span></code>.  The actor’s inner
-<code class="xref py py-class docutils literal notranslate"><span class="pre">_DDPMModule</span></code> is
-accessed via <code class="docutils literal notranslate"><span class="pre">actor_network.module</span></code> and its <code class="docutils literal notranslate"><span class="pre">add_noise</span></code> method is
-used for step 2.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>actor_network</strong> (<em>TensorDictModule</em>) – a <code class="xref py py-class docutils literal notranslate"><span class="pre">DiffusionActor</span></code>
-(or any <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> whose <code class="docutils literal notranslate"><span class="pre">.module</span></code>
-exposes <code class="docutils literal notranslate"><span class="pre">add_noise(clean_action,</span> <span class="pre">t)</span></code> and a
-<code class="docutils literal notranslate"><span class="pre">score_network</span></code> attribute).</p>
-</dd>
-<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>reduction</strong> (<em>str</em><em>, </em><em>optional</em>) – Specifies the reduction to apply to the
-output: <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> | <code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code> | <code class="docutils literal notranslate"><span class="pre">&quot;sum&quot;</span></code>.  Defaults to
-<code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code>.</p>
+<dt class="sig sig-object py" id="torchrl.objectives.BCLoss">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.objectives.</span></span><span class="sig-name descname"><span class="pre">BCLoss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/objectives/bc.html#BCLoss"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.BCLoss" title="Link to this definition">¶</a></dt>
+<dd><p>Behavior Cloning Loss Module.</p>
+<p>Implements behavior cloning loss for both stochastic and deterministic policies.
+Minimizes the negative log-likelihood: -E[log π(a_expert | s)] where π is the
+policy being trained and a_expert are the expert actions from the demonstration dataset.</p>
+<p>Works with any actor network that implements <code class="xref py py-meth docutils literal notranslate"><span class="pre">get_dist()</span></code>
+method, including both
+stochastic and deterministic policies.</p>
+<dl class="simple">
+<dt>Reference:</dt><dd><p>“Integrating Behavior Cloning and Reinforcement Learning for Improved
+Performance in Dense and Sparse Reward Environments”
+<a class="reference external" href="https://arxiv.org/abs/1910.04281">https://arxiv.org/abs/1910.04281</a></p>
 </dd>
 </dl>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>The tensordict passed to <a class="reference internal" href="#torchrl.objectives.DiffusionBCLoss.forward" title="torchrl.objectives.DiffusionBCLoss.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> must contain:</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">self.tensor_keys.action</span></code> — the <em>clean</em> (demonstration) action.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">self.tensor_keys.observation</span></code> — the conditioning observation.</p></li>
-</ul>
-</div>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <span class="n">DiffusionActor</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.objectives</span> <span class="kn">import</span> <span class="n">DiffusionBCLoss</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">actor</span> <span class="o">=</span> <span class="n">DiffusionActor</span><span class="p">(</span><span class="n">action_dim</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">obs_dim</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">num_steps</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">loss_fn</span> <span class="o">=</span> <span class="n">DiffusionBCLoss</span><span class="p">(</span><span class="n">actor</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="p">{</span>
-<span class="gp">... </span>        <span class="s2">&quot;observation&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
-<span class="gp">... </span>        <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
-<span class="gp">... </span>    <span class="p">},</span>
-<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">8</span><span class="p">],</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">loss_td</span> <span class="o">=</span> <span class="n">loss_fn</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">loss_td</span><span class="p">[</span><span class="s2">&quot;loss_diffusion_bc&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
-</pre></div>
-</div>
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.objectives.DiffusionBCLoss.forward">
-<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.12)"><span class="pre">TensorDictBase</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.12)"><span class="pre">TensorDict</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/objectives/diffusion_bc.html#DiffusionBCLoss.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.DiffusionBCLoss.forward" title="Link to this definition">¶</a></dt>
-<dd><p>Compute the diffusion BC loss.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>tensordict</strong> (<em>TensorDictBase</em>) – input data containing observations
-and clean demonstration actions.</p>
+<dd class="field-odd"><p><strong>actor_network</strong> (<em>TensorDictModule</em>) – the actor network to be trained.</p>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>reduction</strong> (<em>str</em><em>, </em><em>optional</em>) – Specifies the reduction to apply to the output:
+<code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> | <code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code> | <code class="docutils literal notranslate"><span class="pre">&quot;sum&quot;</span></code>. <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code>: no reduction will be applied,
+<code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code>: the sum of the output will be divided by the number of
+elements in the output, <code class="docutils literal notranslate"><span class="pre">&quot;sum&quot;</span></code>: the output will be summed. Default: <code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code>.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data.tensor_specs</span> <span class="kn">import</span> <span class="n">Bounded</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.modules.tensordict_module.actors</span> <span class="kn">import</span> <span class="n">Actor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.objectives.bc</span> <span class="kn">import</span> <span class="n">BCLoss</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">n_act</span><span class="p">,</span> <span class="n">n_obs</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">spec</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span><span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_act</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_act</span><span class="p">),</span> <span class="p">(</span><span class="n">n_act</span><span class="p">,))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_obs</span><span class="p">,</span> <span class="n">n_act</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">actor</span> <span class="o">=</span> <span class="n">Actor</span><span class="p">(</span><span class="n">module</span><span class="o">=</span><span class="n">module</span><span class="p">,</span> <span class="n">spec</span><span class="o">=</span><span class="n">spec</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss</span> <span class="o">=</span> <span class="n">BCLoss</span><span class="p">(</span><span class="n">actor</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span>
+<span class="gp">... </span>    <span class="s2">&quot;observation&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="n">n_obs</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="n">spec</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">batch</span><span class="p">),</span>
+<span class="gp">... </span><span class="p">},</span> <span class="n">batch</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="go">TensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        loss_bc: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
+<span class="go">    batch_size=torch.Size([]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)</span>
+</pre></div>
+</div>
+<p>This class is compatible with non-tensordict based modules too and can be
+used without recurring to any tensordict-related primitive. In this case,
+the expected keyword arguments are the actor’s <code class="docutils literal notranslate"><span class="pre">in_keys</span></code> + <code class="docutils literal notranslate"><span class="pre">[&quot;action&quot;]</span></code>.
+The return value is a tensor corresponding to the loss.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data.tensor_specs</span> <span class="kn">import</span> <span class="n">Bounded</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.modules.tensordict_module.actors</span> <span class="kn">import</span> <span class="n">Actor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.objectives.bc</span> <span class="kn">import</span> <span class="n">BCLoss</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">n_act</span><span class="p">,</span> <span class="n">n_obs</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">spec</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span><span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_act</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_act</span><span class="p">),</span> <span class="p">(</span><span class="n">n_act</span><span class="p">,))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_obs</span><span class="p">,</span> <span class="n">n_act</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">actor</span> <span class="o">=</span> <span class="n">Actor</span><span class="p">(</span><span class="n">module</span><span class="o">=</span><span class="n">module</span><span class="p">,</span> <span class="n">spec</span><span class="o">=</span><span class="n">spec</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss</span> <span class="o">=</span> <span class="n">BCLoss</span><span class="p">(</span><span class="n">actor</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">loss</span><span class="o">.</span><span class="n">select_out_keys</span><span class="p">(</span><span class="s2">&quot;loss_bc&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss_bc</span> <span class="o">=</span> <span class="n">loss</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">observation</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="n">n_obs</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">action</span><span class="o">=</span><span class="n">spec</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">batch</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss_bc</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrl.objectives.BCLoss.default_keys">
+<span class="sig-name descname"><span class="pre">default_keys</span></span><a class="headerlink" href="#torchrl.objectives.BCLoss.default_keys" title="Link to this definition">¶</a></dt>
+<dd><p>alias of <code class="xref py py-class docutils literal notranslate"><span class="pre">_AcceptedKeys</span></code></p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.objectives.BCLoss.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.12)"><span class="pre">TensorDictBase</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.12)"><span class="pre">TensorDictBase</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/objectives/bc.html#BCLoss.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.BCLoss.forward" title="Link to this definition">¶</a></dt>
+<dd><p>Compute the behavior cloning loss.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tensordict</strong> (<em>TensorDictBase</em>) – input data containing observations and expert actions.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>TensorDict with key <code class="docutils literal notranslate"><span class="pre">&quot;loss_diffusion_bc&quot;</span></code>.</p>
+<dd class="field-even"><p>TensorDict with key “loss_bc”.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -337,10 +359,10 @@ and clean demonstration actions.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.objectives.GAILLoss.html" class="btn btn-neutral float-right" title="GAILLoss" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.objectives.DiffusionBCLoss.html" class="btn btn-neutral float-right" title="DiffusionBCLoss" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.objectives.BCLoss.html" class="btn btn-neutral" title="BCLoss" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="../objectives_other.html" class="btn btn-neutral" title="Other Loss Modules" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -366,9 +388,10 @@ and clean demonstration actions.</p>
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">DiffusionBCLoss</a><ul>
-<li><a class="reference internal" href="#torchrl.objectives.DiffusionBCLoss"><code class="docutils literal notranslate"><span class="pre">DiffusionBCLoss</span></code></a><ul>
-<li><a class="reference internal" href="#torchrl.objectives.DiffusionBCLoss.forward"><code class="docutils literal notranslate"><span class="pre">DiffusionBCLoss.forward()</span></code></a></li>
+<li><a class="reference internal" href="#">BCLoss</a><ul>
+<li><a class="reference internal" href="#torchrl.objectives.BCLoss"><code class="docutils literal notranslate"><span class="pre">BCLoss</span></code></a><ul>
+<li><a class="reference internal" href="#torchrl.objectives.BCLoss.default_keys"><code class="docutils literal notranslate"><span class="pre">BCLoss.default_keys</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.objectives.BCLoss.forward"><code class="docutils literal notranslate"><span class="pre">BCLoss.forward()</span></code></a></li>
 </ul>
 </li>
 </ul>
