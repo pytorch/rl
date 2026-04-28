@@ -280,6 +280,19 @@
     <span class="n">SumSegmentTreeFp32</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">SumSegmentTreeFp64</span> <span class="o">=</span> <span class="kc">None</span>
 
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">torchrl._torchrl</span> <span class="kn">import</span> <span class="p">(</span>
+        <span class="n">CudaMinSegmentTreeFp32</span><span class="p">,</span>
+        <span class="n">CudaMinSegmentTreeFp64</span><span class="p">,</span>
+        <span class="n">CudaSumSegmentTreeFp32</span><span class="p">,</span>
+        <span class="n">CudaSumSegmentTreeFp64</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+    <span class="n">CudaMinSegmentTreeFp32</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">CudaMinSegmentTreeFp64</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">CudaSumSegmentTreeFp32</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">CudaSumSegmentTreeFp64</span> <span class="o">=</span> <span class="kc">None</span>
+
 <span class="n">_EMPTY_STORAGE_ERROR</span> <span class="o">=</span> <span class="s2">&quot;Cannot sample from an empty storage.&quot;</span>
 
 
@@ -803,6 +816,10 @@
 <span class="sd">        max_priority_within_buffer (bool, optional): if ``True``, the max-priority</span>
 <span class="sd">            is tracked within the buffer. When ``False``, the max-priority tracks</span>
 <span class="sd">            the maximum value since the instantiation of the sampler.</span>
+<span class="sd">        device (torch.device or str, optional): device that holds the priority</span>
+<span class="sd">            trees. Defaults to ``None``, in which case CUDA storage selects a CUDA</span>
+<span class="sd">            tree when the installed TorchRL extension was built with CUDA support,</span>
+<span class="sd">            and CPU storage keeps the existing CPU tree.</span>
 
 <span class="sd">    **Parameter Guidelines**:</span>
 
@@ -878,6 +895,7 @@
         <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span>
         <span class="n">reduction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;max&quot;</span><span class="p">,</span>
         <span class="n">max_priority_within_buffer</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">alpha</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -893,6 +911,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">reduction</span> <span class="o">=</span> <span class="n">reduction</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_max_priority_within_buffer</span> <span class="o">=</span> <span class="n">max_priority_within_buffer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span> <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">rl_warnings</span><span class="p">()</span> <span class="ow">and</span> <span class="n">SumSegmentTreeFp32</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">EXTENSION_WARNING</span><span class="p">)</span>
@@ -903,6 +922,15 @@
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">max_size</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_capacity</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">device</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+        <span class="n">tree_device</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sum_tree</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">tree_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">tree_device</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">alpha</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -927,6 +955,25 @@
             <span class="p">)</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__getstate__</span><span class="p">()</span>
 
+    <span class="k">def</span> <span class="nf">_tree_device_from_storage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">:</span> <span class="n">Storage</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device</span>
+        <span class="k">if</span> <span class="n">storage</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">device</span> <span class="o">==</span> <span class="s2">&quot;auto&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">device</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">_maybe_init_from_storage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">:</span> <span class="n">Storage</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tree_device_from_storage</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">device</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="o">=</span> <span class="n">device</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">()</span>
+
     <span class="k">def</span> <span class="nf">_init</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">SumSegmentTreeFp32</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -944,6 +991,31 @@
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="s2">&quot;MinSegmentTreeFp64 is not available. See warning above.&quot;</span>
             <span class="p">)</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device</span>
+        <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">CudaSumSegmentTreeFp32</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="ow">or</span> <span class="n">CudaMinSegmentTreeFp32</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="ow">or</span> <span class="n">CudaSumSegmentTreeFp64</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="ow">or</span> <span class="n">CudaMinSegmentTreeFp64</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;CUDA prioritized replay buffers require a TorchRL CUDA wheel. &quot;</span>
+                    <span class="s2">&quot;Install a TorchRL wheel matching your PyTorch CUDA variant or &quot;</span>
+                    <span class="s2">&quot;rebuild TorchRL with FORCE_CUDA=1.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">in</span> <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">FloatType</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_sum_tree</span> <span class="o">=</span> <span class="n">CudaSumSegmentTreeFp32</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_max_capacity</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_min_tree</span> <span class="o">=</span> <span class="n">CudaMinSegmentTreeFp32</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_max_capacity</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">in</span> <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">double</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">DoubleTensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_sum_tree</span> <span class="o">=</span> <span class="n">CudaSumSegmentTreeFp64</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_max_capacity</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_min_tree</span> <span class="o">=</span> <span class="n">CudaMinSegmentTreeFp64</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_max_capacity</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;dtype </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s2"> not supported by PrioritizedSampler&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_max_priority</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">return</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">in</span> <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">FloatType</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_sum_tree</span> <span class="o">=</span> <span class="n">SumSegmentTreeFp32</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_max_capacity</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_min_tree</span> <span class="o">=</span> <span class="n">MinSegmentTreeFp32</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_max_capacity</span><span class="p">)</span>
@@ -1003,6 +1075,11 @@
             <span class="k">return</span> <span class="n">is_overwritten</span>
 
         <span class="n">is_overwritten</span> <span class="o">=</span> <span class="n">check_index</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">is_overwritten</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">is_overwritten</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_max_priority</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="k">return</span>
+            <span class="n">is_overwritten</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">is_overwritten</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
         <span class="k">if</span> <span class="n">is_overwritten</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_max_priority</span> <span class="o">=</span> <span class="kc">None</span>
 
@@ -1011,21 +1088,36 @@
         <span class="n">mp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_priority</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">mp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">mp</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">mp</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">mp</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
         <span class="k">return</span> <span class="p">(</span><span class="n">mp</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_eps</span><span class="p">)</span> <span class="o">**</span> <span class="bp">self</span><span class="o">.</span><span class="n">_alpha</span>
 
     <span class="k">def</span> <span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">:</span> <span class="n">Storage</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_init_from_storage</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">_EMPTY_STORAGE_ERROR</span><span class="p">)</span>
-        <span class="n">p_sum</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sum_tree</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">storage</span><span class="p">))</span>
-        <span class="n">p_min</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_min_tree</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">storage</span><span class="p">))</span>
+        <span class="n">tree_device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+        <span class="n">is_cuda</span> <span class="o">=</span> <span class="n">tree_device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span>
+        <span class="k">if</span> <span class="n">is_cuda</span><span class="p">:</span>
+            <span class="n">left</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">tree_device</span><span class="p">)</span>
+            <span class="n">right</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((),</span> <span class="nb">len</span><span class="p">(</span><span class="n">storage</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">tree_device</span><span class="p">)</span>
+            <span class="n">p_sum</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sum_tree</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">right</span><span class="p">)</span>
+            <span class="n">p_min</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_min_tree</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">right</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">p_sum</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sum_tree</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">storage</span><span class="p">))</span>
+            <span class="n">p_min</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_min_tree</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">storage</span><span class="p">))</span>
 
-        <span class="k">if</span> <span class="n">p_sum</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;non-positive p_sum&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">p_min</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;non-positive p_min&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">is_cuda</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">p_sum</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;non-positive p_sum&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">p_min</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;non-positive p_min&quot;</span><span class="p">)</span>
         <span class="c1"># For some undefined reason, only np.random works here.</span>
         <span class="c1"># All PT attempts fail, even when subsequently transformed into numpy</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rng</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">is_cuda</span><span class="p">:</span>
+            <span class="n">mass</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">tree_device</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rng</span><span class="p">)</span>
+            <span class="n">mass</span> <span class="o">=</span> <span class="n">mass</span> <span class="o">*</span> <span class="n">p_sum</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rng</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">mass</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">p_sum</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">mass</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rng</span><span class="p">)</span> <span class="o">*</span> <span class="n">p_sum</span>
@@ -1034,19 +1126,21 @@
         <span class="c1"># mass = torch.rand(batch_size).mul_(p_sum)</span>
         <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sum_tree</span><span class="o">.</span><span class="n">scan_lower_bound</span><span class="p">(</span><span class="n">mass</span><span class="p">)</span>
         <span class="n">index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">index</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">tree_device</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">tree_device</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">index</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
             <span class="n">index</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
         <span class="n">index</span><span class="o">.</span><span class="n">clamp_max_</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
-        <span class="n">weight</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sum_tree</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
-        <span class="c1"># get indices where weight is 0</span>
-        <span class="n">zero_weight</span> <span class="o">=</span> <span class="n">weight</span> <span class="o">==</span> <span class="mi">0</span>
-        <span class="n">index</span> <span class="o">=</span> <span class="n">index</span>
-        <span class="k">while</span> <span class="n">zero_weight</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
-            <span class="n">index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">zero_weight</span><span class="p">,</span> <span class="n">index</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
-            <span class="k">if</span> <span class="p">(</span><span class="n">index</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Failed to find a suitable index&quot;</span><span class="p">)</span>
-            <span class="n">weight</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sum_tree</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
+        <span class="n">weight</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sum_tree</span><span class="p">[</span><span class="n">index</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">tree_device</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">is_cuda</span><span class="p">:</span>
+            <span class="c1"># get indices where weight is 0</span>
             <span class="n">zero_weight</span> <span class="o">=</span> <span class="n">weight</span> <span class="o">==</span> <span class="mi">0</span>
+            <span class="k">while</span> <span class="n">zero_weight</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="n">index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">zero_weight</span><span class="p">,</span> <span class="n">index</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">index</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Failed to find a suitable index&quot;</span><span class="p">)</span>
+                <span class="n">weight</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sum_tree</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
+                <span class="n">zero_weight</span> <span class="o">=</span> <span class="n">weight</span> <span class="o">==</span> <span class="mi">0</span>
 
         <span class="c1"># Importance sampling weight formula:</span>
         <span class="c1">#   w_i = (p_i / sum(p) * N) ^ (-beta)</span>
@@ -1093,8 +1187,10 @@
 <span class="sd">                ``index.ndim &gt; 2``.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">priority</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">priority</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
-        <span class="n">index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_init_from_storage</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span>
+        <span class="n">tree_device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+        <span class="n">priority</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">priority</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">tree_device</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">tree_device</span><span class="p">)</span>
         <span class="c1"># we need to reshape priority if it has more than one element or if it has</span>
         <span class="c1"># a different shape than index</span>
         <span class="k">if</span> <span class="n">priority</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">priority</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">index</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
@@ -1111,10 +1207,14 @@
 
         <span class="c1"># MaxValueWriter will set -1 for items in the data that we don&#39;t want</span>
         <span class="c1"># to update. We therefore have to keep only the non-negative indices.</span>
-        <span class="k">if</span> <span class="n">_is_int</span><span class="p">(</span><span class="n">index</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">_is_int</span><span class="p">(</span><span class="n">index</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">index</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
                 <span class="k">return</span>
         <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">index</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">index</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">priority</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">priority</span> <span class="o">=</span> <span class="n">priority</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">index</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">storage</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -1128,18 +1228,49 @@
                         <span class="s2">&quot;Could not retrieve the storage shape. If your storage is not a TensorStorage subclass &quot;</span>
                         <span class="s2">&quot;or its shape isn&#39;t accessible via the shape attribute, submit an issue on GitHub.&quot;</span>
                     <span class="p">)</span>
-                <span class="n">index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ravel_multi_index</span><span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">shape</span><span class="p">))</span>
+                <span class="k">if</span> <span class="n">tree_device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+                    <span class="n">multipliers</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span>
+                        <span class="n">index</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">tree_device</span>
+                    <span class="p">)</span>
+                    <span class="k">for</span> <span class="n">dim</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">):</span>
+                        <span class="n">multipliers</span><span class="p">[</span><span class="n">dim</span><span class="p">]</span> <span class="o">=</span> <span class="n">multipliers</span><span class="p">[</span><span class="n">dim</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">shape</span><span class="p">[</span><span class="n">dim</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+                    <span class="n">index</span> <span class="o">=</span> <span class="p">(</span><span class="n">index</span> <span class="o">*</span> <span class="n">multipliers</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span>
+                        <span class="n">np</span><span class="o">.</span><span class="n">ravel_multi_index</span><span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">shape</span><span class="p">)</span>
+                    <span class="p">)</span>
             <span class="n">valid_index</span> <span class="o">=</span> <span class="n">index</span> <span class="o">&gt;=</span> <span class="mi">0</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">valid_index</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">tree_device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+                <span class="n">index</span> <span class="o">=</span> <span class="n">index</span><span class="p">[</span><span class="n">valid_index</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">priority</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+                    <span class="n">priority</span> <span class="o">=</span> <span class="n">priority</span><span class="p">[</span><span class="n">valid_index</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">index</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="k">return</span>
+            <span class="k">elif</span> <span class="ow">not</span> <span class="n">valid_index</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
                 <span class="k">return</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">valid_index</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+            <span class="k">elif</span> <span class="ow">not</span> <span class="n">valid_index</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
                 <span class="n">index</span> <span class="o">=</span> <span class="n">index</span><span class="p">[</span><span class="n">valid_index</span><span class="p">]</span>
                 <span class="k">if</span> <span class="n">priority</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
                     <span class="n">priority</span> <span class="o">=</span> <span class="n">priority</span><span class="p">[</span><span class="n">valid_index</span><span class="p">]</span>
 
         <span class="n">max_p</span><span class="p">,</span> <span class="n">max_p_idx</span> <span class="o">=</span> <span class="n">priority</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
         <span class="n">cur_max_priority</span><span class="p">,</span> <span class="n">cur_max_priority_index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_priority</span>
-        <span class="k">if</span> <span class="n">cur_max_priority</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">max_p</span> <span class="o">&gt;</span> <span class="n">cur_max_priority</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">cur_max_priority</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">cur_max_priority</span><span class="p">,</span> <span class="n">cur_max_priority_index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_priority</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">max_p</span><span class="p">,</span>
+                <span class="n">index</span><span class="p">[</span><span class="n">max_p_idx</span><span class="p">]</span> <span class="k">if</span> <span class="n">index</span><span class="o">.</span><span class="n">ndim</span> <span class="k">else</span> <span class="n">index</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">tree_device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_priority_within_buffer</span><span class="p">:</span>
+                <span class="n">cur_max_priority</span><span class="p">,</span> <span class="n">cur_max_priority_index</span> <span class="o">=</span> <span class="n">max_p</span><span class="p">,</span> <span class="p">(</span>
+                    <span class="n">index</span><span class="p">[</span><span class="n">max_p_idx</span><span class="p">]</span> <span class="k">if</span> <span class="n">index</span><span class="o">.</span><span class="n">ndim</span> <span class="k">else</span> <span class="n">index</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">cur_max_priority</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span>
+                    <span class="n">max_p</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">cur_max_priority</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">tree_device</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_max_priority</span> <span class="o">=</span> <span class="p">(</span><span class="n">cur_max_priority</span><span class="p">,</span> <span class="n">cur_max_priority_index</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">max_p</span> <span class="o">&gt;</span> <span class="n">cur_max_priority</span><span class="p">:</span>
             <span class="n">cur_max_priority</span><span class="p">,</span> <span class="n">cur_max_priority_index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_priority</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="n">max_p</span><span class="p">,</span>
                 <span class="n">index</span><span class="p">[</span><span class="n">max_p_idx</span><span class="p">]</span> <span class="k">if</span> <span class="n">index</span><span class="o">.</span><span class="n">ndim</span> <span class="k">else</span> <span class="n">index</span><span class="p">,</span>
@@ -1147,14 +1278,18 @@
         <span class="n">priority</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="n">priority</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_eps</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_alpha</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_sum_tree</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="n">priority</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_min_tree</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="n">priority</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_max_priority_within_buffer</span>
-            <span class="ow">and</span> <span class="n">cur_max_priority_index</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="ow">and</span> <span class="p">(</span><span class="n">index</span> <span class="o">==</span> <span class="n">cur_max_priority_index</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
-        <span class="p">):</span>
-            <span class="n">maxval</span><span class="p">,</span> <span class="n">maxidx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
-                <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_sum_tree</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_max_capacity</span><span class="p">)]</span>
-            <span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_priority_within_buffer</span> <span class="ow">and</span> <span class="n">cur_max_priority_index</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">tree_device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+                <span class="n">all_indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_max_capacity</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">tree_device</span>
+                <span class="p">)</span>
+                <span class="n">maxval</span><span class="p">,</span> <span class="n">maxidx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sum_tree</span><span class="p">[</span><span class="n">all_indices</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="p">(</span><span class="n">index</span> <span class="o">==</span> <span class="n">cur_max_priority_index</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="n">maxval</span><span class="p">,</span> <span class="n">maxidx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                    <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_sum_tree</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_max_capacity</span><span class="p">)]</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_max_priority</span> <span class="o">=</span> <span class="p">(</span><span class="n">maxval</span><span class="p">,</span> <span class="n">maxidx</span><span class="p">)</span></div>
 
 
