@@ -37,7 +37,7 @@ _has_gym = (importlib.util.find_spec("gym") is not None) or (
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 _has_hydra = importlib.util.find_spec("hydra") is not None
 _python_version_compatible = sys.version_info >= (3, 10)
-
+_has_vmas = importlib.util.find_spec("vmas") is not None
 # Make sure that warnings raise an exception
 pytestmark = [
     pytest.mark.filterwarnings("error"),
@@ -62,6 +62,30 @@ class TestEnvConfigs:
         assert cfg.backend == "gymnasium"
         assert cfg.from_pixels is False
         instantiate(cfg)
+
+    def test_vmas_env_config(self):
+        from torchrl.trainers.algorithms.configs.envs_libs import VmasEnvConfig
+
+        cfg = VmasEnvConfig(
+            scenario="balance",
+            num_envs=4,
+            continuous_actions=True,
+            max_steps=100,
+            scenario_kwargs={"n_agents": 3},
+        )
+        assert cfg._target_ == "torchrl.envs.libs.vmas.VmasEnv"
+        assert cfg.scenario == "balance"
+        assert cfg.scenario_kwargs["n_agents"] == 3
+
+    @pytest.mark.skipif(not _has_vmas, reason="Vmas is not installed")
+    def test_vmas_env_config_instantiation(self):
+        from hydra.utils import instantiate
+        from torchrl.envs.libs.vmas import VmasEnv
+        from torchrl.trainers.algorithms.configs.envs_libs import VmasEnvConfig
+
+        cfg = VmasEnvConfig(scenario="balance", num_envs=1)
+        env = instantiate(cfg)
+        assert isinstance(env, VmasEnv)
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
@@ -1298,6 +1322,26 @@ class TestOptimizerConfigs:
     not _configs_available, reason="Config system requires hydra-core and omegaconf"
 )
 class TestTrainerConfigs:
+    def test_nested_key_normalization_for_hydra_lists(self):
+        from torchrl.trainers.algorithms.configs.common import (
+            _convert_hydra_key,
+            _convert_hydra_keys,
+        )
+
+        assert _convert_hydra_key(["agents", "done"]) == (
+            "agents",
+            "done",
+        )
+        assert _convert_hydra_key(["action"]) == "action"
+        assert _convert_hydra_key("observation") == "observation"
+
+        assert _convert_hydra_keys(["action"]) == ["action"]
+        assert _convert_hydra_keys([["agents", "observation"], "action"]) == [
+            ("agents", "observation"),
+            "action",
+        ]
+        assert _convert_hydra_keys(["next", "reward"]) == ["next", "reward"]
+
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_ppo_trainer_config(self):
         from torchrl.trainers.algorithms.configs.trainers import PPOTrainerConfig

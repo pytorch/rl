@@ -6,9 +6,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
+from tensordict import NestedKey
 
 
 @dataclass
@@ -39,3 +42,14 @@ class Config:
             super().__setattr__(name, value)
         else:
             setattr(self._config, name, value)
+
+
+def _normalize_hydra_key(key: Any) -> NestedKey:
+    """Converts Hydra list of strings to a NestedKey."""
+    if isinstance(key, ListConfig):
+        key = tuple(key)
+    return key
+
+
+def _normalize_hydra_keys(keys: Sequence[Any] | None) -> Sequence[NestedKey] | None:
+    return keys if keys is None else [_normalize_hydra_key(key) for key in keys]

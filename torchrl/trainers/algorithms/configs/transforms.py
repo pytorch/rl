@@ -8,7 +8,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from torchrl.trainers.algorithms.configs.common import ConfigBase
+from torchrl.envs.transforms import ExpandAs, RewardSum
+
+from torchrl.trainers.algorithms.configs.common import (
+    _normalize_hydra_key,
+    _normalize_hydra_keys,
+    ConfigBase,
+)
 
 
 @dataclass
@@ -516,7 +522,10 @@ class RewardSumConfig(TransformConfig):
 
     in_keys: list[str] | None = None
     out_keys: list[str] | None = None
-    _target_: str = "torchrl.envs.transforms.transforms.RewardSum"
+    reset_keys: list[str] | None = None
+    _target_: str = (
+        "torchrl.trainers.algorithms.configs.transforms._make_reward_sum_transform"
+    )
 
     def __post_init__(self) -> None:
         """Post-initialization hook for RewardSum configuration."""
@@ -962,7 +971,23 @@ class ExpandAsConfig(TransformConfig):
     ref_key: list[str] | None = None
     in_key: list[str] | None = None
     out_key: list[str] | None = None
-    _target_: str = "torchrl.envs.transforms.transforms.ExpandAs"
+    _target_: str = (
+        "torchrl.trainers.algorithms.configs.transforms._make_expand_as_transform"
+    )
 
     def __post_init__(self) -> None:
         super().__post_init__()
+
+
+def _make_reward_sum_transform(*args, **kwargs) -> RewardSum:
+    in_keys = _normalize_hydra_keys(kwargs.pop("in_keys", None))
+    out_keys = _normalize_hydra_keys(kwargs.pop("out_keys", None))
+    reset_keys = _normalize_hydra_keys(kwargs.pop("reset_keys", None))
+    return RewardSum(in_keys=in_keys, out_keys=out_keys, reset_keys=reset_keys)
+
+
+def _make_expand_as_transform(*args, **kwargs) -> ExpandAs:
+    ref_key = _normalize_hydra_key(kwargs.pop("ref_key", None))
+    in_key = _normalize_hydra_key(kwargs.pop("in_key", None))
+    out_key = _normalize_hydra_key(kwargs.pop("out_key", None))
+    return ExpandAs(ref_key=ref_key, in_key=in_key, out_key=out_key)

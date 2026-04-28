@@ -15,7 +15,7 @@ from torchrl.collectors import BaseCollector
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.objectives.value.advantages import GAE
-from torchrl.trainers.algorithms.configs.common import ConfigBase
+from torchrl.trainers.algorithms.configs.common import _normalize_hydra_key, ConfigBase
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
 from torchrl.trainers.algorithms.dqn import DQNTrainer
@@ -62,6 +62,12 @@ class SACTrainerConfig(TrainerConfig):
     target_net_updater: Any = None
     async_collection: bool = False
     log_timings: bool = False
+    done_key: Any = "done"
+    terminated_key: Any = "terminated"
+    reward_key: Any = "reward"
+    episode_reward_key: Any = "reward_sum"
+    action_key: Any = "action"
+    observation_key: Any = "observation"
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_sac_trainer"
 
@@ -96,11 +102,19 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
     target_net_updater = kwargs.pop("target_net_updater")
     async_collection = kwargs.pop("async_collection", False)
     log_timings = kwargs.pop("log_timings", False)
+    done_key = _normalize_hydra_key(kwargs.pop("done_key", "done"))
+    terminated_key = _normalize_hydra_key(kwargs.pop("terminated_key", "terminated"))
+    reward_key = _normalize_hydra_key(kwargs.pop("reward_key", "reward"))
+    episode_reward_key = _normalize_hydra_key(
+        kwargs.pop("episode_reward_key", "reward_sum")
+    )
+    action_key = _normalize_hydra_key(kwargs.pop("action_key", "action"))
+    observation_key = _normalize_hydra_key(kwargs.pop("observation_key", "observation"))
 
     # Instantiate networks first
-    if actor_network is not None:
+    if actor_network is not None and not isinstance(actor_network, torch.nn.Module):
         actor_network = actor_network()
-    if critic_network is not None:
+    if critic_network is not None and not isinstance(critic_network, torch.nn.Module):
         critic_network = critic_network()
 
     if not isinstance(collector, BaseCollector):
@@ -160,6 +174,12 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
         target_net_updater=target_net_updater,
         async_collection=async_collection,
         log_timings=log_timings,
+        done_key=done_key,
+        terminated_key=terminated_key,
+        reward_key=reward_key,
+        episode_reward_key=episode_reward_key,
+        action_key=action_key,
+        observation_key=observation_key,
     )
 
 
@@ -225,6 +245,12 @@ class PPOTrainerConfig(TrainerConfig):
     gae: Any = None
     weight_update_map: dict[str, str] | None = None
     log_timings: bool = False
+    done_key: Any = "done"
+    terminated_key: Any = "terminated"
+    reward_key: Any = "reward"
+    episode_reward_key: Any = "reward"
+    action_key: Any = "action"
+    observation_key: Any = "observation"
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_ppo_trainer"
 
@@ -260,6 +286,14 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     create_env_fn = kwargs.pop("create_env_fn")
     weight_update_map = kwargs.pop("weight_update_map", None)
     log_timings = kwargs.pop("log_timings", False)
+    done_key = _normalize_hydra_key(kwargs.pop("done_key", "done"))
+    terminated_key = _normalize_hydra_key(kwargs.pop("terminated_key", "terminated"))
+    reward_key = _normalize_hydra_key(kwargs.pop("reward_key", "reward"))
+    episode_reward_key = _normalize_hydra_key(
+        kwargs.pop("episode_reward_key", "reward")
+    )
+    action_key = _normalize_hydra_key(kwargs.pop("action_key", "action"))
+    observation_key = _normalize_hydra_key(kwargs.pop("observation_key", "observation"))
 
     if create_env_fn is not None:
         # could be referenced somewhere else, no need to raise an error
@@ -268,9 +302,9 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     async_collection = kwargs.pop("async_collection", False)
 
     # Instantiate networks first
-    if actor_network is not None:
+    if actor_network is not None and not isinstance(actor_network, torch.nn.Module):
         actor_network = actor_network()
-    if critic_network is not None:
+    if critic_network is not None and not isinstance(critic_network, torch.nn.Module):
         critic_network = critic_network()
     else:
         critic_network = loss_module.critic_network
@@ -342,6 +376,12 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
         gae=gae,
         weight_update_map=weight_update_map,
         log_timings=log_timings,
+        done_key=done_key,
+        terminated_key=terminated_key,
+        reward_key=reward_key,
+        episode_reward_key=episode_reward_key,
+        action_key=action_key,
+        observation_key=observation_key,
     )
 
 
@@ -503,6 +543,12 @@ class DDPGTrainerConfig(TrainerConfig):
     target_net_updater: Any = None
     async_collection: bool = False
     log_timings: bool = False
+    done_key: Any = "done"
+    terminated_key: Any = "terminated"
+    reward_key: Any = "reward"
+    episode_reward_key: Any = "reward_sum"
+    action_key: Any = "action"
+    observation_key: Any = "observation"
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_ddpg_trainer"
 
@@ -536,12 +582,19 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
     target_net_updater = kwargs.pop("target_net_updater")
     async_collection = kwargs.pop("async_collection", False)
     log_timings = kwargs.pop("log_timings", False)
+    done_key = _normalize_hydra_key(kwargs.pop("done_key", "done"))
+    terminated_key = _normalize_hydra_key(kwargs.pop("terminated_key", "terminated"))
+    reward_key = _normalize_hydra_key(kwargs.pop("reward_key", "reward"))
+    episode_reward_key = _normalize_hydra_key(
+        kwargs.pop("episode_reward_key", "reward_sum")
+    )
+    action_key = _normalize_hydra_key(kwargs.pop("action_key", "action"))
+    observation_key = _normalize_hydra_key(kwargs.pop("observation_key", "observation"))
 
-    if actor_network is not None:
+    if actor_network is not None and not isinstance(actor_network, torch.nn.Module):
         actor_network = actor_network()
-    if critic_network is not None:
+    if critic_network is not None and not isinstance(critic_network, torch.nn.Module):
         critic_network = critic_network()
-
     if not isinstance(collector, BaseCollector):
         if not async_collection:
             collector = collector()
@@ -587,6 +640,12 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
         target_net_updater=target_net_updater,
         async_collection=async_collection,
         log_timings=log_timings,
+        done_key=done_key,
+        terminated_key=terminated_key,
+        reward_key=reward_key,
+        episode_reward_key=episode_reward_key,
+        action_key=action_key,
+        observation_key=observation_key,
     )
 
 

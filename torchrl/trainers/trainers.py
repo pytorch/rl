@@ -884,7 +884,6 @@ class Trainer:
             result = op(optim_steps, average_losses, **kwargs)
             if result is not None:
                 self._log(**result)
-        self._log(optim_steps=optim_steps, **average_losses)
 
     def _post_epoch_hook(self) -> None:
         """Execute regular hooks that run AFTER each epoch of optimization.
