@@ -58,6 +58,7 @@ TorchRL organizes configurations into several categories using the ``@`` syntax 
 - ``sampler@<target>``: Sampling strategy configurations
 - ``writer@<target>``: Writer strategy configurations
 - ``trainer@<target>``: Training loop configurations
+- ``hook@<target>``: Trainer hook configurations
 - ``optimizer@<target>``: Optimizer configurations
 - ``loss@<target>``: Loss function configurations
 - ``logger@<target>``: Logging configurations
@@ -483,6 +484,24 @@ Training and Optimization Configurations
     DDPGTrainerConfig
     IQLTrainerConfig
     CQLTrainerConfig
+
+Trainer Hook Configurations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.hooks
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_class.rst
+
+    HookConfig
+    BatchSubSamplerConfig
+    ClearCudaCacheConfig
+    CountFramesLogConfig
+    LogScalarConfig
+    LogTimingConfig
+    RewardNormalizerConfig
+    SelectKeysConfig
 
 .. currentmodule:: torchrl.trainers.algorithms.configs.objectives
 

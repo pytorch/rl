@@ -256,6 +256,7 @@
 <span class="kn">from</span> <span class="nn">torchrl.objectives.common</span> <span class="kn">import</span> <span class="n">LossModule</span>
 <span class="kn">from</span> <span class="nn">torchrl.objectives.utils</span> <span class="kn">import</span> <span class="n">TargetNetUpdater</span>
 <span class="kn">from</span> <span class="nn">torchrl.objectives.value.advantages</span> <span class="kn">import</span> <span class="n">GAE</span>
+<span class="kn">from</span> <span class="nn">torchrl.trainers</span> <span class="kn">import</span> <span class="n">TrainerHookBase</span>
 <span class="kn">from</span> <span class="nn">torchrl.trainers.algorithms.configs.common</span> <span class="kn">import</span> <span class="n">ConfigBase</span>
 <span class="kn">from</span> <span class="nn">torchrl.trainers.algorithms.cql</span> <span class="kn">import</span> <span class="n">CQLTrainer</span>
 <span class="kn">from</span> <span class="nn">torchrl.trainers.algorithms.ddpg</span> <span class="kn">import</span> <span class="n">DDPGTrainer</span>
@@ -275,6 +276,18 @@
     <span class="k">def</span> <span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Post-initialization hook for trainer configurations.&quot;&quot;&quot;</span></div>
 
+
+
+<span class="k">def</span> <span class="nf">_register_trainer_hooks</span><span class="p">(</span><span class="n">trainer</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">hooks</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span>
+    <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">hook</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">hooks</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="n">TrainerHookBase</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;trainer hooks must be TrainerHookBase instances with a &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;register(trainer) method, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span><span class="si">}</span><span class="s2"> at index </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">hook</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">trainer</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="SACTrainerConfig">
@@ -308,6 +321,7 @@
     <span class="n">target_net_updater</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torchrl.trainers.algorithms.configs.trainers._make_sac_trainer&quot;</span>
 
@@ -343,6 +357,7 @@
     <span class="n">target_net_updater</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;target_net_updater&quot;</span><span class="p">)</span>
     <span class="n">async_collection</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;async_collection&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">log_timings</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_timings&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="n">hooks</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;hooks&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
     <span class="c1"># Instantiate networks first</span>
     <span class="k">if</span> <span class="n">actor_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -388,7 +403,7 @@
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">logger</span><span class="p">,</span> <span class="n">Logger</span><span class="p">)</span> <span class="ow">and</span> <span class="n">logger</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;logger must be a Logger, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">logger</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-    <span class="k">return</span> <span class="n">SACTrainer</span><span class="p">(</span>
+    <span class="n">trainer</span> <span class="o">=</span> <span class="n">SACTrainer</span><span class="p">(</span>
         <span class="n">collector</span><span class="o">=</span><span class="n">collector</span><span class="p">,</span>
         <span class="n">total_frames</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
         <span class="n">frame_skip</span><span class="o">=</span><span class="n">frame_skip</span><span class="p">,</span>
@@ -408,6 +423,8 @@
         <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
     <span class="p">)</span>
+    <span class="n">_register_trainer_hooks</span><span class="p">(</span><span class="n">trainer</span><span class="p">,</span> <span class="n">hooks</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">trainer</span>
 
 
 <div class="viewcode-block" id="PPOTrainerConfig">
@@ -474,6 +491,7 @@
     <span class="n">gae</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">weight_update_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torchrl.trainers.algorithms.configs.trainers._make_ppo_trainer&quot;</span>
 
@@ -510,6 +528,7 @@
     <span class="n">create_env_fn</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;create_env_fn&quot;</span><span class="p">)</span>
     <span class="n">weight_update_map</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;weight_update_map&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
     <span class="n">log_timings</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_timings&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="n">hooks</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;hooks&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">create_env_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="c1"># could be referenced somewhere else, no need to raise an error</span>
@@ -570,7 +589,7 @@
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">gae</span><span class="p">,</span> <span class="p">(</span><span class="n">GAE</span><span class="p">,</span> <span class="n">TensorDictModuleBase</span><span class="p">))</span> <span class="ow">and</span> <span class="n">gae</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">gae</span> <span class="o">=</span> <span class="n">gae</span><span class="p">()</span>
 
-    <span class="k">return</span> <span class="n">PPOTrainer</span><span class="p">(</span>
+    <span class="n">trainer</span> <span class="o">=</span> <span class="n">PPOTrainer</span><span class="p">(</span>
         <span class="n">collector</span><span class="o">=</span><span class="n">collector</span><span class="p">,</span>
         <span class="n">total_frames</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
         <span class="n">frame_skip</span><span class="o">=</span><span class="n">frame_skip</span><span class="p">,</span>
@@ -593,6 +612,8 @@
         <span class="n">weight_update_map</span><span class="o">=</span><span class="n">weight_update_map</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
     <span class="p">)</span>
+    <span class="n">_register_trainer_hooks</span><span class="p">(</span><span class="n">trainer</span><span class="p">,</span> <span class="n">hooks</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">trainer</span>
 
 
 <div class="viewcode-block" id="DQNTrainerConfig">
@@ -624,6 +645,7 @@
     <span class="n">annealing_num_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">250_000</span>
     <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torchrl.trainers.algorithms.configs.trainers._make_dqn_trainer&quot;</span>
 
@@ -663,6 +685,7 @@
     <span class="n">annealing_num_steps</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;annealing_num_steps&quot;</span><span class="p">,</span> <span class="mi">250_000</span><span class="p">)</span>
     <span class="n">async_collection</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;async_collection&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">log_timings</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_timings&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="n">hooks</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;hooks&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">value_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value_network</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
         <span class="n">value_network</span> <span class="o">=</span> <span class="n">value_network</span><span class="p">()</span>
@@ -708,7 +731,7 @@
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">logger</span><span class="p">,</span> <span class="n">Logger</span><span class="p">)</span> <span class="ow">and</span> <span class="n">logger</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;logger must be a Logger, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">logger</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-    <span class="k">return</span> <span class="n">DQNTrainer</span><span class="p">(</span>
+    <span class="n">trainer</span> <span class="o">=</span> <span class="n">DQNTrainer</span><span class="p">(</span>
         <span class="n">collector</span><span class="o">=</span><span class="n">collector</span><span class="p">,</span>
         <span class="n">total_frames</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
         <span class="n">frame_skip</span><span class="o">=</span><span class="n">frame_skip</span><span class="p">,</span>
@@ -729,6 +752,8 @@
         <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
     <span class="p">)</span>
+    <span class="n">_register_trainer_hooks</span><span class="p">(</span><span class="n">trainer</span><span class="p">,</span> <span class="n">hooks</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">trainer</span>
 
 
 <div class="viewcode-block" id="DDPGTrainerConfig">
@@ -758,6 +783,7 @@
     <span class="n">target_net_updater</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torchrl.trainers.algorithms.configs.trainers._make_ddpg_trainer&quot;</span>
 
@@ -792,6 +818,7 @@
     <span class="n">target_net_updater</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;target_net_updater&quot;</span><span class="p">)</span>
     <span class="n">async_collection</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;async_collection&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">log_timings</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_timings&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="n">hooks</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;hooks&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">actor_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">actor_network</span> <span class="o">=</span> <span class="n">actor_network</span><span class="p">()</span>
@@ -824,7 +851,7 @@
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">logger</span><span class="p">,</span> <span class="n">Logger</span><span class="p">)</span> <span class="ow">and</span> <span class="n">logger</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;logger must be a Logger, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">logger</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-    <span class="k">return</span> <span class="n">DDPGTrainer</span><span class="p">(</span>
+    <span class="n">trainer</span> <span class="o">=</span> <span class="n">DDPGTrainer</span><span class="p">(</span>
         <span class="n">collector</span><span class="o">=</span><span class="n">collector</span><span class="p">,</span>
         <span class="n">total_frames</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
         <span class="n">frame_skip</span><span class="o">=</span><span class="n">frame_skip</span><span class="p">,</span>
@@ -844,6 +871,8 @@
         <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
     <span class="p">)</span>
+    <span class="n">_register_trainer_hooks</span><span class="p">(</span><span class="n">trainer</span><span class="p">,</span> <span class="n">hooks</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">trainer</span>
 
 
 <div class="viewcode-block" id="IQLTrainerConfig">
@@ -874,6 +903,7 @@
     <span class="n">target_net_updater</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torchrl.trainers.algorithms.configs.trainers._make_iql_trainer&quot;</span>
 
@@ -909,6 +939,7 @@
     <span class="n">target_net_updater</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;target_net_updater&quot;</span><span class="p">)</span>
     <span class="n">async_collection</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;async_collection&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">log_timings</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_timings&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="n">hooks</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;hooks&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">actor_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">actor_network</span> <span class="o">=</span> <span class="n">actor_network</span><span class="p">()</span>
@@ -945,7 +976,7 @@
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">logger</span><span class="p">,</span> <span class="n">Logger</span><span class="p">)</span> <span class="ow">and</span> <span class="n">logger</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;logger must be a Logger, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">logger</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-    <span class="k">return</span> <span class="n">IQLTrainer</span><span class="p">(</span>
+    <span class="n">trainer</span> <span class="o">=</span> <span class="n">IQLTrainer</span><span class="p">(</span>
         <span class="n">collector</span><span class="o">=</span><span class="n">collector</span><span class="p">,</span>
         <span class="n">total_frames</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
         <span class="n">frame_skip</span><span class="o">=</span><span class="n">frame_skip</span><span class="p">,</span>
@@ -965,6 +996,8 @@
         <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
     <span class="p">)</span>
+    <span class="n">_register_trainer_hooks</span><span class="p">(</span><span class="n">trainer</span><span class="p">,</span> <span class="n">hooks</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">trainer</span>
 
 
 <div class="viewcode-block" id="CQLTrainerConfig">
@@ -994,6 +1027,7 @@
     <span class="n">target_net_updater</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torchrl.trainers.algorithms.configs.trainers._make_cql_trainer&quot;</span>
 
@@ -1028,6 +1062,7 @@
     <span class="n">target_net_updater</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;target_net_updater&quot;</span><span class="p">)</span>
     <span class="n">async_collection</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;async_collection&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">log_timings</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_timings&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="n">hooks</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;hooks&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">actor_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">actor_network</span> <span class="o">=</span> <span class="n">actor_network</span><span class="p">()</span>
@@ -1060,7 +1095,7 @@
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">logger</span><span class="p">,</span> <span class="n">Logger</span><span class="p">)</span> <span class="ow">and</span> <span class="n">logger</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;logger must be a Logger, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">logger</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-    <span class="k">return</span> <span class="n">CQLTrainer</span><span class="p">(</span>
+    <span class="n">trainer</span> <span class="o">=</span> <span class="n">CQLTrainer</span><span class="p">(</span>
         <span class="n">collector</span><span class="o">=</span><span class="n">collector</span><span class="p">,</span>
         <span class="n">total_frames</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
         <span class="n">frame_skip</span><span class="o">=</span><span class="n">frame_skip</span><span class="p">,</span>
@@ -1080,6 +1115,8 @@
         <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
     <span class="p">)</span>
+    <span class="n">_register_trainer_hooks</span><span class="p">(</span><span class="n">trainer</span><span class="p">,</span> <span class="n">hooks</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">trainer</span>
 
 
 <span class="nd">@dataclass</span>
@@ -1107,6 +1144,7 @@
     <span class="n">target_net_updater</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">policy_update_delay</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span>
     <span class="n">value_estimator_gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torchrl.trainers.algorithms.configs.trainers._make_td3_trainer&quot;</span>
 
     <span class="k">def</span> <span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -1149,6 +1187,7 @@
     <span class="n">target_net_updater</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;target_net_updater&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
     <span class="n">policy_update_delay</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;policy_update_delay&quot;</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
     <span class="n">value_estimator_gamma</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;value_estimator_gamma&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">hooks</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;hooks&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">actor_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">actor_network</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
         <span class="n">actor_network</span> <span class="o">=</span> <span class="n">actor_network</span><span class="p">()</span>
@@ -1242,7 +1281,7 @@
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">logger</span><span class="p">,</span> <span class="n">Logger</span><span class="p">)</span> <span class="ow">and</span> <span class="n">logger</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;logger must be a Logger or None, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">logger</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-    <span class="k">return</span> <span class="n">TD3Trainer</span><span class="p">(</span>
+    <span class="n">trainer</span> <span class="o">=</span> <span class="n">TD3Trainer</span><span class="p">(</span>
         <span class="n">collector</span><span class="o">=</span><span class="n">collector</span><span class="p">,</span>
         <span class="n">total_frames</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
         <span class="n">frame_skip</span><span class="o">=</span><span class="n">frame_skip</span><span class="p">,</span>
@@ -1265,6 +1304,8 @@
         <span class="n">target_net_updater</span><span class="o">=</span><span class="n">target_net_updater</span><span class="p">,</span>
         <span class="n">exploration_module</span><span class="o">=</span><span class="n">exploration_module</span><span class="p">,</span>
     <span class="p">)</span>
+    <span class="n">_register_trainer_hooks</span><span class="p">(</span><span class="n">trainer</span><span class="p">,</span> <span class="n">hooks</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">trainer</span>
 </pre></div>
 
              </article>
