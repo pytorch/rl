@@ -666,6 +666,8 @@
             <span class="p">[]</span>
         <span class="p">)</span>  <span class="c1"># Process batches for optimization (e.g., subsampling)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_ops</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># After optimization (e.g., weight syncing)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_setup_ops</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># Before training starts (e.g., warmups, lazy init)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_ops</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># At training end (e.g., final eval, publish)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_modules</span> <span class="o">=</span> <span class="p">{}</span>
 
@@ -883,6 +885,8 @@
             <span class="s2">&quot;post_optim_complete_log&quot;</span><span class="p">,</span>
             <span class="s2">&quot;pre_epoch&quot;</span><span class="p">,</span>
             <span class="s2">&quot;post_epoch&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;setup&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;shutdown&quot;</span><span class="p">,</span>
         <span class="p">],</span>
         <span class="n">op</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
@@ -1004,13 +1008,21 @@
             <span class="n">_check_input_output_typehint</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_post_epoch_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
+        <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;setup&quot;</span><span class="p">:</span>
+            <span class="n">_check_input_output_typehint</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_setup_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
+
+        <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;shutdown&quot;</span><span class="p">:</span>
+            <span class="n">_check_input_output_typehint</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
+
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;The hook collection </span><span class="si">{</span><span class="n">dest</span><span class="si">}</span><span class="s2"> is not recognised. Choose from:&quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;(batch_process, pre_optim_steps, process_optim_batch, post_loss, &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;process_loss, optimizer, post_steps, post_optim, pre_steps_log, &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;post_steps_log, post_optim_log, pre_epoch_log, post_epoch_log, &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;post_optim_complete_log, pre_epoch, post_epoch)&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;post_optim_complete_log, setup, shutdown, pre_epoch, post_epoch)&quot;</span>
             <span class="p">)</span>
 
     <span class="n">register_hook</span> <span class="o">=</span> <span class="n">register_op</span>
@@ -1171,6 +1183,14 @@
             <span class="k">if</span> <span class="n">result</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span><span class="o">**</span><span class="n">result</span><span class="p">)</span>
 
+    <span class="k">def</span> <span class="nf">_setup_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_setup_ops</span><span class="p">:</span>
+            <span class="n">op</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_shutdown_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_ops</span><span class="p">:</span>
+            <span class="n">op</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
     <span class="k">def</span> <span class="nf">train</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">progress_bar</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_pbar</span> <span class="o">=</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">total</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span><span class="p">)</span>
@@ -1185,6 +1205,8 @@
             <span class="n">iterator</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_iterator</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">iterator</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_setup_hook</span><span class="p">()</span>
 
         <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">iterator</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="p">:</span>
@@ -1222,6 +1244,7 @@
                 <span class="k">break</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">save_trainer</span><span class="p">()</span>
 
+        <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_hook</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">_async_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
