@@ -161,9 +161,7 @@ class ACTModel(nn.Module):
               inference)
         """
         batch = observation.shape[:-1]
-        flat_b = (
-            math.prod(batch) if len(batch) > 1 else (batch[0] if len(batch) == 1 else 1)
-        )
+        flat_b = math.prod(batch)
 
         obs_flat = observation.reshape(flat_b, self.obs_dim)
         obs_tok = self.obs_proj(obs_flat).unsqueeze(1)  # (B, 1, D), shared

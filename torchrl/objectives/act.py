@@ -26,11 +26,11 @@ class ACTLoss(LossModule):
 
     .. math::
 
-        \\mathcal{L} = \\underbrace{\\|a_{\\text{pred}} -
-        a_{\\text{chunk}}\\|_1}_{\\text{reconstruction}}
-        + \\beta \\cdot
-        \\underbrace{D_{\\mathrm{KL}}\\!\\left(q(z|o,a)\\,\\|\\,
-        \\mathcal{N}(0,I)\\right)}_{\\text{KL}}
+        \mathcal{L} = \underbrace{\|a_{\text{pred}} -
+        a_{\text{chunk}}\|_1}_{\text{reconstruction}}
+        + \beta \cdot
+        \underbrace{D_{\mathrm{KL}}\!\left(q(z|o,a)\,\|\,
+        \mathcal{N}(0,I)\right)}_{\text{KL}}
 
     The ``actor_network`` must read ``"observation"`` and ``"action_chunk"``
     and write ``"action_pred"``, ``"mu"``, and ``"log_var"``.  This matches
@@ -174,9 +174,11 @@ class ACTLoss(LossModule):
         log_var = td_out.get(self.tensor_keys.log_var)
 
         # L1 reconstruction — average over chunk and action dimensions first,
-        # then apply the batch reduction.
+        # then apply the batch reduction. Reducing only the trailing two dims
+        # keeps multi-dim batch shapes intact so the per-element loss matches
+        # ``tensordict.batch_size`` under ``reduction="none"``.
         loss_recon = F.l1_loss(action_pred, action_chunk, reduction="none")
-        loss_recon = loss_recon.mean(dim=list(range(1, loss_recon.dim())))
+        loss_recon = loss_recon.mean(dim=(-2, -1))
         if self.reduction == "mean":
             loss_recon = loss_recon.mean()
         elif self.reduction == "sum":

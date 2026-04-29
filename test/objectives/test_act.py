@@ -324,6 +324,23 @@ class TestACTLoss:
         assert loss_td["loss_reconstruction"].shape == torch.Size([4])
         assert loss_td["loss_kl"].shape == torch.Size([4])
 
+    @pytest.mark.parametrize("batch_shape", [(2, 3), (2, 3, 4)])
+    def test_multi_dim_batch(self, batch_shape):
+        """Per-element losses must match ``tensordict.batch_size`` shape."""
+        actor = _make_actor()
+        loss_fn = ACTLoss(actor, reduction="none")
+        td = TensorDict(
+            {
+                "observation": torch.randn(*batch_shape, OBS_DIM),
+                "action_chunk": torch.randn(*batch_shape, CHUNK_SIZE, ACTION_DIM),
+            },
+            batch_size=list(batch_shape),
+        )
+        loss_td = loss_fn(td)
+        assert loss_td["loss_act"].shape == torch.Size(batch_shape)
+        assert loss_td["loss_reconstruction"].shape == torch.Size(batch_shape)
+        assert loss_td["loss_kl"].shape == torch.Size(batch_shape)
+
     def test_reset_parameters_recursive(self):
         actor = _make_actor()
         loss_fn = ACTLoss(actor)
