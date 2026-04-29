@@ -41,6 +41,19 @@ Once armed, the instrumentation can still be toggled at runtime:
 Calling ``set_profiling_enabled(True)`` without ``TORCHRL_PROFILING=1`` set
 at import time emits a warning and is a no-op.
 
+.. warning::
+
+   ``set_profiling_enabled()`` is **process-local**. It flips a module-level
+   flag in the calling process only; multiprocessing workers and Ray actors
+   each hold their own copy of ``torchrl._utils`` and will not observe the
+   change. ``TORCHRL_PROFILING=1`` is propagated to children at startup
+   (subprocesses inherit ``os.environ``, Ray actors get it injected via
+   ``as_remote(...)``), so every worker comes up with profiling
+   **enabled** by default whenever the variable is set on the driver. If
+   you need runtime scoping inside a worker, drive it from within that
+   worker — for example via ``torch.profiler.schedule`` — rather than
+   expecting a driver-side ``set_profiling_enabled()`` call to reach it.
+
 What gets instrumented
 ----------------------
 
