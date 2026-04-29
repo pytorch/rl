@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import functools
+import os
 
 import pytest
 import torch
@@ -18,6 +19,7 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.data.replay_buffers import (
+    PrioritizedSampler,
     RandomSampler,
     SamplerWithoutReplacement,
     SliceSampler,
@@ -71,8 +73,76 @@ def sample(rb):
     rb.sample()
 
 
+def sample_prioritized_sampler(sampler, storage, batch_size):
+    sampler.sample(storage, batch_size)
+    if sampler.device.type == "cuda":
+        torch.cuda.synchronize(sampler.device)
+
+
 def iterate(rb):
     next(rb)
+
+
+class StorageView:
+    ndim = 1
+    shape = None
+
+    def __init__(self, size, device):
+        self.size = size
+        self.device = torch.device(device)
+        self.shape = (size,)
+
+    def __len__(self):
+        return self.size
+
+
+def _skip_or_fail_unavailable(message):
+    if os.getenv("TORCHRL_BENCHMARK_DEVICE") in {"CPU", "GPU"}:
+        pytest.fail(message)
+    pytest.skip(message)
+
+
+class create_prioritized_sampler:
+    def __init__(self, size, device, batch_size, alpha=0.7, beta=0.5):
+        self.size = size
+        self.device = torch.device(device)
+        self.batch_size = batch_size
+        self.alpha = alpha
+        self.beta = beta
+
+    def __call__(self):
+        ext = pytest.importorskip("torchrl._torchrl")
+        if not hasattr(ext, "SumSegmentTreeFp32"):
+            _skip_or_fail_unavailable("TorchRL was not built with segment tree support")
+        if self.device.type == "cuda":
+            if not torch.cuda.is_available():
+                _skip_or_fail_unavailable("CUDA is not available")
+            if not hasattr(ext, "CudaSumSegmentTreeFp32"):
+                _skip_or_fail_unavailable(
+                    "TorchRL was not built with CUDA segment tree support"
+                )
+        storage = StorageView(self.size, self.device)
+        sampler = PrioritizedSampler(
+            max_capacity=self.size,
+            alpha=self.alpha,
+            beta=self.beta,
+            device=self.device,
+        )
+        index = torch.arange(self.size, device=self.device)
+        priority = torch.linspace(0.1, 1.0, self.size, device=self.device)
+        sampler.update_priority(index, priority, storage=storage)
+        if self.device.type == "cuda":
+            torch.cuda.synchronize(self.device)
+        return ((sampler, storage, self.batch_size), {})
+
+
+def _prioritized_sampler_benchmark_devices():
+    device = os.getenv("TORCHRL_BENCHMARK_DEVICE")
+    if device == "CPU":
+        return ["cpu"]
+    if device == "GPU":
+        return ["cuda"]
+    return ["cpu", "cuda"]
 
 
 @pytest.mark.parametrize(
@@ -111,6 +181,21 @@ def test_rb_sample(benchmark, rb, storage, sampler, size):
     )()
     torch.manual_seed(0)
     benchmark(sample, rb)
+
+
+@pytest.mark.parametrize("device", _prioritized_sampler_benchmark_devices())
+@pytest.mark.parametrize("size", [1_000_000, 10_000_000])
+def test_prioritized_sampler_sample_scale(benchmark, size, device):
+    batch_size = 65_536
+    (sampler, storage, batch_size), _ = create_prioritized_sampler(
+        size=size, device=device, batch_size=batch_size
+    )()
+    benchmark(
+        sample_prioritized_sampler,
+        sampler,
+        storage,
+        batch_size,
+    )
 
 
 def infinite_iter(obj):

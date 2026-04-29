@@ -79,6 +79,22 @@ else:
     Self = T
 
 
+def _storage_index(index: Any, storage: Storage) -> Any:
+    storage_device = getattr(storage, "device", None)
+    if storage_device is None or storage_device == "auto":
+        return index
+    storage_device = torch.device(storage_device)
+
+    def _maybe_to_storage_device(index):
+        if isinstance(index, torch.Tensor) and index.device != storage_device:
+            return index.to(storage_device)
+        return index
+
+    if isinstance(index, tuple):
+        return tuple(_maybe_to_storage_device(item) for item in index)
+    return _maybe_to_storage_device(index)
+
+
 def _maybe_delay_init(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
@@ -423,11 +439,19 @@ class ReplayBuffer:
 
         if isinstance(self._sampler, PrioritizedSampler) and len(self._storage) > 0:
             # Set default priorities for all existing data
-            indices = torch.arange(len(self._storage), dtype=torch.long)
+            device = getattr(self._storage, "device", None)
+            if device == "auto":
+                device = None
+            indices = torch.arange(len(self._storage), dtype=torch.long, device=device)
             default_priorities = torch.full(
-                (len(self._storage),), self._sampler.default_priority, dtype=torch.float
+                (len(self._storage),),
+                self._sampler.default_priority,
+                dtype=torch.float,
+                device=device,
             )
-            self._sampler.update_priority(indices, default_priorities)
+            self._sampler.update_priority(
+                indices, default_priorities, storage=self._storage
+            )
 
     def _maybe_make_storage(
         self, storage: Storage | Callable[[], Storage] | None, compilable
@@ -1021,7 +1045,7 @@ class ReplayBuffer:
         with self._replay_lock if not is_comp else nc, self._write_lock if not is_comp else nc:
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
-            data = self._storage.get(index)
+            data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
         if self._transform is not None and len(self._transform):
@@ -1318,6 +1342,10 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         sampler (Sampler, optional): the sampler to be used. If none is provided,
             a default :class:`~torchrl.data.replay_buffers.PrioritizedSampler` with
             ``alpha``, ``beta``, and ``eps`` will be created.
+        device_sampler (torch.device or str, optional): device where the
+            priority sampler trees will be stored. Defaults to ``None``, in
+            which case CUDA storage selects CUDA sampling and CPU storage
+            selects CPU sampling. Cannot be used together with ``sampler``.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
             loading from a map-style dataset. The default value will be decided
@@ -1423,6 +1451,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         dtype: torch.dtype = torch.float,
         storage: Storage | None = None,
         sampler: Sampler | None = None,
+        device_sampler: DEVICE_TYPING | None = None,
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
@@ -1434,7 +1463,11 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         if storage is None:
             storage = ListStorage(max_size=1_000)
         if sampler is None:
-            sampler = PrioritizedSampler(storage.max_size, alpha, beta, eps, dtype)
+            sampler = PrioritizedSampler(
+                storage.max_size, alpha, beta, eps, dtype, device=device_sampler
+            )
+        elif device_sampler is not None:
+            raise TypeError("device_sampler cannot be passed when sampler is provided.")
         super().__init__(
             storage=storage,
             sampler=sampler,
@@ -1820,7 +1853,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         with self._replay_lock if not is_comp else nc, self._write_lock if not is_comp else nc:
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
-            data = self._storage.get(index)
+            data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
         if self._transform is not None and len(self._transform):
@@ -1884,6 +1917,10 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             This is to be used when the sampler is of type
             :class:`~torchrl.data.PrioritizedSampler`.
             Defaults to ``"td_error"``.
+        device_sampler (torch.device or str, optional): device where the
+            priority sampler trees will be stored. Defaults to ``None``, in
+            which case CUDA storage selects CUDA sampling and CPU storage
+            selects CPU sampling.
         reduction (str, optional): the reduction method for multidimensional
             tensordicts (ie stored trajectories). Can be one of "max", "min",
             "median" or "mean".
@@ -1992,6 +2029,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         priority_key: str = "td_error",
         eps: float = 1e-8,
         storage: Storage | None = None,
+        device_sampler: DEVICE_TYPING | None = None,
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
@@ -2005,7 +2043,12 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
     ) -> None:
         storage = self._maybe_make_storage(storage, compilable=compilable)
         sampler = PrioritizedSampler(
-            storage.max_size, alpha, beta, eps, reduction=reduction
+            storage.max_size,
+            alpha,
+            beta,
+            eps,
+            reduction=reduction,
+            device=device_sampler,
         )
         super().__init__(
             priority_key=priority_key,

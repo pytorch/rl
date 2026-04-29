@@ -120,7 +120,7 @@ from tensordict.nn.distributions import NormalParamExtractor
 from torch import multiprocessing
 
 # Data collection
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
@@ -541,7 +541,7 @@ print("Running value:", critic(env.reset()))
 # We will use the simplest possible data collector, which has the same output as an environment rollout,
 # with the only difference that it will auto reset done states until the desired frames are collected.
 #
-collector = SyncDataCollector(
+collector = Collector(
     env,
     policy,
     device=vmas_device,

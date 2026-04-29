@@ -1236,11 +1236,13 @@ class MultiAgentCountingEnv(EnvBase):
         | dict[str, list[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
         max_steps: int = 5,
         start_val: int = 0,
+        env_done_key: str = "env_done",
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.max_steps = max_steps
         self.start_val = start_val
+        self.env_done_key = env_done_key
         self.n_agents = n_agents
         self.agent_names = [f"agent_{idx}" for idx in range(n_agents)]
 
@@ -1308,6 +1310,12 @@ class MultiAgentCountingEnv(EnvBase):
         self.observation_spec = Composite(observation_specs)
         self.reward_spec = Composite(reward_specs)
         self.done_spec = Composite(done_specs)
+        self.done_spec[env_done_key] = Categorical(
+            2,
+            dtype=torch.bool,
+            shape=(*self.batch_size, 1),
+            device=self.device,
+        )
         self.action_spec = Composite(action_specs)
         self.register_buffer(
             "count",
@@ -1344,6 +1352,8 @@ class MultiAgentCountingEnv(EnvBase):
                     device=self.device,
                 )
 
+        source[self.env_done_key] = self.count > self.max_steps
+
         tensordict = TensorDict(source, batch_size=self.batch_size, device=self.device)
         return tensordict
 
@@ -1377,6 +1387,7 @@ class MultiAgentCountingEnv(EnvBase):
                     batch_size=self.batch_size,
                     device=self.device,
                 )
+        source[self.env_done_key] = self.count > self.max_steps
         tensordict = TensorDict(source, batch_size=self.batch_size, device=self.device)
         return tensordict
 

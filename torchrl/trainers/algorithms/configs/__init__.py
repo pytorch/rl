@@ -136,6 +136,7 @@ from torchrl.trainers.algorithms.configs.transforms import (
     DTypeCastTransformConfig,
     EndOfLifeTransformConfig,
     ExcludeTransformConfig,
+    ExpandAsConfig,
     FiniteTensorDictCheckConfig,
     FlattenObservationConfig,
     FlattenTensorDictConfig,
@@ -486,6 +487,7 @@ def _register_configs():
     # Core transforms
     cs.store(group="transform", name="noop_reset", node=NoopResetEnvConfig)
     cs.store(group="transform", name="step_counter", node=StepCounterConfig)
+    cs.store(group="transform", name="expand_as", node=ExpandAsConfig)
     cs.store(group="transform", name="compose", node=ComposeConfig)
     cs.store(group="transform", name="double_to_float", node=DoubleToFloatConfig)
     cs.store(group="transform", name="to_tensor_image", node=ToTensorImageConfig)

@@ -30,6 +30,7 @@ from .transforms import (
     DoubleToFloat,
     DTypeCastTransform,
     ExcludeTransform,
+    ExpandAs,
     FiniteTensorDictCheck,
     FlattenObservation,
     FrameSkipTransform,
@@ -45,6 +46,7 @@ from .transforms import (
     PermuteTransform,
     PinMemoryTransform,
     RandomCropTensorDict,
+    RandomTruncationTransform,
     RemoveEmptySpecs,
     RenameTransform,
     Resize,
@@ -75,6 +77,7 @@ from .vc1 import VC1Transform
 from .vecnorm import VecNormV2
 from .vip import VIPRewardTransform, VIPTransform
 
+
 __all__ = [
     "ActionDiscretizer",
     "ActionMask",
@@ -97,6 +100,7 @@ __all__ = [
     "DoubleToFloat",
     "EndOfLifeTransform",
     "ExcludeTransform",
+    "ExpandAs",
     "FiniteTensorDictCheck",
     "FlattenObservation",
     "FrameSkipTransform",
@@ -115,6 +119,7 @@ __all__ = [
     "PinMemoryTransform",
     "R3MTransform",
     "RandomCropTensorDict",
+    "RandomTruncationTransform",
     "RayTransform",
     "RemoveEmptySpecs",
     "RenameTransform",

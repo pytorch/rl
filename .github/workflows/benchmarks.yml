@@ -30,6 +30,7 @@ jobs:
 
   benchmark:
     name: ${{ matrix.device }} Pytest benchmark
+    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'benchmarks/upload') }}
     runs-on: linux.g5.4xlarge.nvidia.gpu
     strategy:
       matrix:

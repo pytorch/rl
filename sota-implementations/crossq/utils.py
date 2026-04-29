@@ -8,7 +8,7 @@ import torch
 from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn, optim
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.envs import (
@@ -101,7 +101,7 @@ def make_collector(
     cudagraph=False,
 ):
     """Make collector."""
-    collector = SyncDataCollector(
+    collector = Collector(
         train_env,
         actor_model_explore,
         init_random_frames=cfg.collector.init_random_frames,
