@@ -1323,24 +1323,29 @@ class TestOptimizerConfigs:
 )
 class TestTrainerConfigs:
     def test_nested_key_normalization_for_hydra_lists(self):
+        from omegaconf import ListConfig
         from torchrl.trainers.algorithms.configs.common import (
-            _convert_hydra_key,
-            _convert_hydra_keys,
+            _normalize_hydra_key,
+            _normalize_hydra_keys,
         )
 
-        assert _convert_hydra_key(["agents", "done"]) == (
+        assert _normalize_hydra_key(["agents", "done"]) == ("agents", "done")
+        assert _normalize_hydra_key(ListConfig(["agents", "done"])) == (
             "agents",
             "done",
         )
-        assert _convert_hydra_key(["action"]) == "action"
-        assert _convert_hydra_key("observation") == "observation"
+        assert _normalize_hydra_key(["action"]) == "action"
+        assert _normalize_hydra_key(ListConfig(["action"])) == "action"
+        assert _normalize_hydra_key("observation") == "observation"
+        assert _normalize_hydra_key(None) is None
 
-        assert _convert_hydra_keys(["action"]) == ["action"]
-        assert _convert_hydra_keys([["agents", "observation"], "action"]) == [
+        assert _normalize_hydra_keys(None) is None
+        assert _normalize_hydra_keys(["action"]) == ["action"]
+        assert _normalize_hydra_keys([["agents", "observation"], "action"]) == [
             ("agents", "observation"),
             "action",
         ]
-        assert _convert_hydra_keys(["next", "reward"]) == ["next", "reward"]
+        assert _normalize_hydra_keys(["next", "reward"]) == ["next", "reward"]
 
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_ppo_trainer_config(self):

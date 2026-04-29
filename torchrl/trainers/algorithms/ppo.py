@@ -291,6 +291,7 @@ class PPOTrainer(Trainer):
         self.log_actions = log_actions
         self.log_observations = log_observations
         self.done_key = done_key
+        self.terminated_key = terminated_key
         self.reward_key = reward_key
         self.episode_reward_key = episode_reward_key
         self.action_key = action_key
