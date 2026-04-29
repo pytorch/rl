@@ -95,12 +95,14 @@ from torchrl.trainers.algorithms.configs.modules import (
     ConvNetConfig,
     MLPConfig,
     ModelConfig,
+    QMixerNetworkConfig,
     QValueModelConfig,
     TanhModuleConfig,
     TanhNormalModelConfig,
     TensorDictModuleConfig,
     TensorDictSequentialConfig,
     ValueModelConfig,
+    VDNMixerNetworkConfig,
 )
 from torchrl.trainers.algorithms.configs.objectives import (
     CQLLossConfig,
@@ -111,6 +113,7 @@ from torchrl.trainers.algorithms.configs.objectives import (
     IQLLossConfig,
     LossConfig,
     PPOLossConfig,
+    QMixerLossConfig,
     SACLossConfig,
     SoftUpdateConfig,
     TD3LossConfig,
@@ -294,6 +297,8 @@ __all__ = [
     "TensorDictSequentialConfig",
     "ValueModelConfig",
     "QValueModelConfig",
+    "QMixerNetworkConfig",
+    "VDNMixerNetworkConfig",
     "AdditiveGaussianModuleConfig",
     # Transforms - Core
     "ActionDiscretizerConfig",
@@ -386,6 +391,7 @@ __all__ = [
     "IQLLossConfig",
     "LossConfig",
     "PPOLossConfig",
+    "QMixerLossConfig",
     "SACLossConfig",
     "TD3LossConfig",
     # Value functions
@@ -481,6 +487,8 @@ def _register_configs():
     # Network configs
     cs.store(group="network", name="mlp", node=MLPConfig)
     cs.store(group="network", name="convnet", node=ConvNetConfig)
+    cs.store(group="network", name="qmixer", node=QMixerNetworkConfig)
+    cs.store(group="network", name="vdn_mixer", node=VDNMixerNetworkConfig)
 
     # Model configs
     cs.store(group="network", name="tensordict_module", node=TensorDictModuleConfig)
@@ -602,6 +610,8 @@ def _register_configs():
     cs.store(group="loss", name="dqn", node=DQNLossConfig)
     cs.store(group="loss", name="iql", node=IQLLossConfig)
     cs.store(group="loss", name="ppo", node=PPOLossConfig)
+    cs.store(group="loss", name="qmix", node=QMixerLossConfig)
+    cs.store(group="loss", name="vdn", node=QMixerLossConfig)
     cs.store(group="loss", name="sac", node=SACLossConfig)
     cs.store(group="loss", name="td3", node=TD3LossConfig)
 

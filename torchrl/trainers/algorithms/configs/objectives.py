@@ -16,12 +16,14 @@ from torchrl.objectives import (
     IQLLoss,
     KLPENPPOLoss,
     PPOLoss,
+    QMixerLoss,
     SACLoss,
     TD3Loss,
 )
 from torchrl.objectives.iql import DiscreteIQLLoss
 from torchrl.objectives.sac import DiscreteSACLoss
-from torchrl.trainers.algorithms.configs.common import ConfigBase
+from torchrl.objectives.utils import ValueEstimators
+from torchrl.trainers.algorithms.configs.common import _normalize_hydra_key, ConfigBase
 
 
 @dataclass
@@ -235,6 +237,14 @@ class DQNLossConfig(LossConfig):
     action_space: Any = None
     gamma: float | None = None
     reduction: str | None = None
+    action_key: Any = None
+    action_value_key: Any = None
+    value_key: Any = None
+    reward_key: Any = None
+    done_key: Any = None
+    terminated_key: Any = None
+    priority_key: Any = None
+    priority_weight_key: Any = None
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_dqn_loss"
 
     def __post_init__(self) -> None:
@@ -242,10 +252,79 @@ class DQNLossConfig(LossConfig):
 
 
 def _make_dqn_loss(*args, **kwargs) -> DQNLoss:
+    tensor_keys = {
+        "action": kwargs.pop("action_key", None),
+        "action_value": kwargs.pop("action_value_key", None),
+        "value": kwargs.pop("value_key", None),
+        "reward": kwargs.pop("reward_key", None),
+        "done": kwargs.pop("done_key", None),
+        "terminated": kwargs.pop("terminated_key", None),
+        "priority": kwargs.pop("priority_key", None),
+        "priority_weight": kwargs.pop("priority_weight_key", None),
+    }
     value_network = kwargs.get("value_network")
     if value_network is not None and hasattr(value_network, "_target_"):
         kwargs["value_network"] = value_network()
-    return DQNLoss(*args, **kwargs)
+    loss = DQNLoss(*args, **kwargs)
+    tensor_keys = {
+        key: _normalize_hydra_key(value)
+        for key, value in tensor_keys.items()
+        if value is not None
+    }
+    if tensor_keys:
+        loss.set_keys(**tensor_keys)
+    return loss
+
+
+@dataclass
+class QMixerLossConfig(LossConfig):
+    """A class to configure a QMixer loss."""
+
+    local_value_network: Any = None
+    mixer_network: Any = None
+    loss_function: str = "l2"
+    delay_value: bool = True
+    action_space: Any = None
+    gamma: float | None = None
+    priority_key: str | None = None
+    action_key: Any = None
+    action_value_key: Any = None
+    local_value_key: Any = None
+    global_value_key: Any = None
+    reward_key: Any = None
+    done_key: Any = None
+    terminated_key: Any = None
+    _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_qmixer_loss"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+
+
+def _make_qmixer_loss(*args, **kwargs) -> QMixerLoss:
+    tensor_keys = {
+        "action": _normalize_hydra_key(kwargs.pop("action_key", None)),
+        "action_value": _normalize_hydra_key(kwargs.pop("action_value_key", None)),
+        "local_value": _normalize_hydra_key(kwargs.pop("local_value_key", None)),
+        "global_value": _normalize_hydra_key(kwargs.pop("global_value_key", None)),
+        "reward": _normalize_hydra_key(kwargs.pop("reward_key", None)),
+        "done": _normalize_hydra_key(kwargs.pop("done_key", None)),
+        "terminated": _normalize_hydra_key(kwargs.pop("terminated_key", None)),
+        "priority": _normalize_hydra_key(kwargs.pop("priority_key", None)),
+    }
+    local_value_network = kwargs.get("local_value_network")
+    mixer_network = kwargs.get("mixer_network")
+    gamma = kwargs.pop("gamma", None)
+
+    if local_value_network is not None and hasattr(local_value_network, "_target_"):
+        kwargs["local_value_network"] = local_value_network()
+    if mixer_network is not None and hasattr(mixer_network, "_target_"):
+        kwargs["mixer_network"] = mixer_network()
+
+    loss = QMixerLoss(*args, **kwargs)
+    loss.set_keys(**{k: v for k, v in tensor_keys.items() if v is not None})
+    if gamma is not None:
+        loss.make_value_estimator(ValueEstimators.TD0, gamma=gamma)
+    return loss
 
 
 @dataclass

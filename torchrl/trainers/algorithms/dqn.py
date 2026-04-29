@@ -13,6 +13,7 @@ from collections.abc import Callable
 from functools import partial
 
 from tensordict import TensorDict, TensorDictBase
+from tensordict.utils import NestedKey
 from torch import optim
 
 from torchrl.collectors import BaseCollector
@@ -126,6 +127,13 @@ class DQNTrainer(Trainer):
         greedy_module: EGreedyModule | None = None,
         async_collection: bool = False,
         log_timings: bool = False,
+        mixing_strategy: str | None = None,
+        done_key: NestedKey = "done",
+        terminated_key: NestedKey = "terminated",
+        reward_key: NestedKey = "reward",
+        episode_reward_key: NestedKey = "reward_sum",
+        action_key: NestedKey = "action",
+        observation_key: NestedKey = "observation",
     ) -> None:
         warnings.warn(
             "DQNTrainer is an experimental/prototype feature. The API may change in future versions. "
@@ -153,6 +161,13 @@ class DQNTrainer(Trainer):
         )
         self.replay_buffer = replay_buffer
         self.async_collection = async_collection
+        self.mixing_strategy = mixing_strategy
+        self.done_key = done_key
+        self.terminated_key = terminated_key
+        self.reward_key = reward_key
+        self.episode_reward_key = episode_reward_key
+        self.action_key = action_key
+        self.observation_key = observation_key
 
         if replay_buffer is not None:
             rb_trainer = ReplayBufferTrainer(
@@ -171,7 +186,15 @@ class DQNTrainer(Trainer):
         self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
 
         self.greedy_module = greedy_module
-        weights_source = self.loss_module.value_network
+        if hasattr(self.loss_module, "value_network"):
+            weights_source = self.loss_module.value_network
+        elif hasattr(self.loss_module, "local_value_network"):
+            weights_source = self.loss_module.local_value_network
+        else:
+            raise AttributeError(
+                "loss_module must expose either `value_network` or `local_value_network` "
+                "to sync policy weights with the collector."
+            )
         if greedy_module is not None:
             from tensordict.nn import TensorDictSequential
 
@@ -189,6 +212,9 @@ class DQNTrainer(Trainer):
         self.log_rewards = log_rewards
         self.log_observations = log_observations
 
+        if self.mixing_strategy in ("qmix", "vdn"):
+            self.register_op("batch_process", self._aggregate_agent_rewards)
+
         if self.enable_logging:
             self._setup_dqn_logging()
 
@@ -199,10 +225,21 @@ class DQNTrainer(Trainer):
             self.greedy_module.step(delta)
             self._greedy_last_frames = self.collected_frames
 
+    def _aggregate_agent_rewards(self, batch: TensorDictBase) -> TensorDictBase:
+        for key in (self.reward_key, self.episode_reward_key):
+            next_key = ("next", *key) if isinstance(key, tuple) else ("next", key)
+            if batch.get(next_key, None) is not None:
+                continue
+            source_key = ("next", "agents", key[-1] if isinstance(key, tuple) else key)
+            value = batch.get(source_key, None)
+            if value is not None:
+                batch.set(next_key, value.mean(-2))
+        return batch
+
     def _setup_dqn_logging(self):
         """Set up logging hooks for DQN-specific metrics."""
         log_done_percentage = LogScalar(
-            key=("next", "done"),
+            key=("next", self.done_key),
             logname="done_percentage",
             log_pbar=True,
             include_std=False,
@@ -213,21 +250,21 @@ class DQNTrainer(Trainer):
 
         if self.log_rewards:
             log_rewards = LogScalar(
-                key=("next", "reward"),
+                key=("next", self.reward_key),
                 logname="r_training",
                 log_pbar=True,
                 include_std=True,
                 reduction="mean",
             )
             log_max_reward = LogScalar(
-                key=("next", "reward"),
+                key=("next", self.reward_key),
                 logname="r_max",
                 log_pbar=False,
                 include_std=False,
                 reduction="max",
             )
             log_total_reward = LogScalar(
-                key=("next", "reward_sum"),
+                key=("next", self.episode_reward_key),
                 logname="r_total",
                 log_pbar=False,
                 include_std=False,
@@ -239,7 +276,7 @@ class DQNTrainer(Trainer):
 
         if self.log_observations:
             log_obs_norm = LogScalar(
-                key="observation",
+                key=self.observation_key,
                 logname="obs_norm",
                 log_pbar=False,
                 include_std=True,
