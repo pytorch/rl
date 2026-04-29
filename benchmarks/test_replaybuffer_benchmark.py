@@ -84,7 +84,7 @@ def sample_prioritized_replay_buffer(rb):
     sampler_device = rb._sampler.device
     if sampler_device.type == "cuda":
         torch.cuda.synchronize(sampler_device)
-    elif getattr(sample, "device", None) is not None and sample.device.type == "cuda":
+    elif sample.device is not None and sample.device.type == "cuda":
         torch.cuda.synchronize(sample.device)
 
 
@@ -202,8 +202,13 @@ class create_prioritized_replay_buffer:
             device=data_device,
         )
         rb.extend(data)
-        if "cuda" in {self.storage_device.type, self.sampler_device.type}:
-            torch.cuda.synchronize()
+        if self.storage_device.type == "cuda":
+            torch.cuda.synchronize(self.storage_device)
+        if (
+            self.sampler_device.type == "cuda"
+            and self.sampler_device != self.storage_device
+        ):
+            torch.cuda.synchronize(self.sampler_device)
         return ((rb,), {})
 
 

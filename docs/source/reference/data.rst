@@ -109,6 +109,7 @@ CPU memmap storage with CUDA priority sampling:
     )
     rb.extend(data)
     sample = rb.sample()
+    sample["td_error"] = torch.rand(sample.shape)
     rb.update_tensordict_priority(sample)
 
 CUDA storage with CPU priority sampling:
@@ -138,6 +139,7 @@ CUDA storage with CPU priority sampling:
     )
     rb.extend(data)
     sample = rb.sample()
+    sample["td_error"] = torch.rand(sample.shape, device="cuda")
     rb.update_tensordict_priority(sample)
 
 Documentation Sections

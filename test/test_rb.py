@@ -4946,7 +4946,7 @@ class TestSharedStorageInit:
             assert p.exitcode == 0
             assert queue.get(timeout=5) == "done"
 
-        assert len(storage) >= 8
+        assert len(storage) == 8
         learner_rb = TensorDictPrioritizedReplayBuffer(
             alpha=0.7,
             beta=0.5,
