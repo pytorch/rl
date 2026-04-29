@@ -304,6 +304,10 @@ Default is False.</p></li>
 timing information for all hooks to the logger (e.g., wandb, tensorboard).
 Timing metrics will be logged with prefix “time/” (e.g., “time/hook/UpdateWeights”).
 Default is False.</p></li>
+<li><p><strong>auto_log_optim_steps</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, automatically log <code class="docutils literal notranslate"><span class="pre">optim_steps</span></code> and the
+keys of the averaged loss TensorDict at the end of every optimization loop, in addition
+to anything <code class="docutils literal notranslate"><span class="pre">post_optim_complete_log</span></code> hooks return. Set to False to fully delegate
+this logging to user-registered hooks. Default is True.</p></li>
 </ul>
 </dd>
 </dl>

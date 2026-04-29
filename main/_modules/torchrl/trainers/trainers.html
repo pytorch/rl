@@ -547,6 +547,10 @@
 <span class="sd">            timing information for all hooks to the logger (e.g., wandb, tensorboard).</span>
 <span class="sd">            Timing metrics will be logged with prefix &quot;time/&quot; (e.g., &quot;time/hook/UpdateWeights&quot;).</span>
 <span class="sd">            Default is False.</span>
+<span class="sd">        auto_log_optim_steps (bool, optional): If True, automatically log ``optim_steps`` and the</span>
+<span class="sd">            keys of the averaged loss TensorDict at the end of every optimization loop, in addition</span>
+<span class="sd">            to anything ``post_optim_complete_log`` hooks return. Set to False to fully delegate</span>
+<span class="sd">            this logging to user-registered hooks. Default is True.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="nd">@classmethod</span>
@@ -585,6 +589,7 @@
         <span class="n">num_epochs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">auto_log_optim_steps</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="c1"># objects</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">frame_skip</span> <span class="o">=</span> <span class="n">frame_skip</span>
@@ -616,6 +621,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">progress_bar</span> <span class="o">=</span> <span class="n">progress_bar</span> <span class="ow">and</span> <span class="n">_has_tqdm</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">save_trainer_interval</span> <span class="o">=</span> <span class="n">save_trainer_interval</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">save_trainer_file</span> <span class="o">=</span> <span class="n">save_trainer_file</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">auto_log_optim_steps</span> <span class="o">=</span> <span class="n">auto_log_optim_steps</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_log_dict</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
 
@@ -1148,7 +1154,11 @@
             <span class="n">result</span> <span class="o">=</span> <span class="n">op</span><span class="p">(</span><span class="n">optim_steps</span><span class="p">,</span> <span class="n">average_losses</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">result</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span><span class="o">**</span><span class="n">result</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span><span class="n">optim_steps</span><span class="o">=</span><span class="n">optim_steps</span><span class="p">,</span> <span class="o">**</span><span class="n">average_losses</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">auto_log_optim_steps</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">average_losses</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span><span class="n">optim_steps</span><span class="o">=</span><span class="n">optim_steps</span><span class="p">,</span> <span class="o">**</span><span class="n">average_losses</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span><span class="n">optim_steps</span><span class="o">=</span><span class="n">optim_steps</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_post_epoch_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Execute regular hooks that run AFTER each epoch of optimization.</span>

@@ -254,6 +254,7 @@
 <span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">partial</span>
 
 <span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span> <span class="nn">tensordict.utils</span> <span class="kn">import</span> <span class="n">NestedKey</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">optim</span>
 
 <span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">BaseCollector</span>
@@ -330,6 +331,14 @@
 <span class="sd">            timing information for all hooks to the logger (e.g., wandb, tensorboard).</span>
 <span class="sd">            Timing metrics will be logged with prefix &quot;time/&quot; (e.g., &quot;time/hook/UpdateWeights&quot;).</span>
 <span class="sd">            Default is False.</span>
+<span class="sd">        done_key (NestedKey, optional): Done key used by GAE, losses, and logging. Default: &quot;done&quot;.</span>
+<span class="sd">        terminated_key (NestedKey, optional): Terminated key used by GAE, losses, and logging.</span>
+<span class="sd">            Default: &quot;terminated&quot;.</span>
+<span class="sd">        reward_key (NestedKey, optional): Reward key used by GAE, losses, and logging. Default: &quot;reward&quot;.</span>
+<span class="sd">        episode_reward_key (NestedKey, optional): Episode reward key used for cumulative reward logging.</span>
+<span class="sd">            Default: &quot;reward&quot;.</span>
+<span class="sd">        action_key (NestedKey, optional): Action key used by losses and logging. Default: &quot;action&quot;.</span>
+<span class="sd">        observation_key (NestedKey, optional): Observation key used for logging. Default: &quot;observation&quot;.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; # Basic usage with manual configuration</span>
@@ -380,6 +389,12 @@
         <span class="n">gae</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">weight_update_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">done_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;done&quot;</span><span class="p">,</span>
+        <span class="n">terminated_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;terminated&quot;</span><span class="p">,</span>
+        <span class="n">reward_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span><span class="p">,</span>
+        <span class="n">episode_reward_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span><span class="p">,</span>
+        <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span><span class="p">,</span>
+        <span class="n">observation_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;observation&quot;</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
             <span class="s2">&quot;PPOTrainer is an experimental/prototype feature. The API may change in future versions. &quot;</span>
@@ -416,9 +431,25 @@
                 <span class="n">value_network</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span><span class="o">.</span><span class="n">critic_network</span><span class="p">,</span>
                 <span class="n">average_gae</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_epoch&quot;</span><span class="p">,</span> <span class="n">gae</span><span class="p">)</span>
         <span class="k">elif</span> <span class="ow">not</span> <span class="n">add_gae</span> <span class="ow">and</span> <span class="n">gae</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;gae must not be provided if add_gae is False&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">add_gae</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">gae</span><span class="p">,</span> <span class="s2">&quot;set_keys&quot;</span><span class="p">):</span>
+                <span class="n">gae</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span>
+                    <span class="n">reward</span><span class="o">=</span><span class="n">reward_key</span><span class="p">,</span>
+                    <span class="n">done</span><span class="o">=</span><span class="n">done_key</span><span class="p">,</span>
+                    <span class="n">terminated</span><span class="o">=</span><span class="n">terminated_key</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_epoch&quot;</span><span class="p">,</span> <span class="n">gae</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span><span class="p">,</span> <span class="s2">&quot;set_keys&quot;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span>
+                <span class="n">reward</span><span class="o">=</span><span class="n">reward_key</span><span class="p">,</span>
+                <span class="n">done</span><span class="o">=</span><span class="n">done_key</span><span class="p">,</span>
+                <span class="n">terminated</span><span class="o">=</span><span class="n">terminated_key</span><span class="p">,</span>
+                <span class="n">action</span><span class="o">=</span><span class="n">action_key</span><span class="p">,</span>
+            <span class="p">)</span>
 
         <span class="k">if</span> <span class="p">(</span>
             <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span>
@@ -502,6 +533,12 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">log_rewards</span> <span class="o">=</span> <span class="n">log_rewards</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">log_actions</span> <span class="o">=</span> <span class="n">log_actions</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">log_observations</span> <span class="o">=</span> <span class="n">log_observations</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">done_key</span> <span class="o">=</span> <span class="n">done_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">terminated_key</span> <span class="o">=</span> <span class="n">terminated_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reward_key</span> <span class="o">=</span> <span class="n">reward_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">episode_reward_key</span> <span class="o">=</span> <span class="n">episode_reward_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_key</span> <span class="o">=</span> <span class="n">action_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">observation_key</span> <span class="o">=</span> <span class="n">observation_key</span>
 
         <span class="c1"># Set up comprehensive logging for PPO training</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">enable_logging</span><span class="p">:</span>
@@ -519,7 +556,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="c1"># Always log done states as percentage (episode completion rate)</span>
         <span class="n">log_done_percentage</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
-            <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">),</span>
+            <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_key</span><span class="p">),</span>
             <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;done_percentage&quot;</span><span class="p">,</span>
             <span class="n">log_pbar</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="n">include_std</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># No std for binary values</span>
@@ -534,7 +571,7 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_rewards</span><span class="p">:</span>
             <span class="c1"># 1. Log training rewards (most important metric for PPO)</span>
             <span class="n">log_rewards</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
-                <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">),</span>
+                <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">reward_key</span><span class="p">),</span>
                 <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;r_training&quot;</span><span class="p">,</span>
                 <span class="n">log_pbar</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># Show in progress bar</span>
                 <span class="n">include_std</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
@@ -547,7 +584,7 @@
 
             <span class="c1"># 2. Log maximum reward in batch (for monitoring best performance)</span>
             <span class="n">log_max_reward</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
-                <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">),</span>
+                <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">reward_key</span><span class="p">),</span>
                 <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;r_max&quot;</span><span class="p">,</span>
                 <span class="n">log_pbar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
                 <span class="n">include_std</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
@@ -560,7 +597,7 @@
 
             <span class="c1"># 3. Log total reward in batch (for monitoring cumulative performance)</span>
             <span class="n">log_total_reward</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
-                <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">),</span>
+                <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">episode_reward_key</span><span class="p">),</span>
                 <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;r_total&quot;</span><span class="p">,</span>
                 <span class="n">log_pbar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
                 <span class="n">include_std</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
@@ -575,7 +612,7 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_actions</span><span class="p">:</span>
             <span class="c1"># 4. Log action norms (useful for monitoring policy behavior)</span>
             <span class="n">log_action_norm</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
-                <span class="n">key</span><span class="o">=</span><span class="s2">&quot;action&quot;</span><span class="p">,</span>
+                <span class="n">key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">action_key</span><span class="p">,</span>
                 <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;action_norm&quot;</span><span class="p">,</span>
                 <span class="n">log_pbar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
                 <span class="n">include_std</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
@@ -590,7 +627,7 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_observations</span><span class="p">:</span>
             <span class="c1"># 5. Log observation statistics (for monitoring state distributions)</span>
             <span class="n">log_obs_norm</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
-                <span class="n">key</span><span class="o">=</span><span class="s2">&quot;observation&quot;</span><span class="p">,</span>
+                <span class="n">key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_key</span><span class="p">,</span>
                 <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;obs_norm&quot;</span><span class="p">,</span>
                 <span class="n">log_pbar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
                 <span class="n">include_std</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>

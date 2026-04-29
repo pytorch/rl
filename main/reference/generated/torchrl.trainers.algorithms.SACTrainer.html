@@ -289,6 +289,13 @@ entropy measure of the policy into the reward to encourage exploration.</p>
 <li><p><strong>log_actions</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to log action statistics. Defaults to True.</p></li>
 <li><p><strong>log_observations</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to log observation statistics. Defaults to False.</p></li>
 <li><p><strong>target_net_updater</strong> (<em>TargetNetUpdater</em><em>, </em><em>optional</em>) – Target network updater for soft updates. Defaults to None.</p></li>
+<li><p><strong>done_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Done key used by losses and logging. Defaults to “done”.</p></li>
+<li><p><strong>terminated_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Terminated key used by losses and logging. Defaults to “terminated”.</p></li>
+<li><p><strong>reward_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Reward key used by losses and logging. Defaults to “reward”.</p></li>
+<li><p><strong>episode_reward_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Episode reward key used for cumulative reward logging.
+Defaults to “reward_sum”.</p></li>
+<li><p><strong>action_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Action key used by losses and logging. Defaults to “action”.</p></li>
+<li><p><strong>observation_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Observation key used for logging. Defaults to “observation”.</p></li>
 </ul>
 </dd>
 </dl>

@@ -308,6 +308,14 @@ weight_sync_schemes configured. Example: {“policy”: “loss_module.actor_net
 timing information for all hooks to the logger (e.g., wandb, tensorboard).
 Timing metrics will be logged with prefix “time/” (e.g., “time/hook/UpdateWeights”).
 Default is False.</p></li>
+<li><p><strong>done_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Done key used by GAE, losses, and logging. Default: “done”.</p></li>
+<li><p><strong>terminated_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Terminated key used by GAE, losses, and logging.
+Default: “terminated”.</p></li>
+<li><p><strong>reward_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Reward key used by GAE, losses, and logging. Default: “reward”.</p></li>
+<li><p><strong>episode_reward_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Episode reward key used for cumulative reward logging.
+Default: “reward”.</p></li>
+<li><p><strong>action_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Action key used by losses and logging. Default: “action”.</p></li>
+<li><p><strong>observation_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Observation key used for logging. Default: “observation”.</p></li>
 </ul>
 </dd>
 </dl>

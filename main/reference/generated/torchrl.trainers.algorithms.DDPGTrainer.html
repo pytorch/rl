@@ -287,6 +287,13 @@ that learns a deterministic policy for continuous action spaces.</p>
 <li><p><strong>target_net_updater</strong> (<em>TargetNetUpdater</em><em>, </em><em>optional</em>) – Target network updater (typically SoftUpdate).</p></li>
 <li><p><strong>async_collection</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to use async data collection. Defaults to False.</p></li>
 <li><p><strong>log_timings</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to log timing information for hooks. Defaults to False.</p></li>
+<li><p><strong>done_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Done key used by losses and logging. Defaults to “done”.</p></li>
+<li><p><strong>terminated_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Terminated key used by losses and logging. Defaults to “terminated”.</p></li>
+<li><p><strong>reward_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Reward key used by losses and logging. Defaults to “reward”.</p></li>
+<li><p><strong>episode_reward_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Episode reward key used for cumulative reward logging.
+Defaults to “reward_sum”.</p></li>
+<li><p><strong>action_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Action key used by losses and logging. Defaults to “action”.</p></li>
+<li><p><strong>observation_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Observation key used for logging. Defaults to “observation”.</p></li>
 </ul>
 </dd>
 </dl>

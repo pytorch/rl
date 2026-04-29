@@ -286,8 +286,14 @@ convention, they will be grouped by <code class="docutils literal notranslate"><
 in one group named <code class="docutils literal notranslate"><span class="pre">&quot;agents&quot;</span></code>.
 Otherwise, a group map can be specified or selected from some premade options.
 See <code class="xref py py-class docutils literal notranslate"><span class="pre">MarlGroupMapType</span></code> for more info.</p></li>
-<li><p><strong>**kwargs</strong> (<em>Dict</em><em>, </em><em>optional</em>) – These are additional arguments that can be passed to the VMAS scenario constructor.
-(e.g., number of agents, reward sparsity). The available arguments will vary based on the chosen scenario.
+<li><p><strong>scenario_kwargs</strong> (<em>Dict</em><em>, </em><em>optional</em>) – dictionary of additional arguments passed to the VMAS
+scenario constructor (e.g., number of agents, reward sparsity).
+This is convenient when scenario parameters are stored under a dedicated config field.</p></li>
+<li><p><strong>**kwargs</strong> (<em>Dict</em><em>, </em><em>optional</em>) – Additional arguments passed to the VMAS scenario constructor.
+This allows passing scenario arguments directly as keyword arguments.
+If the same key is provided in both <code class="docutils literal notranslate"><span class="pre">scenario_kwargs</span></code> and <code class="docutils literal notranslate"><span class="pre">kwargs</span></code>, the value in
+<code class="docutils literal notranslate"><span class="pre">kwargs</span></code> takes precedence.
+The available arguments will vary based on the chosen scenario.
 To see the available arguments for a specific scenario, see the constructor in its file from
 <a class="reference external" href="https://github.com/proroklab/VectorizedMultiAgentSimulator/tree/VMAS-1.3.3/vmas/scenarios">the scenario folder</a>.</p></li>
 </ul>

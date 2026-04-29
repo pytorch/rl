@@ -68,7 +68,7 @@ Collectors Deep Dive: Trajectory Assembly
  .. code-block:: none
 
 
-    <torch._C.Generator object at 0x7f9d2a138c30>
+    <torch._C.Generator object at 0x7f4bfe4b0c30>
 
 
 
