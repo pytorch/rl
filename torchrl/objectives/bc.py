@@ -4,8 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from dataclasses import dataclass
-from typing import Any, Callable, Literal
+from typing import Literal
 
 import torch
 import torch.nn.functional as F

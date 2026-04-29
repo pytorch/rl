@@ -417,6 +417,8 @@ class Trainer:
             []
         )  # Process batches for optimization (e.g., subsampling)
         self._post_optim_ops = []  # After optimization (e.g., weight syncing)
+        self._setup_ops = []  # Before training starts (e.g., warmups, lazy init)
+        self._shutdown_ops = []  # At training end (e.g., final eval, publish)
 
         self._modules = {}
 
@@ -631,6 +633,8 @@ class Trainer:
             "post_optim_complete_log",
             "pre_epoch",
             "post_epoch",
+            "setup",
+            "shutdown",
         ],
         op: Callable,
         **kwargs,
@@ -752,13 +756,21 @@ class Trainer:
             _check_input_output_typehint(op, input=None, output=None)
             self._post_epoch_ops.append((timed_op, kwargs))
 
+        elif dest == "setup":
+            _check_input_output_typehint(op, input=None, output=None)
+            self._setup_ops.append((timed_op, kwargs))
+
+        elif dest == "shutdown":
+            _check_input_output_typehint(op, input=None, output=None)
+            self._shutdown_ops.append((timed_op, kwargs))
+
         else:
             raise RuntimeError(
                 f"The hook collection {dest} is not recognised. Choose from:"
                 f"(batch_process, pre_optim_steps, process_optim_batch, post_loss, "
                 f"process_loss, optimizer, post_steps, post_optim, pre_steps_log, "
                 f"post_steps_log, post_optim_log, pre_epoch_log, post_epoch_log, "
-                f"post_optim_complete_log, pre_epoch, post_epoch)"
+                f"post_optim_complete_log, setup, shutdown, pre_epoch, post_epoch)"
             )
 
     register_hook = register_op
@@ -919,6 +931,14 @@ class Trainer:
             if result is not None:
                 self._log(**result)
 
+    def _setup_hook(self) -> None:
+        for op, kwargs in self._setup_ops:
+            op(**kwargs)
+
+    def _shutdown_hook(self) -> None:
+        for op, kwargs in self._shutdown_ops:
+            op(**kwargs)
+
     def train(self):
         if self.progress_bar:
             self._pbar = tqdm(total=self.total_frames)
@@ -933,6 +953,8 @@ class Trainer:
             iterator = self._async_iterator()
         else:
             iterator = self.collector
+
+        self._setup_hook()
 
         for batch in iterator:
             if not self.async_collection:
@@ -970,6 +992,7 @@ class Trainer:
                 break
             self.save_trainer()
 
+        self._shutdown_hook()
         self.collector.shutdown()
 
     def _async_iterator(self):

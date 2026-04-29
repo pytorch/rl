@@ -22,7 +22,7 @@ on:
         description: 'Build CUDA wheels'
         required: false
         type: boolean
-        default: false
+        default: true
       build-rocm:
         description: 'Build ROCm wheels'
         required: false
@@ -49,7 +49,7 @@ on:
         description: 'Build with CUDA (enable/disable)'
         required: false
         type: string
-        default: 'disable'
+        default: 'enable'
       with-rocm:
         description: 'Build with ROCm (enable/disable)'
         required: false
@@ -83,8 +83,8 @@ jobs:
       use-only-dl-pytorch-org: ${{ inputs.channel == 'release' && 'true' || 'false' }}
       # For workflow_dispatch: convert boolean to enable/disable string
       # For workflow_call: use the string input directly
-      # Default: disable CUDA/ROCm (torchrl is CPU-only), enable CPU
-      with-cuda: ${{ inputs.with-cuda || (github.event_name == 'workflow_dispatch' && (inputs.build-cuda && 'enable' || 'disable')) || 'disable' }}
+      # Default: build Linux CUDA wheels now that prioritized replay has CUDA kernels.
+      with-cuda: ${{ inputs.with-cuda || (github.event_name == 'workflow_dispatch' && (inputs.build-cuda && 'enable' || 'disable')) || 'enable' }}
       with-rocm: ${{ inputs.with-rocm || (github.event_name == 'workflow_dispatch' && (inputs.build-rocm && 'enable' || 'disable')) || 'disable' }}
       with-cpu: ${{ inputs.with-cpu || (github.event_name == 'workflow_dispatch' && (inputs.build-cpu && 'enable' || 'disable')) || 'enable' }}
   build:
