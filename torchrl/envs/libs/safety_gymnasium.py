@@ -38,8 +38,7 @@ def _list_safety_gymnasium_envs() -> list[str]:
 
 
 class _SafetyGymCostMixin:
-    """Expose safety-gymnasium's per-step ``cost`` signal as a top-level
-    observation key.
+    """Expose safety-gymnasium's per-step ``cost`` signal as a top-level observation key.
 
     safety-gymnasium's ``step`` returns a 6-tuple
     ``(obs, reward, cost, terminated, truncated, info)``. We collapse the
@@ -49,9 +48,7 @@ class _SafetyGymCostMixin:
     """
 
     def _post_init_cost(self) -> None:
-        self.observation_spec["cost"] = Unbounded(
-            shape=(), dtype=torch.float64
-        )
+        self.observation_spec["cost"] = Unbounded(shape=(), dtype=torch.float64)
         self._last_cost = torch.zeros((), dtype=torch.float64)
 
     def _output_transform(self, step_outputs_tuple):

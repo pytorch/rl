@@ -15,9 +15,7 @@ from torchrl.envs.libs.safety_gymnasium import (
 from torchrl.envs.utils import check_env_specs
 
 
-@pytest.mark.skipif(
-    not _has_safety_gymnasium, reason="safety-gymnasium not installed"
-)
+@pytest.mark.skipif(not _has_safety_gymnasium, reason="safety-gymnasium not installed")
 class TestSafetyGymnasium:
     def test_wrapper_specs(self):
         import safety_gymnasium
