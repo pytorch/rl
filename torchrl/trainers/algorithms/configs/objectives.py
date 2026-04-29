@@ -252,25 +252,25 @@ class DQNLossConfig(LossConfig):
 
 
 def _make_dqn_loss(*args, **kwargs) -> DQNLoss:
-    tensor_keys = {
-        "action": kwargs.pop("action_key", None),
-        "action_value": kwargs.pop("action_value_key", None),
-        "value": kwargs.pop("value_key", None),
-        "reward": kwargs.pop("reward_key", None),
-        "done": kwargs.pop("done_key", None),
-        "terminated": kwargs.pop("terminated_key", None),
-        "priority": kwargs.pop("priority_key", None),
-        "priority_weight": kwargs.pop("priority_weight_key", None),
-    }
+    tensor_keys = {}
+    for key in (
+        "action_key",
+        "action_value_key",
+        "value_key",
+        "reward_key",
+        "done_key",
+        "terminated_key",
+        "priority_key",
+        "priority_weight_key",
+    ):
+        if key in kwargs:
+            value = kwargs.pop(key)
+            if value is not None:
+                tensor_keys[key.removesuffix("_key")] = _normalize_hydra_key(value)
     value_network = kwargs.get("value_network")
     if value_network is not None and hasattr(value_network, "_target_"):
         kwargs["value_network"] = value_network()
     loss = DQNLoss(*args, **kwargs)
-    tensor_keys = {
-        key: _normalize_hydra_key(value)
-        for key, value in tensor_keys.items()
-        if value is not None
-    }
     if tensor_keys:
         loss.set_keys(**tensor_keys)
     return loss
@@ -301,16 +301,21 @@ class QMixerLossConfig(LossConfig):
 
 
 def _make_qmixer_loss(*args, **kwargs) -> QMixerLoss:
-    tensor_keys = {
-        "action": _normalize_hydra_key(kwargs.pop("action_key", None)),
-        "action_value": _normalize_hydra_key(kwargs.pop("action_value_key", None)),
-        "local_value": _normalize_hydra_key(kwargs.pop("local_value_key", None)),
-        "global_value": _normalize_hydra_key(kwargs.pop("global_value_key", None)),
-        "reward": _normalize_hydra_key(kwargs.pop("reward_key", None)),
-        "done": _normalize_hydra_key(kwargs.pop("done_key", None)),
-        "terminated": _normalize_hydra_key(kwargs.pop("terminated_key", None)),
-        "priority": _normalize_hydra_key(kwargs.pop("priority_key", None)),
-    }
+    tensor_keys = {}
+    for key in (
+        "action_key",
+        "action_value_key",
+        "local_value_key",
+        "global_value_key",
+        "reward_key",
+        "done_key",
+        "terminated_key",
+        "priority_key",
+    ):
+        if key in kwargs:
+            value = kwargs.pop(key)
+            if value is not None:
+                tensor_keys[key.removesuffix("_key")] = _normalize_hydra_key(value)
     local_value_network = kwargs.get("local_value_network")
     mixer_network = kwargs.get("mixer_network")
     gamma = kwargs.pop("gamma", None)
@@ -321,7 +326,7 @@ def _make_qmixer_loss(*args, **kwargs) -> QMixerLoss:
         kwargs["mixer_network"] = mixer_network()
 
     loss = QMixerLoss(*args, **kwargs)
-    loss.set_keys(**{k: v for k, v in tensor_keys.items() if v is not None})
+    loss.set_keys(**tensor_keys)
     if gamma is not None:
         loss.make_value_estimator(ValueEstimators.TD0, gamma=gamma)
     return loss

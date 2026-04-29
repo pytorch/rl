@@ -628,75 +628,29 @@ class QValueModelConfig(ModelConfig):
 def _make_qvalue_model(*args, **kwargs):
     """Helper function to create a QValueActor with the given network."""
     from hydra.utils import instantiate
-    from tensordict.nn import TensorDictModule, TensorDictModuleBase
 
-    from torchrl.modules import QValueActor, QValueModule, SafeSequential
+    from torchrl.modules import QValueActor
 
     network = kwargs.pop("network")
     shared = kwargs.pop("shared", False)
     if "in_keys" in kwargs:
         kwargs["in_keys"] = _normalize_hydra_keys(kwargs["in_keys"])
 
-    action_key = _normalize_hydra_key(kwargs.pop("action_key", None))
-    action_value_key = _normalize_hydra_key(kwargs.get("action_value_key", None))
-    chosen_action_value_key = _normalize_hydra_key(
-        kwargs.pop("chosen_action_value_key", None)
-    )
-    if action_value_key is not None:
-        kwargs["action_value_key"] = action_value_key
-    action_mask_key = _normalize_hydra_key(kwargs.get("action_mask_key", None))
-    if action_mask_key is not None:
-        kwargs["action_mask_key"] = action_mask_key
+    for key in (
+        "action_key",
+        "action_value_key",
+        "chosen_action_value_key",
+        "action_mask_key",
+    ):
+        if key in kwargs:
+            kwargs[key] = _normalize_hydra_key(kwargs[key])
 
     if hasattr(network, "_target_"):
         network = instantiate(network)
     elif callable(network) and hasattr(network, "func"):
         network = network()
 
-    if action_key is None and chosen_action_value_key is None:
-        qvalue_actor = QValueActor(network, **kwargs)
-    else:
-        in_keys = kwargs.pop("in_keys", None)
-        spec = kwargs.pop("spec", None)
-        safe = kwargs.pop("safe", False)
-        action_space = kwargs.pop("action_space", None)
-        strict_shape = kwargs.pop("strict_shape", None)
-        action_value_key = kwargs.pop("action_value_key", None)
-        action_mask_key = kwargs.pop("action_mask_key", None)
-        if kwargs:
-            raise TypeError(
-                "Unexpected QValueModelConfig arguments for explicit key "
-                f"construction: {sorted(kwargs)}."
-            )
-        if action_key is None:
-            action_key = "action"
-        if action_value_key is None:
-            action_value_key = "action_value"
-        if chosen_action_value_key is None:
-            chosen_action_value_key = "chosen_action_value"
-        if isinstance(network, TensorDictModuleBase):
-            if action_value_key not in network.out_keys:
-                raise KeyError(
-                    f"The key '{action_value_key}' is not part of the module out-keys."
-                )
-            qvalue_input = network
-        else:
-            if in_keys is None:
-                in_keys = ["observation"]
-            qvalue_input = TensorDictModule(
-                network, in_keys=in_keys, out_keys=[action_value_key]
-            )
-        qvalue = QValueModule(
-            action_space=action_space,
-            action_value_key=action_value_key,
-            action_mask_key=action_mask_key,
-            out_keys=[action_key, action_value_key, chosen_action_value_key],
-            spec=spec,
-            safe=safe,
-            strict_shape=strict_shape,
-        )
-        qvalue_actor = SafeSequential(qvalue_input, qvalue)
-        qvalue_actor.action_space = qvalue.action_space
+    qvalue_actor = QValueActor(network, **kwargs)
 
     if shared:
         qvalue_actor = qvalue_actor.share_memory()
