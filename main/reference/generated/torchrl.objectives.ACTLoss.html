@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>ObsEncoder &mdash; torchrl main documentation</title>
+  <title>ACTLoss &mdash; torchrl main documentation</title>
   
 
   
@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="ObsDecoder" href="torchrl.modules.ObsDecoder.html" />
-    <link rel="prev" title="DreamerActor" href="torchrl.modules.DreamerActor.html" /> 
+    <link rel="next" title="BCLoss" href="torchrl.objectives.BCLoss.html" />
+    <link rel="prev" title="Other Loss Modules" href="../objectives_other.html" /> 
 
   
   <script src="../../_static/js/modernizr.min.js"></script>
@@ -214,17 +214,17 @@
         
           <li><a href="../index.html">API Reference</a> &gt;</li>
         
-          <li><a href="../modules.html">torchrl.modules package</a> &gt;</li>
+          <li><a href="../objectives.html">torchrl.objectives package</a> &gt;</li>
         
-          <li><a href="../modules_models.html">Robot Learning</a> &gt;</li>
+          <li><a href="../objectives_other.html">Other Loss Modules</a> &gt;</li>
         
-      <li>ObsEncoder</li>
+      <li>ACTLoss</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="../../_sources/reference/generated/torchrl.modules.ObsEncoder.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+            <a href="../../_sources/reference/generated/torchrl.objectives.ACTLoss.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -249,39 +249,86 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" class="pytorch-article">
               
-  <section id="obsencoder">
-<h1>ObsEncoder<a class="headerlink" href="#obsencoder" title="Link to this heading">¶</a></h1>
+  <section id="actloss">
+<h1>ACTLoss<a class="headerlink" href="#actloss" title="Link to this heading">¶</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="torchrl.modules.ObsEncoder">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.</span></span><span class="sig-name descname"><span class="pre">ObsEncoder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">32</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_layers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">in_channels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">depth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/models/model_based.html#ObsEncoder"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.ObsEncoder" title="Link to this definition">¶</a></dt>
-<dd><p>Observation encoder network.</p>
-<p>Takes a pixel observation and encodes it into a latent space.</p>
-<p>Reference: <a class="reference external" href="https://arxiv.org/abs/1803.10122">https://arxiv.org/abs/1803.10122</a></p>
+<dt class="sig sig-object py" id="torchrl.objectives.ACTLoss">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.objectives.</span></span><span class="sig-name descname"><span class="pre">ACTLoss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/objectives/act.html#ACTLoss"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.ACTLoss" title="Link to this definition">¶</a></dt>
+<dd><p>Loss module for Action Chunking with Transformers (ACT).</p>
+<p>Implements the training objective from <em>Learning Fine-Grained Bimanual
+Manipulation with Low-Cost Hardware</em> (<a class="reference external" href="https://arxiv.org/abs/2304.13705">Zhao et al., 2023</a>), pairing an L1
+chunk-reconstruction term with a KL-divergence penalty on the CVAE
+latent:</p>
+<div class="math notranslate nohighlight">
+\[\mathcal{L} = \underbrace{\|a_{\text{pred}} -
+a_{\text{chunk}}\|_1}_{\text{reconstruction}}
++ \beta \cdot
+\underbrace{D_{\mathrm{KL}}\!\left(q(z|o,a)\,\|\,
+\mathcal{N}(0,I)\right)}_{\text{KL}}\]</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">actor_network</span></code> must read <code class="docutils literal notranslate"><span class="pre">&quot;observation&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;action_chunk&quot;</span></code>
+and write <code class="docutils literal notranslate"><span class="pre">&quot;action_pred&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;mu&quot;</span></code>, and <code class="docutils literal notranslate"><span class="pre">&quot;log_var&quot;</span></code>.  This matches
+the contract of <code class="xref py py-class docutils literal notranslate"><span class="pre">ACTModel</span></code> when wrapped
+with a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>.</p>
+<p>Three values are returned in the output TensorDict:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;loss_act&quot;</span></code> — the full (differentiable) training loss.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;loss_reconstruction&quot;</span></code> — detached L1 reconstruction term (for
+logging).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;loss_kl&quot;</span></code> — detached KL term (for logging).</p></li>
+</ul>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>channels</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of hidden units in the first layer.
-Defaults to 32.</p></li>
-<li><p><strong>num_layers</strong> (<em>int</em><em>, </em><em>optional</em>) – Depth of the network. Defaults to 4.</p></li>
-<li><p><strong>in_channels</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of input channels. If None, uses LazyConv2d.
-Defaults to None for backward compatibility.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.11)"><em>torch.device</em></a><em>, </em><em>optional</em>) – Device to create the module on.
-Defaults to None (uses default device).</p></li>
+<dd class="field-odd"><p><strong>actor_network</strong> (<em>TensorDictModule</em>) – ACT policy.  Must expose
+<code class="docutils literal notranslate"><span class="pre">in_keys</span></code> containing <code class="docutils literal notranslate"><span class="pre">&quot;observation&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;action_chunk&quot;</span></code>
+and write <code class="docutils literal notranslate"><span class="pre">&quot;action_pred&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;mu&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;log_var&quot;</span></code>.</p>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>kl_weight</strong> (<em>float</em><em>, </em><em>optional</em>) – β — weight on the KL divergence term.
+Defaults to <code class="docutils literal notranslate"><span class="pre">10.0</span></code> (as in the original paper).</p></li>
+<li><p><strong>reduction</strong> (<em>str</em><em>, </em><em>optional</em>) – <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> | <code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code> | <code class="docutils literal notranslate"><span class="pre">&quot;sum&quot;</span></code>.
+Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.modules.ObsEncoder.forward">
-<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">observation</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/models/model_based.html#ObsEncoder.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.ObsEncoder.forward" title="Link to this definition">¶</a></dt>
-<dd><p>Define the computation performed at every call.</p>
-<p>Should be overridden by all subclasses.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Although the recipe for forward pass needs to be defined within
-this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
-instead of this since the former takes care of running the
-registered hooks while the latter silently ignores them.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModule</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.modules.models</span> <span class="kn">import</span> <span class="n">ACTModel</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.objectives</span> <span class="kn">import</span> <span class="n">ACTLoss</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">ACTModel</span><span class="p">(</span><span class="n">obs_dim</span><span class="o">=</span><span class="mi">14</span><span class="p">,</span> <span class="n">action_dim</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">actor</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">model</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">,</span> <span class="s2">&quot;action_chunk&quot;</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action_pred&quot;</span><span class="p">,</span> <span class="s2">&quot;mu&quot;</span><span class="p">,</span> <span class="s2">&quot;log_var&quot;</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss_fn</span> <span class="o">=</span> <span class="n">ACTLoss</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">kl_weight</span><span class="o">=</span><span class="mf">10.0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="p">{</span>
+<span class="gp">... </span>        <span class="s2">&quot;observation&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">14</span><span class="p">),</span>
+<span class="gp">... </span>        <span class="s2">&quot;action_chunk&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">7</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="p">},</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss_td</span> <span class="o">=</span> <span class="n">loss_fn</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss_td</span><span class="p">[</span><span class="s2">&quot;loss_act&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+</pre></div>
 </div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.objectives.ACTLoss.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.12)"><span class="pre">TensorDictBase</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.12)"><span class="pre">TensorDict</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/objectives/act.html#ACTLoss.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.ACTLoss.forward" title="Link to this definition">¶</a></dt>
+<dd><p>Compute the ACT loss.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tensordict</strong> (<em>TensorDictBase</em>) – Input data containing
+<code class="docutils literal notranslate"><span class="pre">&quot;observation&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;action_chunk&quot;</span></code>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>TensorDict with keys <code class="docutils literal notranslate"><span class="pre">&quot;loss_act&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;loss_reconstruction&quot;</span></code>,
+and <code class="docutils literal notranslate"><span class="pre">&quot;loss_kl&quot;</span></code>.</p>
+</dd>
+</dl>
 </dd></dl>
 
 </dd></dl>
@@ -296,10 +343,10 @@ registered hooks while the latter silently ignores them.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.modules.ObsDecoder.html" class="btn btn-neutral float-right" title="ObsDecoder" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.objectives.BCLoss.html" class="btn btn-neutral float-right" title="BCLoss" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.modules.DreamerActor.html" class="btn btn-neutral" title="DreamerActor" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="../objectives_other.html" class="btn btn-neutral" title="Other Loss Modules" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -325,9 +372,9 @@ registered hooks while the latter silently ignores them.</p>
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">ObsEncoder</a><ul>
-<li><a class="reference internal" href="#torchrl.modules.ObsEncoder"><code class="docutils literal notranslate"><span class="pre">ObsEncoder</span></code></a><ul>
-<li><a class="reference internal" href="#torchrl.modules.ObsEncoder.forward"><code class="docutils literal notranslate"><span class="pre">ObsEncoder.forward()</span></code></a></li>
+<li><a class="reference internal" href="#">ACTLoss</a><ul>
+<li><a class="reference internal" href="#torchrl.objectives.ACTLoss"><code class="docutils literal notranslate"><span class="pre">ACTLoss</span></code></a><ul>
+<li><a class="reference internal" href="#torchrl.objectives.ACTLoss.forward"><code class="docutils literal notranslate"><span class="pre">ACTLoss.forward()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -361,6 +408,7 @@ registered hooks while the latter silently ignores them.</p>
       <script type="text/javascript" src="../../_static/sphinx_highlight.js"></script>
       <script type="text/javascript" src="../../_static/sg-tags.js"></script>
       <script type="text/javascript" src="../../_static/design-tabs.js"></script>
+      <script type="text/javascript" src="../../https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 
   
 
