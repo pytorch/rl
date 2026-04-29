@@ -2633,7 +2633,7 @@ defaults:
   - sampler@replay_buffer.sampler: random
   - trainer@trainer: dqn
   - optimizer@optimizer: adam
-  - loss@loss: qmix
+  - loss@loss: mixer
   - target_net_updater@target_net_updater: soft
   - logger@logger: csv
   - _self_

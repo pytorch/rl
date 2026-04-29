@@ -610,8 +610,7 @@ def _register_configs():
     cs.store(group="loss", name="dqn", node=DQNLossConfig)
     cs.store(group="loss", name="iql", node=IQLLossConfig)
     cs.store(group="loss", name="ppo", node=PPOLossConfig)
-    cs.store(group="loss", name="qmix", node=QMixerLossConfig)
-    cs.store(group="loss", name="vdn", node=QMixerLossConfig)
+    cs.store(group="loss", name="mixer", node=QMixerLossConfig)
     cs.store(group="loss", name="sac", node=SACLossConfig)
     cs.store(group="loss", name="td3", node=TD3LossConfig)
 

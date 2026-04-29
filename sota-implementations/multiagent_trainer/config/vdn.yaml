@@ -1,7 +1,6 @@
 defaults:
   - qmix
   - network@networks.vdn_mixer_network: vdn_mixer
-  - override loss@qmix_loss: vdn
   - _self_
 
 networks:

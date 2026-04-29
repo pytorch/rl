@@ -13,7 +13,7 @@ defaults:
   - trainer@trainer: dqn
   - optimizer@optimizer: adam
   - network@networks.mixer_network: qmixer
-  - loss@qmix_loss: qmix
+  - loss@mixer_loss: mixer
   - target_net_updater@qmix_target_net_updater: soft
   - logger@logger: csv
   - _self_
@@ -132,7 +132,7 @@ replay_buffer:
     compilable: false
   batch_size: ${train.minibatch_size}
 
-qmix_loss:
+mixer_loss:
   local_value_network: ${models.qvalue_model}
   mixer_network: ${models.mixer_model}
   loss_function: l2
@@ -150,7 +150,7 @@ qmix_loss:
 qmix_target_net_updater:
   tau: 0.005
 
-loss: ${qmix_loss}
+loss: ${mixer_loss}
 
 target_net_updater: ${qmix_target_net_updater}
 
