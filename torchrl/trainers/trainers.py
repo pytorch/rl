@@ -1455,6 +1455,16 @@ class ClearCudaCache(TrainerHookBase):
         if self.count % self.interval == 0:
             torch.cuda.empty_cache()
 
+    def state_dict(self) -> dict[str, Any]:
+        return {"count": self.count}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        self.count = state_dict["count"]
+
+    def register(self, trainer: Trainer, name: str = "clear_cuda_cache"):
+        trainer.register_module(name, self)
+        trainer.register_op("pre_optim_steps", self)
+
 
 class LogTiming(TrainerHookBase):
     """Hook to log timing information collected by timeit context managers.
@@ -1625,6 +1635,12 @@ class LogScalar(TrainerHookBase):
             result[f"{self.logname}_std"] = std_value
 
         return result
+
+    def state_dict(self) -> dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        pass
 
     def register(self, trainer: Trainer, name: str | None = None):
         if name is None:
