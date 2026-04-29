@@ -78,6 +78,7 @@ from torchrl.trainers.algorithms.configs.hooks import (
     BatchSubSamplerConfig,
     ClearCudaCacheConfig,
     CountFramesLogConfig,
+    EarlyStoppingConfig,
     HookConfig,
     LogScalarConfig,
     LogTimingConfig,
@@ -404,6 +405,7 @@ __all__ = [
     "BatchSubSamplerConfig",
     "ClearCudaCacheConfig",
     "CountFramesLogConfig",
+    "EarlyStoppingConfig",
     "LogScalarConfig",
     "LogTimingConfig",
     "RewardNormalizerConfig",
@@ -675,6 +677,7 @@ def _register_configs():
     cs.store(group="hook", name="batch_subsampler", node=BatchSubSamplerConfig)
     cs.store(group="hook", name="clear_cuda_cache", node=ClearCudaCacheConfig)
     cs.store(group="hook", name="count_frames_log", node=CountFramesLogConfig)
+    cs.store(group="hook", name="early_stopping", node=EarlyStoppingConfig)
     cs.store(group="hook", name="log_scalar", node=LogScalarConfig)
     cs.store(group="hook", name="log_timing", node=LogTimingConfig)
     cs.store(group="hook", name="reward_normalizer", node=RewardNormalizerConfig)

@@ -1527,6 +1527,18 @@ class TestTrainerConfigs:
                 {"frame_skip": 2, "log_pbar": True},
                 "CountFramesLog",
             ),
+            (
+                "EarlyStoppingConfig",
+                {
+                    "monitor": "r_training",
+                    "mode": "max",
+                    "min_delta": 0.01,
+                    "patience": 3,
+                    "wait_for": 0,
+                    "check_finite": True,
+                },
+                "EarlyStopping",
+            ),
         ],
     )
     def test_individual_hook_configs(self, config_cls, kwargs, hook_cls):
