@@ -1473,16 +1473,56 @@ class TestTrainerConfigs:
                 {"keys": ["observation", "action"]},
                 "SelectKeys",
             ),
+            (
+                "CountFramesLogConfig",
+                {"frame_skip": 2, "log_pbar": True},
+                "CountFramesLog",
+            ),
         ],
     )
     def test_individual_hook_configs(self, config_cls, kwargs, hook_cls):
         from hydra.utils import instantiate
         from torchrl import trainers as trainers_module
+        from torchrl.trainers import Trainer
         from torchrl.trainers.algorithms import configs as configs_module
 
         cfg = getattr(configs_module, config_cls)(**kwargs)
         hook = instantiate(cfg)
         assert isinstance(hook, getattr(trainers_module, hook_cls))
+
+        # Verify the hook can be registered on a trainer through the same path
+        # _register_trainer_hooks uses (i.e. ``hook.register(trainer)`` with no
+        # name argument). This catches missing register/state_dict/load_state_dict
+        # methods which would otherwise only fail at trainer build time.
+        class _MockCollector:
+            def set_seed(self, seed, **kwargs):
+                return seed
+
+            def update_policy_weights_(self):
+                pass
+
+            def shutdown(self):
+                pass
+
+            def state_dict(self):
+                return {}
+
+            def load_state_dict(self, state_dict):
+                pass
+
+        trainer = Trainer(
+            collector=_MockCollector(),
+            total_frames=None,
+            frame_skip=None,
+            optim_steps_per_batch=None,
+            loss_module=torch.nn.Module(),
+            optimizer=None,
+            save_trainer_file=None,
+        )
+        hook.register(trainer)
+        # Round-trip the state dict to verify state_dict/load_state_dict are
+        # implemented (Trainer.state_dict iterates registered modules).
+        hook.load_state_dict(hook.state_dict())
 
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_ddpg_trainer_config(self):
