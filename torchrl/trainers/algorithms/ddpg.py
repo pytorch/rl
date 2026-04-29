@@ -35,6 +35,9 @@ from torchrl.trainers.trainers import (
 class DDPGTrainer(Trainer):
     """A trainer class for Deep Deterministic Policy Gradient (DDPG) algorithm.
 
+    See also :class:`~torchrl.trainers.algorithms.configs.DDPGTrainerConfig` for the
+    Hydra configuration counterpart.
+
     This trainer implements the DDPG algorithm, an off-policy actor-critic method
     that learns a deterministic policy for continuous action spaces.
 
@@ -105,6 +108,7 @@ class DDPGTrainer(Trainer):
         target_net_updater: TargetNetUpdater | None = None,
         async_collection: bool = False,
         log_timings: bool = False,
+        auto_log_optim_steps: bool = True,
         done_key: NestedKey = "done",
         terminated_key: NestedKey = "terminated",
         reward_key: NestedKey = "reward",
@@ -135,6 +139,7 @@ class DDPGTrainer(Trainer):
             save_trainer_file=save_trainer_file,
             async_collection=async_collection,
             log_timings=log_timings,
+            auto_log_optim_steps=auto_log_optim_steps,
         )
         self.replay_buffer = replay_buffer
         self.async_collection = async_collection
