@@ -1188,7 +1188,13 @@ class TestOptimizationStepper:
 
 
 class TestPostOptimCompleteLog:
-    def _make_trainer(self, loss_module, optimization_stepper=None, optimizer=None):
+    def _make_trainer(
+        self,
+        loss_module,
+        optimization_stepper=None,
+        optimizer=None,
+        auto_log_optim_steps=True,
+    ):
         trainer = Trainer(
             collector=MockingCollector(),
             total_frames=None,
@@ -1197,6 +1203,7 @@ class TestPostOptimCompleteLog:
             loss_module=loss_module,
             optimizer=optimizer,
             optimization_stepper=optimization_stepper,
+            auto_log_optim_steps=auto_log_optim_steps,
         )
         trainer._pbar_str = OrderedDict()
         return trainer
@@ -1243,6 +1250,31 @@ class TestPostOptimCompleteLog:
         assert trainer._log_dict["custom_metric"][-1] == 1.0
         assert "optim_steps" in trainer._log_dict
         assert "loss" in trainer._log_dict
+
+    def test_auto_log_optim_steps_disabled(self):
+        captured = {}
+
+        def capture_hook(optim_steps, average_losses):
+            captured["optim_steps"] = optim_steps
+            captured["average_losses"] = average_losses
+            return None
+
+        stepper = _CountingStepper()
+        trainer = self._make_trainer(
+            loss_module=_CountingLossModule(),
+            optimization_stepper=stepper,
+            auto_log_optim_steps=False,
+        )
+        trainer.register_op("post_optim_complete_log", capture_hook)
+        td = TensorDict({"x": torch.randn(3)}, [])
+        trainer.optim_steps(td)
+
+        # Hook still fires and sees the values
+        assert captured["optim_steps"] == trainer._optim_count
+        assert "loss" in captured["average_losses"].keys()
+        # but the trainer doesn't auto-log them
+        assert "optim_steps" not in trainer._log_dict
+        assert "loss" not in trainer._log_dict
 
 
 class TestDefaultOptimizationStepper:

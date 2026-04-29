@@ -298,6 +298,10 @@ class Trainer:
             timing information for all hooks to the logger (e.g., wandb, tensorboard).
             Timing metrics will be logged with prefix "time/" (e.g., "time/hook/UpdateWeights").
             Default is False.
+        auto_log_optim_steps (bool, optional): If True, automatically log ``optim_steps`` and the
+            keys of the averaged loss TensorDict at the end of every optimization loop, in addition
+            to anything ``post_optim_complete_log`` hooks return. Set to False to fully delegate
+            this logging to user-registered hooks. Default is True.
     """
 
     @classmethod
@@ -336,6 +340,7 @@ class Trainer:
         num_epochs: int = 1,
         async_collection: bool = False,
         log_timings: bool = False,
+        auto_log_optim_steps: bool = True,
     ) -> None:
         # objects
         self.frame_skip = frame_skip
@@ -367,6 +372,7 @@ class Trainer:
         self.progress_bar = progress_bar and _has_tqdm
         self.save_trainer_interval = save_trainer_interval
         self.save_trainer_file = save_trainer_file
+        self.auto_log_optim_steps = auto_log_optim_steps
 
         self._log_dict = defaultdict(list)
 
@@ -896,10 +902,11 @@ class Trainer:
             result = op(optim_steps, average_losses, **kwargs)
             if result is not None:
                 self._log(**result)
-        if average_losses is not None:
-            self._log(optim_steps=optim_steps, **average_losses)
-        else:
-            self._log(optim_steps=optim_steps)
+        if self.auto_log_optim_steps:
+            if average_losses is not None:
+                self._log(optim_steps=optim_steps, **average_losses)
+            else:
+                self._log(optim_steps=optim_steps)
 
     def _post_epoch_hook(self) -> None:
         """Execute regular hooks that run AFTER each epoch of optimization.
