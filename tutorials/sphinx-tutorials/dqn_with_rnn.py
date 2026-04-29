@@ -91,7 +91,7 @@ from tensordict.nn import (
     TensorDictSequential as Seq,
 )
 from torch import nn
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.envs import (
@@ -389,6 +389,12 @@ optim = torch.optim.Adam(policy.parameters(), lr=3e-4)
 # on disk, and pass the replay buffer directly to the data collector so it can
 # automatically populate the buffer as data is collected.
 #
+# .. seealso::
+#   The :ref:`collector trajectory assembly tutorial <collector_trajectory_assembly>`
+#   explains how ``split_trajectories``, ``trajs_per_batch``, and
+#   ``SliceSampler`` work together in detail, including asynchronous
+#   collection with :meth:`~torchrl.collectors.Collector.start`.
+#
 # .. note::
 #   For the sake of efficiency, we're only running a few thousands iterations
 #   here. In a real setting, the total number of frames should be set to 1M.
@@ -405,7 +411,7 @@ rb = TensorDictReplayBuffer(
     transform=lambda td: td.to(device),
 )
 
-collector = SyncDataCollector(
+collector = Collector(
     env,
     stoch_policy,
     frames_per_batch=50,

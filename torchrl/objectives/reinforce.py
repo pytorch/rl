@@ -228,6 +228,7 @@ class ReinforceLoss(LossModule):
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.GAE
+    _schedulable_buffers = frozenset({"clip_value"})
     out_keys = ["loss_actor", "loss_value"]
 
     actor_network: TensorDictModule

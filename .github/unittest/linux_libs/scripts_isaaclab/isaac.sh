@@ -70,12 +70,44 @@ if [[ -f "${ISAACLAB_PYTHON}" ]]; then
     "${ISAACLAB_PYTHON}" -p -m pip install ray --disable-pip-version-check || echo "WARNING: ray installation failed (optional)"
     "${ISAACLAB_PYTHON}" -p -c "import torchrl; print(f'TorchRL imported successfully')"
     
-    # Install pytest
     "${ISAACLAB_PYTHON}" -p -m pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio --disable-pip-version-check
-    
-    # Run tests
+
+    # Run tests.
+    #
+    # Isaac Sim / Omniverse leaves non-trivial process-global state (CUDA
+    # context, Kit threads, Omniverse plugins) that has repeatedly crashed
+    # the parent pytest process with a native SIGSEGV when the next test
+    # tries to reinitialise AppLauncher.  We cannot use ``pytest-forked``
+    # for isolation because CUDA is already initialised at pytest collection
+    # time and forking after that is disallowed by PyTorch
+    # ("Cannot re-initialize CUDA in forked subprocess").
+    #
+    # Instead: collect the test ids once, then invoke pytest once per test
+    # id — each invocation is a fresh Python process with a clean Omniverse
+    # / torch state.  Slower than a single pytest invocation, but a segfault
+    # in one test becomes an isolated failure rather than torching the suite.
     cd "${root_dir}"
-    "${ISAACLAB_PYTHON}" -p -m pytest test/test_libs.py -k isaac -s || exit $?
+
+    echo "* Collecting isaac test ids..."
+    TEST_IDS=$("${ISAACLAB_PYTHON}" -p -m pytest test/libs -k isaac --collect-only -q 2>/dev/null | grep "::")
+    if [[ -z "${TEST_IDS}" ]]; then
+        echo "ERROR: no isaac tests collected"
+        exit 1
+    fi
+    echo "* Running ${TEST_IDS} tests, one per subprocess"
+
+    OVERALL=0
+    while IFS= read -r TEST_ID; do
+        [[ -z "${TEST_ID}" ]] && continue
+        echo "===================================================================="
+        echo "Running: ${TEST_ID}"
+        echo "===================================================================="
+        if ! "${ISAACLAB_PYTHON}" -p -m pytest "${TEST_ID}" -s; then
+            echo "TEST FAILED: ${TEST_ID}"
+            OVERALL=1
+        fi
+    done <<< "${TEST_IDS}"
+    exit "${OVERALL}"
 else
     echo "ERROR: Could not find isaaclab.sh at ${ISAACLAB_PYTHON}"
     echo "* Listing /workspace contents:"

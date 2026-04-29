@@ -310,15 +310,15 @@ print("Log prob:", td["action_log_prob"].shape)
 # this efficiently, including batching, device management, and multi-process
 # collection.
 #
-# The :class:`~torchrl.collectors.SyncDataCollector` collects data
+# The :class:`~torchrl.collectors.Collector` collects data
 # synchronously - it waits for a batch to be ready before returning:
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 
 # A simple deterministic policy for demonstration
 actor = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
 
-collector = SyncDataCollector(
+collector = Collector(
     create_env_fn=lambda: GymEnv("Pendulum-v1"),
     policy=actor,
     frames_per_batch=200,  # Collect 200 frames per iteration
@@ -334,7 +334,7 @@ collector.shutdown()
 
 ###############################################################################
 # For async collection (useful when training takes longer than collecting),
-# see :class:`~torchrl.collectors.MultiaSyncDataCollector`.
+# see :class:`~torchrl.collectors.MultiAsyncCollector`.
 #
 # Replay Buffers
 # --------------
@@ -448,7 +448,7 @@ qnet = TensorDictModule(
 policy = QValueActor(qnet, in_keys=["observation"], spec=env.action_spec)
 
 # 3. Set up the data collector
-collector = SyncDataCollector(
+collector = Collector(
     create_env_fn=lambda: GymEnv("CartPole-v1"),
     policy=policy,
     frames_per_batch=100,

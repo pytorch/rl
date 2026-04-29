@@ -262,6 +262,7 @@ class A2CLoss(LossModule):
     default_keys = _AcceptedKeys
     tensor_keys: _AcceptedKeys
     default_value_estimator: ValueEstimators = ValueEstimators.GAE
+    _schedulable_buffers = frozenset({"entropy_coeff", "critic_coeff", "clip_value"})
 
     actor_network: TensorDictModule
     critic_network: TensorDictModule

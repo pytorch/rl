@@ -67,6 +67,7 @@ from torchrl.data import (
     LazyTensorStorage,
     NonTensor,
     ReplayBuffer,
+    SliceSampler,
     TensorSpec,
     Unbounded,
 )
@@ -81,7 +82,7 @@ from torchrl.envs import (
     Transform,
 )
 from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, set_gym_backend
-from torchrl.envs.transforms import TransformedEnv, VecNorm
+from torchrl.envs.transforms import Compose, TransformedEnv, VecNorm
 from torchrl.envs.utils import (
     _aggregate_end_of_traj,
     check_env_specs,
@@ -499,6 +500,82 @@ class TestMakePolicyFactory:
 
         finally:
             collector.shutdown()
+
+
+class TestRandomPolicyLazyInit:
+    """Tests for lazy initialization of ``RandomPolicy`` from the env's action_spec."""
+
+    def test_standalone_random_policy_requires_spec(self):
+        """Calling a spec-less ``RandomPolicy`` outside a collector raises a clear error."""
+        pol = RandomPolicy()
+        assert pol.action_spec is None
+        with pytest.raises(RuntimeError, match="action_spec is not set"):
+            pol(TensorDict())
+
+    def test_set_action_spec_from_env_is_idempotent(self):
+        """``set_action_spec_from_env`` only fills the spec when unset."""
+        env = ContinuousActionVecMockEnv()
+        pol = RandomPolicy()
+        pol.set_action_spec_from_env(env)
+        assert pol.action_spec is not None
+        first_spec = pol.action_spec
+        # Second call is a no-op — should not overwrite
+        pol.set_action_spec_from_env(env)
+        assert pol.action_spec is first_spec
+
+    def test_sync_collector_lazy_policy_instance(self):
+        """``Collector(env, RandomPolicy())`` fills the spec from the env."""
+        pol = RandomPolicy()
+        env = ContinuousActionVecMockEnv()
+        collector = Collector(
+            env,
+            policy=pol,
+            total_frames=20,
+            frames_per_batch=10,
+        )
+        try:
+            # Spec is filled by the collector, the user's policy instance is mutated.
+            assert pol.action_spec is not None
+            data = next(iter(collector))
+            assert "action" in data.keys()
+            assert data["action"].shape[-1] == env.full_action_spec["action"].shape[-1]
+        finally:
+            collector.shutdown()
+
+    def test_sync_collector_lazy_policy_factory(self):
+        """``policy_factory=RandomPolicy`` (returning a spec-less instance) also works."""
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            policy_factory=RandomPolicy,
+            total_frames=20,
+            frames_per_batch=10,
+        )
+        try:
+            data = next(iter(collector))
+            assert "action" in data.keys()
+        finally:
+            collector.shutdown()
+
+    def test_multi_sync_collector_lazy_policy_instance(self):
+        """Multi-worker collectors inherit the lazy-init path via the inner ``Collector``."""
+        collector = MultiSyncCollector(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            policy=RandomPolicy(),
+            total_frames=40,
+            frames_per_batch=20,
+        )
+        try:
+            data = next(iter(collector))
+            assert "action" in data.keys()
+        finally:
+            collector.shutdown()
+
+    def test_explicit_spec_still_works(self):
+        """Passing an explicit ``action_spec`` keeps the original behavior unchanged."""
+        env = ContinuousActionVecMockEnv()
+        pol = RandomPolicy(env.full_action_spec)
+        td = pol(TensorDict())
+        assert "action" in td.keys()
 
 
 class TestCollectorGeneric:
@@ -1976,7 +2053,7 @@ if __name__ == "__main__":
         """
         A simple mock environment that returns a fixed ID as its sole observation.
 
-        This environment is designed to test MultiSyncDataCollector ordering.
+        This environment is designed to test MultiSyncCollector ordering.
         Each environment instance is initialized with a unique env_id, which it
         returns as the observation at every step.
         """
@@ -2072,7 +2149,7 @@ if __name__ == "__main__":
         self, num_envs: int, n_steps: int, with_preempt: bool, cat_results: str | int
     ):
         """
-        Test that MultiSyncDataCollector returns data in the correct order.
+        Test that MultiSyncCollector returns data in the correct order.
 
         We create num_envs environments, each returning its env_id as the observation.
         After collection, we verify that the observations correspond to the correct env_ids in order
@@ -2195,7 +2272,7 @@ if __name__ == "__main__":
     ):
         """Regression test for issue #3137: traj_ids shape inconsistency with unbatched envs.
 
-        When using SyncDataCollector with an unbatched environment (batch_size=()),
+        When using Collector with an unbatched environment (batch_size=()),
         the traj_ids should maintain consistent shapes across all steps, even when
         done=True triggers trajectory updates.
 
@@ -5568,6 +5645,663 @@ class TestTrajsPerBatch:
             collector.shutdown()
             if not multi:
                 env.close(raise_if_closed=False)
+
+
+class TestTrajsPerBatchReplayBuffer:
+    """Tests for trajs_per_batch + ReplayBuffer integration.
+
+    ``trajs_per_batch`` makes a collector yield (or write to a replay buffer)
+    only *complete* trajectories — i.e. episode segments whose last step has
+    ``("next", "done") == True``.  When combined with a replay buffer the
+    collector writes each trajectory as a **flat 1-D sequence** of valid
+    timesteps (no padding), which is directly compatible with
+    :class:`~torchrl.data.SliceSampler` using ``end_key=("next", "done")``.
+
+    The tests below cover:
+
+    * Single-process collector: sync iteration and ``start()`` async mode.
+    * Multi-process collectors (``MultiSyncCollector``, ``MultiAsyncCollector``):
+      both iteration and ``start()`` mode.
+    * Batched environments (``SerialEnv``): trajectory completeness and flat
+      1-D storage regardless of the environment batch shape.
+    * **Completeness guarantee**: every trajectory stored in the RB ends with
+      ``done=True`` — partial trajectories never leak into the buffer.
+    * **SliceSampler integration**: sampled slices respect episode boundaries.
+    """
+
+    @staticmethod
+    def _make_env_and_policy(max_steps=4):
+        env_fn = lambda: TransformedEnv(  # noqa: E731
+            CountingEnv(max_steps=max_steps), StepCounter(max_steps)
+        )
+        probe = env_fn()
+        try:
+            policy = RandomPolicy(probe.action_spec)
+        finally:
+            probe.close(raise_if_closed=False)
+        return env_fn, policy
+
+    @staticmethod
+    def _make_batched_env_fn(max_steps=4, num_envs=2):
+        """Return a factory that creates a SerialEnv with InitTracker."""
+
+        def env_fn():
+            return TransformedEnv(
+                CountingEnv(max_steps=max_steps),
+                Compose(StepCounter(max_steps), InitTracker()),
+            )
+
+        return lambda: SerialEnv(num_envs, env_fn)
+
+    @staticmethod
+    def _assert_rb_trajectories_complete(rb):
+        """Assert that every trajectory stored in *rb* ends with done=True.
+
+        Groups all stored timesteps by ``("collector", "traj_ids")`` and
+        checks that the last timestep of each trajectory has
+        ``("next", "done") == True``.  This is the core completeness
+        guarantee of ``trajs_per_batch``.
+        """
+        all_data = rb.storage[: len(rb)]
+        traj_ids = all_data[("collector", "traj_ids")]
+        done = all_data[("next", "done")]
+        unique_ids = traj_ids.unique()
+        assert len(unique_ids) > 0, "replay buffer has no trajectories"
+        for tid in unique_ids:
+            mask = traj_ids == tid
+            traj_done = done[mask]
+            assert traj_done[-1].any(), (
+                f"trajectory {tid.item()} does not end with done=True — "
+                "partial trajectory leaked into the replay buffer"
+            )
+
+    # ------------------------------------------------------------------
+    # Single-process collector tests
+    # ------------------------------------------------------------------
+
+    def test_trajs_per_batch_replay_buffer_sync(self):
+        """Replay buffer receives complete trajectories as flat timesteps."""
+        max_steps = 4
+        num_trajs = 2
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(200))
+        env = env_fn()
+        collector = Collector(
+            env,
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 3,
+            total_frames=max_steps * 12,
+            trajs_per_batch=num_trajs,
+        )
+        try:
+            list(collector)  # exhaust the collector
+        finally:
+            collector.shutdown()
+            env.close(raise_if_closed=False)
+
+        assert len(rb) > 0, "replay buffer must be non-empty"
+        # Trajectories are stored as flat timestep sequences (1-D storage);
+        # each sampled entry is a single timestep.
+        sample = rb.sample(num_trajs)
+        assert sample.ndim == 1, "sampled entries should be individual timesteps (1-D)"
+        assert ("collector", "traj_ids") in sample.keys(True)
+        self._assert_rb_trajectories_complete(rb)
+
+    def test_trajs_per_batch_replay_buffer_start_async(self):
+        """collector.start() fills the replay buffer with complete trajectories."""
+        max_steps = 4
+        num_trajs = 2
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(200), shared=True)
+        env = env_fn()
+        collector = Collector(
+            env,
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 3,
+            total_frames=max_steps * 12,
+            trajs_per_batch=num_trajs,
+        )
+        try:
+            collector.start()
+            deadline = time.time() + 30
+            while len(rb) < num_trajs and time.time() < deadline:
+                time.sleep(0.05)
+            collector.async_shutdown()
+        finally:
+            env.close(raise_if_closed=False)
+
+        assert (
+            len(rb) >= num_trajs
+        ), "replay buffer must have at least num_trajs entries"
+        sample = rb.sample(num_trajs)
+        assert sample.ndim == 1
+        assert ("collector", "traj_ids") in sample.keys(True)
+        self._assert_rb_trajectories_complete(rb)
+
+    # ------------------------------------------------------------------
+    # Completeness guarantee: every RB trajectory ends with done=True
+    # ------------------------------------------------------------------
+
+    def test_trajs_per_batch_completeness_single(self):
+        """All trajectories in the RB are complete (single-process collector).
+
+        Fills the buffer with many trajectories and asserts every single one
+        ends with ``("next", "done") == True``.  No partial trajectory may
+        leak into the buffer — partials stay in the internal ``partial_trajs``
+        dict until the episode finishes.
+        """
+        max_steps = 5
+        num_trajs = 3
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(1000))
+        env = env_fn()
+        collector = Collector(
+            env,
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 4,
+            total_frames=max_steps * 40,
+            trajs_per_batch=num_trajs,
+        )
+        try:
+            list(collector)
+        finally:
+            collector.shutdown()
+            env.close(raise_if_closed=False)
+
+        assert len(rb) > 0
+        self._assert_rb_trajectories_complete(rb)
+
+    def test_trajs_per_batch_completeness_batched_env(self):
+        """All trajectories in the RB are complete (batched env).
+
+        A batched env (SerialEnv with 3 sub-envs) produces interleaved steps
+        from multiple environments.  ``_traj_ingest`` flattens and groups by
+        ``traj_id``, so each trajectory is still written as a flat 1-D
+        sequence.  Verify that every one ends with done=True.
+        """
+        max_steps = 4
+        num_envs = 3
+        num_trajs = 4
+
+        def env_fn():
+            return TransformedEnv(
+                CountingEnv(max_steps=max_steps),
+                Compose(StepCounter(max_steps), InitTracker()),
+            )
+
+        batched_env = SerialEnv(num_envs, env_fn)
+        try:
+            policy = RandomPolicy(batched_env.action_spec)
+            rb = ReplayBuffer(storage=LazyTensorStorage(500))
+            collector = Collector(
+                batched_env,
+                policy,
+                replay_buffer=rb,
+                frames_per_batch=max_steps * num_envs * 3,
+                total_frames=max_steps * num_envs * 20,
+                trajs_per_batch=num_trajs,
+            )
+            try:
+                list(collector)
+            finally:
+                collector.shutdown()
+        finally:
+            batched_env.close(raise_if_closed=False)
+
+        assert len(rb) > 0, "replay buffer must be populated"
+        self._assert_rb_trajectories_complete(rb)
+
+    def test_trajs_per_batch_completeness_multi_collector(self):
+        """All trajectories in the RB are complete (multi-process collector).
+
+        Two workers each run their own ``_iter_by_trajectories`` loop and
+        write to the shared replay buffer.  Verify every trajectory stored
+        is complete.
+        """
+        max_steps = 4
+        num_trajs = 2
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(400), shared=True)
+        collector = MultiSyncCollector(
+            [env_fn, env_fn],
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 4,
+            total_frames=max_steps * 24,
+            trajs_per_batch=num_trajs,
+            cat_results="stack",
+        )
+        try:
+            for _ in collector:
+                pass
+        finally:
+            collector.shutdown()
+
+        assert len(rb) > 0
+        self._assert_rb_trajectories_complete(rb)
+
+    # ------------------------------------------------------------------
+    # Flat 1-D storage: batched envs write flat sequences
+    # ------------------------------------------------------------------
+
+    def test_trajs_per_batch_flat_storage_batched_env(self):
+        """Batched env + trajs_per_batch writes flat 1-D sequences to the RB.
+
+        Even though the environment has batch_size > 1, trajectories are
+        disassembled by ``_traj_ingest`` (which flattens and groups by
+        ``traj_id``) and written individually.  The replay buffer storage
+        should be 1-D (ndim=1) — each entry is a single timestep.
+        """
+        max_steps = 4
+        num_envs = 2
+        num_trajs = 4
+
+        def env_fn():
+            return TransformedEnv(
+                CountingEnv(max_steps=max_steps),
+                Compose(StepCounter(max_steps), InitTracker()),
+            )
+
+        batched_env = SerialEnv(num_envs, env_fn)
+        try:
+            policy = RandomPolicy(batched_env.action_spec)
+            rb = ReplayBuffer(storage=LazyTensorStorage(400))
+            collector = Collector(
+                batched_env,
+                policy,
+                replay_buffer=rb,
+                frames_per_batch=max_steps * num_envs * 3,
+                total_frames=max_steps * num_envs * 12,
+                trajs_per_batch=num_trajs,
+            )
+            try:
+                list(collector)
+            finally:
+                collector.shutdown()
+        finally:
+            batched_env.close(raise_if_closed=False)
+
+        assert len(rb) > 0
+        # Storage is 1-D: each entry is one timestep, not an env-batch slice
+        sample = rb.sample(4)
+        assert (
+            sample.ndim == 1
+        ), f"Expected 1-D storage (flat timesteps) but got ndim={sample.ndim}"
+        assert ("collector", "traj_ids") in sample.keys(True)
+
+    # ------------------------------------------------------------------
+    # SliceSampler integration
+    # ------------------------------------------------------------------
+
+    def test_trajs_per_batch_slice_sampler(self):
+        """SliceSampler samples contiguous slices from trajectory-filled buffer."""
+        max_steps = 8
+        num_trajs = 4
+        slice_len = 3
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(800),
+            sampler=SliceSampler(
+                slice_len=slice_len,
+                end_key=("next", "done"),
+                strict_length=True,
+            ),
+        )
+        env = env_fn()
+        collector = Collector(
+            env,
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 3,
+            total_frames=max_steps * 30,
+            trajs_per_batch=num_trajs,
+        )
+        try:
+            list(collector)
+        finally:
+            collector.shutdown()
+            env.close(raise_if_closed=False)
+
+        assert len(rb) > 0
+        num_slices = 4
+        sample = rb.sample(slice_len * num_slices)
+        assert sample.shape[0] == slice_len * num_slices
+        # Verify contiguity: within each slice, traj_ids are constant and
+        # step counts are monotonically increasing
+        sample_reshaped = sample.reshape(num_slices, slice_len)
+        for i in range(num_slices):
+            slice_data = sample_reshaped[i]
+            tids = slice_data[("collector", "traj_ids")]
+            assert (
+                tids == tids[0]
+            ).all(), f"slice {i}: traj_ids should be constant within a slice"
+
+    def test_trajs_per_batch_slice_sampler_batched_env(self):
+        """SliceSampler + batched env: slices respect episode boundaries.
+
+        Fills a buffer from a batched environment using ``trajs_per_batch``,
+        then samples slices and verifies that no slice crosses an episode
+        boundary (i.e. ``done=True`` only appears at the last position of a
+        slice, or not at all).
+        """
+        max_steps = 6
+        num_envs = 2
+        num_trajs = 4
+        slice_len = 3
+
+        def env_fn():
+            return TransformedEnv(
+                CountingEnv(max_steps=max_steps),
+                Compose(StepCounter(max_steps), InitTracker()),
+            )
+
+        batched_env = SerialEnv(num_envs, env_fn)
+        try:
+            policy = RandomPolicy(batched_env.action_spec)
+            rb = ReplayBuffer(
+                storage=LazyTensorStorage(600),
+                sampler=SliceSampler(
+                    slice_len=slice_len,
+                    end_key=("next", "done"),
+                    strict_length=True,
+                ),
+            )
+            collector = Collector(
+                batched_env,
+                policy,
+                replay_buffer=rb,
+                frames_per_batch=max_steps * num_envs * 3,
+                total_frames=max_steps * num_envs * 20,
+                trajs_per_batch=num_trajs,
+            )
+            try:
+                list(collector)
+            finally:
+                collector.shutdown()
+        finally:
+            batched_env.close(raise_if_closed=False)
+
+        assert len(rb) > 0
+        num_slices = 6
+        sample = rb.sample(slice_len * num_slices)
+        sample_reshaped = sample.reshape(num_slices, slice_len)
+        for i in range(num_slices):
+            slice_data = sample_reshaped[i]
+            done = slice_data[("next", "done")].squeeze(-1)
+            # done=True should only appear at the last step or not at all
+            if done.any():
+                # Find position of the first done=True
+                done_pos = done.nonzero(as_tuple=True)[0]
+                assert done_pos[-1] == slice_len - 1, (
+                    f"slice {i}: done=True at position {done_pos.tolist()} "
+                    f"but expected only at position {slice_len - 1}"
+                )
+
+    # ------------------------------------------------------------------
+    # Multi-process collector tests
+    # ------------------------------------------------------------------
+
+    def test_trajs_per_batch_multi_collector_rb(self):
+        """Multi-process collectors populate the replay buffer with trajectory data
+        when both trajs_per_batch and replay_buffer are provided."""
+        max_steps = 4
+        num_trajs = 2
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(200), shared=True)
+        collector = MultiSyncCollector(
+            [env_fn, env_fn],
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 4,
+            total_frames=max_steps * 16,
+            trajs_per_batch=num_trajs,
+            cat_results="stack",
+        )
+        try:
+            for _ in collector:
+                pass
+        finally:
+            collector.shutdown()
+
+        assert len(rb) > 0, "replay buffer must be non-empty"
+        sample = rb.sample(num_trajs)
+        assert ("collector", "traj_ids") in sample.keys(True)
+        self._assert_rb_trajectories_complete(rb)
+
+    def test_trajs_per_batch_multi_collector_rb_start(self):
+        """Multi-process collector start() mode fills the replay buffer with
+        trajectory data from all workers."""
+        max_steps = 4
+        num_trajs = 2
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(200), shared=True)
+        collector = MultiSyncCollector(
+            [env_fn, env_fn],
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 4,
+            total_frames=-1,
+            trajs_per_batch=num_trajs,
+            cat_results="stack",
+        )
+        try:
+            collector.start()
+            deadline = time.time() + 30
+            while len(rb) < max_steps * num_trajs and time.time() < deadline:
+                time.sleep(0.05)
+        finally:
+            collector.shutdown()
+
+        assert (
+            len(rb) >= max_steps * num_trajs
+        ), f"replay buffer must have enough entries, got {len(rb)}"
+        sample = rb.sample(num_trajs)
+        assert ("collector", "traj_ids") in sample.keys(True)
+        self._assert_rb_trajectories_complete(rb)
+
+    def test_trajs_per_batch_multi_collector_batched_env_rb(self):
+        """Multi-process + batched env + trajs_per_batch + replay buffer.
+
+        Each worker runs a SerialEnv (2 sub-envs).  Verify that:
+        1. The replay buffer is populated with flat 1-D timesteps.
+        2. Every trajectory in the buffer is complete (ends with done=True).
+        3. traj_ids are present.
+        """
+        max_steps = 4
+        num_envs = 2
+        num_trajs = 2
+
+        batched_env_fn = EnvCreator(
+            lambda: SerialEnv(
+                num_envs,
+                EnvCreator(
+                    lambda: TransformedEnv(
+                        CountingEnv(max_steps=max_steps),
+                        Compose(StepCounter(max_steps), InitTracker()),
+                    )
+                ),
+            )
+        )
+        probe = batched_env_fn()
+        policy = RandomPolicy(probe.action_spec)
+        probe.close(raise_if_closed=False)
+
+        rb = ReplayBuffer(storage=LazyTensorStorage(400), shared=True)
+        collector = MultiSyncCollector(
+            [batched_env_fn, batched_env_fn],
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * num_envs * 4,
+            total_frames=max_steps * num_envs * 20,
+            trajs_per_batch=num_trajs,
+            cat_results="stack",
+        )
+        try:
+            for _ in collector:
+                pass
+        finally:
+            collector.shutdown()
+
+        assert len(rb) > 0, "replay buffer must be populated"
+        sample = rb.sample(4)
+        assert sample.ndim == 1, "storage should be flat 1-D timesteps"
+        assert ("collector", "traj_ids") in sample.keys(True)
+        self._assert_rb_trajectories_complete(rb)
+
+    def test_trajs_per_batch_multi_async_collector_rb(self):
+        """MultiAsyncCollector + trajs_per_batch + replay buffer.
+
+        Same guarantees as sync: buffer populated, trajectories complete.
+        """
+        max_steps = 4
+        num_trajs = 2
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(400), shared=True)
+        collector = MultiAsyncCollector(
+            [env_fn, env_fn],
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 4,
+            total_frames=max_steps * 24,
+            trajs_per_batch=num_trajs,
+            cat_results="stack",
+        )
+        try:
+            for _ in collector:
+                pass
+        finally:
+            collector.shutdown()
+
+        assert len(rb) > 0, "replay buffer must be non-empty"
+        assert ("collector", "traj_ids") in rb.sample(2).keys(True)
+        self._assert_rb_trajectories_complete(rb)
+
+    # ------------------------------------------------------------------
+    # Batched env: trajectory completeness (yielded batches, not RB)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize("with_rb", [False, True])
+    def test_trajs_per_batch_batched_env(self, with_rb):
+        """SerialEnv (batched) + trajs_per_batch, with and without replay buffer.
+
+        Verifies trajectory completeness via InitTracker (is_init=True at start)
+        and done=True at the last valid step (per ("collector", "mask")).
+        When with_rb=True, trajectories are written as flat sequences to a 1-D
+        replay buffer (ndim=2 is incompatible with variable-length trajectories).
+        """
+        max_steps = 4
+        num_envs = 2
+        num_trajs = 4
+
+        def env_fn():
+            return TransformedEnv(
+                CountingEnv(max_steps=max_steps),
+                Compose(StepCounter(max_steps), InitTracker()),
+            )
+
+        batched_env = SerialEnv(num_envs, env_fn)
+        try:
+            policy = RandomPolicy(batched_env.action_spec)
+            rb = ReplayBuffer(storage=LazyTensorStorage(400)) if with_rb else None
+            collector = Collector(
+                batched_env,
+                policy,
+                replay_buffer=rb,
+                frames_per_batch=max_steps * num_envs * 3,
+                total_frames=max_steps * num_envs * 12,
+                trajs_per_batch=num_trajs,
+            )
+            try:
+                for traj_batch in collector:
+                    if traj_batch is None:
+                        continue
+                    # traj_batch.shape == [num_trajs, max_len]
+                    mask = traj_batch[("collector", "mask")]
+                    is_init = traj_batch["is_init"]
+                    done = traj_batch[("next", "done")]
+                    for i in range(traj_batch.shape[0]):
+                        row_mask = mask[i]
+                        assert is_init[i][row_mask][
+                            0
+                        ].any(), f"row {i}: first valid step must have is_init=True"
+                        assert done[i][row_mask][
+                            -1
+                        ].any(), f"row {i}: last valid step must have done=True"
+            finally:
+                collector.shutdown()
+        finally:
+            batched_env.close(raise_if_closed=False)
+
+        if with_rb:
+            assert len(rb) > 0, "replay buffer must be populated"
+            assert ("collector", "traj_ids") in rb.sample(1).keys(True)
+            self._assert_rb_trajectories_complete(rb)
+
+    @pytest.mark.parametrize("with_rb", [False, True])
+    def test_trajs_per_batch_multi_async_ndim2(self, with_rb):
+        """MultiAsyncCollector + ndim=2 storage, with and without replay buffer.
+
+        Verifies trajectory completeness by grouping sampled steps by traj_id
+        and checking is_init=True at the start and done=True at the end.
+        When with_rb=True, uses SerialEnv per worker (required so fake_td is 2D
+        at multi-collector init) and checks the ndim=2 replay buffer is populated.
+        """
+        max_steps = 4
+        num_envs = 2
+
+        def env_fn():
+            return TransformedEnv(
+                CountingEnv(max_steps=max_steps),
+                Compose(StepCounter(max_steps), InitTracker()),
+            )
+
+        # SerialEnv per worker gives a 2D fake_td at init (needed for ndim=2 storage)
+        # and is used for both variants to keep env_fn consistent.
+        batched_env_fn = lambda: SerialEnv(num_envs, env_fn)  # noqa: E731
+        probe = batched_env_fn()
+        policy = RandomPolicy(probe.action_spec)
+        probe.close(raise_if_closed=False)
+
+        rb = (
+            ReplayBuffer(storage=LazyTensorStorage(400, ndim=2), shared=True)
+            if with_rb
+            else None
+        )
+        collector = MultiAsyncCollector(
+            [batched_env_fn, batched_env_fn],
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * num_envs * 4,
+            total_frames=max_steps * num_envs * 16,
+            cat_results="stack",
+        )
+        try:
+            for batch in collector:
+                if batch is None:
+                    continue
+                flat = batch.reshape(-1)
+                traj_ids = flat[("collector", "traj_ids")]
+                done = flat[("next", "done")]
+                is_init = flat["is_init"]
+                for tid in traj_ids.unique():
+                    idx = traj_ids == tid
+                    if not done[idx].any():
+                        continue  # partial trajectory at buffer boundary
+                    assert is_init[idx][
+                        0
+                    ].any(), f"traj {tid}: first step must have is_init=True"
+                    assert done[idx][
+                        -1
+                    ].any(), f"traj {tid}: last step must have done=True"
+        finally:
+            collector.shutdown()
+
+        if with_rb:
+            assert len(rb) > 0, "ndim=2 replay buffer must be populated"
+            assert ("collector", "traj_ids") in rb.sample(1).keys(True)
 
 
 if __name__ == "__main__":

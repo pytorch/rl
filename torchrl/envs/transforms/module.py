@@ -11,10 +11,10 @@ from typing import overload, TYPE_CHECKING
 import torch
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
-from torchrl._utils import logger as torchrl_logger
+from torchrl._utils import _RayServiceMetaClass, logger as torchrl_logger
 
 from torchrl.data.tensor_specs import TensorSpec
-from torchrl.envs.transforms.ray_service import _RayServiceMetaClass, RayTransform
+from torchrl.envs.transforms.ray_service import RayTransform
 from torchrl.envs.transforms.transforms import Transform
 
 if TYPE_CHECKING:

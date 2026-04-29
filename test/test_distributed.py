@@ -38,6 +38,7 @@ from torchrl.data import (
     LazyTensorStorage,
     RandomSampler,
     RayReplayBuffer,
+    ReplayBuffer,
     RoundRobinWriter,
     SamplerWithoutReplacement,
 )
@@ -972,6 +973,73 @@ class TestRayCollector(DistributedCollectorBase):
                 collector.update_policy_weights_(weights)
         finally:
             collector.shutdown()
+
+
+@pytest.mark.skipif(
+    not _has_ray, reason="Ray not found. Ray may be badly configured or not installed."
+)
+class TestRayTrajsPerBatch:
+    """Tests for trajs_per_batch + replay_buffer on RayCollector."""
+
+    @pytest.fixture(autouse=True, scope="class")
+    def start_ray(self):
+        import ray
+
+        ray.shutdown()
+        ray_init_config = dict(DEFAULT_RAY_INIT_CONFIG)
+        ray_init_config["runtime_env"] = {
+            "working_dir": os.path.dirname(__file__),
+            "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
+        }
+        ray.init(**ray_init_config)
+        yield
+        ray.shutdown()
+
+    @pytest.fixture(autouse=True, scope="function")
+    def reset_process_group(self):
+        import torch.distributed as dist
+
+        try:
+            dist.destroy_process_group()
+        except Exception:
+            pass
+        yield
+
+    def test_ray_trajs_per_batch_replay_buffer_rejects_regular_rb(self):
+        """RayCollector rejects a regular ReplayBuffer (must use RayReplayBuffer)."""
+        from torchrl.envs import StepCounter, TransformedEnv
+
+        max_steps = 4
+        num_trajs = 2
+
+        def env_fn():
+            return TransformedEnv(
+                CountingEnv(max_steps=max_steps), StepCounter(max_steps)
+            )
+
+        probe = env_fn()
+        policy = RandomPolicy(probe.action_spec)
+        probe.close(raise_if_closed=False)
+
+        rb = ReplayBuffer(storage=LazyTensorStorage(200))
+        ray_init_config = dict(DEFAULT_RAY_INIT_CONFIG)
+        ray_init_config["runtime_env"] = {
+            "working_dir": os.path.dirname(__file__),
+            "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
+        }
+        remote_configs = {"num_cpus": 1, "num_gpus": 0.0}
+        with pytest.raises(TypeError, match="RayReplayBuffer"):
+            RayCollector(
+                [env_fn, env_fn],
+                policy,
+                collector_class=Collector,
+                replay_buffer=rb,
+                frames_per_batch=max_steps * 4,
+                total_frames=max_steps * 16,
+                trajs_per_batch=num_trajs,
+                ray_init_config=ray_init_config,
+                remote_configs=remote_configs,
+            )
 
 
 if __name__ == "__main__":

@@ -77,6 +77,7 @@ if [[ "$RELEASE" == 0 ]]; then
     uv pip install cloudpickle packaging importlib_metadata orjson "pyvers>=0.1.0,<0.2.0"
     uv pip install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git
 else
+    uv pip install cloudpickle packaging importlib_metadata orjson "pyvers>=0.1.0,<0.2.0"
     uv pip install --no-deps tensordict
 fi
 
@@ -190,8 +191,8 @@ run_tests() {
         test_failed=1
     fi
     
-    if ! python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 -k "gym and not isaac" --mp_fork; then
-        echo "ERROR: test_libs.py failed for ${version_name}"
+    if ! python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/libs --instafail -v --durations 200 -k "gym and not isaac" --mp_fork; then
+        echo "ERROR: test/libs failed for ${version_name}"
         test_failed=1
     fi
     

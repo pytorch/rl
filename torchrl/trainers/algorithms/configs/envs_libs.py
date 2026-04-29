@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from omegaconf import MISSING
@@ -329,13 +329,15 @@ class UnityMLAgentsEnvConfig(EnvLibsConfig):
 class VmasEnvConfig(EnvLibsConfig):
     """Configuration for VmasEnv environment."""
 
-    env_name: str = MISSING
-    from_pixels: bool = False
-    pixels_only: bool = True
-    frame_skip: int | None = None
+    scenario: Any = MISSING
+    num_envs: int = 1
+    continuous_actions: bool = True
+    max_steps: int | None = None
+    categorical_actions: bool = True
+    seed: int | None = None
     device: str = "cpu"
-    batch_size: list[int] | None = None
-    allow_done_after_reset: bool = False
+    group_map: Any = None
+    scenario_kwargs: dict[str, Any] = field(default_factory=dict)
     _target_: str = "torchrl.envs.libs.vmas.VmasEnv"
 
     def __post_init__(self) -> None:

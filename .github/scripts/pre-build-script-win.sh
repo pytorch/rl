@@ -1,6 +1,6 @@
 #!/bin/bash
 
-pip install --upgrade setuptools
+pip install --upgrade setuptools packaging
 ${CONDA_RUN} pip install "pybind11[global]"
 
 # Determine tensordict installation source based on branch/tag

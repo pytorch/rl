@@ -1,5 +1,16 @@
 .. currentmodule:: torchrl.modules
 
+Robot Learning
+==============
+
+Policy architectures for robot manipulation and imitation learning.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    ACTModel
+
 World Models and Model-Based RL
 ===============================
 

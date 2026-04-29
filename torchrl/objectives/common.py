@@ -66,6 +66,12 @@ class _LossMeta(abc.ABCMeta):
         for name, value in cls.__dict__.items():
             if not name.startswith("_") and name.endswith("loss"):
                 setattr(cls, name, _forward_wrapper(value))
+        # Merge _schedulable_buffers from all bases so __setattr__ can do a
+        # single O(1) check instead of walking the MRO on every call.
+        merged = set()
+        for base in cls.__mro__:
+            merged |= getattr(base, "_schedulable_buffers", frozenset())
+        cls._all_schedulable_buffers = frozenset(merged)
 
 
 class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
@@ -95,6 +101,11 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
     :meth:._forward_value_estimator_keys() method. This function is crucial for
     forwarding any altered tensordict keys to the underlying value_estimator.
 
+    Subclasses can declare a ``_schedulable_buffers`` frozenset to allow direct
+    scalar assignment (e.g. ``loss.entropy_coeff = 0.003``) for registered
+    buffers that are commonly scheduled during training. The assignment performs
+    an in-place update, preserving the buffer's device and dtype.
+
     Examples:
         >>> class MyLoss(LossModule):
         >>>     @dataclass
@@ -116,6 +127,8 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         change the value of this attribute which will change the mode.
 
     """
+
+    _schedulable_buffers: frozenset = frozenset()
 
     @dataclass
     class _AcceptedKeys:
@@ -148,6 +161,27 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
     def __new__(cls, *args, **kwargs):
         self = super().__new__(cls)
         return self
+
+    def __setattr__(self, name: str, value) -> None:
+        # Allow direct scalar assignment to schedulable buffers:
+        #   loss.entropy_coeff = 0.003
+        # performs an in-place copy, preserving device and dtype.
+        if (
+            isinstance(value, (int, float))
+            and name in type(self)._all_schedulable_buffers
+            and hasattr(self, "_buffers")
+            and name in self._buffers
+            and self._buffers[name] is not None
+        ):
+            self._buffers[name].copy_(
+                torch.as_tensor(
+                    value,
+                    dtype=self._buffers[name].dtype,
+                    device=self._buffers[name].device,
+                )
+            )
+            return
+        super().__setattr__(name, value)
 
     def __init__(self):
         super().__init__()

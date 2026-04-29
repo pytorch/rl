@@ -21,7 +21,7 @@ from gail_utils import log_metrics, make_gail_discriminator, make_offline_replay
 from ppo_utils import eval_model, make_env, make_ppo_models
 from tensordict.nn import CudaGraphModule
 from torchrl._utils import compile_with_warmup, get_available_device, timeit
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.envs import set_gym_backend
@@ -126,7 +126,7 @@ def main(cfg: DictConfig):  # noqa: F821
                 compile_mode = "reduce-overhead"
 
     # Create collector
-    collector = SyncDataCollector(
+    collector = Collector(
         create_env_fn=make_env(cfg.env.env_name, device),
         policy=actor,
         frames_per_batch=cfg.ppo.collector.frames_per_batch,

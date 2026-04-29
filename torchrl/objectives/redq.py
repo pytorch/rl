@@ -250,6 +250,9 @@ class REDQLoss(LossModule):
     default_keys = _AcceptedKeys
     delay_actor: bool = False
     default_value_estimator = ValueEstimators.TD0
+    _schedulable_buffers = frozenset(
+        {"alpha_init", "min_log_alpha", "max_log_alpha", "log_alpha"}
+    )
     out_keys = [
         "loss_actor",
         "loss_qvalue",

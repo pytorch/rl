@@ -438,7 +438,6 @@ class Collector(BaseCollector):
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
         extend_buffer: bool = True,
-        local_init_rb: bool | None = None,
         trust_policy: bool | None = None,
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
@@ -493,7 +492,6 @@ class Collector(BaseCollector):
         self._setup_replay_buffer(
             replay_buffer=replay_buffer,
             extend_buffer=extend_buffer,
-            local_init_rb=local_init_rb,
             postproc=postproc,
             split_trajs=split_trajs,
             return_same_td=return_same_td,
@@ -606,6 +604,12 @@ class Collector(BaseCollector):
         elif policy_factory is not None:
             raise TypeError("policy_factory cannot be used with policy argument.")
 
+        # Lazily initialize a RandomPolicy that was constructed without an
+        # action_spec (supports both `policy=RandomPolicy()` and a
+        # `policy_factory` that returns one).
+        if isinstance(policy, RandomPolicy):
+            policy.set_action_spec_from_env(env)
+
         if trust_policy is None:
             trust_policy = isinstance(policy, (RandomPolicy, CudaGraphModule))
         self.trust_policy = trust_policy
@@ -688,7 +692,6 @@ class Collector(BaseCollector):
         self,
         replay_buffer: ReplayBuffer | None,
         extend_buffer: bool,
-        local_init_rb: bool | None,
         postproc: Callable | None,
         split_trajs: bool | None,
         return_same_td: bool,
@@ -697,17 +700,7 @@ class Collector(BaseCollector):
         """Set up replay buffer configuration and validate compatibility."""
         self.replay_buffer = replay_buffer
         self.extend_buffer = extend_buffer
-
-        # Handle local_init_rb deprecation
-        if local_init_rb is None:
-            local_init_rb = False
-            if replay_buffer is not None and not local_init_rb:
-                warnings.warn(
-                    "local_init_rb=False is deprecated and will be removed in v0.12. "
-                    "The new storage-level initialization provides better performance.",
-                    FutureWarning,
-                )
-        self.local_init_rb = local_init_rb
+        self.local_init_rb = True
 
         # Validate replay buffer compatibility
         if self.replay_buffer is not None and not self._ignore_rb:

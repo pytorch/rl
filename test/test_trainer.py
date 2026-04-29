@@ -88,6 +88,19 @@ class MockingCollector:
         pass
 
 
+class MockingIterableCollector(MockingCollector):
+    def __init__(self, batches):
+        self._batches = batches
+        self.init_random_frames = 10**9
+        self.shutdown_calls = 0
+
+    def __iter__(self):
+        return iter(self._batches)
+
+    def shutdown(self):
+        self.shutdown_calls += 1
+
+
 class MockingLossModule(nn.Module):
     pass
 
@@ -150,7 +163,7 @@ class TestSelectKeys:
         assert not len(sd["select_keys"])
         trainer2.load_state_dict(sd)
 
-    @pytest.mark.parametrize("backend", ["torchsnapshot", "torch"])
+    @pytest.mark.parametrize("backend", ["torchsnapshot", "torch", "memmap"])
     def test_selectkeys_save(self, backend):
         if not _has_ts and backend == "torchsnapshot":
             pytest.skip("torchsnapshot not found")
@@ -171,6 +184,8 @@ class TestSelectKeys:
                 file = path.join(tmpdirname, "file.pt")
             elif backend == "torchsnapshot":
                 file = tmpdirname
+            elif backend == "memmap":
+                file = path.join(tmpdirname, "ckpt")
             else:
                 raise NotImplementedError
             trainer = mocking_trainer(file=file)
@@ -195,8 +210,7 @@ class TestSelectKeys:
 
             trainer2.load_from_file(file)
             assert state_dict_has_been_called[0]
-            if backend == "torch":
-                assert load_state_dict_has_been_called[0]
+            assert load_state_dict_has_been_called[0]
 
         SelectKeys.state_dict = SelectKeys_state_dict
         SelectKeys.load_state_dict = SelectKeys_load_state_dict
@@ -720,6 +734,7 @@ class TestRewardNorm:
         [
             "torchsnapshot",
             "torch",
+            "memmap",
         ],
     )
     def test_reward_norm_save(self, backend):
@@ -746,6 +761,8 @@ class TestRewardNorm:
                 file = path.join(tmpdirname, "file.pt")
             elif backend == "torchsnapshot":
                 file = tmpdirname
+            elif backend == "memmap":
+                file = path.join(tmpdirname, "ckpt")
             else:
                 raise NotImplementedError
             trainer = mocking_trainer(file)
@@ -763,6 +780,8 @@ class TestRewardNorm:
             reward_normalizer2 = RewardNormalizer()
             reward_normalizer2.register(trainer2)
             trainer2.load_from_file(file)
+            assert state_dict_has_been_called[0]
+            assert load_state_dict_has_been_called[0]
 
         RewardNormalizer.state_dict = RewardNormalizer_state_dict
         RewardNormalizer.load_state_dict = RewardNormalizer_load_state_dict
@@ -922,6 +941,7 @@ class TestRecorder:
         [
             "torchsnapshot",
             "torch",
+            "memmap",
         ],
     )
     def test_recorder_load(self, backend, N=8):
@@ -946,6 +966,8 @@ class TestRecorder:
                 file = path.join(tmpdirname, "file.pt")
             elif backend == "torchsnapshot":
                 file = tmpdirname
+            elif backend == "memmap":
+                file = path.join(tmpdirname, "ckpt")
             else:
                 raise NotImplementedError
             trainer = mocking_trainer(file)
@@ -1020,6 +1042,7 @@ class TestCountFrames:
         [
             "torchsnapshot",
             "torch",
+            "memmap",
         ],
     )
     def test_countframes_load(self, backend):
@@ -1044,6 +1067,8 @@ class TestCountFrames:
                 file = path.join(tmpdirname, "file.pt")
             elif backend == "torchsnapshot":
                 file = tmpdirname
+            elif backend == "memmap":
+                file = path.join(tmpdirname, "ckpt")
             else:
                 raise NotImplementedError
             trainer = mocking_trainer(file)
@@ -1162,6 +1187,96 @@ class TestOptimizationStepper:
         assert "optimization_stepper" in sd
 
 
+class TestPostOptimCompleteLog:
+    def _make_trainer(
+        self,
+        loss_module,
+        optimization_stepper=None,
+        optimizer=None,
+        auto_log_optim_steps=True,
+    ):
+        trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=None,
+            frame_skip=None,
+            optim_steps_per_batch=1,
+            loss_module=loss_module,
+            optimizer=optimizer,
+            optimization_stepper=optimization_stepper,
+            auto_log_optim_steps=auto_log_optim_steps,
+        )
+        trainer._pbar_str = OrderedDict()
+        return trainer
+
+    def test_hook_receives_optim_steps_and_averaged_losses(self):
+        captured = {}
+
+        def capture_hook(optim_steps, average_losses):
+            captured["optim_steps"] = optim_steps
+            captured["average_losses"] = average_losses
+            return None
+
+        stepper = _CountingStepper()
+        loss_module = _CountingLossModule()
+        trainer = self._make_trainer(
+            loss_module=loss_module,
+            optimization_stepper=stepper,
+        )
+        trainer.register_op("post_optim_complete_log", capture_hook)
+        td = TensorDict({"x": torch.randn(3)}, [])
+        trainer.optim_steps(td)
+
+        assert stepper.calls == 1
+        assert captured["optim_steps"] == trainer._optim_count
+        assert "loss" in captured["average_losses"].keys()
+        assert "optim_steps" in trainer._log_dict
+        assert "loss" in trainer._log_dict
+        assert trainer._log_dict["optim_steps"][-1] == trainer._optim_count
+
+    def test_hook_return_logs_extra_metric(self):
+        def extra_metric_hook(optim_steps, average_losses):
+            return {"custom_metric": 1.0}
+
+        stepper = _CountingStepper()
+        trainer = self._make_trainer(
+            loss_module=_CountingLossModule(),
+            optimization_stepper=stepper,
+        )
+        trainer.register_op("post_optim_complete_log", extra_metric_hook)
+        td = TensorDict({"x": torch.randn(3)}, [])
+        trainer.optim_steps(td)
+
+        assert "custom_metric" in trainer._log_dict
+        assert trainer._log_dict["custom_metric"][-1] == 1.0
+        assert "optim_steps" in trainer._log_dict
+        assert "loss" in trainer._log_dict
+
+    def test_auto_log_optim_steps_disabled(self):
+        captured = {}
+
+        def capture_hook(optim_steps, average_losses):
+            captured["optim_steps"] = optim_steps
+            captured["average_losses"] = average_losses
+            return None
+
+        stepper = _CountingStepper()
+        trainer = self._make_trainer(
+            loss_module=_CountingLossModule(),
+            optimization_stepper=stepper,
+            auto_log_optim_steps=False,
+        )
+        trainer.register_op("post_optim_complete_log", capture_hook)
+        td = TensorDict({"x": torch.randn(3)}, [])
+        trainer.optim_steps(td)
+
+        # Hook still fires and sees the values
+        assert captured["optim_steps"] == trainer._optim_count
+        assert "loss" in captured["average_losses"].keys()
+        # but the trainer doesn't auto-log them
+        assert "optim_steps" not in trainer._log_dict
+        assert "loss" not in trainer._log_dict
+
+
 class TestDefaultOptimizationStepper:
     def test_loss_components_partial(self):
         torch.manual_seed(0)
@@ -1275,6 +1390,50 @@ class TestProcessLossHook:
         trainer.register_op("process_loss", WeightedLoss())
         td_out = trainer._process_loss_hook(td_sub_batch, td_loss.clone())
         assert torch.allclose(td_out["loss_a"], torch.tensor(0.5))
+
+
+class TestSetupShutdownHooks:
+    @staticmethod
+    def _make_trainer(collector):
+        trainer = Trainer(
+            collector=collector,
+            total_frames=2,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=MockingLossModule(),
+            optimizer=None,
+            progress_bar=False,
+        )
+        trainer._pbar_str = OrderedDict()
+        return trainer
+
+    def test_setup_and_shutdown_hooks_order(self):
+        batches = [
+            TensorDict({"x": torch.zeros(1)}, [1]),
+            TensorDict({"x": torch.ones(1)}, [1]),
+        ]
+        collector = MockingIterableCollector(batches)
+        trainer = self._make_trainer(collector)
+
+        call_order = []
+
+        def setup_hook():
+            call_order.append("setup")
+
+        def pre_steps_hook(_batch):
+            call_order.append("pre_steps")
+
+        def shutdown_hook():
+            call_order.append("shutdown")
+
+        trainer.register_op("setup", setup_hook)
+        trainer.register_op("pre_steps_log", pre_steps_hook)
+        trainer.register_op("shutdown", shutdown_hook)
+
+        trainer.train()
+
+        assert call_order == ["setup", "pre_steps", "pre_steps", "shutdown"]
+        assert collector.shutdown_calls == 1
 
 
 if __name__ == "__main__":

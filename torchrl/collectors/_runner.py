@@ -188,7 +188,14 @@ def _main_async_collector(
     worker_idx: int | None = None,
     init_random_frames: int | None = None,
     profile_config: ProfileConfig | None = None,
+    trajs_per_batch: int | None = None,
+    init_fn: Callable[[], None] | None = None,
 ) -> None:
+    # Process-level initialisation hook (e.g. Isaac Lab ``AppLauncher``).
+    # Runs before any CUDA/torchrl work in the child process.
+    if init_fn is not None:
+        init_fn()
+
     if collector_class is None:
         collector_class = Collector
     # init variables that will be cleared when closing
@@ -211,7 +218,10 @@ def _main_async_collector(
         init_random_frames if init_random_frames is not None else 0
     )
     try:
-        collector_class._ignore_rb = extend_buffer
+        # When trajs_per_batch is set, _iter_by_trajectories() handles RB writes
+        # (with proper padding stripping for 1-D storage). Set _ignore_rb=False so
+        # it detects the RB. When trajs_per_batch is None, keep existing behavior.
+        collector_class._ignore_rb = extend_buffer if trajs_per_batch is None else False
         inner_collector = collector_class(
             create_env_fn,
             create_env_kwargs=create_env_kwargs,
@@ -245,6 +255,7 @@ def _main_async_collector(
             # init_random_frames is passed; inner collector will use _should_use_random_frames()
             # which checks replay_buffer.write_count when replay_buffer is provided
             init_random_frames=init_random_frames,
+            trajs_per_batch=trajs_per_batch,
         )
         # Set up weight receivers for worker process using the standard register_scheme_receiver API.
         # This properly initializes the schemes on the receiver side and stores them in _receiver_schemes.
@@ -441,7 +452,7 @@ def _main_async_collector(
                 continue
 
             if replay_buffer is not None:
-                if extend_buffer:
+                if extend_buffer and next_data is not None:
                     next_data.names = None
                     replay_buffer.extend(next_data)
 

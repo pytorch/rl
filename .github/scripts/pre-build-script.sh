@@ -1,6 +1,9 @@
 #!/bin/bash
 
-${CONDA_RUN} pip install --upgrade setuptools
+# setuptools>=82 removed pkg_resources and no longer vendors `packaging`;
+# PyTorch imports `from packaging.version import Version` at init time,
+# so the standalone package must be present.
+${CONDA_RUN} pip install --upgrade setuptools packaging
 
 ${CONDA_RUN} pip install "pybind11[global]"
 ${CONDA_RUN} conda install anaconda::cmake -y

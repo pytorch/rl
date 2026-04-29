@@ -464,6 +464,7 @@ class DistributionalDQNLoss(LossModule):
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
+    _schedulable_buffers = frozenset({"gamma"})
 
     value_network: TensorDictModule
     value_network_params: TensorDictParams

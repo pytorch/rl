@@ -15,10 +15,11 @@ import torch
 from tensordict import NestedKey, set_list_to_stack, TensorDictBase, unravel_key
 from tensordict.utils import _zip_strict, is_seq_of_nested_key, logger as torchrl_logger
 from torch.nn.utils.rnn import pad_sequence
+from torchrl._utils import _RayServiceMetaClass
 from torchrl.data import Composite, Unbounded
 from torchrl.data.tensor_specs import DEVICE_TYPING
 from torchrl.envs import EnvBase, Transform
-from torchrl.envs.transforms.ray_service import _RayServiceMetaClass, RayTransform
+from torchrl.envs.transforms.ray_service import RayTransform
 from torchrl.envs.transforms.transforms import Compose
 from torchrl.envs.transforms.utils import _set_missing_tolerance
 from torchrl.modules.llm.policies.common import LLMWrapperBase

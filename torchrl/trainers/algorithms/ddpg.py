@@ -13,6 +13,7 @@ from collections.abc import Callable
 from functools import partial
 
 from tensordict import TensorDict, TensorDictBase
+from tensordict.utils import NestedKey
 from torch import optim
 
 from torchrl.collectors import BaseCollector
@@ -66,6 +67,13 @@ class DDPGTrainer(Trainer):
         target_net_updater (TargetNetUpdater, optional): Target network updater (typically SoftUpdate).
         async_collection (bool, optional): Whether to use async data collection. Defaults to False.
         log_timings (bool, optional): Whether to log timing information for hooks. Defaults to False.
+        done_key (NestedKey, optional): Done key used by losses and logging. Defaults to "done".
+        terminated_key (NestedKey, optional): Terminated key used by losses and logging. Defaults to "terminated".
+        reward_key (NestedKey, optional): Reward key used by losses and logging. Defaults to "reward".
+        episode_reward_key (NestedKey, optional): Episode reward key used for cumulative reward logging.
+            Defaults to "reward_sum".
+        action_key (NestedKey, optional): Action key used by losses and logging. Defaults to "action".
+        observation_key (NestedKey, optional): Observation key used for logging. Defaults to "observation".
 
     Note:
         This is an experimental/prototype feature. The API may change in future versions.
@@ -97,6 +105,12 @@ class DDPGTrainer(Trainer):
         target_net_updater: TargetNetUpdater | None = None,
         async_collection: bool = False,
         log_timings: bool = False,
+        done_key: NestedKey = "done",
+        terminated_key: NestedKey = "terminated",
+        reward_key: NestedKey = "reward",
+        episode_reward_key: NestedKey = "reward_sum",
+        action_key: NestedKey = "action",
+        observation_key: NestedKey = "observation",
     ) -> None:
         warnings.warn(
             "DDPGTrainer is an experimental/prototype feature. The API may change in future versions. "
@@ -153,6 +167,19 @@ class DDPGTrainer(Trainer):
         self.log_rewards = log_rewards
         self.log_actions = log_actions
         self.log_observations = log_observations
+        self.done_key = done_key
+        self.terminated_key = terminated_key
+        self.reward_key = reward_key
+        self.episode_reward_key = episode_reward_key
+        self.action_key = action_key
+        self.observation_key = observation_key
+
+        if hasattr(self.loss_module, "set_keys"):
+            self.loss_module.set_keys(
+                reward=reward_key,
+                done=done_key,
+                terminated=terminated_key,
+            )
 
         if self.enable_logging:
             self._setup_ddpg_logging()
@@ -162,7 +189,7 @@ class DDPGTrainer(Trainer):
         hook_dest = "pre_steps_log" if not self.async_collection else "post_optim_log"
 
         log_done_percentage = LogScalar(
-            key=("next", "done"),
+            key=("next", self.done_key),
             logname="done_percentage",
             log_pbar=True,
             include_std=False,
@@ -172,21 +199,21 @@ class DDPGTrainer(Trainer):
 
         if self.log_rewards:
             log_rewards = LogScalar(
-                key=("next", "reward"),
+                key=("next", self.reward_key),
                 logname="r_training",
                 log_pbar=True,
                 include_std=True,
                 reduction="mean",
             )
             log_max_reward = LogScalar(
-                key=("next", "reward"),
+                key=("next", self.reward_key),
                 logname="r_max",
                 log_pbar=False,
                 include_std=False,
                 reduction="max",
             )
             log_total_reward = LogScalar(
-                key=("next", "reward_sum"),
+                key=("next", self.episode_reward_key),
                 logname="r_total",
                 log_pbar=False,
                 include_std=False,
@@ -198,7 +225,7 @@ class DDPGTrainer(Trainer):
 
         if self.log_actions:
             log_action_norm = LogScalar(
-                key="action",
+                key=self.action_key,
                 logname="action_norm",
                 log_pbar=False,
                 include_std=True,
@@ -208,7 +235,7 @@ class DDPGTrainer(Trainer):
 
         if self.log_observations:
             log_obs_norm = LogScalar(
-                key="observation",
+                key=self.observation_key,
                 logname="obs_norm",
                 log_pbar=False,
                 include_std=True,

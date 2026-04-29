@@ -18,7 +18,7 @@ import torch.optim
 import tqdm
 from tensordict.nn import CudaGraphModule, TensorDictSequential
 from torchrl._utils import get_available_device, timeit
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
 from torchrl.envs import ExplorationType, set_exploration_type
 from torchrl.modules import EGreedyModule
@@ -158,7 +158,7 @@ def main(cfg: DictConfig):  # noqa: F821
         update = CudaGraphModule(update, warmup=50)
 
     # Create the collector
-    collector = SyncDataCollector(
+    collector = Collector(
         create_env_fn=make_env(
             cfg.env.env_name, frame_skip, device, gym_backend=cfg.env.backend
         ),

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import abc
 import itertools
+import json
 import pathlib
 import time
 import warnings
@@ -18,7 +19,7 @@ from typing import Any, Literal
 
 import numpy as np
 import torch.nn
-from tensordict import NestedKey, pad, TensorDict, TensorDictBase
+from tensordict import NestedKey, NonTensorData, pad, TensorDict, TensorDictBase
 from tensordict._tensorcollection import TensorCollection
 from tensordict.nn import TensorDictModule
 from tensordict.utils import expand_right
@@ -60,6 +61,7 @@ try:
 except ImportError:
     _has_ts = False
 
+
 REPLAY_BUFFER_CLASS = {
     "prioritized": TensorDictPrioritizedReplayBuffer,
     "circular": TensorDictReplayBuffer,
@@ -74,6 +76,31 @@ LOGGER_METHODS = {
 # Format strings for different data types in progress bar display
 TYPE_DESCR = {float: "4.4f", int: ""}
 REWARD_KEY = ("next", "reward")
+
+
+def _state_dict_to_td(sd: dict) -> TensorDict:
+    """Convert a state dict to a :class:`~tensordict.TensorDict`.
+
+    Tensor values are stored directly; everything else is wrapped in
+    :class:`~tensordict.NonTensorData` so that :meth:`~tensordict.TensorDict.dumps`
+    can persist the whole state without pickle dependencies.
+    """
+    return TensorDict(
+        {
+            k: v if isinstance(v, torch.Tensor) else NonTensorData(v)
+            for k, v in sd.items()
+        },
+        [],
+    )
+
+
+def _td_to_state_dict(td: TensorDict) -> dict:
+    """Inverse of :func:`_state_dict_to_td`.
+
+    Unwraps :class:`~tensordict.NonTensorData` back to plain Python values and
+    leaves tensors (including :class:`~tensordict.MemoryMappedTensor`) as-is.
+    """
+    return {k: v.data if isinstance(v, NonTensorData) else v for k, v in td.items()}
 
 
 class TrainerHookBase:
@@ -271,6 +298,10 @@ class Trainer:
             timing information for all hooks to the logger (e.g., wandb, tensorboard).
             Timing metrics will be logged with prefix "time/" (e.g., "time/hook/UpdateWeights").
             Default is False.
+        auto_log_optim_steps (bool, optional): If True, automatically log ``optim_steps`` and the
+            keys of the averaged loss TensorDict at the end of every optimization loop, in addition
+            to anything ``post_optim_complete_log`` hooks return. Set to False to fully delegate
+            this logging to user-registered hooks. Default is True.
     """
 
     @classmethod
@@ -309,6 +340,7 @@ class Trainer:
         num_epochs: int = 1,
         async_collection: bool = False,
         log_timings: bool = False,
+        auto_log_optim_steps: bool = True,
     ) -> None:
         # objects
         self.frame_skip = frame_skip
@@ -340,6 +372,7 @@ class Trainer:
         self.progress_bar = progress_bar and _has_tqdm
         self.save_trainer_interval = save_trainer_interval
         self.save_trainer_file = save_trainer_file
+        self.auto_log_optim_steps = auto_log_optim_steps
 
         self._log_dict = defaultdict(list)
 
@@ -365,6 +398,9 @@ class Trainer:
         self._post_epoch_log_ops = (
             []
         )  # After each epoch logging (e.g., epoch completion metrics)
+        self._post_optim_complete_log_ops = (
+            []
+        )  # After all optimization steps for a batch (e.g., logging average_losses)
 
         # Regular hook collections for non-logging operations
         self._pre_epoch_ops = (
@@ -387,6 +423,8 @@ class Trainer:
             []
         )  # Process batches for optimization (e.g., subsampling)
         self._post_optim_ops = []  # After optimization (e.g., weight syncing)
+        self._setup_ops = []  # Before training starts (e.g., warmups, lazy init)
+        self._shutdown_ops = []  # At training end (e.g., final eval, publish)
 
         self._modules = {}
 
@@ -504,6 +542,21 @@ class Trainer:
             Snapshot.take(app_state=self.app_state, path=self.save_trainer_file)
         elif _CKPT_BACKEND == "torch":
             torch.save(self.state_dict(), self.save_trainer_file)
+        elif _CKPT_BACKEND == "memmap":
+            state = self.state_dict()
+            path = pathlib.Path(self.save_trainer_file)
+            path.mkdir(parents=True, exist_ok=True)
+            # Persist all module state dicts using TensorDict memmap.
+            # Non-tensor values (scalars, bools, nested dicts) are wrapped in
+            # NonTensorData automatically by _state_dict_to_td, so no pickle
+            # dependency is needed.
+            for key in ("loss_module", "collector", *self._modules):
+                sd = state[key]
+                if sd:
+                    _state_dict_to_td(sd).dumps(str(path / key))
+            # Persist non-tensor training counters as JSON.
+            with open(path / "state.json", "w") as f:
+                json.dump(dict(state["state"]), f)
         else:
             raise NotImplementedError(
                 f"CKPT_BACKEND should be one of {_CKPT_BACKEND.backends}, got {_CKPT_BACKEND}."
@@ -522,14 +575,36 @@ class Trainer:
         """Loads a file and its state-dict in the trainer.
 
         Keyword arguments are passed to the :func:`~torch.load` function.
+        They are ignored when ``CKPT_BACKEND=memmap``.
+
+        .. note::
+            When ``CKPT_BACKEND=torch``, ``weights_only=True`` is set by
+            default for safer deserialization. Pass ``weights_only=False``
+            explicitly only if you have custom (non-stdlib) objects in your
+            state dict.
 
         """
         if _CKPT_BACKEND == "torchsnapshot":
             snapshot = Snapshot(path=file)
             snapshot.restore(app_state=self.app_state)
         elif _CKPT_BACKEND == "torch":
+            kwargs.setdefault("weights_only", True)
             loaded_dict: OrderedDict = torch.load(file, **kwargs)
             self.load_state_dict(loaded_dict)
+        elif _CKPT_BACKEND == "memmap":
+            path = pathlib.Path(file)
+            state: dict = {}
+            for key in ("loss_module", "collector", *self._modules):
+                key_path = path / key
+                if key_path.exists():
+                    state[key] = _td_to_state_dict(
+                        TensorDict.load_memmap(str(key_path))
+                    )
+                else:
+                    state[key] = {}
+            with open(path / "state.json") as f:
+                state["state"] = json.load(f)
+            self.load_state_dict(state)
         return self
 
     def set_seed(self):
@@ -561,8 +636,11 @@ class Trainer:
             "post_optim_log",
             "pre_epoch_log",
             "post_epoch_log",
+            "post_optim_complete_log",
             "pre_epoch",
             "post_epoch",
+            "setup",
+            "shutdown",
         ],
         op: Callable,
         **kwargs,
@@ -670,6 +748,12 @@ class Trainer:
             )
             self._post_epoch_log_ops.append((timed_op, kwargs))
 
+        elif dest == "post_optim_complete_log":
+            _check_input_output_typehint(
+                op, input=[int, TensorDictBase | None], output=tuple[str, float]
+            )
+            self._post_optim_complete_log_ops.append((timed_op, kwargs))
+
         elif dest == "pre_epoch":
             _check_input_output_typehint(op, input=None, output=None)
             self._pre_epoch_ops.append((timed_op, kwargs))
@@ -678,13 +762,21 @@ class Trainer:
             _check_input_output_typehint(op, input=None, output=None)
             self._post_epoch_ops.append((timed_op, kwargs))
 
+        elif dest == "setup":
+            _check_input_output_typehint(op, input=None, output=None)
+            self._setup_ops.append((timed_op, kwargs))
+
+        elif dest == "shutdown":
+            _check_input_output_typehint(op, input=None, output=None)
+            self._shutdown_ops.append((timed_op, kwargs))
+
         else:
             raise RuntimeError(
                 f"The hook collection {dest} is not recognised. Choose from:"
                 f"(batch_process, pre_optim_steps, process_optim_batch, post_loss, "
                 f"process_loss, optimizer, post_steps, post_optim, pre_steps_log, "
                 f"post_steps_log, post_optim_log, pre_epoch_log, post_epoch_log, "
-                f"pre_epoch, post_epoch)"
+                f"post_optim_complete_log, setup, shutdown, pre_epoch, post_epoch)"
             )
 
     register_hook = register_op
@@ -798,6 +890,24 @@ class Trainer:
             if result is not None:
                 self._log(**result)
 
+    def _post_optim_complete_log_hook(
+        self, optim_steps: int, average_losses: TensorDictBase | None
+    ) -> None:
+        """Execute logging hooks that run AFTER all steps in the optimization loop.
+
+        These hooks log metrics that use the total step count and averaged loss TensorDict.
+        Called once per optimization loop.
+        """
+        for op, kwargs in self._post_optim_complete_log_ops:
+            result = op(optim_steps, average_losses, **kwargs)
+            if result is not None:
+                self._log(**result)
+        if self.auto_log_optim_steps:
+            if average_losses is not None:
+                self._log(optim_steps=optim_steps, **average_losses)
+            else:
+                self._log(optim_steps=optim_steps)
+
     def _post_epoch_hook(self) -> None:
         """Execute regular hooks that run AFTER each epoch of optimization.
 
@@ -831,6 +941,14 @@ class Trainer:
             if result is not None:
                 self._log(**result)
 
+    def _setup_hook(self) -> None:
+        for op, kwargs in self._setup_ops:
+            op(**kwargs)
+
+    def _shutdown_hook(self) -> None:
+        for op, kwargs in self._shutdown_ops:
+            op(**kwargs)
+
     def train(self):
         if self.progress_bar:
             self._pbar = tqdm(total=self.total_frames)
@@ -845,6 +963,8 @@ class Trainer:
             iterator = self._async_iterator()
         else:
             iterator = self.collector
+
+        self._setup_hook()
 
         for batch in iterator:
             if not self.async_collection:
@@ -882,6 +1002,7 @@ class Trainer:
                 break
             self.save_trainer()
 
+        self._shutdown_hook()
         self.collector.shutdown()
 
     def _async_iterator(self):
@@ -967,12 +1088,8 @@ class Trainer:
             self._post_epoch_hook()
 
         if j >= 0:
-            # Log optimization statistics and average losses after completing all optimization steps
-            # This is the main logging point for training metrics like loss values and optimization step count
-            self._log(
-                optim_steps=self._optim_count,
-                **average_losses,
-            )
+            # LOGGING POINT 6: After all optimization for this batch (e.g., logging average_losses)
+            self._post_optim_complete_log_hook(self._optim_count, average_losses)
 
     def _log(self, log_pbar=False, **kwargs) -> None:
         """Main logging method that handles both logger output and progress bar updates.
@@ -1338,6 +1455,16 @@ class ClearCudaCache(TrainerHookBase):
         if self.count % self.interval == 0:
             torch.cuda.empty_cache()
 
+    def state_dict(self) -> dict[str, Any]:
+        return {"count": self.count}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        self.count = state_dict["count"]
+
+    def register(self, trainer: Trainer, name: str = "clear_cuda_cache"):
+        trainer.register_module(name, self)
+        trainer.register_op("pre_optim_steps", self)
+
 
 class LogTiming(TrainerHookBase):
     """Hook to log timing information collected by timeit context managers.
@@ -1508,6 +1635,12 @@ class LogScalar(TrainerHookBase):
             result[f"{self.logname}_std"] = std_value
 
         return result
+
+    def state_dict(self) -> dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        pass
 
     def register(self, trainer: Trainer, name: str | None = None):
         if name is None:

@@ -73,9 +73,26 @@ jobs:
         echo '::group::Lint C source'
         set +e
         python ./.github/unittest/linux/scripts/run-clang-format.py -r torchrl/csrc --clang-format-executable clang-format
-        
+
         if [ $? -ne 0 ]; then
           git --no-pager diff
           exit 1
         fi
         echo '::endgroup::'
+
+  lint-done:
+    name: lint-done
+    needs: [python-source-and-configs, c-source]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check lint results
+        run: |
+          if [[ "${{ needs.python-source-and-configs.result }}" != "success" ]] || \
+             [[ "${{ needs.c-source.result }}" != "success" ]]; then
+            echo "One or more lint checks failed or were cancelled."
+            echo "  python-source-and-configs: ${{ needs.python-source-and-configs.result }}"
+            echo "  c-source: ${{ needs.c-source.result }}"
+            exit 1
+          fi
+          echo "All lint checks passed."

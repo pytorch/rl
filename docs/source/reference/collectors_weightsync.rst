@@ -381,9 +381,10 @@ Usage Examples
 
 .. note::
     **Runnable versions** of these examples are available in the repository:
-    
+
     - `examples/collectors/weight_sync_standalone.py <https://github.com/pytorch/rl/blob/main/examples/collectors/weight_sync_standalone.py>`_: Standalone weight synchronization
     - `examples/collectors/weight_sync_collectors.py <https://github.com/pytorch/rl/blob/main/examples/collectors/weight_sync_collectors.py>`_: Collector integration
+    - `examples/collectors/multi_weight_updates.py <https://github.com/pytorch/rl/blob/main/examples/collectors/multi_weight_updates.py>`_: Multi-model weight sync (policy + env + replay buffer)
 
 Using Weight Sync Schemes with Collectors
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -509,6 +510,302 @@ two-phase pattern: initialize first (no communication), then connect (blocking r
     The ``strategy`` parameter determines the weight format: ``"state_dict"`` uses PyTorch's native state
     dictionaries, while ``"tensordict"`` (default) uses TensorDict format which is more efficient for
     structured models and supports features like device mapping.
+
+Multi-Model Weight Sync in Collectors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In many RL pipelines, the policy is not the only model that needs
+synchronization.  Common cases include:
+
+- **Env transforms** such as :class:`~torchrl.envs.transforms.ModuleTransform`
+  wrapping a learned feature extractor.
+- **Replay buffer transforms** with a module (e.g., a learned priority model
+  or a preprocessing network).
+- **Running statistics** from :class:`~torchrl.envs.transforms.VecNormV2`
+  (running mean, variance, count).
+
+The ``weight_sync_schemes`` dict maps **model IDs** (dotted paths into the
+collector's object tree) to scheme instances.  The ``update_policy_weights_``
+method then accepts a ``weights_dict`` to update all models atomically.
+
+.. note::
+    **Runnable version**: `examples/collectors/multi_weight_updates.py
+    <https://github.com/pytorch/rl/blob/main/examples/collectors/multi_weight_updates.py>`_
+
+Model ID Paths
+^^^^^^^^^^^^^^
+
+Model IDs are dotted attribute paths resolved from the collector.
+Common patterns:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Model ID
+     - Resolves to
+   * - ``"policy"``
+     - The collector's policy module
+   * - ``"env.transform[0]"``
+     - First transform on the env
+   * - ``"env.transform[0].module"``
+     - The ``module`` attribute of a :class:`ModuleTransform`
+   * - ``"replay_buffer.transform[0].module"``
+     - Module inside a replay-buffer transform
+
+Subscript notation (``[0]``, ``["key"]``) is supported for indexing into
+sequences or dicts.
+
+Example: Policy + Env Transform + Replay Buffer
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: python
+
+    from torchrl.collectors import MultiSyncCollector
+    from torchrl.weight_update import MultiProcessWeightSyncScheme
+
+    weight_sync_schemes = {
+        "policy": MultiProcessWeightSyncScheme(strategy="state_dict"),
+        "env.transform[0].module": MultiProcessWeightSyncScheme(
+            strategy="tensordict"
+        ),
+        "replay_buffer.transform[0].module": MultiProcessWeightSyncScheme(
+            strategy="tensordict"
+        ),
+    }
+
+    collector = MultiSyncCollector(
+        create_env_fn=[make_env, make_env],
+        policy_factory=policy_factory,
+        frames_per_batch=200,
+        total_frames=10000,
+        weight_sync_schemes=weight_sync_schemes,
+        replay_buffer=rb,
+    )
+
+    for data in collector:
+        # ... training step ...
+
+        # Atomic update of all three models
+        collector.update_policy_weights_(
+            weights_dict={
+                "policy": train_policy,
+                "env.transform[0].module": train_env_module,
+                "replay_buffer.transform[0].module": train_rb_module,
+            }
+        )
+
+    collector.shutdown()
+
+VecNormV2 Running Statistics
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+:class:`~torchrl.envs.transforms.VecNormV2` stores running mean, variance,
+and count as "extra state" (via PyTorch's ``get_extra_state()`` /
+``set_extra_state()``).  These are **not** captured by
+``TensorDict.from_module()`` (which only sees ``nn.Parameter`` and
+registered buffers), but **are** captured by both:
+
+- The ``"state_dict"`` strategy (via PyTorch's ``state_dict()``).
+- The ``"tensordict"`` strategy, which additionally calls
+  ``get_extra_state()`` and stores the result under a special
+  ``"__extra_state__"`` key in the TensorDict.
+
+This means no special handling is needed for the *transfer* — just
+register a scheme for the VecNormV2 transform and include it in
+``weights_dict``.
+
+**Freezing worker-side VecNormV2**: when collector workers receive
+stats from the trainer, they should **not** update those stats with
+their own data.  Freeze VecNormV2 in the worker env factory so that
+only the training process accumulates statistics:
+
+.. code-block:: python
+
+    from torchrl.collectors import MultiSyncCollector
+    from torchrl.weight_update import MultiProcessWeightSyncScheme
+
+    def make_worker_env():
+        """Worker env: VecNormV2 is frozen so stats come from the trainer."""
+        env = make_base_env()  # includes VecNormV2 transform
+        # Freeze so the worker doesn't update running stats locally
+        for t in env.transform:
+            if hasattr(t, "freeze"):
+                t.freeze()
+        return env
+
+    weight_sync_schemes = {
+        "policy": MultiProcessWeightSyncScheme(strategy="tensordict"),
+        "env.transform[0]": MultiProcessWeightSyncScheme(
+            strategy="tensordict"
+        ),
+    }
+
+    collector = MultiSyncCollector(
+        create_env_fn=[make_worker_env, make_worker_env],
+        policy_factory=policy_factory,
+        frames_per_batch=200,
+        total_frames=10000,
+        weight_sync_schemes=weight_sync_schemes,
+    )
+
+    for data in collector:
+        # ... training step (updates train_env VecNormV2 stats) ...
+
+        # Push trainer's stats to frozen worker VecNormV2 instances
+        collector.update_policy_weights_(
+            weights_dict={
+                "policy": train_policy,
+                "env.transform[0]": train_env.transform[0],  # VecNormV2
+            }
+        )
+
+    collector.shutdown()
+
+.. important::
+    The ``"tensordict"`` strategy captures ``get_extra_state()`` from
+    **any** module that defines it, not just VecNormV2.  If you have
+    custom modules with stateful buffers exposed via this PyTorch
+    protocol, they will be synchronized automatically.
+
+.. note::
+    The :class:`~torchrl.collectors.Evaluator` **automatically freezes**
+    VecNormV2 transforms in the eval env (see :ref:`evaluator-vecnorm`
+    below).  For regular collectors, you must freeze explicitly in the
+    env factory as shown above.
+
+Evaluator Weight Sync
+---------------------
+
+The :class:`~torchrl.collectors.Evaluator` supports multi-model weight
+synchronization through two complementary mechanisms:
+
+1. **``weights_dict``** parameter on ``evaluate()`` / ``trigger_eval()`` --
+   a dict mapping model IDs to weight sources (``nn.Module`` or
+   ``TensorDictBase``).
+2. **``weight_sync_schemes``** parameter on ``Evaluator.__init__()`` --
+   enables process-level isolation via
+   :class:`~torchrl.collectors.MultiSyncCollector` (1 worker) with
+   scheme-based weight transfer.
+
+Thread Backend (Same Process)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Without ``weight_sync_schemes``, the evaluator runs in the same process
+(thread backend) and applies weights directly via ``to_module()``.  The
+``weights_dict`` parameter lets you sync multiple models:
+
+.. code-block:: python
+
+    from torchrl.collectors import Evaluator
+
+    evaluator = Evaluator(env, policy, max_steps=1000)
+
+    # Sync policy only (backward-compatible)
+    evaluator.evaluate(weights=train_policy, step=0)
+
+    # Sync policy + env transform (e.g., VecNormV2)
+    evaluator.evaluate(
+        weights_dict={
+            "policy": train_policy,
+            "env.transform[0]": train_env.transform[0],
+        },
+        step=0,
+    )
+
+Process Backend (CUDA Isolation)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+With ``backend="process"`` or ``weight_sync_schemes``, the evaluator
+creates a :class:`~torchrl.collectors.MultiSyncCollector` with a single
+worker process internally.  This provides full CUDA context isolation
+and uses the weight-sync-scheme infrastructure for cross-process weight
+transfer:
+
+.. code-block:: python
+
+    from torchrl.collectors import Evaluator
+    from torchrl.weight_update import MultiProcessWeightSyncScheme
+
+    evaluator = Evaluator(
+        env=make_eval_env,
+        policy_factory=make_eval_policy,
+        weight_sync_schemes={
+            "policy": MultiProcessWeightSyncScheme(),
+            "env.transform[0]": MultiProcessWeightSyncScheme(),
+        },
+        max_steps=1000,
+    )
+
+    # Sync both policy and env transform via schemes
+    evaluator.trigger_eval(
+        weights_dict={
+            "policy": train_policy,
+            "env.transform[0]": train_env.transform[0],
+        },
+        step=current_step,
+    )
+
+    result = evaluator.poll()
+
+.. _evaluator-vecnorm:
+
+VecNormV2 Running Stats
+~~~~~~~~~~~~~~~~~~~~~~~
+
+When using the ``"tensordict"`` strategy (default), the
+:class:`WeightStrategy` captures ``get_extra_state()`` alongside
+parameters from ``TensorDict.from_module()``.  This means running
+statistics from :class:`~torchrl.envs.transforms.VecNormV2` (running
+mean, variance, count) are automatically synchronized.  No special
+handling is needed:
+
+.. code-block:: python
+
+    from torchrl.weight_update import MultiProcessWeightSyncScheme
+
+    # VecNormV2 running stats are automatically captured by the
+    # tensordict strategy via get_extra_state() / set_extra_state()
+    evaluator = Evaluator(
+        env=make_eval_env,  # eval env with VecNormV2 transform
+        policy_factory=make_eval_policy,
+        weight_sync_schemes={
+            "policy": MultiProcessWeightSyncScheme(strategy="tensordict"),
+            "env.transform[0]": MultiProcessWeightSyncScheme(strategy="tensordict"),
+        },
+        max_steps=1000,
+    )
+
+    evaluator.trigger_eval(
+        weights_dict={
+            "policy": train_policy,
+            "env.transform[0]": train_env.transform[0],  # VecNormV2
+        },
+        step=step,
+    )
+
+.. important::
+    The evaluator **automatically freezes** all
+    :class:`~torchrl.envs.transforms.VecNormV2` (and
+    :class:`~torchrl.envs.transforms.VecNorm`) transforms in the eval
+    environment — whether the env is passed directly or created from a
+    factory.  This means the eval environment uses the training
+    statistics as-is and does not update them with eval data.
+
+    You do **not** need to call ``.freeze()`` or use ``frozen_copy()``
+    in your eval env factory — the evaluator handles this.
+
+    For **regular collectors** (not the evaluator), workers that
+    receive VecNormV2 stats via ``weight_sync_schemes`` should be
+    frozen explicitly in the env factory:
+
+    .. code-block:: python
+
+        def make_worker_env():
+            env = make_base_env()
+            for t in env.transform:
+                if hasattr(t, "freeze"):
+                    t.freeze()
+            return env
 
 Transports
 ----------

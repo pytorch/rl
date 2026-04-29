@@ -1,7 +1,7 @@
 #!/bin/bash
 
-export TORCHRL_BUILD_VERSION=0.11.0
-${CONDA_RUN} pip install --upgrade setuptools
+export TORCHRL_BUILD_VERSION=0.12.0
+${CONDA_RUN} pip install --upgrade setuptools packaging
 
 # Always install pybind11 - required for building C++ extensions
 ${CONDA_RUN} pip install "pybind11[global]"

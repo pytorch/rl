@@ -266,6 +266,9 @@ class CQLLoss(LossModule):
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
+    _schedulable_buffers = frozenset(
+        {"alpha_init", "min_log_alpha", "max_log_alpha", "log_alpha"}
+    )
 
     actor_network: TensorDictModule
     qvalue_network: TensorDictModule

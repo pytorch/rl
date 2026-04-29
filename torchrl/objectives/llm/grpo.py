@@ -193,6 +193,8 @@ class GRPOLoss(LossModule):
         """
         return self._tensor_keys
 
+    _schedulable_buffers = frozenset({"clip_epsilon_low", "clip_epsilon_high"})
+
     def __init__(
         self,
         actor_network: LLMWrapperBase | None = None,
