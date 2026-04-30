@@ -26,15 +26,17 @@ Pieces, in the order they appear:
   ``traj_key`` argument: on the first sample it probes the storage and picks
   ``("collector", "traj_ids")`` automatically (the key the collector writes).
 * ``strict_length=False, pad_output=True`` make every sample uniform
-  ``[B * T]`` with ``("collector", "mask")`` flagging the real timesteps;
-  short trajectories are padded instead of dropped.
+  ``[B * T]`` (short trajectories are padded instead of dropped) and write
+  ``is_init=True`` at every slice start, OR-ed with whatever ``InitTracker``
+  already wrote.  A ``("collector", "mask")`` flagging real vs padded
+  timesteps is also emitted; mask-aware loss modules consume it on their own
+  — the training loop never has to touch it.
 * :func:`~torchrl.modules.set_recurrent_mode` ``("recurrent")`` lets the GRU
-  consume the flat ``[B * T]`` sample directly. Because ``pad_output=True``
-  also writes ``is_init=True`` at every slice start, the RNN's existing
+  consume the flat ``[B * T]`` sample directly. The RNN's existing
   ``is_init``-based split path (``_get_num_per_traj_init``) recovers the
   per-slice trajectory structure on its own and uses each slice's stored
   ``recurrent_state[0]`` as the initial hidden state. No reshape, no manual
-  splitting, no per-slice book-keeping in the training loop.
+  splitting, no per-slice book-keeping.
 
 Run it::
 
@@ -137,25 +139,11 @@ for step in range(N_TRAINING_STEPS):
 
     # The flat [B*T] sample carries is_init=True at every slice start, so the
     # GRU in recurrent_mode splits the sequence into independent slices on its
-    # own. action_value comes out shaped exactly like the input.
+    # own and returns action_value shaped exactly like the input.
     with set_recurrent_mode("recurrent"):
         out = policy(sample)
     assert out["action_value"].shape == torch.Size([NUM_SLICES * SLICE_LEN, N_ACT])
-
-    # ("collector", "mask") is [B*T] whenever any slice was padded, absent
-    # otherwise. Multiplying the loss by it zeros padded contributions.
-    mask_key = ("collector", "mask")
-    if mask_key in sample.keys(True):
-        mask = sample[mask_key]
-        per_step = out["action_value"].pow(2).sum(-1)
-        loss = (per_step * mask).sum() / mask.sum().clamp(min=1)
-        lengths = mask.reshape(NUM_SLICES, SLICE_LEN).sum(-1).tolist()
-        print(
-            f"step {step}: write_count={rb.write_count} "
-            f"lengths={lengths} loss={loss.item():.4f}"
-        )
-    else:
-        print(f"step {step}: write_count={rb.write_count} (no padding)")
+    print(f"step {step}: write_count={rb.write_count}")
 
 collector.async_shutdown()
 print("\nDone.")
