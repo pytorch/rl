@@ -89,6 +89,7 @@ from torchrl.trainers.algorithms.configs.logging import (
     CSVLoggerConfig,
     LoggerConfig,
     TensorboardLoggerConfig,
+    TrackioLoggerConfig,
     WandbLoggerConfig,
 )
 from torchrl.trainers.algorithms.configs.modules import (
@@ -414,6 +415,7 @@ __all__ = [
     "CSVLoggerConfig",
     "LoggerConfig",
     "TensorboardLoggerConfig",
+    "TrackioLoggerConfig",
     "WandbLoggerConfig",
     # Weight Updaters
     "WeightUpdaterConfig",
@@ -708,6 +710,7 @@ def _register_configs():
 
     cs.store(group="logger", name="wandb", node=WandbLoggerConfig)
     cs.store(group="logger", name="tensorboard", node=TensorboardLoggerConfig)
+    cs.store(group="logger", name="trackio", node=TrackioLoggerConfig)
     cs.store(group="logger", name="csv", node=CSVLoggerConfig)
     cs.store(group="logger", name="base", node=LoggerConfig)
 
