@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>CountFramesLog &mdash; torchrl main documentation</title>
+  <title>EarlyStopping &mdash; torchrl main documentation</title>
   
 
   
@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="EarlyStopping" href="torchrl.trainers.EarlyStopping.html" />
-    <link rel="prev" title="ClearCudaCache" href="torchrl.trainers.ClearCudaCache.html" /> 
+    <link rel="next" title="LogScalar" href="torchrl.trainers.LogScalar.html" />
+    <link rel="prev" title="CountFramesLog" href="torchrl.trainers.CountFramesLog.html" /> 
 
   
   <script src="../../_static/js/modernizr.min.js"></script>
@@ -218,13 +218,13 @@
         
           <li><a href="../trainers_hooks.html">Training Hooks</a> &gt;</li>
         
-      <li>CountFramesLog</li>
+      <li>EarlyStopping</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="../../_sources/reference/generated/torchrl.trainers.CountFramesLog.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+            <a href="../../_sources/reference/generated/torchrl.trainers.EarlyStopping.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -249,31 +249,42 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" class="pytorch-article">
               
-  <section id="countframeslog">
-<h1>CountFramesLog<a class="headerlink" href="#countframeslog" title="Link to this heading">¶</a></h1>
+  <section id="earlystopping">
+<h1>EarlyStopping<a class="headerlink" href="#earlystopping" title="Link to this heading">¶</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="torchrl.trainers.CountFramesLog">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.trainers.</span></span><span class="sig-name descname"><span class="pre">CountFramesLog</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/trainers/trainers.html#CountFramesLog"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.trainers.CountFramesLog" title="Link to this definition">¶</a></dt>
-<dd><p>A frame counter hook.</p>
+<dt class="sig sig-object py" id="torchrl.trainers.EarlyStopping">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.trainers.</span></span><span class="sig-name descname"><span class="pre">EarlyStopping</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">monitor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'r_evaluation'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'min'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'max'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'max'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_delta</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">patience</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wait_for</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1000000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">check_finite</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/trainers/trainers.html#EarlyStopping"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.trainers.EarlyStopping" title="Link to this definition">¶</a></dt>
+<dd><p>Early stopping hook for <a class="reference internal" href="torchrl.trainers.Trainer.html#torchrl.trainers.Trainer" title="torchrl.trainers.Trainer"><code class="xref py py-class docutils literal notranslate"><span class="pre">Trainer</span></code></a>.</p>
+<p>This hook monitors a scalar metric and stops training when that metric
+does not improve according to a configured criterion.</p>
+<p>By default, the hook monitors <code class="docutils literal notranslate"><span class="pre">&quot;r_evaluation&quot;</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>frame_skip</strong> (<em>int</em>) – frame skip of the environment. This argument is
-important to keep track of the total number of frames, not the
-apparent one.</p></li>
-<li><p><strong>log_pbar</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the reward value will be logged on
-the progression bar. Default is <cite>False</cite>.</p></li>
+<li><p><strong>monitor</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Metric name to monitor.
+Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;r_evaluation&quot;</span></code>.</p></li>
+<li><p><strong>mode</strong> (<em>Literal</em><em>[</em><em>&quot;min&quot;</em><em>, </em><em>&quot;max&quot;</em><em>]</em><em>, </em><em>optional</em>) – One of <code class="docutils literal notranslate"><span class="pre">&quot;min&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;max&quot;</span></code>.
+In <code class="docutils literal notranslate"><span class="pre">&quot;max&quot;</span></code> mode, larger metric values are considered better.
+Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;max&quot;</span></code>.</p></li>
+<li><p><strong>min_delta</strong> (<em>float</em><em>, </em><em>optional</em>) – Minimum absolute improvement required to
+qualify as better. Defaults to <code class="docutils literal notranslate"><span class="pre">0.0</span></code>.</p></li>
+<li><p><strong>patience</strong> (<em>int</em><em>, </em><em>optional</em>) – Maximum number of non-improving frames
+allowed before stopping. Defaults to <code class="docutils literal notranslate"><span class="pre">100_000</span></code>.</p></li>
+<li><p><strong>wait_for</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of initial frames to ignore before
+checking the stopping criterion. Defaults to <code class="docutils literal notranslate"><span class="pre">1_000_000</span></code>.</p></li>
+<li><p><strong>check_finite</strong> (<em>bool</em><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, non-finite metric values
+(NaN or inf) trigger early stopping. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">count_frames</span> <span class="o">=</span> <span class="n">CountFramesLog</span><span class="p">(</span><span class="n">frame_skip</span><span class="o">=</span><span class="n">frame_skip</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_steps_log&quot;</span><span class="p">,</span> <span class="n">count_frames</span><span class="p">)</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">LogScalar</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">),</span> <span class="s2">&quot;r_training&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">trainer</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">EarlyStopping</span><span class="p">(</span><span class="n">monitor</span><span class="o">=</span><span class="s2">&quot;r_training&quot;</span><span class="p">,</span> <span class="n">patience</span><span class="o">=</span><span class="mi">10_000</span><span class="p">)</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">trainer</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.trainers.CountFramesLog.register">
-<span class="sig-name descname"><span class="pre">register</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trainer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.trainers.Trainer.html#torchrl.trainers.Trainer" title="torchrl.trainers.trainers.Trainer"><span class="pre">Trainer</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'count_frames_log'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/trainers/trainers.html#CountFramesLog.register"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.trainers.CountFramesLog.register" title="Link to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="torchrl.trainers.EarlyStopping.register">
+<span class="sig-name descname"><span class="pre">register</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trainer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.trainers.Trainer.html#torchrl.trainers.Trainer" title="torchrl.trainers.trainers.Trainer"><span class="pre">Trainer</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'early_stopping'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/trainers/trainers.html#EarlyStopping.register"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.trainers.EarlyStopping.register" title="Link to this definition">¶</a></dt>
 <dd><p>Registers the hook in the trainer at a default location.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -302,10 +313,10 @@ the progression bar. Default is <cite>False</cite>.</p></li>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.trainers.EarlyStopping.html" class="btn btn-neutral float-right" title="EarlyStopping" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.trainers.LogScalar.html" class="btn btn-neutral float-right" title="LogScalar" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.trainers.ClearCudaCache.html" class="btn btn-neutral" title="ClearCudaCache" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.trainers.CountFramesLog.html" class="btn btn-neutral" title="CountFramesLog" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -331,9 +342,9 @@ the progression bar. Default is <cite>False</cite>.</p></li>
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">CountFramesLog</a><ul>
-<li><a class="reference internal" href="#torchrl.trainers.CountFramesLog"><code class="docutils literal notranslate"><span class="pre">CountFramesLog</span></code></a><ul>
-<li><a class="reference internal" href="#torchrl.trainers.CountFramesLog.register"><code class="docutils literal notranslate"><span class="pre">CountFramesLog.register()</span></code></a></li>
+<li><a class="reference internal" href="#">EarlyStopping</a><ul>
+<li><a class="reference internal" href="#torchrl.trainers.EarlyStopping"><code class="docutils literal notranslate"><span class="pre">EarlyStopping</span></code></a><ul>
+<li><a class="reference internal" href="#torchrl.trainers.EarlyStopping.register"><code class="docutils literal notranslate"><span class="pre">EarlyStopping.register()</span></code></a></li>
 </ul>
 </li>
 </ul>

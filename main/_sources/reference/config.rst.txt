@@ -498,6 +498,7 @@ Trainer Hook Configurations
     BatchSubSamplerConfig
     ClearCudaCacheConfig
     CountFramesLogConfig
+    EarlyStoppingConfig
     LogScalarConfig
     LogTimingConfig
     RewardNormalizerConfig
