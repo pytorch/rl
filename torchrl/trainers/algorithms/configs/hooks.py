@@ -66,8 +66,8 @@ class EarlyStoppingConfig(HookConfig):
         ... )
     """
 
-    monitor: NestedKey = "r_evaluation"
-    mode: Literal["min", "max"] = "max"
+    monitor: Any = "r_evaluation"
+    mode: str = "max"
     min_delta: float = 0.0
     patience: int = 100_000
     wait_for: int = 1_000_000
