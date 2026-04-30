@@ -2378,9 +2378,9 @@ class EarlyStopping(TrainerHookBase):
     By default, the hook monitors ``"r_evaluation"``.
 
     Args:
-        monitor (str, optional): Metric name to monitor.
+        monitor (NestedKey, optional): Metric name to monitor.
             Defaults to ``"r_evaluation"``.
-        mode (str, optional): One of ``"min"`` or ``"max"``.
+        mode (Literal["min", "max"], optional): One of ``"min"`` or ``"max"``.
             In ``"max"`` mode, larger metric values are considered better.
             Defaults to ``"max"``.
         min_delta (float, optional): Minimum absolute improvement required to
@@ -2400,8 +2400,8 @@ class EarlyStopping(TrainerHookBase):
     def __init__(
         self,
         *,
-        monitor: str = "r_evaluation",
-        mode: str = "max",
+        monitor: NestedKey = "r_evaluation",
+        mode: Literal["min", "max"] = "max",
         min_delta: float = 0.0,
         patience: int = 100_000,
         wait_for: int = 1_000_000,

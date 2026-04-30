@@ -1349,7 +1349,7 @@ class TestProcessLossHook:
         """Test that multiple process_loss hooks are applied in order."""
         trainer = mocking_trainer()
         td_loss = TensorDict({"loss_a": torch.tensor(2.0)}, [])
-        td_sub_batch = TensorDict({}, [])
+        td_sub_batch = TensorDict()
 
         call_order = []
 
@@ -1488,7 +1488,7 @@ class TestEarlyStopping:
         )
         early_stopping.register(trainer)
 
-        td = TensorDict({}, [])
+        td = TensorDict()
         for value, should_stop in zip(values, expected_stops):
             trainer._log(**{monitor: value})
             trainer.collected_frames += 1
@@ -1506,7 +1506,7 @@ class TestEarlyStopping:
         early_stopping.register(trainer)
 
         with pytest.raises(RuntimeError, match="could not find monitored metric"):
-            trainer._post_steps_log_hook(TensorDict({}, []))
+            trainer._post_steps_log_hook(TensorDict())
 
     def test_train_stops_early(self):
         rewards = [1.0, 2.0, 2.0, 2.0, 2.0]
