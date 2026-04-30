@@ -26,17 +26,13 @@ Pieces, in the order they appear:
   ``traj_key`` argument: on the first sample it probes the storage and picks
   ``("collector", "traj_ids")`` automatically (the key the collector writes).
 * ``strict_length=False, pad_output=True`` make every sample uniform
-  ``[B * T]`` (short trajectories are padded instead of dropped) and write
-  ``is_init=True`` at every slice start, OR-ed with whatever ``InitTracker``
-  already wrote.  A ``("collector", "mask")`` flagging real vs padded
-  timesteps is also emitted; mask-aware loss modules consume it on their own
-  — the training loop never has to touch it.
+  ``[B * T]`` and write ``is_init=True`` at every slice start (OR-ed with
+  whatever ``InitTracker`` already wrote).
 * :func:`~torchrl.modules.set_recurrent_mode` ``("recurrent")`` lets the GRU
-  consume the flat ``[B * T]`` sample directly. The RNN's existing
-  ``is_init``-based split path (``_get_num_per_traj_init``) recovers the
-  per-slice trajectory structure on its own and uses each slice's stored
-  ``recurrent_state[0]`` as the initial hidden state. No reshape, no manual
-  splitting, no per-slice book-keeping.
+  consume the flat ``[B * T]`` sample directly: the RNN's existing
+  ``is_init``-based split path recovers the per-slice trajectory structure
+  on its own and uses each slice's stored ``recurrent_state[0]`` as the
+  initial hidden state.
 
 Run it::
 
@@ -128,7 +124,7 @@ while rb.write_count < BATCH_SIZE:
     time.sleep(0.05)
 
 # ---------------------------------------------------------------------------
-# Training loop. Sample, reshape to [B, T] for the GRU, that's it.
+# Training loop: sample, run the recurrent policy, done.
 # ---------------------------------------------------------------------------
 N_TRAINING_STEPS = 5
 for step in range(N_TRAINING_STEPS):
@@ -136,10 +132,6 @@ for step in range(N_TRAINING_STEPS):
     if step == 0:
         # First sample triggered the auto-detect — confirm what was picked.
         print("Auto-detected traj_key:", rb.sampler.traj_key)
-
-    # The flat [B*T] sample carries is_init=True at every slice start, so the
-    # GRU in recurrent_mode splits the sequence into independent slices on its
-    # own and returns action_value shaped exactly like the input.
     with set_recurrent_mode("recurrent"):
         out = policy(sample)
     assert out["action_value"].shape == torch.Size([NUM_SLICES * SLICE_LEN, N_ACT])
