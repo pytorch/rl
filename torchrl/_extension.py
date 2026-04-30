@@ -9,10 +9,20 @@ import warnings
 
 from packaging.version import parse
 
+__version__ = None  # type: ignore
 try:
-    from .version import __version__, pytorch_version
+    try:
+        from importlib.metadata import version as _dist_version
+    except ImportError:  # pragma: no cover
+        from importlib_metadata import version as _dist_version  # type: ignore
+
+    __version__ = _dist_version("torchrl")
+except Exception:
+    __version__ = None  # type: ignore
+
+try:
+    from .version import pytorch_version
 except ImportError:
-    __version__ = None
     pytorch_version = "unknown"
 
 
@@ -48,7 +58,7 @@ if _is_nightly(__version__):
         " - make sure ninja and cmake were installed\n"
         " - make sure you ran `python setup.py clean && python setup.py develop` and that no error was raised\n"
         " - make sure the version of PyTorch you are using matches the one that was present in your virtual env during "
-        f"setup. This package was built with PyTorch {pytorch_version}."
+        f"setup. This package was built with PyTorch {pytorch_version}. You can deactivate this warning by setting the environment variable `RL_WARNINGS=0`."
     )
 
 else:
@@ -59,5 +69,6 @@ else:
         "prioritized replay buffers can only be used with the PyTorch version they were built against. "
         f"This package was built with PyTorch {pytorch_version}. "
         "Workarounds include: (1) upgrading/downgrading PyTorch or TorchRL to compatible versions, "
-        "or (2) making a local install using `pip install git+https://github.com/pytorch/rl.git@<version>`."
+        "or (2) making a local install using `pip install git+https://github.com/pytorch/rl.git@<version>`. "
+        "You can deactivate this warning by setting the environment variable `RL_WARNINGS=0`."
     )

@@ -12,7 +12,7 @@ import torch
 from tensordict.nn import InteractionType, TensorDictModule
 
 from torch import nn, optim
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import (
     Composite,
     TensorDictPrioritizedReplayBuffer,
@@ -129,7 +129,7 @@ def make_collector(
         else:
             device = "cpu"
     device = torch.device(device)
-    collector = SyncDataCollector(
+    collector = Collector(
         train_env,
         actor_model_explore,
         init_random_frames=cfg.collector.init_random_frames,
@@ -304,8 +304,7 @@ def make_optimizer(cfg, loss_module):
 
 
 def log_metrics(logger, metrics, step):
-    for metric_name, metric_value in metrics.items():
-        logger.log_scalar(metric_name, metric_value, step)
+    logger.log_metrics(metrics, step)
 
 
 def get_activation(cfg):

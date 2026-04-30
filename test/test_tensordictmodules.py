@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import argparse
 import functools
-import os
 
 import pytest
 import torch
@@ -58,10 +57,7 @@ from torchrl.modules.tensordict_module.sequence import SafeSequential
 from torchrl.modules.utils import get_primers_from_module
 from torchrl.objectives import DDPGLoss
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test.mocking_classes import CountingEnv, DiscreteActionVecMockEnv
-else:
-    from mocking_classes import CountingEnv, DiscreteActionVecMockEnv
+from torchrl.testing.mocking_classes import CountingEnv, DiscreteActionVecMockEnv
 
 _has_functorch = False
 try:

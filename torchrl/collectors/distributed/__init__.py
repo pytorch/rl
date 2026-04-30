@@ -5,21 +5,30 @@
 
 from .generic import (
     DEFAULT_SLURM_CONF,
+    DistributedCollector,
     DistributedDataCollector,
     DistributedWeightUpdater,
 )
 from .ray import RayCollector
-from .rpc import RPCDataCollector, RPCWeightUpdater
-from .sync import DistributedSyncDataCollector
+from .ray_eval_worker import RayEvalWorker
+from .rpc import RPCCollector, RPCDataCollector, RPCWeightUpdater
+from .sync import DistributedSyncCollector, DistributedSyncDataCollector
 from .utils import submitit_delayed_launcher
 
 __all__ = [
     "DEFAULT_SLURM_CONF",
+    # New canonical names (preferred)
+    "DistributedCollector",
+    "DistributedSyncCollector",
+    "RPCCollector",
+    # Legacy names (backward-compatible aliases)
     "DistributedDataCollector",
-    "DistributedWeightUpdater",
     "DistributedSyncDataCollector",
     "RPCDataCollector",
+    # Other exports
+    "DistributedWeightUpdater",
     "RPCWeightUpdater",
     "RayCollector",
+    "RayEvalWorker",
     "submitit_delayed_launcher",
 ]

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
-import os
 import pathlib
 import sys
 from time import sleep
@@ -24,6 +23,15 @@ from torchrl.envs.transforms.transforms import (
     FlattenObservation,
     TransformedEnv,
 )
+
+from torchrl.testing import generate_seeds, get_default_devices
+from torchrl.testing.mocking_classes import (
+    ContinuousActionConvMockEnvNumpy,
+    ContinuousActionVecMockEnv,
+    DiscreteActionConvMockEnvNumpy,
+    DiscreteActionVecMockEnv,
+    MockSerialEnv,
+)
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.helpers.envs import (
     EnvConfig,
@@ -36,30 +44,18 @@ from torchrl.trainers.helpers.models import (
     make_dqn_actor,
 )
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import generate_seeds, get_default_devices
-    from pytorch.rl.test.mocking_classes import (
-        ContinuousActionConvMockEnvNumpy,
-        ContinuousActionVecMockEnv,
-        DiscreteActionConvMockEnvNumpy,
-        DiscreteActionVecMockEnv,
-        MockSerialEnv,
-    )
-else:
-    from _utils_internal import generate_seeds, get_default_devices
-    from mocking_classes import (
-        ContinuousActionConvMockEnvNumpy,
-        ContinuousActionVecMockEnv,
-        DiscreteActionConvMockEnvNumpy,
-        DiscreteActionVecMockEnv,
-        MockSerialEnv,
-    )
-
 try:
     from hydra import compose, initialize
     from hydra.core.config_store import ConfigStore
 
     _has_hydra = True
+
+    @pytest.fixture(autouse=True, scope="module")
+    def clear_hydra():
+        from hydra.core.global_hydra import GlobalHydra
+
+        GlobalHydra.instance().clear()
+
 except ImportError:
     _has_hydra = False
 

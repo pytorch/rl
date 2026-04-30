@@ -8,7 +8,7 @@ dependencies:
     - hypothesis
     - future
     - cloudpickle
-    - gym[atari]==0.13
+    - gym==0.13
     - pygame
     - moviepy<2.0.0
     - tqdm
@@ -21,9 +21,11 @@ dependencies:
     - pyyaml
     - scipy
     - hydra-core
-    - mujoco
+    - mujoco<3.3.6
     - patchelf
     - pyopengl==3.1.4
     - ray
     - av
     - h5py
+    - numpy<2.0.0
+    - pybind11[global]

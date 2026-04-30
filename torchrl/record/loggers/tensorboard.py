@@ -7,7 +7,7 @@ from __future__ import annotations
 import importlib.util
 
 import os
-from typing import Sequence
+from collections.abc import Sequence
 
 from torch import Tensor
 

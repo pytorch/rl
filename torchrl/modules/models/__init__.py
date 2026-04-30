@@ -6,6 +6,7 @@
 
 from torchrl.modules.tensordict_module.common import DistributionalDQNnet
 
+from .act import ACTModel
 from .batchrenorm import BatchRenorm1d
 
 from .decision_transformer import DecisionTransformer
@@ -16,6 +17,7 @@ from .exploration import (
     NoisyLinear,
     reset_noise,
 )
+from .gp import GPWorldModel
 from .llm import GPT2RewardModel
 from .model_based import (
     DreamerActor,
@@ -46,24 +48,14 @@ from .multiagent import (
     QMixer,
     VDNMixer,
 )
+from .rbf_controller import RBFController
 from .utils import Squeeze2dLayer, SqueezeLayer
 
 __all__ = [
-    "DistributionalDQNnet",
+    "ACTModel",
     "BatchRenorm1d",
-    "DecisionTransformer",
-    "GPT2RewardModel",
     "ConsistentDropout",
     "ConsistentDropoutModule",
-    "NoisyLazyLinear",
-    "NoisyLinear",
-    "reset_noise",
-    "DreamerActor",
-    "ObsDecoder",
-    "ObsEncoder",
-    "RSSMPosterior",
-    "RSSMPrior",
-    "RSSMRollout",
     "Conv2dNet",
     "Conv3dNet",
     "ConvNet",
@@ -71,16 +63,30 @@ __all__ = [
     "DdpgCnnQNet",
     "DdpgMlpActor",
     "DdpgMlpQNet",
+    "DecisionTransformer",
+    "DistributionalDQNnet",
+    "DreamerActor",
     "DTActor",
     "DuelingCnnDQNet",
     "DuelingMlpDQNet",
+    "GPT2RewardModel",
+    "GPWorldModel",
     "MLP",
-    "OnlineDTActor",
     "MultiAgentConvNet",
     "MultiAgentMLP",
     "MultiAgentNetBase",
+    "NoisyLazyLinear",
+    "NoisyLinear",
+    "ObsDecoder",
+    "ObsEncoder",
+    "OnlineDTActor",
     "QMixer",
-    "VDNMixer",
+    "RBFController",
+    "RSSMPosterior",
+    "RSSMPrior",
+    "RSSMRollout",
     "Squeeze2dLayer",
     "SqueezeLayer",
+    "VDNMixer",
+    "reset_noise",
 ]

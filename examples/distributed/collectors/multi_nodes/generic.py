@@ -10,11 +10,11 @@ import gym
 import tqdm
 from torchrl._utils import logger as torchrl_logger
 
-from torchrl.collectors.collectors import MultiSyncDataCollector, SyncDataCollector
-from torchrl.collectors.distributed import DistributedDataCollector
+from torchrl.collectors import Collector, MultiSyncCollector
+from torchrl.collectors.distributed import DistributedCollector
 from torchrl.envs import EnvCreator
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
-from torchrl.envs.utils import RandomPolicy
+from torchrl.modules import RandomPolicy
 
 parser = ArgumentParser()
 parser.add_argument(
@@ -97,15 +97,13 @@ if __name__ == "__main__":
     make_env = EnvCreator(gym_make)
     action_spec = make_env().action_spec
 
-    collector = DistributedDataCollector(
+    collector = DistributedCollector(
         [make_env] * num_nodes,
         RandomPolicy(action_spec),
         num_workers_per_collector=num_workers,
         frames_per_batch=frames_per_batch,
         total_frames=args.total_frames,
-        collector_class=SyncDataCollector
-        if num_workers == 1
-        else MultiSyncDataCollector,
+        collector_class=Collector if num_workers == 1 else MultiSyncCollector,
         collector_kwargs=collector_kwargs,
         slurm_kwargs=slurm_conf,
         sync=args.sync,
@@ -125,5 +123,5 @@ if __name__ == "__main__":
             t0 = time.time()
     collector.shutdown()
     t1 = time.time()
-    torchrl_logger.info(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
+    torchrl_logger.info(f"time elapsed: {t1 - t0}s, rate: {counter / (t1 - t0)} fps")
     exit()

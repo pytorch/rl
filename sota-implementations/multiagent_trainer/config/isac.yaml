@@ -1,0 +1,6 @@
+defaults:
+  - masac
+  - _self_
+
+model:
+  centralized_critic: false

@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TorchRL Nightly Status</title>
+<style>
+:root {
+    --success: #22c55e;
+    --failure: #ef4444;
+    --skipped: #9ca3af;
+    --pending: #f59e0b;
+    --cancelled: #9ca3af;
+    --not_run: #6b7280;
+    --neutral: #94a3b8;
+    --bg-primary: #0f172a;
+    --bg-secondary: #1e293b;
+    --bg-tertiary: #334155;
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --border: #475569;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+    padding: 2rem;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+h1 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+.subtitle {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 2.5rem;
+    font-weight: bold;
+    margin-bottom: 0.25rem;
+}
+
+.stat-value.success { color: var(--success); }
+.stat-value.failure { color: var(--failure); }
+.stat-value.neutral { color: var(--neutral); }
+
+.stat-label {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.legend {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+}
+
+.legend-dot.success { background: var(--success); }
+.legend-dot.failure { background: var(--failure); }
+.legend-dot.skipped { background: var(--skipped); }
+.legend-dot.pending { background: var(--pending); }
+
+.table-container {
+    overflow-x: auto;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+th, td {
+    padding: 0.75rem 0.5rem;
+    text-align: center;
+    border-bottom: 1px solid var(--bg-tertiary);
+}
+
+th {
+    background: var(--bg-tertiary);
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+th:first-child, td:first-child {
+    text-align: left;
+    position: sticky;
+    left: 0;
+    background: var(--bg-secondary);
+    z-index: 5;
+    min-width: 120px;
+}
+
+th:first-child {
+    background: var(--bg-tertiary);
+    z-index: 15;
+}
+
+.date-header {
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.date-header .day {
+    font-weight: 600;
+}
+
+.date-header .date {
+    color: var(--text-secondary);
+}
+
+.status-cell {
+    width: 40px;
+    min-width: 40px;
+}
+
+.status-dot {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+}
+
+.status-dot:hover {
+    transform: scale(1.2);
+}
+
+.status-dot.success { background: var(--success); }
+.status-dot.failure { background: var(--failure); }
+.status-dot.skipped { background: var(--skipped); }
+.status-dot.pending { background: var(--pending); }
+.status-dot.cancelled { background: var(--skipped); }
+.status-dot.in_progress { background: var(--pending); }
+.status-dot.not_run { background: transparent; border: 2px dashed var(--border); }
+
+.workflow-name {
+    font-weight: 500;
+}
+
+.no-data {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-secondary);
+}
+
+.loading {
+    text-align: center;
+    padding: 3rem;
+}
+
+.loading-spinner {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--bg-tertiary);
+    border-top-color: var(--text-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.tooltip {
+    position: fixed;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    pointer-events: none;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    max-width: 250px;
+}
+
+.tooltip-header {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.tooltip-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.tooltip-status .status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+}
+
+footer {
+    text-align: center;
+    margin-top: 2rem;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+footer a {
+    color: var(--text-secondary);
+    text-decoration: underline;
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>TorchRL Nightly Status</h1>
+        <p class="subtitle">Daily health of TorchRL CI pipelines</p>
+        <p class="subtitle" id="last-updated"></p>
+    </header>
+
+    <div class="stats-grid" id="stats-grid"></div>
+
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-dot success"></div>
+            <span>Success</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot failure"></div>
+            <span>Failure</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot skipped"></div>
+            <span>Skipped/Cancelled</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot pending"></div>
+            <span>In Progress</span>
+        </div>
+    </div>
+
+    <div class="table-container" id="table-container">
+        <div class="loading">
+            <div class="loading-spinner"></div>
+            <p>Loading status data...</p>
+        </div>
+    </div>
+
+    <footer>
+        <p>Data updates after each nightly run. <a href="https://github.com/pytorch/rl/actions/workflows/nightly_orchestrator.yml">View workflow runs</a></p>
+    </footer>
+</div>
+
+<div class="tooltip" id="tooltip" style="display: none;"></div>
+
+<script>
+const WORKFLOW_ORDER = [
+    'test-linux.yml',
+    'test-linux-llm.yml',
+    'test-linux-habitat.yml',
+    'test-linux-tutorials.yml',
+    'test-linux-sota.yml',
+    'test-linux-libs.yml',
+    'test-windows-optdepts.yml',
+    'lint.yml',
+    'docs.yml',
+    'benchmarks.yml',
+    'validate-test-partitioning.yml',
+    'nightly_build.yml',
+    'build-wheels-linux.yml',
+    'build-wheels-m1.yml',
+    'build-wheels-windows.yml',
+    'build-wheels-aarch64-linux.yml',
+];
+
+async function loadData() {
+    try {
+        const response = await fetch('history.json');
+        if (!response.ok) throw new Error('Failed to load data');
+        return await response.json();
+    } catch (error) {
+        console.error('Error loading data:', error);
+        return null;
+    }
+}
+
+function formatDate(dateStr) {
+    const date = new Date(dateStr + 'T00:00:00');
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return {
+        day: days[date.getDay()],
+        date: `${months[date.getMonth()]} ${date.getDate()}`
+    };
+}
+
+function getStatusClass(status) {
+    if (!status) return 'not_run';
+    switch (status.toLowerCase()) {
+        case 'success': return 'success';
+        case 'failure': return 'failure';
+        case 'skipped': return 'skipped';
+        case 'cancelled': return 'cancelled';
+        case 'in_progress':
+        case 'pending':
+        case 'queued':
+            return 'pending';
+        default: return 'skipped';
+    }
+}
+
+function renderStats(data) {
+    const container = document.getElementById('stats-grid');
+    const stats7 = data.stats?.last_7_days || {};
+    const stats30 = data.stats?.last_30_days || {};
+
+    const getSuccessRateClass = (rate) => {
+        if (rate == null) return 'neutral';
+        if (rate >= 90) return 'success';
+        if (rate >= 70) return 'neutral';
+        return 'failure';
+    };
+
+    container.innerHTML = `
+        <div class="stat-card">
+            <div class="stat-value ${getSuccessRateClass(stats7.success_rate)}">
+                ${stats7.success_rate != null ? stats7.success_rate + '%' : 'N/A'}
+            </div>
+            <div class="stat-label">7-Day Success Rate</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value ${getSuccessRateClass(stats30.success_rate)}">
+                ${stats30.success_rate != null ? stats30.success_rate + '%' : 'N/A'}
+            </div>
+            <div class="stat-label">30-Day Success Rate</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value success">${stats7.total_success || 0}</div>
+            <div class="stat-label">Successful (7 days)</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value failure">${stats7.total_failure || 0}</div>
+            <div class="stat-label">Failed (7 days)</div>
+        </div>
+    `;
+}
+
+function renderTable(data) {
+    const container = document.getElementById('table-container');
+    const history = data.history || [];
+
+    if (history.length === 0) {
+        container.innerHTML = '<div class="no-data">No data available yet.</div>';
+        return;
+    }
+
+    // Get last 30 days
+    const recentHistory = history.slice(0, 30);
+
+    // Build table
+    let html = '<table><thead><tr><th>Workflow</th>';
+
+    // Date headers
+    for (const day of recentHistory) {
+        const formatted = formatDate(day.date);
+        html += `<th class="status-cell">
+            <div class="date-header">
+                <div class="day">${formatted.day}</div>
+                <div class="date">${formatted.date}</div>
+            </div>
+        </th>`;
+    }
+    html += '</tr></thead><tbody>';
+
+    // Workflow rows
+    for (const workflowFile of WORKFLOW_ORDER) {
+        const displayName = recentHistory[0]?.workflows?.[workflowFile]?.display_name || workflowFile.replace('.yml', '').replace(/-/g, ' ');
+
+        html += `<tr><td class="workflow-name">${displayName}</td>`;
+
+        for (const day of recentHistory) {
+            const workflow = day.workflows?.[workflowFile];
+            const status = workflow?.status || 'not_run';
+            const statusClass = getStatusClass(status);
+            const url = workflow?.url;
+
+            html += `<td class="status-cell">`;
+            if (url) {
+                html += `<a href="${url}" target="_blank">`;
+            }
+            html += `<span class="status-dot ${statusClass}" data-workflow="${workflowFile}" data-date="${day.date}" data-status="${status}"></span>`;
+            if (url) {
+                html += `</a>`;
+            }
+            html += `</td>`;
+        }
+
+        html += '</tr>';
+    }
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+
+    // Setup tooltips
+    setupTooltips();
+}
+
+function setupTooltips() {
+    const tooltip = document.getElementById('tooltip');
+    const dots = document.querySelectorAll('.status-dot');
+
+    dots.forEach(dot => {
+        dot.addEventListener('mouseenter', (e) => {
+            const workflow = dot.dataset.workflow;
+            const date = dot.dataset.date;
+            const status = dot.dataset.status;
+
+            tooltip.innerHTML = `
+                <div class="tooltip-header">${workflow}</div>
+                <div>${formatDate(date).day}, ${formatDate(date).date}</div>
+                <div class="tooltip-status">
+                    <span class="status-indicator ${getStatusClass(status)}" style="background: var(--${getStatusClass(status)})"></span>
+                    <span>${status}</span>
+                </div>
+            `;
+            tooltip.style.display = 'block';
+        });
+
+        dot.addEventListener('mousemove', (e) => {
+            tooltip.style.left = e.clientX + 10 + 'px';
+            tooltip.style.top = e.clientY + 10 + 'px';
+        });
+
+        dot.addEventListener('mouseleave', () => {
+            tooltip.style.display = 'none';
+        });
+    });
+}
+
+async function init() {
+    const data = await loadData();
+
+    if (!data) {
+        document.getElementById('table-container').innerHTML =
+            '<div class="no-data">Failed to load data. Please try again later.</div>';
+        return;
+    }
+
+    // Update last updated time
+    if (data.last_updated) {
+        const updated = new Date(data.last_updated);
+        document.getElementById('last-updated').textContent =
+            `Last updated: ${updated.toLocaleDateString()} ${updated.toLocaleTimeString()}`;
+    }
+
+    renderStats(data);
+    renderTable(data);
+}
+
+init();
+</script>
+</body>
+</html>

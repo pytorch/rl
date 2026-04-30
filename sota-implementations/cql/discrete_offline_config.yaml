@@ -1,0 +1,66 @@
+# env and task
+env:
+  name: CartPole-v1 # CartPole environment for discrete action space
+  task: ""
+  library: minari
+  n_samples_stats: 1000
+  seed: 0
+  backend: gymnasium  
+
+# Collector
+collector:
+  frames_per_batch: 200
+  total_frames: 1_000_000
+  multi_step: 0
+  init_random_frames: 1000
+  env_per_collector: 1
+  device:
+  max_frames_per_traj: 200
+  annealing_frames: 10000
+  eps_start: 1.0
+  eps_end: 0.01
+
+
+# logger
+logger:
+  backend: wandb
+  project_name: torchrl_example_cql
+  group_name: null
+  exp_name: cql_${replay_buffer.dataset}
+  eval_iter: 5000         # eval interval in gradient steps
+  eval_steps: 1000        # evaluation steps per eval
+  mode: online
+  eval_envs: 5 # number of evaluation environments
+  video: True
+
+# replay buffer
+replay_buffer:
+  env: CartPole-v1
+  dataset: CartPole-v2-random-v1
+  batch_size: 128
+  episodes: 10000
+
+# optimization
+optim:
+  device: null
+  lr: 3e-4               # learning rate
+  weight_decay: 0.0
+  gradient_steps: 100_000
+  policy_eval_start: 40_000
+
+# model
+model:
+  hidden_sizes: [256, 256]
+  activation: relu
+
+# loss
+loss: 
+  loss_function: l2
+  gamma: 0.99
+  tau: 0.005
+  action_space: categorical
+
+compile:
+  compile: False
+  compile_mode:
+  cudagraphs: False

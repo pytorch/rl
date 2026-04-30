@@ -10,5 +10,7 @@ API Reference
     llms
     modules
     objectives
+    services
     trainers
     utils
+    config

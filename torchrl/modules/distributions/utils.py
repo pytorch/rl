@@ -16,21 +16,25 @@ except ImportError:
 
 def _cast_device(elt: torch.Tensor | float, device) -> torch.Tensor | float:
     if isinstance(elt, torch.Tensor):
-        return elt.to(device)
+        _non_blocking = device is not None and torch.device(device).type == "cuda"
+        return elt.to(device, non_blocking=_non_blocking)
     return elt
 
 
 def _cast_transform_device(transform, device):
     if transform is None:
         return transform
-    elif isinstance(transform, d.ComposeTransform):
+    _non_blocking = device is not None and torch.device(device).type == "cuda"
+    if isinstance(transform, d.ComposeTransform):
         for i, t in enumerate(transform.parts):
             transform.parts[i] = _cast_transform_device(t, device)
     elif isinstance(transform, d.Transform):
         for attribute in dir(transform):
             value = getattr(transform, attribute)
             if isinstance(value, torch.Tensor):
-                setattr(transform, attribute, value.to(device))
+                setattr(
+                    transform, attribute, value.to(device, non_blocking=_non_blocking)
+                )
         return transform
     else:
         raise TypeError(

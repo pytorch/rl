@@ -75,7 +75,8 @@ async def main():
         # break at some point
         break
 
-    await distributed_collector.async_shutdown()
+    await distributed_collector.async_shutdown(shutdown_ray=False)
+    buffer.close()
 
 
 if __name__ == "__main__":

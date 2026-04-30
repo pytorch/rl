@@ -17,8 +17,8 @@ import torch.nn
 import torch.optim
 import tqdm
 from tensordict.nn import CudaGraphModule, TensorDictSequential
-from torchrl._utils import timeit
-from torchrl.collectors import SyncDataCollector
+from torchrl._utils import get_available_device, timeit
+from torchrl.collectors import Collector
 from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
 from torchrl.envs import ExplorationType, set_exploration_type
 from torchrl.modules import EGreedyModule
@@ -33,13 +33,7 @@ torch.set_float32_matmul_precision("high")
 @hydra.main(config_path="", config_name="config_atari", version_base="1.1")
 def main(cfg: DictConfig):  # noqa: F821
 
-    device = cfg.device
-    if device in ("", None):
-        if torch.cuda.is_available():
-            device = "cuda:0"
-        else:
-            device = "cpu"
-    device = torch.device(device)
+    device = torch.device(cfg.device) if cfg.device else get_available_device()
 
     # Correct for frame_skip
     frame_skip = 4
@@ -164,7 +158,7 @@ def main(cfg: DictConfig):  # noqa: F821
         update = CudaGraphModule(update, warmup=50)
 
     # Create the collector
-    collector = SyncDataCollector(
+    collector = Collector(
         create_env_fn=make_env(
             cfg.env.env_name, frame_skip, device, gym_backend=cfg.env.backend
         ),
@@ -219,8 +213,7 @@ def main(cfg: DictConfig):  # noqa: F821
 
         if collected_frames < init_random_frames:
             if logger:
-                for key, value in metrics_to_log.items():
-                    logger.log_scalar(key, value, step=collected_frames)
+                logger.log_metrics(metrics_to_log, step=collected_frames)
             continue
 
         # optimization steps
@@ -263,8 +256,7 @@ def main(cfg: DictConfig):  # noqa: F821
         if logger:
             metrics_to_log.update(timeit.todict(prefix="time"))
             metrics_to_log["time/speed"] = pbar.format_dict["rate"]
-            for key, value in metrics_to_log.items():
-                logger.log_scalar(key, value, step=collected_frames)
+            logger.log_metrics(metrics_to_log, step=collected_frames)
 
         # update weights of the inference policy
         collector.update_policy_weights_()

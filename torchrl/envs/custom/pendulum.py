@@ -41,14 +41,14 @@ class PendulumEnv(EnvBase):
                         dtype=torch.float32,
                         domain=continuous),
                     params: Composite(
-                        max_speed: UnboundedDiscrete(
+                        max_speed: UnboundedContinuous(
                             shape=torch.Size([]),
                             space=ContinuousBox(
-                                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, contiguous=True),
-                                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, contiguous=True)),
+                                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
                             device=cpu,
-                            dtype=torch.int64,
-                            domain=discrete),
+                            dtype=torch.float32,
+                            domain=continuous),
                         max_torque: UnboundedContinuous(
                             shape=torch.Size([]),
                             space=ContinuousBox(
@@ -140,14 +140,14 @@ class PendulumEnv(EnvBase):
                         dtype=torch.float32,
                         domain=continuous),
                     params: Composite(
-                        max_speed: UnboundedDiscrete(
+                        max_speed: UnboundedContinuous(
                             shape=torch.Size([]),
                             space=ContinuousBox(
-                                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, contiguous=True),
-                                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, contiguous=True)),
+                                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
                             device=cpu,
-                            dtype=torch.int64,
-                            domain=discrete),
+                            dtype=torch.float32,
+                            domain=continuous),
                         max_torque: UnboundedContinuous(
                             shape=torch.Size([]),
                             space=ContinuousBox(
@@ -379,7 +379,7 @@ class PendulumEnv(EnvBase):
             {
                 "params": TensorDict(
                     {
-                        "max_speed": 8,
+                        "max_speed": 8.0,
                         "max_torque": 2.0,
                         "dt": 0.05,
                         "g": g,

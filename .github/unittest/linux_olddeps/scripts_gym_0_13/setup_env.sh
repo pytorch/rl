@@ -11,11 +11,13 @@ set -v
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 apt-get update && apt-get upgrade -y
-printf "* Installing vim - git - wget\n"
-apt-get install -y vim git wget
+printf "* Installing vim - git - wget - cmake\n"
+apt-get install -y vim git wget cmake
 
 printf "* Installing glfw - glew - osmesa part 1\n"
-apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb libx11-dev libegl-dev
+apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb libx11-dev \
+  libegl-dev \
+  librhash0 # For cmake
 
 #printf "* Installing glfw - glew - osmesa part 2\n"
 #apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libsdl2-dev libsdl2-2.0-0
@@ -100,7 +102,6 @@ conda env config vars set \
   SDL_VIDEODRIVER=dummy \
   DISPLAY=unix:0.0 \
   PYOPENGL_PLATFORM=egl \
-  LD_PRELOAD=$glew_path \
   NVIDIA_PATH=/usr/src/nvidia-470.63.01 \
   MUJOCO_PY_MJKEY_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/mjkey.txt \
   MUJOCO_PY_MUJOCO_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/linux/mujoco210 \
@@ -114,11 +115,3 @@ conda deactivate && conda activate "${env_dir}"
 
 conda env update --file "${this_dir}/environment.yml" --prune
 #conda install -c conda-forge fltk -y
-
-# ROM licence for Atari
-wget https://www.rarlab.com/rar/rarlinux-x64-5.7.1.tar.gz
-tar -xzvf rarlinux-x64-5.7.1.tar.gz
-mkdir Roms
-wget http://www.atarimania.com/roms/Roms.rar
-./rar/unrar e Roms.rar ./Roms -y
-python -m atari_py.import_roms Roms

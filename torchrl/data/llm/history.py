@@ -246,7 +246,7 @@ def add_chat_template(
           `name_or_path` attribute.
         - Templates are stored globally and persist for the duration of the Python session.
     """
-    global _CHAT_TEMPLATES, _CUSTOM_INVERSE_PARSERS, _CUSTOM_MODEL_FAMILY_KEYWORDS
+    global _CHAT_TEMPLATES, _CUSTOM_INVERSE_PARSERS, _CUSTOM_MODEL_FAMILY_KEYWORDS  # noqa: F824
 
     # Validate template contains generation blocks
     if "{% generation %}" not in template:
@@ -519,8 +519,10 @@ class History(TensorClass["nocast"]):
         :class:`~torchrl.modules.llm.policies.Tokens`: Container for token data.
     """
 
-    role: str
-    content: str | ContentBase
+    role: str | list[str] | list[list[str]]
+    content: str | ContentBase | list[str] | list[ContentBase] | list[list[str]] | list[
+        list[ContentBase]
+    ]
     is_complete: bool = True
     tool_calls: list[dict] | None = None
     tool_responses: list[str] | None = None
@@ -906,7 +908,7 @@ class History(TensorClass["nocast"]):
         if not parsed_messages:
             raise RuntimeError(
                 f"Couldn't get a single item out of text {text}. A common cause "
-                f"if that special tokens should not be ommitted, did you set include_stop_str_in_output/skip_special_tokens=False?"
+                f"if that special tokens should not be omitted, did you set include_stop_str_in_output/skip_special_tokens=False?"
             )
 
         return lazy_stack(parsed_messages)
@@ -976,7 +978,7 @@ class History(TensorClass["nocast"]):
         if not parsed_messages:
             raise RuntimeError(
                 f"Couldn't get a single item out of text {template}. A common cause "
-                f"if that special tokens should not be ommitted, did you set include_stop_str_in_output/skip_special_tokens=False?"
+                f"if that special tokens should not be omitted, did you set include_stop_str_in_output/skip_special_tokens=False?"
             )
 
         return lazy_stack(parsed_messages)
@@ -1217,15 +1219,6 @@ class History(TensorClass["nocast"]):
                 f"The new history to append must have one less dimension than self. Got self.ndim={self.ndim} and history.ndim={history.ndim}."
             )
         dim = _maybe_correct_neg_dim(dim, self.batch_size)
-        # if self.ndim > 1 and dim >= self.ndim - 1:
-        #     # then we need to append each element independently
-        #     result = []
-        #     for hist, new_hist in zip(self.unbind(0), history.unbind(0)):
-        #         hist_c = hist.append(new_hist, inplace=inplace, dim=dim - 1)
-        #         result.append(hist_c)
-        #     if inplace:
-        #         return self
-        #     return lazy_stack(result)
         if inplace:
             if (
                 isinstance(self._tensordict, LazyStackedTensorDict)

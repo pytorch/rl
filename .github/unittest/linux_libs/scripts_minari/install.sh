@@ -33,27 +33,28 @@ if [[ "$TORCH_VERSION" == "nightly" ]]; then
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
-      uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+      uv pip install torch --index-url https://download.pytorch.org/whl/cpu -U
   else
-      uv pip install torch --index-url https://download.pytorch.org/whl/cu128
+      uv pip install torch --index-url https://download.pytorch.org/whl/cu128 -U
   fi
 else
   printf "Failed to install pytorch"
   exit 1
 fi
 
-# install tensordict
+# install tensordict and its deps
+uv pip install cloudpickle packaging importlib_metadata orjson "pyvers>=0.1.0,<0.2.0"
 if [[ "$RELEASE" == 0 ]]; then
-  uv pip install git+https://github.com/pytorch/tensordict.git
+  uv pip install --no-deps git+https://github.com/pytorch/tensordict.git
 else
-  uv pip install tensordict
+  uv pip install --no-deps tensordict
 fi
 
 # smoke test
 python -c "import functorch;import tensordict"
 
 printf "* Installing torchrl\n"
-python setup.py develop
+uv pip install -e . --no-build-isolation --no-deps
 
 # smoke test
 python -c "import torchrl"

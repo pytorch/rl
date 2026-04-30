@@ -9,7 +9,6 @@ import pickle
 
 import time
 from pathlib import Path
-from typing import Dict
 
 import numpy as np
 
@@ -23,7 +22,7 @@ from ray.rllib.agents.ppo import PPOTrainer
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.tune import register_env
 from torchrl._utils import logger as torchrl_logger
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.envs.libs.vmas import VmasEnv
 from vmas import Wrapper
 
@@ -57,7 +56,7 @@ def run_vmas_torchrl(
         seed=seed,
     )
 
-    collector = SyncDataCollector(
+    collector = Collector(
         env,
         policy=None,
         device=device,
@@ -93,7 +92,7 @@ def run_vmas_rllib(
                 - result["timers"]["learn_time_ms"]
             )
 
-    def env_creator(config: Dict):
+    def env_creator(config: dict):
         env = vmas.make_env(
             scenario=config["scenario_name"],
             num_envs=config["num_envs"],

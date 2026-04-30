@@ -11,7 +11,7 @@ import torch
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn
 from torchrl._utils import logger as torchrl_logger
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
@@ -78,7 +78,7 @@ def train(cfg: DictConfig):  # noqa: F821
     # Policy
     actor_net = MultiAgentMLP(
         n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
-        n_agent_outputs=env.action_spec.shape[-1],
+        n_agent_outputs=env.full_action_spec_unbatched[env.action_key].shape[-1],
         n_agents=env.n_agents,
         centralised=False,
         share_params=cfg.model.shared_parameters,
@@ -116,7 +116,9 @@ def train(cfg: DictConfig):  # noqa: F821
     # Critic
     module = MultiAgentMLP(
         n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1]
-        + env.action_spec.shape[-1],  # Q critic takes action and value
+        + env.full_action_spec_unbatched[env.action_key].shape[
+            -1
+        ],  # Q critic takes action and value
         n_agent_outputs=1,
         n_agents=env.n_agents,
         centralised=cfg.model.centralised_critic,
@@ -132,7 +134,7 @@ def train(cfg: DictConfig):  # noqa: F821
         out_keys=[("agents", "state_action_value")],
     )
 
-    collector = SyncDataCollector(
+    collector = Collector(
         env,
         policy_explore,
         device=cfg.env.device,

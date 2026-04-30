@@ -120,7 +120,7 @@ from tensordict.nn.distributions import NormalParamExtractor
 from torch import multiprocessing
 
 # Data collection
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
@@ -385,7 +385,7 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 # Another important decision we need to make is whether we want our agents to **share the policy parameters**.
 # On the one hand, sharing parameters means that they will all share the same policy, which will allow them to benefit from
 # each other's experiences. This will also result in faster training.
-# On the other hand, it will make them behaviorally *homogenous*, as they will in fact share the same model.
+# On the other hand, it will make them behaviorally *homogeneous*, as they will in fact share the same model.
 # For this example, we will enable sharing as we do not mind the homogeneity and can benefit from the computational
 # speed, but it is important to always think about this decision in your own problems!
 #
@@ -541,7 +541,7 @@ print("Running value:", critic(env.reset()))
 # We will use the simplest possible data collector, which has the same output as an environment rollout,
 # with the only difference that it will auto reset done states until the desired frames are collected.
 #
-collector = SyncDataCollector(
+collector = Collector(
     env,
     policy,
     device=vmas_device,
@@ -599,7 +599,7 @@ loss_module = ClipPPOLoss(
     actor_network=policy,
     critic_network=critic,
     clip_epsilon=clip_epsilon,
-    entropy_coef=entropy_eps,
+    entropy_coeff=entropy_eps,
     normalize_advantage=False,  # Important to avoid normalizing across the agent dimension
 )
 loss_module.set_keys(  # We have to tell the loss where to find the keys

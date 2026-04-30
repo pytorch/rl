@@ -9,6 +9,7 @@ from torchrl.modules.tensordict_module.actors import (
     ActorCriticWrapper,
     ActorValueOperator,
     DecisionTransformerInferenceWrapper,
+    DiffusionActor,
     DistributionalQValueActor,
     DistributionalQValueHook,
     DistributionalQValueModule,
@@ -29,6 +30,7 @@ from torchrl.modules.tensordict_module.exploration import (
     EGreedyWrapper,
     OrnsteinUhlenbeckProcessModule,
     OrnsteinUhlenbeckProcessWrapper,
+    RandomPolicy,
 )
 from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticModule,
@@ -53,6 +55,7 @@ __all__ = [
     "ActorCriticWrapper",
     "ActorValueOperator",
     "DecisionTransformerInferenceWrapper",
+    "DiffusionActor",
     "DistributionalQValueActor",
     "DistributionalQValueHook",
     "DistributionalQValueModule",
@@ -70,6 +73,7 @@ __all__ = [
     "AdditiveGaussianWrapper",
     "EGreedyModule",
     "EGreedyWrapper",
+    "RandomPolicy",
     "OrnsteinUhlenbeckProcessModule",
     "OrnsteinUhlenbeckProcessWrapper",
     "SafeProbabilisticModule",

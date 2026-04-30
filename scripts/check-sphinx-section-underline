@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+"""Check that RST title underlines (and overlines) have the same length as the title text."""
+
+import argparse
+from pathlib import Path
+
+RST_SECTION_CHARS = frozenset("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
+
+
+def _strip_bom(line: str) -> str:
+    """Strip the Unicode BOM (U+FEFF) that some generators emit."""
+    return line.lstrip("\ufeff")
+
+
+def _is_section_line(line: str) -> bool:
+    """Return True if *line* is composed entirely of one repeated RST section character."""
+    if not line:
+        return False
+    if line[0] not in RST_SECTION_CHARS:
+        return False
+    return len(set(line)) == 1
+
+
+def _is_title_candidate(line: str) -> bool:
+    """Return True if *line* could be an RST section title."""
+    if not line or line[0] == " ":
+        return False
+    if _is_section_line(line):
+        return False
+    if line.startswith(">>>") or line.startswith("..."):
+        return False
+    return True
+
+
+def _visible_len(line: str) -> int:
+    """Length ignoring BOM characters."""
+    return len(_strip_bom(line))
+
+
+def _scan(lines: list[str]) -> list[tuple[int, str, int, int, int]]:
+    """Return ``(marker_idx, title, title_len, marker_len, is_overline)`` for every mismatch."""
+    n = len(lines)
+    errors: list[tuple[int, str, int, int, int]] = []
+    consumed: set[int] = set()
+
+    i = 0
+    while i < n:
+        line = lines[i]
+
+        if not _is_section_line(line) or line[0] == " ":
+            i += 1
+            continue
+
+        # --- overline + title + underline ---
+        title_candidate = _strip_bom(lines[i + 1]) if i + 1 < n else ""
+        if (
+            i + 2 < n
+            and _is_title_candidate(title_candidate)
+            and _is_section_line(lines[i + 2])
+            and lines[i + 2][0] == line[0]
+        ):
+            title = title_candidate
+            title_len = len(title)
+
+            if len(line) != title_len:
+                errors.append((i, title, title_len, len(line), True))
+            if len(lines[i + 2]) != title_len:
+                errors.append((i + 2, title, title_len, len(lines[i + 2]), False))
+            consumed.update({i, i + 1, i + 2})
+            i += 3
+            continue
+
+        # --- title (previous line) + underline ---
+        if i > 0 and i not in consumed:
+            prev = _strip_bom(lines[i - 1])
+            if _is_title_candidate(prev):
+                title_len = len(prev)
+                if len(line) != title_len:
+                    errors.append((i, prev, title_len, len(line), False))
+
+        i += 1
+
+    return errors
+
+
+def fix_file(filepath: str) -> list[tuple[int, str, int, int]]:
+    """Fix marker lines in-place and return the list of mismatches that were corrected."""
+    with open(filepath) as fh:
+        raw_lines = fh.readlines()
+
+    lines = [raw.rstrip("\n\r") for raw in raw_lines]
+    mismatches = _scan(lines)
+
+    reported: list[tuple[int, str, int, int]] = []
+    fixed_indices: dict[int, str] = {}
+    for marker_idx, title, title_len, marker_len, _is_over in mismatches:
+        reported.append((marker_idx + 1, title, title_len, marker_len))
+        fixed_indices[marker_idx] = lines[marker_idx][0] * title_len
+
+    if fixed_indices:
+        with open(filepath, "w") as fh:
+            for idx, raw_line in enumerate(raw_lines):
+                if idx in fixed_indices:
+                    fh.write(fixed_indices[idx] + "\n")
+                else:
+                    fh.write(raw_line)
+
+    return reported
+
+
+def check_file(filepath: str) -> list[tuple[int, str, int, int]]:
+    """Return ``(lineno, title, title_len, marker_len)`` for every mismatch in *filepath*."""
+    with open(filepath) as fh:
+        raw_lines = fh.readlines()
+
+    lines = [raw.rstrip("\n\r") for raw in raw_lines]
+    return [
+        (marker_idx + 1, title, title_len, marker_len)
+        for marker_idx, title, title_len, marker_len, _ in _scan(lines)
+    ]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "files", nargs="*", help="RST files to check (default: all docs/**/*.rst)"
+    )
+    parser.add_argument("--fix", action="store_true", help="Fix underlines in-place")
+    args = parser.parse_args()
+
+    paths = args.files or [str(p) for p in Path("docs").rglob("*.rst")]
+
+    handler = fix_file if args.fix else check_file
+    failures = 0
+    for path in sorted(paths):
+        for lineno, title, title_len, marker_len in handler(path):
+            verb = "fixed" if args.fix else "found"
+            print(
+                f"{path}:{lineno}: title/underline length mismatch ({verb}): "
+                f"title {title_len!r} != marker {marker_len!r}  "
+                f"({title!r})"
+            )
+            failures += 1
+
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

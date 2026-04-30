@@ -552,7 +552,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
 
         This method is intended to be called by the :class:`~torchrl.record.PixelRenderTransform`
         created whenever `from_pixels=True` is selected.
-        To create an appropriate rendering transform, use a similar call as bellow:
+        To create an appropriate rendering transform, use a similar call as below:
 
             >>> from torchrl.record import PixelRenderTransform
             >>> matplotlib_backend = None # Change this value if a specific matplotlib backend has to be used.

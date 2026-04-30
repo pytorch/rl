@@ -1,7 +1,6 @@
 import os
 import shutil
 from pathlib import Path
-from typing import List
 
 FILE_DIR = os.path.dirname(__file__)
 KNOWLEDGE_GEN_DIR = "reference/generated/knowledge_base"
@@ -10,7 +9,7 @@ TUTORIALS_GEN_DIR = "reference/generated/tutorials"
 TUTORIALS_MEDIA_GEN_DIR = "reference/generated/tutorials/media"
 
 
-def _get_file_content(name: str) -> List[str]:
+def _get_file_content(name: str) -> list[str]:
     """A function to get the content of a reference file.
 
     Given the name of a knowledge base file, populates a file template. The result can be used to link a knowledge base

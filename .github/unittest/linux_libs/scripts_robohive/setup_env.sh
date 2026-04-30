@@ -7,6 +7,8 @@
 
 set -e
 
+export DEBIAN_FRONTEND=noninteractive
+
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
 apt-get update && apt-get install -y git wget gcc g++ cmake
@@ -82,7 +84,7 @@ conda install conda-forge::ffmpeg -y
 
 pip install robohive
 
-python3 -m robohive_init
+python -m robohive_init
 
 # make sure only gymnasium is available
 # pip uninstall gym -y

@@ -20,9 +20,39 @@ try:
 except ImportError:
     pass
 
+try:
+    from .gen_dgrl import GenDGRLExperienceReplay
+except ImportError:
+    pass
+
+try:
+    from .openml import OpenMLExperienceReplay
+except ImportError:
+    pass
+
+try:
+    from .openx import OpenXExperienceReplay
+except ImportError:
+    pass
+
+try:
+    from .roboset import RobosetExperienceReplay
+except ImportError:
+    pass
+
+try:
+    from .vd4rl import VD4RLExperienceReplay
+except ImportError:
+    pass
+
 __all__ = [
     "AtariDQNExperienceReplay",
     "BaseDatasetExperienceReplay",
     "D4RLExperienceReplay",
     "MinariExperienceReplay",
+    "GenDGRLExperienceReplay",
+    "OpenMLExperienceReplay",
+    "OpenXExperienceReplay",
+    "RobosetExperienceReplay",
+    "VD4RLExperienceReplay",
 ]

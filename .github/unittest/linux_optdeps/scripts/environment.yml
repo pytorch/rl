@@ -17,5 +17,6 @@ dependencies:
     - pybind11[global]
     - pyyaml
     - scipy
+    - psutil
     - coverage
     - ray

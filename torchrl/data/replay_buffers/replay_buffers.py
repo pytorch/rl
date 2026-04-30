@@ -11,9 +11,10 @@ import multiprocessing
 import textwrap
 import threading
 import warnings
+from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any
 
 import numpy as np
 import torch
@@ -23,7 +24,8 @@ try:
 except ImportError:
     from torch._dynamo import is_compiling
 
-from functools import partial
+from functools import partial, wraps
+from typing import TYPE_CHECKING, TypeVar
 
 from tensordict import (
     is_tensor_collection,
@@ -39,7 +41,7 @@ from tensordict.utils import expand_as_right, expand_right
 from torch import Tensor
 from torch.utils._pytree import tree_map
 
-from torchrl._utils import accept_remote_rref_udf_invocation
+from torchrl._utils import accept_remote_rref_udf_invocation, rl_warnings
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     RandomSampler,
@@ -69,6 +71,38 @@ from torchrl.data.replay_buffers.writers import (
 )
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.transforms.transforms import _InvertTransform, Transform
+
+T = TypeVar("T")
+if TYPE_CHECKING:
+    from typing import Self
+else:
+    Self = T
+
+
+def _storage_index(index: Any, storage: Storage) -> Any:
+    storage_device = getattr(storage, "device", None)
+    if storage_device is None or storage_device == "auto":
+        return index
+    storage_device = torch.device(storage_device)
+
+    def _maybe_to_storage_device(index):
+        if isinstance(index, torch.Tensor) and index.device != storage_device:
+            return index.to(storage_device)
+        return index
+
+    if isinstance(index, tuple):
+        return tuple(_maybe_to_storage_device(item) for item in index)
+    return _maybe_to_storage_device(index)
+
+
+def _maybe_delay_init(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if self._delayed_init and not self.initialized:
+            self._init()
+        return func(self, *args, **kwargs)
+
+    return wrapper
 
 
 class ReplayBuffer:
@@ -127,6 +161,11 @@ class ReplayBuffer:
             multi-dimensional and keep consistent notions of storage-capacity
             and batch-size during sampling.
 
+            .. important:: When using a collector with ``trajs_per_batch``,
+                trajectories are written as flat 1-D sequences of variable
+                length.  Do not set ``dim_extend > 0`` or ``ndim >= 2`` in
+                this case — the storage must be 1-dimensional.
+
             .. note:: This argument has no effect on :meth:`add` and
                 therefore should be used with caution when both :meth:`add`
                 and :meth:`extend` are used in a codebase. For example:
@@ -152,6 +191,12 @@ class ReplayBuffer:
         compilable (bool, optional): whether the writer is compilable.
             If ``True``, the writer cannot be shared between multiple processes.
             Defaults to ``False``.
+        delayed_init (bool, optional): whether to initialize storage, writer, sampler and transform
+            the first time the buffer is used rather than during construction.
+            This is useful when the replay buffer needs to be pickled and sent to remote workers,
+            particularly when using transforms with modules that require gradients.
+            If not specified, defaults to ``True`` when ``transform_factory`` is provided,
+            and ``False`` otherwise.
 
     Examples:
         >>> import torch
@@ -242,19 +287,55 @@ class ReplayBuffer:
         generator: torch.Generator | None = None,
         shared: bool = False,
         compilable: bool | None = None,
+        delayed_init: bool | None = None,
     ) -> None:
-        self._storage = self._maybe_make_storage(storage, compilable=compilable)
-        self._storage.attach(self)
-        self._sampler = self._maybe_make_sampler(sampler)
-        self._writer = self._maybe_make_writer(writer)
-        self._writer.register_storage(self._storage)
+        self._delayed_init = delayed_init
+        self._initialized = False
 
-        self._get_collate_fn(collate_fn)
+        # Store init parameters for potential delayed initialization
+        self._init_storage = storage
+        self._init_sampler = sampler
+        self._init_writer = writer
+        self._init_collate_fn = collate_fn
+        self._init_transform = transform
+        self._init_transform_factory = transform_factory
+        self._init_checkpointer = checkpointer
+        self._init_generator = generator
+        self._init_compilable = compilable
+
+        if transform is not None and transform_factory is not None:
+            raise TypeError(
+                f"transform and transform_factory are mutually exclusive. "
+                f"Got transform={transform} and transform_factory={transform_factory}."
+            )
+
+        # Auto-detect delayed_init when transform_factory is provided
+        if transform_factory is not None and delayed_init is None:
+            delayed_init = True
+        elif delayed_init is None:
+            delayed_init = False
+
+        # Update _delayed_init after auto-detection
+        self._delayed_init = delayed_init
+
         self._pin_memory = pin_memory
-
         self._prefetch = bool(prefetch)
         self._prefetch_cap = prefetch or 0
         self._prefetch_queue = collections.deque()
+        self._batch_size = batch_size
+
+        if batch_size is None and prefetch:
+            raise ValueError(
+                "Dynamic batch-size specification is incompatible "
+                "with multithreaded sampling. "
+                "When using prefetch, the batch-size must be specified in "
+                "advance. "
+            )
+
+        if dim_extend is not None and dim_extend < 0:
+            raise ValueError("dim_extend must be a positive value.")
+        self._dim_extend = dim_extend
+
         if self._prefetch_cap:
             self._prefetch_executor = ThreadPoolExecutor(max_workers=self._prefetch_cap)
 
@@ -266,30 +347,111 @@ class ReplayBuffer:
         self._replay_lock = threading.RLock()
         self._futures_lock = threading.RLock()
 
-        self._transform = self._maybe_make_transform(transform, transform_factory)
+        # If not delayed, initialize immediately
+        if not self._delayed_init:
+            self._init()
 
-        if batch_size is None and prefetch:
-            raise ValueError(
-                "Dynamic batch-size specification is incompatible "
-                "with multithreaded sampling. "
-                "When using prefetch, the batch-size must be specified in "
-                "advance. "
+    def _init(self) -> None:
+        """Initialize the replay buffer components.
+
+        This method is called either immediately during __init__ (if delayed_init=False)
+        or on first use of the buffer (if delayed_init=True).
+        """
+        if self._initialized:
+            return
+
+        self._initialized = True
+        try:
+            # Initialize storage
+            self._storage = self._maybe_make_storage(
+                self._init_storage, compilable=self._init_compilable
             )
-        if (
-            batch_size is None
-            and hasattr(self._sampler, "drop_last")
-            and self._sampler.drop_last
-        ):
-            raise ValueError(
-                "Samplers with drop_last=True must work with a predictable batch-size. "
-                "Please pass the batch-size to the ReplayBuffer constructor."
+            self._storage.attach(self)
+
+            # Initialize sampler
+            self._sampler = self._maybe_make_sampler(self._init_sampler)
+
+            # Initialize writer
+            self._writer = self._maybe_make_writer(self._init_writer)
+            self._writer.register_storage(self._storage)
+
+            # Initialize collate function
+            self._get_collate_fn(self._init_collate_fn)
+
+            # Initialize transform
+            self._transform = self._maybe_make_transform(
+                self._init_transform, self._init_transform_factory
             )
-        self._batch_size = batch_size
-        if dim_extend is not None and dim_extend < 0:
-            raise ValueError("dim_extend must be a positive value.")
-        self.dim_extend = dim_extend
-        self._storage.checkpointer = checkpointer
-        self.set_rng(generator=generator)
+
+            # Check batch_size compatibility with sampler
+            if (
+                self._batch_size is None
+                and hasattr(self._sampler, "drop_last")
+                and self._sampler.drop_last
+            ):
+                raise ValueError(
+                    "Samplers with drop_last=True must work with a predictable batch-size. "
+                    "Please pass the batch-size to the ReplayBuffer constructor."
+                )
+
+            # Set dim_extend properly now that storage is initialized
+            if self._dim_extend is None:
+                if self._storage is not None:
+                    ndim = self._storage.ndim
+                    self._dim_extend = ndim - 1
+                else:
+                    self._dim_extend = 1
+
+            # Set checkpointer and generator
+            self._storage.checkpointer = self._init_checkpointer
+            self.set_rng(generator=self._init_generator)
+
+            # Initialize prioritized sampler if needed
+            self._initialize_prioritized_sampler()
+
+            # Remove init parameters
+            self._init_storage = None
+            self._init_sampler = None
+            self._init_writer = None
+            self._init_collate_fn = None
+            self._init_transform = None
+            self._init_transform_factory = None
+            self._init_checkpointer = None
+            self._init_generator = None
+            self._init_compilable = None
+        except Exception as e:
+            self._initialized = False
+            raise e
+
+    @property
+    def initialized(self) -> bool:
+        """Whether the replay buffer has been initialized."""
+        return self._initialized
+
+    def _initialize_prioritized_sampler(self) -> None:
+        """Initialize priority trees for existing data when using PrioritizedSampler.
+
+        This method ensures that when a PrioritizedSampler is used with storage that
+        already contains data, the priority trees are properly populated with default
+        priorities for all existing entries.
+        """
+        from .samplers import PrioritizedSampler
+
+        if isinstance(self._sampler, PrioritizedSampler) and len(self._storage) > 0:
+            # Set default priorities for all existing data
+            device = getattr(self._storage, "device", None)
+            if device == "auto":
+                device = None
+            indices = torch.arange(len(self._storage), dtype=torch.long, device=device)
+            default_priorities = torch.full(
+                (len(self._storage),),
+                self._sampler.default_priority,
+                dtype=torch.float,
+                device=device,
+            )
+            self._sampler.update_priority(
+                indices, default_priorities, storage=self._storage
+            )
 
     def _maybe_make_storage(
         self, storage: Storage | Callable[[], Storage] | None, compilable
@@ -366,14 +528,16 @@ class ReplayBuffer:
         transform.eval()
         return transform
 
-    def share(self, shared: bool = True):
+    def share(self, shared: bool = True) -> Self:
         self.shared = shared
         if self.shared:
             self._write_lock = multiprocessing.Lock()
         else:
             self._write_lock = contextlib.nullcontext()
+        return self
 
-    def set_rng(self, generator):
+    @_maybe_delay_init
+    def set_rng(self, generator) -> None:
         self._rng = generator
         self._storage._rng = generator
         self._sampler._rng = generator
@@ -387,7 +551,7 @@ class ReplayBuffer:
     def batch_size(self):
         """The batch size of the replay buffer.
 
-        The batch size can be overriden by setting the `batch_size` parameter in the :meth:`sample` method.
+        The batch size can be overridden by setting the `batch_size` parameter in the :meth:`sample` method.
 
         It defines both the number of samples returned by :meth:`sample` and the number of samples that are
         yielded by the :class:`ReplayBuffer` iterator.
@@ -406,7 +570,7 @@ class ReplayBuffer:
             )
 
         if value is None:
-            if self._storage is not None:
+            if self._initialized and self._storage is not None:
                 ndim = self._storage.ndim
                 value = ndim - 1
             else:
@@ -428,6 +592,7 @@ class ReplayBuffer:
             )
         )
 
+    @_maybe_delay_init
     def set_storage(self, storage: Storage, collate_fn: Callable | None = None):
         """Sets a new storage in the replay buffer and returns the previous storage.
 
@@ -443,6 +608,7 @@ class ReplayBuffer:
 
         return prev_storage
 
+    @_maybe_delay_init
     def set_writer(self, writer: Writer):
         """Sets a new writer in the replay buffer and returns the previous writer."""
         prev_writer = self._writer
@@ -450,12 +616,14 @@ class ReplayBuffer:
         self._writer.register_storage(self._storage)
         return prev_writer
 
+    @_maybe_delay_init
     def set_sampler(self, sampler: Sampler):
         """Sets a new sampler in the replay buffer and returns the previous sampler."""
         prev_sampler = self._sampler
         self._sampler = sampler
         return prev_sampler
 
+    @_maybe_delay_init
     def __len__(self) -> int:
         with self._replay_lock:
             return len(self._storage)
@@ -470,7 +638,8 @@ class ReplayBuffer:
         return None  # explicit return for remote calls
 
     @property
-    def write_count(self):
+    @_maybe_delay_init
+    def write_count(self) -> int:
         """The total number of items written so far in the buffer through add and extend."""
         return self._writer._write_count
 
@@ -498,6 +667,7 @@ class ReplayBuffer:
         )
         return f"{self.__class__.__name__}(\n{storage}, \n{sampler}, \n{writer}, {transform}\n{batch_size}, \n{collate_fn})"
 
+    @_maybe_delay_init
     @pin_memory_output
     def __getitem__(self, index: int | torch.Tensor | NestedKey) -> Any:
         if isinstance(index, str) or (isinstance(index, tuple) and unravel_key(index)):
@@ -529,6 +699,7 @@ class ReplayBuffer:
 
         return data
 
+    @_maybe_delay_init
     def __setitem__(self, index, value) -> None:
         if isinstance(index, str) or (isinstance(index, tuple) and unravel_key(index)):
             self[:][index] = value
@@ -553,6 +724,64 @@ class ReplayBuffer:
                 self._storage[index] = value
         return
 
+    @_maybe_delay_init
+    def set_at_(self, key, value, index):
+        """Sets the value of a key at specified indices in the replay buffer.
+
+        Args:
+            key (NestedKey): the key to set.
+            value (torch.Tensor): the value to write.
+            index: the indices where to write the value.
+
+        Returns:
+            self
+
+        """
+        index = _to_numpy(index)
+        with self._replay_lock:
+            self._storage[:].set_at_(key, value, index)
+        return self
+
+    @_maybe_delay_init
+    def set_(self, key, value):
+        """Sets the value of a key across the entire replay buffer in-place.
+
+        Args:
+            key (NestedKey): the key to set.
+            value (torch.Tensor): the value to write.
+
+        Returns:
+            self
+
+        """
+        with self._replay_lock:
+            self._storage[:].set_(key, value)
+        return self
+
+    @_maybe_delay_init
+    def update_(self, input_dict_or_td, clone=False, *, keys_to_update=None):
+        """Updates the replay buffer in-place with the given dict or TensorDict.
+
+        Args:
+            input_dict_or_td (dict or TensorDictBase): the data to update with.
+            clone (bool, optional): whether to clone the values before writing.
+                Defaults to ``False``.
+            keys_to_update (sequence of NestedKey, optional): if provided, only
+                these keys will be updated.
+
+        Returns:
+            self
+
+        """
+        with self._replay_lock:
+            self._storage[:].update_(
+                input_dict_or_td,
+                clone=clone,
+                keys_to_update=keys_to_update,
+            )
+        return self
+
+    @_maybe_delay_init
     def state_dict(self) -> dict[str, Any]:
         return {
             "_storage": self._storage.state_dict(),
@@ -565,6 +794,7 @@ class ReplayBuffer:
             else None,
         }
 
+    @_maybe_delay_init
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         self._storage.load_state_dict(state_dict["_storage"])
         self._sampler.load_state_dict(state_dict["_sampler"])
@@ -578,6 +808,7 @@ class ReplayBuffer:
             rng.set_state(state)
             self.set_rng(generator=rng)
 
+    @_maybe_delay_init
     def dumps(self, path):
         """Saves the replay buffer on disk at the specified path.
 
@@ -634,6 +865,7 @@ class ReplayBuffer:
         with open(path / "buffer_metadata.json", "w") as file:
             json.dump({"batch_size": self._batch_size}, file)
 
+    @_maybe_delay_init
     def loads(self, path):
         """Loads a replay buffer state at the given path.
 
@@ -661,18 +893,22 @@ class ReplayBuffer:
             metadata = json.load(file)
         self._batch_size = metadata["batch_size"]
 
+    @_maybe_delay_init
     def save(self, *args, **kwargs):
         """Alias for :meth:`dumps`."""
         return self.dumps(*args, **kwargs)
 
+    @_maybe_delay_init
     def dump(self, *args, **kwargs):
         """Alias for :meth:`dumps`."""
         return self.dumps(*args, **kwargs)
 
+    @_maybe_delay_init
     def load(self, *args, **kwargs):
         """Alias for :meth:`loads`."""
         return self.loads(*args, **kwargs)
 
+    @_maybe_delay_init
     def register_save_hook(self, hook: Callable[[Any], Any]):
         """Registers a save hook for the storage.
 
@@ -682,6 +918,7 @@ class ReplayBuffer:
         """
         self._storage.register_save_hook(hook)
 
+    @_maybe_delay_init
     def register_load_hook(self, hook: Callable[[Any], Any]):
         """Registers a load hook for the storage.
 
@@ -691,6 +928,7 @@ class ReplayBuffer:
         """
         self._storage.register_load_hook(hook)
 
+    @_maybe_delay_init
     def add(self, data: Any) -> int:
         """Add a single element to the replay buffer.
 
@@ -719,6 +957,13 @@ class ReplayBuffer:
                     data = None
         if data is None:
             return torch.zeros((0, self._storage.ndim), dtype=torch.long)
+        if rl_warnings() and is_tensor_collection(data) and data.ndim:
+            warnings.warn(
+                f"Using `add()` with a TensorDict that has batch_size={data.batch_size}. "
+                f"Use `extend()` to add multiple elements, or `add()` with a single element (batch_size=torch.Size([])). "
+                "You can silence this warning by setting the `RL_WARNINGS` environment variable to `'0'`."
+            )
+
         return self._add(data)
 
     def _add(self, data):
@@ -737,6 +982,7 @@ class ReplayBuffer:
             self._sampler.extend(index)
         return index
 
+    @_maybe_delay_init
     def extend(
         self, data: Sequence, *, update_priority: bool | None = None
     ) -> torch.Tensor:
@@ -777,6 +1023,7 @@ class ReplayBuffer:
             return torch.zeros((0, self._storage.ndim), dtype=torch.long)
         return self._extend(data, update_priority=update_priority)
 
+    @_maybe_delay_init
     def update_priority(
         self,
         index: int | torch.Tensor | tuple[torch.Tensor],
@@ -793,10 +1040,12 @@ class ReplayBuffer:
 
     @pin_memory_output
     def _sample(self, batch_size: int) -> tuple[Any, dict]:
-        with self._replay_lock if not is_compiling() else contextlib.nullcontext():
+        is_comp = is_compiling()
+        nc = contextlib.nullcontext()
+        with self._replay_lock if not is_comp else nc, self._write_lock if not is_comp else nc:
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
-            data = self._storage.get(index)
+            data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
         if self._transform is not None and len(self._transform):
@@ -808,6 +1057,7 @@ class ReplayBuffer:
 
         return data, info
 
+    @_maybe_delay_init
     def empty(self, empty_write_count: bool = True):
         """Empties the replay buffer and reset cursor to 0.
 
@@ -818,6 +1068,7 @@ class ReplayBuffer:
         self._sampler._empty()
         self._storage._empty()
 
+    @_maybe_delay_init
     def sample(self, batch_size: int | None = None, return_info: bool = False) -> Any:
         """Samples a batch of data from the replay buffer.
 
@@ -876,9 +1127,11 @@ class ReplayBuffer:
             return out, info
         return result[0]
 
+    @_maybe_delay_init
     def mark_update(self, index: int | torch.Tensor) -> None:
         self._sampler.mark_update(index, storage=self._storage)
 
+    @_maybe_delay_init
     def append_transform(
         self, transform: Transform, *, invert: bool = False  # noqa-F821
     ) -> ReplayBuffer:  # noqa: D417
@@ -914,6 +1167,7 @@ class ReplayBuffer:
         self._transform.append(transform)
         return self
 
+    @_maybe_delay_init
     def insert_transform(
         self,
         index: int,
@@ -942,6 +1196,7 @@ class ReplayBuffer:
 
     _iterator = None
 
+    @_maybe_delay_init
     def next(self):
         """Returns the next item in the replay buffer.
 
@@ -960,6 +1215,7 @@ class ReplayBuffer:
             self._iterator = None
             return None
 
+    @_maybe_delay_init
     def __iter__(self):
         if self._sampler.ran_out:
             self._sampler.ran_out = False
@@ -973,6 +1229,7 @@ class ReplayBuffer:
         ):
             yield self.sample()
 
+    @_maybe_delay_init
     def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
         if getattr(self, "_rng", None) is not None:
@@ -987,6 +1244,13 @@ class ReplayBuffer:
             state["_replay_lock_placeholder"] = None
         if _futures_lock is not None:
             state["_futures_lock_placeholder"] = None
+        # Remove non-picklable prefetch objects - they will be recreated on unpickle
+        _prefetch_queue = state.pop("_prefetch_queue", None)
+        _prefetch_executor = state.pop("_prefetch_executor", None)
+        if _prefetch_queue is not None:
+            state["_prefetch_queue_placeholder"] = None
+        if _prefetch_executor is not None:
+            state["_prefetch_executor_placeholder"] = None
         return state
 
     def __setstate__(self, state: dict[str, Any]):
@@ -1005,12 +1269,22 @@ class ReplayBuffer:
             state.pop("_futures_lock_placeholder")
             _futures_lock = threading.RLock()
             state["_futures_lock"] = _futures_lock
+        # Recreate prefetch objects after unpickling if they were present
+        if "_prefetch_queue_placeholder" in state:
+            state.pop("_prefetch_queue_placeholder")
+            state["_prefetch_queue"] = collections.deque()
+        if "_prefetch_executor_placeholder" in state:
+            state.pop("_prefetch_executor_placeholder")
+            state["_prefetch_executor"] = ThreadPoolExecutor(
+                max_workers=state["_prefetch_cap"]
+            )
         self.__dict__.update(state)
         if rngstate is not None:
             self.set_rng(rng)
 
     @property
-    def sampler(self):
+    @_maybe_delay_init
+    def sampler(self) -> Sampler:
         """The sampler of the replay buffer.
 
         The sampler must be an instance of :class:`~torchrl.data.replay_buffers.Sampler`.
@@ -1019,7 +1293,8 @@ class ReplayBuffer:
         return self._sampler
 
     @property
-    def writer(self):
+    @_maybe_delay_init
+    def writer(self) -> Writer:
         """The writer of the replay buffer.
 
         The writer must be an instance of :class:`~torchrl.data.replay_buffers.Writer`.
@@ -1028,13 +1303,23 @@ class ReplayBuffer:
         return self._writer
 
     @property
-    def storage(self):
+    @_maybe_delay_init
+    def storage(self) -> Storage:
         """The storage of the replay buffer.
 
         The storage must be an instance of :class:`~torchrl.data.replay_buffers.Storage`.
 
         """
         return self._storage
+
+    @property
+    @_maybe_delay_init
+    def transform(self) -> Transform:
+        """The transform of the replay buffer.
+
+        The transform must be an instance of :class:`~torchrl.envs.transforms.Transform`.
+        """
+        return self._transform
 
 
 class PrioritizedReplayBuffer(ReplayBuffer):
@@ -1057,6 +1342,10 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         sampler (Sampler, optional): the sampler to be used. If none is provided,
             a default :class:`~torchrl.data.replay_buffers.PrioritizedSampler` with
             ``alpha``, ``beta``, and ``eps`` will be created.
+        sampler_device (torch.device or str, optional): device where the
+            priority sampler trees will be stored. Defaults to ``None``, in
+            which case CUDA storage selects CUDA sampling and CPU storage
+            selects CPU sampling. Cannot be used together with ``sampler``.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
             loading from a map-style dataset. The default value will be decided
@@ -1092,6 +1381,11 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             multi-dimensional and keep consistent notions of storage-capacity
             and batch-size during sampling.
 
+            .. important:: When using a collector with ``trajs_per_batch``,
+                trajectories are written as flat 1-D sequences of variable
+                length.  Do not set ``dim_extend > 0`` or ``ndim >= 2`` in
+                this case — the storage must be 1-dimensional.
+
             .. note:: This argument has no effect on :meth:`add` and
                 therefore should be used with caution when both :meth:`add`
                 and :meth:`extend` are used in a codebase. For example:
@@ -1104,6 +1398,13 @@ class PrioritizedReplayBuffer(ReplayBuffer):
                     >>> for d in data.unbind(1):
                     ...     rb.add(d)
                     >>> rb.extend(data)
+
+        delayed_init (bool, optional): whether to initialize storage, writer, sampler and transform
+            the first time the buffer is used rather than during construction.
+            This is useful when the replay buffer needs to be pickled and sent to remote workers,
+            particularly when using transforms with modules that require gradients.
+            If not specified, defaults to ``True`` when ``transform_factory`` is provided,
+            and ``False`` otherwise.
 
     .. note::
         Generic prioritized replay buffers (ie. non-tensordict backed) require
@@ -1129,14 +1430,14 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         >>> # get the info to find what the indices are
         >>> sample, info = rb.sample(5, return_info=True)
         >>> print(sample, info)
-        tensor([2, 7, 4, 3, 5]) {'_weight': array([1., 1., 1., 1., 1.], dtype=float32), 'index': array([2, 7, 4, 3, 5])}
+        tensor([2, 7, 4, 3, 5]) {'priority_weight': array([1., 1., 1., 1., 1.], dtype=float32), 'index': array([2, 7, 4, 3, 5])}
         >>> # update priority
         >>> priority = torch.ones(5) * 5
         >>> rb.update_priority(info["index"], priority)
         >>> # and now a new sample, the weights should be updated
         >>> sample, info = rb.sample(5, return_info=True)
         >>> print(sample, info)
-        tensor([2, 5, 2, 2, 5]) {'_weight': array([0.36278465, 0.36278465, 0.36278465, 0.36278465, 0.36278465],
+        tensor([2, 5, 2, 2, 5]) {'priority_weight': array([0.36278465, 0.36278465, 0.36278465, 0.36278465, 0.36278465],
               dtype=float32), 'index': array([2, 5, 2, 2, 5])}
 
     """
@@ -1150,17 +1451,23 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         dtype: torch.dtype = torch.float,
         storage: Storage | None = None,
         sampler: Sampler | None = None,
+        sampler_device: DEVICE_TYPING | None = None,
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
         transform: Transform | None = None,  # noqa-F821
         batch_size: int | None = None,
         dim_extend: int | None = None,
+        delayed_init: bool = False,
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
         if sampler is None:
-            sampler = PrioritizedSampler(storage.max_size, alpha, beta, eps, dtype)
+            sampler = PrioritizedSampler(
+                storage.max_size, alpha, beta, eps, dtype, device=sampler_device
+            )
+        elif sampler_device is not None:
+            raise TypeError("sampler_device cannot be passed when sampler is provided.")
         super().__init__(
             storage=storage,
             sampler=sampler,
@@ -1170,6 +1477,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             transform=transform,
             batch_size=batch_size,
             dim_extend=dim_extend,
+            delayed_init=delayed_init,
         )
 
 
@@ -1259,6 +1567,12 @@ class TensorDictReplayBuffer(ReplayBuffer):
         compilable (bool, optional): whether the writer is compilable.
             If ``True``, the writer cannot be shared between multiple processes.
             Defaults to ``False``.
+        delayed_init (bool, optional): whether to initialize storage, writer, sampler and transform
+            the first time the buffer is used rather than during construction.
+            This is useful when the replay buffer needs to be pickled and sent to remote workers,
+            particularly when using transforms with modules that require gradients.
+            If not specified, defaults to ``True`` when ``transform_factory`` is provided,
+            and ``False`` otherwise.
 
     Examples:
         >>> import torch
@@ -1376,6 +1690,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
         return priority
 
+    @_maybe_delay_init
     def add(self, data: TensorDictBase) -> int:
         if self._transform is not None:
             with _set_dispatch_td_nn_modules(is_tensor_collection(data)):
@@ -1391,6 +1706,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
             self.update_tensordict_priority(data)
         return index
 
+    @_maybe_delay_init
     def extend(
         self, tensordicts: TensorDictBase, *, update_priority: bool | None = None
     ) -> torch.Tensor:
@@ -1441,7 +1757,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         if _is_int(index):
             index = torch.as_tensor(index, device=tensordict.device)
         elif index.ndim == 2 and index.shape[:1] != tensordict.shape[:1]:
-            for dim in range(2, tensordict.ndim + 1):
+            for dim in range(tensordict.ndim, 1, -1):
                 if index.shape[:1].numel() == tensordict.shape[:dim].numel():
                     # if index has 2 dims and is in a non-zero format
                     index = index.unflatten(0, tensordict.shape[:dim])
@@ -1454,6 +1770,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
             return
         tensordict.set("index", expand_as_right(index, tensordict))
 
+    @_maybe_delay_init
     def update_tensordict_priority(self, data: TensorDictBase) -> None:
         if not isinstance(self._sampler, PrioritizedSampler):
             return
@@ -1531,10 +1848,12 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
     @pin_memory_output
     def _sample(self, batch_size: int) -> tuple[Any, dict]:
-        with self._replay_lock if not is_compiling() else contextlib.nullcontext():
+        is_comp = is_compiling()
+        nc = contextlib.nullcontext()
+        with self._replay_lock if not is_comp else nc, self._write_lock if not is_comp else nc:
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
-            data = self._storage.get(index)
+            data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
         if self._transform is not None and len(self._transform):
@@ -1598,6 +1917,10 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             This is to be used when the sampler is of type
             :class:`~torchrl.data.PrioritizedSampler`.
             Defaults to ``"td_error"``.
+        sampler_device (torch.device or str, optional): device where the
+            priority sampler trees will be stored. Defaults to ``None``, in
+            which case CUDA storage selects CUDA sampling and CPU storage
+            selects CPU sampling.
         reduction (str, optional): the reduction method for multidimensional
             tensordicts (ie stored trajectories). Can be one of "max", "min",
             "median" or "mean".
@@ -1634,6 +1957,12 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         compilable (bool, optional): whether the writer is compilable.
             If ``True``, the writer cannot be shared between multiple processes.
             Defaults to ``False``.
+        delayed_init (bool, optional): whether to initialize storage, writer, sampler and transform
+            the first time the buffer is used rather than during construction.
+            This is useful when the replay buffer needs to be pickled and sent to remote workers,
+            particularly when using transforms with modules that require gradients.
+            If not specified, defaults to ``True`` when ``transform_factory`` is provided,
+            and ``False`` otherwise.
 
     Examples:
         >>> import torch
@@ -1652,7 +1981,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         >>> print(sample)
         TensorDict(
             fields={
-                _weight: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.float32, is_shared=False),
+                priority_weight: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.float32, is_shared=False),
                 a: Tensor(shape=torch.Size([5, 3]), device=cpu, dtype=torch.float32, is_shared=False),
                 b: TensorDict(
                     fields={
@@ -1675,7 +2004,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         >>> print(sample)
         TensorDict(
             fields={
-                _weight: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.float32, is_shared=False),
+                priority_weight: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.float32, is_shared=False),
                 a: Tensor(shape=torch.Size([5, 3]), device=cpu, dtype=torch.float32, is_shared=False),
                 b: TensorDict(
                     fields={
@@ -1700,6 +2029,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         priority_key: str = "td_error",
         eps: float = 1e-8,
         storage: Storage | None = None,
+        sampler_device: DEVICE_TYPING | None = None,
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
@@ -1713,7 +2043,12 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
     ) -> None:
         storage = self._maybe_make_storage(storage, compilable=compilable)
         sampler = PrioritizedSampler(
-            storage.max_size, alpha, beta, eps, reduction=reduction
+            storage.max_size,
+            alpha,
+            beta,
+            eps,
+            reduction=reduction,
+            device=sampler_device,
         )
         super().__init__(
             priority_key=priority_key,
@@ -1864,6 +2199,12 @@ class ReplayBufferEnsemble(ReplayBuffer):
 
         shared (bool, optional): whether the buffer will be shared using multiprocessing or not.
             Defaults to ``False``.
+        delayed_init (bool, optional): whether to initialize storage, writer, sampler and transform
+            the first time the buffer is used rather than during construction.
+            This is useful when the replay buffer needs to be pickled and sent to remote workers,
+            particularly when using transforms with modules that require gradients.
+            If not specified, defaults to ``True`` when ``transform_factory`` is provided,
+            and ``False`` otherwise.
 
     Examples:
         >>> from torchrl.envs import Compose, ToTensorImage, Resize, RenameTransform
@@ -1964,6 +2305,14 @@ class ReplayBufferEnsemble(ReplayBuffer):
         if rbs:
             if storages is not None or samplers is not None or writers is not None:
                 raise RuntimeError
+            # Ensure all replay buffers are initialized before creating ensemble
+            for rb in rbs:
+                if (
+                    hasattr(rb, "_delayed_init")
+                    and rb._delayed_init
+                    and not rb.initialized
+                ):
+                    rb._init()
             storages = StorageEnsemble(
                 *[rb._storage for rb in rbs], transforms=[rb._transform for rb in rbs]
             )

@@ -4,9 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from enum import Enum
 from functools import wraps
-from typing import Sequence
 
 import torch
 import torch.distributions as D
@@ -73,8 +74,8 @@ class OneHotCategorical(D.Categorical):
         grad_method (ReparamGradientStrategy, optional): strategy to gather
             reparameterized samples.
             ``ReparamGradientStrategy.PassThrough`` will compute the sample gradients
-             by using the softmax valued log-probability as a proxy to the
-             sample gradients.
+            by using the softmax valued log-probability as a proxy to the
+            sample gradients.
             ``ReparamGradientStrategy.RelaxedOneHot`` will use
             :class:`torch.distributions.RelaxedOneHot` to sample from the distribution.
 
@@ -621,7 +622,7 @@ class Ordinal(D.Categorical):
     not impose any notion of proximity or ordering over its support's atoms.
     The `Ordinal` distribution explicitly encodes those concepts, which is
     useful for learning discrete sampling from continuous sets. See §5 of
-    `Tang & Agrawal, 2020<https://arxiv.org/pdf/1901.10500.pdf>`_ for details.
+    `Tang & Agrawal, 2020 <https://arxiv.org/pdf/1901.10500.pdf>`_ for details.
 
     .. note::
         This class is mostly useful when you want to learn a distribution over
@@ -804,7 +805,16 @@ class LLMMaskedCategorical(D.Distribution):
     def _sampling_dist(self):
         """Get masked distribution for sampling operations."""
         if self._masked_dist is None:
-            self._masked_dist = D.Categorical(logits=self._sampling_logits)
+            logits = self._sampling_logits
+            # Replace inf/NaN to prevent softmax → multinomial crashes
+            if not logits.isfinite().all():
+                logits = torch.nan_to_num(
+                    logits,
+                    nan=0.0,
+                    posinf=1e4,
+                    neginf=-1e4,
+                )
+            self._masked_dist = D.Categorical(logits=logits)
         return self._masked_dist
 
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:

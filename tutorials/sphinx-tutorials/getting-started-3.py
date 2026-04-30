@@ -42,7 +42,7 @@ import tempfile
 #
 #
 # The primary data collector discussed here is the
-# :class:`~torchrl.collectors.SyncDataCollector`, which is the focus of this
+# :class:`~torchrl.collectors.Collector`, which is the focus of this
 # documentation. At a fundamental level, a collector is a straightforward
 # class responsible for executing your policy within the environment,
 # resetting the environment when necessary, and providing batches of a
@@ -58,9 +58,9 @@ import tempfile
 
 import torch
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.envs import GymEnv
-from torchrl.envs.utils import RandomPolicy
+from torchrl.modules import RandomPolicy
 
 torch.manual_seed(0)
 
@@ -68,7 +68,7 @@ env = GymEnv("CartPole-v1")
 env.set_seed(0)
 
 policy = RandomPolicy(env.action_spec)
-collector = SyncDataCollector(env, policy, frames_per_batch=200, total_frames=-1)
+collector = Collector(env, policy, frames_per_batch=200, total_frames=-1)
 
 #################################
 # We now expect that our collector will deliver batches of size ``200`` no
@@ -100,7 +100,7 @@ print(data["collector", "traj_ids"])
 # the environment (the ``total_frames`` argument in the collector).
 # For this reason, most training loops in our examples look like this:
 #
-#   ..code - block::Python
+#   .. code-block:: python
 #
 #     >>> for data in collector:
 #     ...     # your algorithm here
@@ -116,7 +116,7 @@ print(data["collector", "traj_ids"])
 # temporarily and cleared after a little while given some heuristic:
 # first-in first-out or other. A typical pseudo-code would look like this:
 #
-# ..code - block::Python
+# .. code-block:: python
 #
 #   >>> for data in collector:
 #   ...     storage.store(data)
@@ -181,8 +181,8 @@ print(sample)
 # ----------
 #
 # - You can have look at other multiprocessed
-#   collectors such as :class:`~torchrl.collectors.collectors.MultiSyncDataCollector` or
-#   :class:`~torchrl.collectors.collectors.MultiaSyncDataCollector`.
+#   collectors such as :class:`~torchrl.collectors.MultiSyncCollector` or
+#   :class:`~torchrl.collectors.MultiAsyncCollector`.
 # - TorchRL also offers distributed collectors if you have multiple nodes to
 #   use for inference. Check them out in the
 #   :ref:`API reference <ref_collectors>`.
@@ -195,6 +195,11 @@ print(sample)
 #   simplicity. Try it out for yourself: build a buffer and indicate its
 #   batch-size in the constructor, then try to iterate over it. This is
 #   equivalent to calling ``rb.sample()`` within a loop!
+# - For trajectory-based training (recurrent policies, decision transformers),
+#   see :ref:`collectors_replay_trajs` — it shows how to use
+#   ``trajs_per_batch`` with a :class:`~torchrl.data.SliceSampler` to store
+#   and sample clean trajectory slices from the replay buffer, especially
+#   with multi-process collectors.
 #
 
 # sphinx_gallery_start_ignore

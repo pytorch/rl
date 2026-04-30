@@ -33,6 +33,7 @@ from torchrl.objectives.value import (
     TD0Estimator,
     TD1Estimator,
     TDLambdaEstimator,
+    ValueEstimatorBase,
     VTrace,
 )
 
@@ -227,6 +228,7 @@ class ReinforceLoss(LossModule):
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.GAE
+    _schedulable_buffers = frozenset({"clip_value"})
     out_keys = ["loss_actor", "loss_value"]
 
     actor_network: TensorDictModule
@@ -249,13 +251,13 @@ class ReinforceLoss(LossModule):
         delay_value: bool = False,
         loss_critic_type: str = "smooth_l1",
         gamma: float | None = None,
-        advantage_key: str = None,
-        value_target_key: str = None,
+        advantage_key: str | None = None,
+        value_target_key: str | None = None,
         separate_losses: bool = False,
         functional: bool = True,
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
-        reduction: str = None,
+        reduction: str | None = None,
         clip_value: float | None = None,
     ) -> None:
         if actor is not None:
@@ -478,6 +480,13 @@ class ReinforceLoss(LossModule):
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
+
+        # Handle ValueEstimatorBase instance or class
+        if isinstance(value_type, ValueEstimatorBase) or (
+            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
+        ):
+            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+
         self.value_type = value_type
         hp = dict(default_value_kwargs(value_type))
         if hasattr(self, "gamma"):

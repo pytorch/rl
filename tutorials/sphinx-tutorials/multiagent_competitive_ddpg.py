@@ -111,7 +111,7 @@ from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import multiprocessing
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyMemmapStorage, RandomSampler, ReplayBuffer
 
 from torchrl.envs import (
@@ -415,7 +415,7 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 # Another important decision we need to make is whether we want the agents within a team to **share the policy parameters**.
 # On the one hand, sharing parameters means that they will all share the same policy, which will allow them to benefit from
 # each other's experiences. This will also result in faster training.
-# On the other hand, it will make them behaviorally *homogenous*, as they will in fact share the same model.
+# On the other hand, it will make them behaviorally *homogeneous*, as they will in fact share the same model.
 # For this example, we will enable sharing as we do not mind the homogeneity and can benefit from the computational
 # speed, but it is important to always think about this decision in your own problems!
 #
@@ -639,7 +639,7 @@ for group, _agents in env.group_map.items():
 # Put exploration policies from each group in a sequence
 agents_exploration_policy = TensorDictSequential(*exploration_policies.values())
 
-collector = SyncDataCollector(
+collector = Collector(
     env,
     agents_exploration_policy,
     device=device,

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-import os
 
 import pytest
 import torch
@@ -33,12 +32,8 @@ from torchrl.modules.tensordict_module.actors import (
     ValueOperator,
 )
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import get_default_devices
-    from pytorch.rl.test.mocking_classes import NestedCountingEnv
-else:
-    from _utils_internal import get_default_devices
-    from mocking_classes import NestedCountingEnv
+from torchrl.testing import get_default_devices
+from torchrl.testing.mocking_classes import NestedCountingEnv
 
 _has_vllm = importlib.util.find_spec("vllm") is not None
 
@@ -648,6 +643,70 @@ class TestQValue:
             assert not (td.get("action")[~action_mask]).any()
         else:
             assert action_mask.gather(-1, td.get("action").unsqueeze(-1)).all()
+
+    def test_qvalue_actor_strict_shape_auto(self):
+        """Test that strict_shape='auto' reshapes action to match spec (issue #3059)."""
+        action_spec = Categorical(4, shape=torch.Size((1, 1)), dtype=torch.int64)
+        module = TensorDictModule(
+            module=nn.Linear(3, 1), in_keys=("observation",), out_keys=("action_value",)
+        )
+        qvalue_actor = QValueActor(
+            module=module,
+            in_keys=["observation"],
+            spec=action_spec,
+            strict_shape="auto",
+        )
+        td = TensorDict({"observation": torch.randn(12, 3)})
+        qvalue_actor(td)
+        assert td["action"].shape == torch.Size([12, 1])
+
+    def test_qvalue_actor_strict_shape_true_raises(self):
+        """Test that strict_shape=True raises on shape mismatch."""
+        action_spec = Categorical(4, shape=torch.Size((1, 1)), dtype=torch.int64)
+        module = TensorDictModule(
+            module=nn.Linear(3, 1), in_keys=("observation",), out_keys=("action_value",)
+        )
+        qvalue_actor = QValueActor(
+            module=module, in_keys=["observation"], spec=action_spec, strict_shape=True
+        )
+        td = TensorDict({"observation": torch.randn(12, 3)})
+        with pytest.raises(RuntimeError, match="does not match expected shape"):
+            qvalue_actor(td)
+
+    def test_qvalue_actor_strict_shape_none_warns(self):
+        """Test that strict_shape=None (default) issues FutureWarning."""
+        action_spec = Categorical(4, shape=torch.Size((1, 1)), dtype=torch.int64)
+        module = TensorDictModule(
+            module=nn.Linear(3, 1), in_keys=("observation",), out_keys=("action_value",)
+        )
+        qvalue_actor = QValueActor(
+            module=module, in_keys=["observation"], spec=action_spec
+        )
+        td = TensorDict({"observation": torch.randn(12, 3)})
+        with pytest.warns(FutureWarning, match="does not match expected shape"):
+            qvalue_actor(td)
+
+    def test_qvalue_actor_strict_shape_normal_no_warning(self):
+        """Test that matching shapes produce no warning even with strict_shape='auto'."""
+        import warnings
+
+        action_spec = OneHot(4)
+        module = TensorDictModule(
+            module=nn.Linear(3, 4), in_keys=("observation",), out_keys=("action_value",)
+        )
+        qvalue_actor = QValueActor(
+            module=module,
+            in_keys=["observation"],
+            spec=action_spec,
+            strict_shape="auto",
+        )
+        td = TensorDict({"observation": torch.randn(5, 3)})
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            qvalue_actor(td)
+            future_warns = [x for x in w if issubclass(x.category, FutureWarning)]
+            assert len(future_warns) == 0
+        assert td["action"].shape == torch.Size([5, 4])
 
 
 @pytest.mark.parametrize("device", get_default_devices())

@@ -91,23 +91,13 @@ from tensordict.nn import TensorDictSequential
 
 warnings.filterwarnings("ignore")
 
+# Set multiprocessing start method to fork if not already set
+# This allows the tutorial to run as a script without if __name__ == "__main__"
 from torch import multiprocessing
 
-# TorchRL prefers spawn method, that restricts creation of  ``~torchrl.envs.ParallelEnv`` inside
-# `__main__` method call, but for the easy of reading the code switch to fork
-# which is also a default spawn method in Google's Colaboratory
-try:
-    is_sphinx = __sphinx_build__
-except NameError:
-    is_sphinx = False
-
-try:
-    multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
-    mp_context = "fork"
-except RuntimeError:
-    # If we can't set the method globally we can still run the parallel env with "fork"
-    # This will fail on windows! Use "spawn" and put the script within `if __name__ == "__main__"`
-    mp_context = "fork"
+if multiprocessing.get_start_method(allow_none=True) is None:
+    multiprocessing.set_start_method("fork")
+mp_context = multiprocessing.get_start_method()
 
 # sphinx_gallery_end_ignore
 import os
@@ -115,7 +105,7 @@ import uuid
 
 import torch
 from torch import nn
-from torchrl.collectors import MultiaSyncDataCollector, SyncDataCollector
+from torchrl.collectors import Collector, MultiAsyncCollector
 from torchrl.data import LazyMemmapStorage, MultiStep, TensorDictReplayBuffer
 from torchrl.envs import (
     EnvCreator,
@@ -408,7 +398,7 @@ def get_replay_buffer(buffer_size, n_optim, batch_size, device):
 #   This feature is only available when running the code within the "spawn"
 #   start method of python multiprocessing library. If this tutorial is run
 #   directly as a script (thereby using the "fork" method) we will be using
-#   a regular :class:`~torchrl.collectors.SyncDataCollector`.
+#   a regular :class:`~torchrl.collectors.Collector`.
 #
 # The advantage of this configuration is that we can balance the amount of
 # compute that is executed in batch with what we want to be executed
@@ -440,10 +430,10 @@ def get_collector(
 ):
     # We can't use nested child processes with mp_start_method="fork"
     if is_fork:
-        cls = SyncDataCollector
+        cls = Collector
         env_arg = make_env(parallel=True, obs_norm_sd=stats, num_workers=num_workers)
     else:
-        cls = MultiaSyncDataCollector
+        cls = MultiAsyncCollector
         env_arg = [
             make_env(parallel=True, obs_norm_sd=stats, num_workers=num_workers)
         ] * num_collectors

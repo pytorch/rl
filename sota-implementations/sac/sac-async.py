@@ -30,7 +30,12 @@ import torch.cuda
 import tqdm
 from tensordict import TensorDict
 from tensordict.nn import CudaGraphModule
-from torchrl._utils import compile_with_warmup, logger as torchrl_logger, timeit
+from torchrl._utils import (
+    compile_with_warmup,
+    get_available_device,
+    logger as torchrl_logger,
+    timeit,
+)
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives import group_optimizers
 from torchrl.record.loggers import generate_exp_name, get_logger
@@ -52,13 +57,11 @@ tensordict.nn.functional_modules._exclude_td_from_pytree().set()
 
 @hydra.main(version_base="1.1", config_path="", config_name="config-async")
 def main(cfg: DictConfig):  # noqa: F821
-    device = cfg.network.device
-    if device in ("", None):
-        if torch.cuda.is_available():
-            device = torch.device("cuda:0")
-        else:
-            device = torch.device("cpu")
-    device = torch.device(device)
+    device = (
+        torch.device(cfg.network.device)
+        if cfg.network.device
+        else get_available_device()
+    )
 
     # Create logger
     exp_name = generate_exp_name("SAC", cfg.logger.exp_name)

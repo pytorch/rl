@@ -12,7 +12,7 @@ from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
 from torchrl._utils import logger as torchrl_logger
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
@@ -75,7 +75,8 @@ def train(cfg: DictConfig):  # noqa: F821
     actor_net = nn.Sequential(
         MultiAgentMLP(
             n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
-            n_agent_outputs=2 * env.action_spec.shape[-1],
+            n_agent_outputs=2
+            * env.full_action_spec_unbatched[env.action_key].shape[-1],
             n_agents=env.n_agents,
             centralised=False,
             share_params=cfg.model.shared_parameters,
@@ -121,7 +122,7 @@ def train(cfg: DictConfig):  # noqa: F821
         in_keys=[("agents", "observation")],
     )
 
-    collector = SyncDataCollector(
+    collector = Collector(
         env,
         policy,
         device=cfg.env.device,
@@ -142,7 +143,7 @@ def train(cfg: DictConfig):  # noqa: F821
         actor_network=policy,
         critic_network=value_module,
         clip_epsilon=cfg.loss.clip_epsilon,
-        entropy_coef=cfg.loss.entropy_eps,
+        entropy_coeff=cfg.loss.entropy_eps,
         normalize_advantage=False,
     )
     loss_module.set_keys(

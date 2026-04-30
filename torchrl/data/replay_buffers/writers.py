@@ -8,10 +8,11 @@ import heapq
 import json
 import textwrap
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from copy import copy
 from multiprocessing.context import get_spawning_popen
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 import torch
@@ -19,6 +20,11 @@ from tensordict import is_tensor_collection, MemoryMappedTensor, TensorDictBase
 from tensordict.utils import expand_as_right, is_tensorclass
 from torch import multiprocessing as mp
 from torchrl._utils import _STRDTYPE2DTYPE
+
+try:
+    from torch.compiler import disable as compile_disable
+except ImportError:
+    from torch._dynamo import disable as compile_disable
 
 try:
     from torch.utils._pytree import tree_leaves
@@ -87,7 +93,8 @@ class Writer(ABC):
         )
         mesh = torch.stack(
             torch.meshgrid(
-                *(torch.arange(dim, device=device) for dim in self._storage.shape[1:])
+                *(torch.arange(dim, device=device) for dim in self._storage.shape[1:]),
+                indexing="ij",
             ),
             -1,
         ).flatten(0, -2)
@@ -151,6 +158,7 @@ class RoundRobinWriter(Writer):
     def __init__(self, compilable: bool = False) -> None:
         super().__init__(compilable=compilable)
         self._cursor = 0
+        self._write_count  # noqa
 
     def dumps(self, path):
         path = Path(path).absolute()
@@ -176,8 +184,7 @@ class RoundRobinWriter(Writer):
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(_cursor, data)
         index = self._replicate_index(index)
-        for ent in self._storage._attached_entities_iter():
-            ent.mark_update(index)
+        self._mark_update_entities(index)
         return index
 
     def extend(self, data: Sequence) -> torch.Tensor:
@@ -205,8 +212,7 @@ class RoundRobinWriter(Writer):
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(index, data)
         index = self._replicate_index(index)
-        for ent in self._storage._attached_entities_iter():
-            ent.mark_update(index)
+        self._mark_update_entities(index)
         return index
 
     def state_dict(self) -> dict[str, Any]:
@@ -220,9 +226,17 @@ class RoundRobinWriter(Writer):
         if empty_write_count:
             self._write_count = 0
 
+    # TODO: Workaround for PyTorch nightly regression where compiler can't handle
+    # method calls on objects returned from _attached_entities_iter()
+    @compile_disable()
+    def _mark_update_entities(self, index: torch.Tensor) -> None:
+        """Mark entities as updated with the given index."""
+        for ent in self._storage._attached_entities_iter():
+            ent.mark_update(index)
+
     @property
     def _cursor(self):
-        _cursor_value = self.__dict__.get("_cursor_value", None)
+        _cursor_value = getattr(self, "_cursor_value", None)
         if not self._compilable:
             if _cursor_value is None:
                 _cursor_value = self._cursor_value = mp.Value("i", 0)
@@ -235,7 +249,7 @@ class RoundRobinWriter(Writer):
     @_cursor.setter
     def _cursor(self, value):
         if not self._compilable:
-            _cursor_value = self.__dict__.get("_cursor_value", None)
+            _cursor_value = getattr(self, "_cursor_value", None)
             if _cursor_value is None:
                 _cursor_value = self._cursor_value = mp.Value("i", 0)
             _cursor_value.value = value
@@ -244,7 +258,7 @@ class RoundRobinWriter(Writer):
 
     @property
     def _write_count(self):
-        _write_count = self.__dict__.get("_write_count_value", None)
+        _write_count = getattr(self, "_write_count_value", None)
         if not self._compilable:
             if _write_count is None:
                 _write_count = self._write_count_value = mp.Value("i", 0)
@@ -257,7 +271,7 @@ class RoundRobinWriter(Writer):
     @_write_count.setter
     def _write_count(self, value):
         if not self._compilable:
-            _write_count = self.__dict__.get("_write_count_value", None)
+            _write_count = getattr(self, "_write_count_value", None)
             if _write_count is None:
                 _write_count = self._write_count_value = mp.Value("i", 0)
             _write_count.value = value
@@ -268,18 +282,28 @@ class RoundRobinWriter(Writer):
         state = super().__getstate__()
         if get_spawning_popen() is None:
             cursor = self._cursor
+            write_count = self._write_count
             del state["_cursor_value"]
+            del state["_write_count_value"]
             state["cursor__context"] = cursor
+            state["write_count__context"] = write_count
         return state
 
     def __setstate__(self, state):
         cursor = state.pop("cursor__context", None)
+        write_count = state.pop("write_count__context", None)
         if cursor is not None:
             if not state["_compilable"]:
                 _cursor_value = mp.Value("i", cursor)
             else:
                 _cursor_value = cursor
             state["_cursor_value"] = _cursor_value
+        if write_count is not None:
+            if not state["_compilable"]:
+                _write_count_value = mp.Value("i", write_count)
+            else:
+                _write_count_value = write_count
+            state["_write_count_value"] = _write_count_value
         self.__dict__.update(state)
 
     def __repr__(self):
@@ -304,8 +328,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
             )
         self._storage.set(index, data)
         index = self._replicate_index(index)
-        for ent in self._storage._attached_entities_iter():
-            ent.mark_update(index)
+        self._mark_update_entities(index)
         return index
 
     def extend(self, data: Sequence) -> torch.Tensor:
@@ -334,8 +357,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(index, data)
         index = self._replicate_index(index)
-        for ent in self._storage._attached_entities_iter():
-            ent.mark_update(index)
+        self._mark_update_entities(index)
         return index
 
 
@@ -509,14 +531,14 @@ class TensorDictMaxValueWriter(Writer):
 
     @property
     def _write_count(self):
-        _write_count = self.__dict__.get("_write_count_value", None)
+        _write_count = getattr(self, "_write_count_value", None)
         if _write_count is None:
             _write_count = self._write_count_value = mp.Value("i", 0)
         return _write_count.value
 
     @_write_count.setter
     def _write_count(self, value):
-        _write_count = self.__dict__.get("_write_count_value", None)
+        _write_count = getattr(self, "_write_count_value", None)
         if _write_count is None:
             _write_count = self._write_count_value = mp.Value("i", 0)
         _write_count.value = value
@@ -569,9 +591,16 @@ class TensorDictMaxValueWriter(Writer):
             device = getattr(self._storage, "device", None)
             out_index = torch.full(data.shape, -1, dtype=torch.long, device=device)
         index = self._replicate_index(out_index)
+        self._mark_update_entities(index)
+        return index
+
+    # TODO: Workaround for PyTorch nightly regression where compiler can't handle
+    # method calls on objects returned from _attached_entities_iter()
+    @compile_disable()
+    def _mark_update_entities(self, index: torch.Tensor) -> None:
+        """Mark entities as updated with the given index."""
         for ent in self._storage._attached_entities_iter():
             ent.mark_update(index)
-        return index
 
     def _empty(self, empty_write_count: bool = True) -> None:
         self._cursor = 0
@@ -586,7 +615,18 @@ class TensorDictMaxValueWriter(Writer):
                 f"Please submit an issue at https://github.com/pytorch/rl if this feature is needed."
             )
         state = super().__getstate__()
+        # Handle the mp.Value object for pickling
+        if "_write_count_value" in state:
+            write_count = self._write_count
+            del state["_write_count_value"]
+            state["write_count__context"] = write_count
         return state
+
+    def __setstate__(self, state):
+        write_count = state.pop("write_count__context", None)
+        if write_count is not None:
+            state["_write_count_value"] = mp.Value("i", write_count)
+        self.__dict__.update(state)
 
     def dumps(self, path):
         path = Path(path).absolute()

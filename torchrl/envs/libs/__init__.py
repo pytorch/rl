@@ -6,6 +6,7 @@
 from .brax import BraxEnv, BraxWrapper
 from .dm_control import DMControlEnv, DMControlWrapper
 from .envpool import MultiThreadedEnv, MultiThreadedEnvWrapper
+from .genesis import GenesisEnv, GenesisWrapper
 from .gym import (
     gym_backend,
     GymEnv,
@@ -23,7 +24,9 @@ from .meltingpot import MeltingpotEnv, MeltingpotWrapper
 from .openml import OpenMLEnv
 from .openspiel import OpenSpielEnv, OpenSpielWrapper
 from .pettingzoo import PettingZooEnv, PettingZooWrapper
+from .procgen import ProcgenEnv, ProcgenWrapper
 from .robohive import RoboHiveEnv
+from .safety_gymnasium import SafetyGymnasiumEnv, SafetyGymnasiumWrapper
 from .smacv2 import SMACv2Env, SMACv2Wrapper
 from .unity_mlagents import UnityMLAgentsEnv, UnityMLAgentsWrapper
 from .vmas import VmasEnv, VmasWrapper
@@ -33,6 +36,8 @@ __all__ = [
     "BraxWrapper",
     "DMControlEnv",
     "DMControlWrapper",
+    "GenesisEnv",
+    "GenesisWrapper",
     "GymEnv",
     "GymWrapper",
     "HabitatEnv",
@@ -52,7 +57,11 @@ __all__ = [
     "OpenSpielWrapper",
     "PettingZooEnv",
     "PettingZooWrapper",
+    "ProcgenEnv",
+    "ProcgenWrapper",
     "RoboHiveEnv",
+    "SafetyGymnasiumEnv",
+    "SafetyGymnasiumWrapper",
     "SMACv2Env",
     "SMACv2Wrapper",
     "UnityMLAgentsEnv",

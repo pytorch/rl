@@ -144,7 +144,7 @@ if __name__ == "__main__":
     rank = args.rank
     storage_type = args.storage
 
-    torchrl_logger.info(f"Rank: {rank}; Storage: {storage_type}")
+    torchrl_logger.debug(f"RANK: {rank}; Storage: {storage_type}")
 
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "29500"

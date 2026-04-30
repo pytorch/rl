@@ -12,8 +12,8 @@ import pathlib
 import shutil
 import tempfile
 from collections import defaultdict
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import numpy as np
 import torch

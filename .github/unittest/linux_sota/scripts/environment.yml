@@ -1,6 +1,6 @@
 channels:
-  - pytorch
   - defaults
+  - pytorch
 dependencies:
   - pip
   - protobuf
@@ -20,12 +20,16 @@ dependencies:
     - pybind11[global]
     - pyyaml
     - scipy
+    - psutil
     - hydra-core
     - imageio==2.26.0
     - dm_control
-    - mujoco
+    - mujoco<3.3.6
     - mlflow
+    - trackio
     - av
     - coverage
     - vmas
     - transformers
+    - minari
+    - minari[create]

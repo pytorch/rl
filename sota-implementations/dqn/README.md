@@ -21,10 +21,10 @@ You can execute the DQN algorithm on the CartPole environment by running the fol
 ```bash
 python dqn_cartpole.py
 
+``` 
+
 You can execute the DQN algorithm on Atari environments by running the following command:
 
 ```bash
 python dqn_atari.py
 ```
-
-``` 

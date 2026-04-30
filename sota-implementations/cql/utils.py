@@ -11,7 +11,7 @@ import torch.optim
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.nn.distributions import NormalParamExtractor
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import (
     Composite,
     LazyMemmapStorage,
@@ -130,7 +130,7 @@ def make_collector(
             device = torch.device("cuda:0")
         else:
             device = torch.device("cpu")
-    collector = SyncDataCollector(
+    collector = Collector(
         train_env,
         actor_model_explore,
         init_random_frames=cfg.collector.init_random_frames,
@@ -191,6 +191,49 @@ def make_offline_replay_buffer(rb_cfg):
     )
 
     data.append_transform(DoubleToFloat())
+
+    return data
+
+
+def make_offline_discrete_replay_buffer(rb_cfg):
+    import gymnasium as gym
+    import minari
+    from minari import DataCollector
+
+    # Create custom minari dataset from environment
+
+    env = gym.make(rb_cfg.env)
+    env = DataCollector(env)
+
+    for _ in range(rb_cfg.episodes):
+        env.reset(seed=123)
+        while True:
+            action = env.action_space.sample()
+            obs, rew, terminated, truncated, info = env.step(action)
+            if terminated or truncated:
+                break
+
+    env.create_dataset(
+        dataset_id=rb_cfg.dataset,
+        algorithm_name="Random-Policy",
+        code_permalink="https://github.com/Farama-Foundation/Minari",
+        author="Farama",
+        author_email="contact@farama.org",
+    )
+
+    data = MinariExperienceReplay(
+        dataset_id=rb_cfg.dataset,
+        split_trajs=False,
+        batch_size=rb_cfg.batch_size,
+        load_from_local_minari=True,
+        sampler=SamplerWithoutReplacement(drop_last=True),
+        prefetch=4,
+    )
+
+    data.append_transform(DoubleToFloat())
+
+    # Clean up
+    minari.delete_dataset(rb_cfg.dataset)
 
     return data
 
@@ -354,11 +397,21 @@ def make_continuous_loss(loss_cfg, model, device: torch.device | None = None):
 
 
 def make_discrete_loss(loss_cfg, model, device: torch.device | None = None):
-    loss_module = DiscreteCQLLoss(
-        model,
-        loss_function=loss_cfg.loss_function,
-        delay_value=True,
-    )
+
+    if "action_space" in loss_cfg:  # especify action space
+        loss_module = DiscreteCQLLoss(
+            model,
+            loss_function=loss_cfg.loss_function,
+            action_space=loss_cfg.action_space,
+            delay_value=True,
+        )
+    else:
+        loss_module = DiscreteCQLLoss(
+            model,
+            loss_function=loss_cfg.loss_function,
+            delay_value=True,
+        )
+
     loss_module.make_value_estimator(gamma=loss_cfg.gamma, device=device)
     target_net_updater = SoftUpdate(loss_module, tau=loss_cfg.tau)
 
@@ -409,8 +462,7 @@ def make_continuous_cql_optimizer(cfg, loss_module):
 
 def log_metrics(logger, metrics, step):
     if logger is not None:
-        for metric_name, metric_value in metrics.items():
-            logger.log_scalar(metric_name, metric_value, step)
+        logger.log_metrics(metrics, step)
 
 
 def dump_video(module):

@@ -71,15 +71,15 @@ python -m pip install "numpy<2.0"
 printf "Installing PyTorch with %s\n" "${cudatoolkit}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if $torch_cuda ; then
-    python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu118
+    python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu118 -U
   else
     python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
   if $torch_cuda ; then
-      python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu118
+      python -m pip install torch --index-url https://download.pytorch.org/whl/cu118 -U
   else
-      python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      python -m pip install torch --index-url https://download.pytorch.org/whl/cpu -U
   fi
 else
   printf "Failed to install pytorch"
@@ -98,13 +98,14 @@ fi
 
 #python -m pip install pip --upgrade
 
+# install build dependencies (needed for torchrl C++ extensions)
+echo "=== Installing build dependencies ==="
+conda install anaconda::cmake -y
+python -m pip install "pybind11[global]"
+
 # install tensordict
 echo "=== Installing tensordict ==="
 if [[ "$RELEASE" == 0 ]]; then
-  conda install anaconda::cmake -y
-
-  python -m pip install "pybind11[global]"
-
   python -m pip install git+https://github.com/pytorch/tensordict
 else
   pip3 install tensordict
@@ -121,7 +122,7 @@ echo "=== Setting up CUDA environment ==="
 source "$this_dir/set_cuda_envs.sh"
 
 printf "* Installing torchrl\n"
-python setup.py develop
+python -m pip install -e . --no-build-isolation
 
 whatsinside=$(ls -rtlh ./torchrl)
 echo $whatsinside
@@ -146,6 +147,8 @@ export LAZY_LEGACY_OP=False
 
 echo "=== Collecting environment info ==="
 python -m torch.utils.collect_env
+
+bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
 
 echo "=== Starting pytest execution ==="
 echo "Current working directory: $(pwd)"

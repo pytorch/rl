@@ -5,7 +5,8 @@
 from __future__ import annotations
 
 from collections import deque
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import torch
 
@@ -13,7 +14,7 @@ from tensordict import lazy_stack, TensorDictBase
 
 from torchrl._utils import as_remote, logger as torchrl_logger
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors._single import Collector
 from torchrl.collectors.llm.utils import _QueueAsRB
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
@@ -22,8 +23,8 @@ from torchrl.envs.common import EnvBase
 from torchrl.envs.llm.transforms.policy_version import PolicyVersion
 
 
-class LLMCollector(SyncDataCollector):
-    """A simplified version of SyncDataCollector for LLM inference.
+class LLMCollector(Collector):
+    """A simplified version of Collector for LLM inference.
 
     Args:
         env (EnvBase or EnvBase constructor): the environment to be used for data collection.
@@ -71,7 +72,7 @@ class LLMCollector(SyncDataCollector):
             Defaults to `True` when `replay_buffer` is provided, `False` otherwise.
         weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers.
-            This is typically not used in :class:`~torchrl.collectors.SyncDataCollector` as it operates in a single-process environment.
+            This is typically not used in :class:`~torchrl.collectors.Collector` as it operates in a single-process environment.
             Consider using a constructor if the updater needs to be serialized.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
             This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.
@@ -84,7 +85,7 @@ class LLMCollector(SyncDataCollector):
     Examples:
         >>> import vllm
         >>> from torchrl.modules import vLLMWrapper
-        >>> from pytorch.rl.test.mocking_classes import DummyStrDataLoader
+        >>> from torchrl.testing.mocking_classes import DummyStrDataLoader
         >>> from torchrl.envs import LLMEnv
         >>> llm_model = vllm.LLM("gpt2")
         >>> tokenizer = llm_model.get_tokenizer()
@@ -217,10 +218,13 @@ class LLMCollector(SyncDataCollector):
         self.yield_completed_trajectories = yield_completed_trajectories
         self.yield_only_last_steps = yield_only_last_steps
         self.verbose = verbose
+        self._shuttle = None  # Initialize shuttle for rollout
         if self.yield_completed_trajectories:
-            if len(self.env.batch_size) != 1:
+            # For async envs, we route by env_id so we only care about batch_size[0].
+            # For non-async envs, we need exactly one batch dimension.
+            if not isinstance(self.env, AsyncEnvPool) and len(self.env.batch_size) != 1:
                 raise ValueError(
-                    "`yield_only_last_steps` only works with envs that have a single batch dimension. Got "
+                    "`yield_completed_trajectories` only works with envs that have a single batch dimension. Got "
                     f"env.batch_size={self.env.batch_size}."
                 )
             self._yield_queues = [deque() for _ in range(self.env.batch_size[0])]
@@ -307,16 +311,17 @@ class LLMCollector(SyncDataCollector):
         policy_input = self._shuttle
         while collected_steps < self.dialog_turns_per_batch:
             if self.verbose:
-                torchrl_logger.info(
+                torchrl_logger.debug(
                     f"LLMCollector: Collected {collected_steps} steps over {self.dialog_turns_per_batch} requested."
                 )
             env_input = self.policy(policy_input)
             env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
 
             # carry over collector data without messing up devices
-            collector_data = env_output.get("collector").copy()
-            env_next_output.set("collector", collector_data)
-            self._update_traj_ids(env_output)
+            collector_data = env_output.get("collector", default=None)
+            if collector_data is not None:
+                env_next_output.set("collector", collector_data.copy())
+                self._update_traj_ids(env_output)
             trajectory.append(env_output.clone())
             collected_steps += env_output.numel()
             policy_input = self._shuttle = env_next_output
@@ -329,10 +334,8 @@ class LLMCollector(SyncDataCollector):
 
     def _rollout_yield_trajs(self) -> TensorDictBase:  # A simplified version of rollout
         if self._shuttle is None:
-            raise RuntimeError("Data shuttle not found")
-            # next_output = self.env.reset()
-        else:
-            next_output = self._shuttle
+            self._shuttle = self.env.reset()
+        next_output = self._shuttle
 
         collected_steps = 0
         dones = torch.zeros(self.env.batch_size, dtype=torch.bool)
@@ -340,7 +343,7 @@ class LLMCollector(SyncDataCollector):
             if self._result_numel >= self.dialog_turns_per_batch:
                 break
             elif self.verbose:
-                torchrl_logger.info(
+                torchrl_logger.debug(
                     f"LLMCollector: Collected {collected_steps} steps with {self._result_numel} elements in the resulting batch, over {self.dialog_turns_per_batch} requested."
                 )
             env_input = self.policy(next_output)
@@ -349,10 +352,10 @@ class LLMCollector(SyncDataCollector):
             #     print(len(cur_output[i]["text"]) < len(cur_output[i]["next", "text"]))
 
             # carry over collector data without messing up devices
-            self._update_traj_ids(cur_output)
-
-            collector_data = cur_output.get("collector").copy()
-            next_output.set("collector", collector_data)
+            collector_data = cur_output.get("collector", default=None)
+            if collector_data is not None:
+                self._update_traj_ids(cur_output)
+                next_output.set("collector", collector_data.copy())
 
             # if the loop is interrupted
             self._shuttle = next_output
@@ -384,7 +387,7 @@ class LLMCollector(SyncDataCollector):
             self._result_numel -= result[-1].numel()
         result = torch.cat(result, -1)
         if self.verbose:
-            torchrl_logger.info(
+            torchrl_logger.debug(
                 f"LLMCollector: Yielding completed trajectory with shape {result.shape}."
             )
         return result
@@ -395,27 +398,37 @@ class LLMCollector(SyncDataCollector):
         self,
     ) -> TensorDictBase:  # A simplified version of rollout
         if not self.started:
+            if self._shuttle is None:
+                self._shuttle = self.env.reset()
             next_output = self._shuttle
             env_input = self.policy(next_output)
             self.env.async_step_and_maybe_reset_send(env_input)
         self.started = True
 
         collected_steps = 0
-        dones = torch.zeros(self.env.batch_size, dtype=torch.bool)
+        # Use only the first dimension (num_envs) for done tracking, since we route by env_id
+        dones = torch.zeros(self.env.batch_size[0], dtype=torch.bool)
         while True:
             if self._trajectory_queue:
                 break
 
             cur_output, next_output = self.env.async_step_and_maybe_reset_recv()
 
-            # Get the env ids
-            env_ids = cur_output.get(self.env._env_idx_key).tolist()
+            # Get the env ids - flatten to handle multi-dimensional batch sizes
+            # (e.g., AsyncEnvPool with batch_size=[4, 1] gives [[0], [1], [2], [3]])
+            env_ids_raw = cur_output.get(self.env._env_idx_key).tolist()
+            # Flatten nested lists to get scalar env indices
+            env_ids = []
+            for eid in env_ids_raw:
+                while isinstance(eid, list) and len(eid) == 1:
+                    eid = eid[0]
+                env_ids.append(eid)
 
             # carry over collector data without messing up devices
-            self._update_traj_ids(cur_output)
-
-            collector_data = cur_output.get("collector").copy()
-            next_output.set("collector", collector_data)
+            collector_data = cur_output.get("collector", default=None)
+            if collector_data is not None:
+                self._update_traj_ids(cur_output)
+                next_output.set("collector", collector_data.copy())
 
             collected_steps += next_output.numel()
             dones.fill_(False)
@@ -445,8 +458,11 @@ class LLMCollector(SyncDataCollector):
                 self.env.async_step_and_maybe_reset_send(env_input)
 
         result = self._trajectory_queue.popleft()
+        # Flatten the result - AsyncEnvPool child envs with batch_size=(1,) produce
+        # trajectories with shape [1, T] but we want [T] for consistency
+        result = result.view(-1)
         if self.verbose:
-            torchrl_logger.info(
+            torchrl_logger.debug(
                 f"LLMCollector: Yielding completed trajectory with shape {result.shape}."
             )
         return result

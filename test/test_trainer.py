@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
+import inspect
 import os
 import tempfile
 from argparse import Namespace
@@ -24,10 +26,6 @@ try:
 except ImportError:
     _has_tb = False
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import PONG_VERSIONED
-else:
-    from _utils_internal import PONG_VERSIONED
 from tensordict import TensorDict
 from torchrl.data import (
     LazyMemmapStorage,
@@ -37,15 +35,26 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.envs.libs.gym import _has_gym
+from torchrl.testing import PONG_VERSIONED
 from torchrl.trainers import LogValidationReward, Trainer
+from torchrl.trainers.algorithms.cql import CQLTrainer
+from torchrl.trainers.algorithms.ddpg import DDPGTrainer
+from torchrl.trainers.algorithms.dqn import DQNTrainer
+from torchrl.trainers.algorithms.iql import IQLTrainer
+from torchrl.trainers.algorithms.ppo import PPOTrainer
+from torchrl.trainers.algorithms.sac import SACTrainer
+from torchrl.trainers.algorithms.td3 import TD3Trainer
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.trainers import (
     _has_tqdm,
     _has_ts,
     BatchSubSampler,
     CountFramesLog,
+    DefaultOptimizationStepper,
+    EarlyStopping,
     LogScalar,
     mask_batch,
+    OptimizationStepper,
     OptimizerHook,
     ReplayBufferTrainer,
     REWARD_KEY,
@@ -53,6 +62,8 @@ from torchrl.trainers.trainers import (
     SelectKeys,
     UpdateWeights,
 )
+
+_has_ale = importlib.util.find_spec("ale_py") is not None
 
 
 def _fun_checker(fun, checker):
@@ -84,6 +95,19 @@ class MockingCollector:
 
     def load_state_dict(self, state_dict):
         pass
+
+
+class MockingIterableCollector(MockingCollector):
+    def __init__(self, batches):
+        self._batches = batches
+        self.init_random_frames = 10**9
+        self.shutdown_calls = 0
+
+    def __iter__(self):
+        return iter(self._batches)
+
+    def shutdown(self):
+        self.shutdown_calls += 1
 
 
 class MockingLossModule(nn.Module):
@@ -148,7 +172,7 @@ class TestSelectKeys:
         assert not len(sd["select_keys"])
         trainer2.load_state_dict(sd)
 
-    @pytest.mark.parametrize("backend", ["torchsnapshot", "torch"])
+    @pytest.mark.parametrize("backend", ["torchsnapshot", "torch", "memmap"])
     def test_selectkeys_save(self, backend):
         if not _has_ts and backend == "torchsnapshot":
             pytest.skip("torchsnapshot not found")
@@ -169,6 +193,8 @@ class TestSelectKeys:
                 file = path.join(tmpdirname, "file.pt")
             elif backend == "torchsnapshot":
                 file = tmpdirname
+            elif backend == "memmap":
+                file = path.join(tmpdirname, "ckpt")
             else:
                 raise NotImplementedError
             trainer = mocking_trainer(file=file)
@@ -193,8 +219,7 @@ class TestSelectKeys:
 
             trainer2.load_from_file(file)
             assert state_dict_has_been_called[0]
-            if backend == "torch":
-                assert load_state_dict_has_been_called[0]
+            assert load_state_dict_has_been_called[0]
 
         SelectKeys.state_dict = SelectKeys_state_dict
         SelectKeys.load_state_dict = SelectKeys_load_state_dict
@@ -230,7 +255,11 @@ class TestRB:
             [batch],
         )
         td_out = trainer._process_batch_hook(td)
-        assert td_out is td
+        # The ReplayBufferTrainer.extend method calls .cpu() which creates a new TensorDict
+        # so we can't expect the same object identity, but the content should be the same
+        assert td_out.shape == td.shape
+        assert td_out.device == torch.device("cpu")
+        assert td.device is None or td.device == torch.device("cpu")
 
         td_out = trainer._process_optim_batch_hook(td)
         assert td_out is not td
@@ -640,7 +669,7 @@ class TestLogReward:
         trainer = mocking_trainer()
         trainer.collected_frames = 0
 
-        log_reward = LogScalar(logname, log_pbar=pbar)
+        log_reward = LogScalar(REWARD_KEY, logname, log_pbar=pbar)
         trainer.register_op("pre_steps_log", log_reward)
         td = TensorDict({REWARD_KEY: torch.ones(3)}, [3])
         trainer._pre_steps_log_hook(td)
@@ -656,7 +685,7 @@ class TestLogReward:
         trainer = mocking_trainer()
         trainer.collected_frames = 0
 
-        log_reward = LogScalar(logname, log_pbar=pbar)
+        log_reward = LogScalar(REWARD_KEY, logname, log_pbar=pbar)
         log_reward.register(trainer)
         td = TensorDict({REWARD_KEY: torch.ones(3)}, [3])
         trainer._pre_steps_log_hook(td)
@@ -714,6 +743,7 @@ class TestRewardNorm:
         [
             "torchsnapshot",
             "torch",
+            "memmap",
         ],
     )
     def test_reward_norm_save(self, backend):
@@ -740,6 +770,8 @@ class TestRewardNorm:
                 file = path.join(tmpdirname, "file.pt")
             elif backend == "torchsnapshot":
                 file = tmpdirname
+            elif backend == "memmap":
+                file = path.join(tmpdirname, "ckpt")
             else:
                 raise NotImplementedError
             trainer = mocking_trainer(file)
@@ -757,6 +789,8 @@ class TestRewardNorm:
             reward_normalizer2 = RewardNormalizer()
             reward_normalizer2.register(trainer2)
             trainer2.load_from_file(file)
+            assert state_dict_has_been_called[0]
+            assert load_state_dict_has_been_called[0]
 
         RewardNormalizer.state_dict = RewardNormalizer_state_dict
         RewardNormalizer.load_state_dict = RewardNormalizer_load_state_dict
@@ -839,6 +873,10 @@ class TestSubSampler:
 
 @pytest.mark.skipif(not _has_gym, reason="No gym library")
 @pytest.mark.skipif(not _has_tb, reason="No tensorboard library")
+@pytest.mark.skipif(
+    not _has_ale,
+    reason="ALE not available (missing ale_py); skipping Atari gym tests.",
+)
 class TestRecorder:
     def _get_args(self):
         args = Namespace()
@@ -912,6 +950,7 @@ class TestRecorder:
         [
             "torchsnapshot",
             "torch",
+            "memmap",
         ],
     )
     def test_recorder_load(self, backend, N=8):
@@ -936,6 +975,8 @@ class TestRecorder:
                 file = path.join(tmpdirname, "file.pt")
             elif backend == "torchsnapshot":
                 file = tmpdirname
+            elif backend == "memmap":
+                file = path.join(tmpdirname, "ckpt")
             else:
                 raise NotImplementedError
             trainer = mocking_trainer(file)
@@ -1010,6 +1051,7 @@ class TestCountFrames:
         [
             "torchsnapshot",
             "torch",
+            "memmap",
         ],
     )
     def test_countframes_load(self, backend):
@@ -1034,6 +1076,8 @@ class TestCountFrames:
                 file = path.join(tmpdirname, "file.pt")
             elif backend == "torchsnapshot":
                 file = tmpdirname
+            elif backend == "memmap":
+                file = path.join(tmpdirname, "ckpt")
             else:
                 raise NotImplementedError
             trainer = mocking_trainer(file)
@@ -1067,6 +1111,455 @@ class TestCountFrames:
             assert load_state_dict_has_been_called[0]
         CountFramesLog.state_dict = CountFramesLog_state_dict
         CountFramesLog.load_state_dict = CountFramesLog_load_state_dict
+
+
+class _CountingLossModule(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.forward_calls = 0
+
+    def forward(self, td: TensorDict):
+        self.forward_calls += 1
+        return TensorDict({"loss": torch.zeros(())}, [])
+
+
+class _CountingStepper(OptimizationStepper):
+    def __init__(self):
+        self.calls = 0
+
+    def step(self, trainer: Trainer, sub_batch: TensorDict) -> TensorDict:
+        self.calls += 1
+        return TensorDict({"loss": torch.zeros(())}, [])
+
+    def state_dict(self):
+        return {"calls": self.calls}
+
+    def load_state_dict(self, state_dict):
+        self.calls = state_dict["calls"]
+
+
+class TestOptimizationStepper:
+    def _make_trainer(self, loss_module, optimization_stepper=None, optimizer=None):
+        trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=None,
+            frame_skip=None,
+            optim_steps_per_batch=1,
+            loss_module=loss_module,
+            optimizer=optimizer,
+            optimization_stepper=optimization_stepper,
+        )
+        trainer._pbar_str = OrderedDict()
+        return trainer
+
+    def test_custom_stepper_used(self):
+        loss_module = _CountingLossModule()
+        stepper = _CountingStepper()
+        trainer = self._make_trainer(
+            loss_module=loss_module,
+            optimization_stepper=stepper,
+        )
+        td = TensorDict({"x": torch.randn(3)}, [])
+        trainer.optim_steps(td)
+        assert stepper.calls == 1
+        assert loss_module.forward_calls == 0
+
+    def test_stepper_checkpoint_roundtrip(self, tmp_path):
+        """Stepper state survives save/load via Trainer checkpointing."""
+        import os
+
+        os.environ["CKPT_BACKEND"] = "torch"
+
+        loss_module = _CountingLossModule()
+        stepper = _CountingStepper()
+        trainer1 = self._make_trainer(
+            loss_module=loss_module,
+            optimization_stepper=stepper,
+            optimizer=None,
+        )
+        stepper.calls = 5
+
+        file = str(tmp_path / "trainer.pt")
+        trainer1.save_trainer_file = file
+        trainer1.save_trainer(force_save=True)
+
+        stepper2 = _CountingStepper()
+        trainer2 = self._make_trainer(
+            loss_module=_CountingLossModule(),
+            optimization_stepper=stepper2,
+            optimizer=None,
+        )
+        trainer2.load_from_file(file)
+
+        assert stepper2.calls == 5
+        sd = torch.load(file)
+        assert "optimization_stepper" in sd
+
+
+class TestPostOptimCompleteLog:
+    def _make_trainer(
+        self,
+        loss_module,
+        optimization_stepper=None,
+        optimizer=None,
+        auto_log_optim_steps=True,
+    ):
+        trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=None,
+            frame_skip=None,
+            optim_steps_per_batch=1,
+            loss_module=loss_module,
+            optimizer=optimizer,
+            optimization_stepper=optimization_stepper,
+            auto_log_optim_steps=auto_log_optim_steps,
+        )
+        trainer._pbar_str = OrderedDict()
+        return trainer
+
+    def test_hook_receives_optim_steps_and_averaged_losses(self):
+        captured = {}
+
+        def capture_hook(optim_steps, average_losses):
+            captured["optim_steps"] = optim_steps
+            captured["average_losses"] = average_losses
+            return None
+
+        stepper = _CountingStepper()
+        loss_module = _CountingLossModule()
+        trainer = self._make_trainer(
+            loss_module=loss_module,
+            optimization_stepper=stepper,
+        )
+        trainer.register_op("post_optim_complete_log", capture_hook)
+        td = TensorDict({"x": torch.randn(3)}, [])
+        trainer.optim_steps(td)
+
+        assert stepper.calls == 1
+        assert captured["optim_steps"] == trainer._optim_count
+        assert "loss" in captured["average_losses"].keys()
+        assert "optim_steps" in trainer._log_dict
+        assert "loss" in trainer._log_dict
+        assert trainer._log_dict["optim_steps"][-1] == trainer._optim_count
+
+    def test_hook_return_logs_extra_metric(self):
+        def extra_metric_hook(optim_steps, average_losses):
+            return {"custom_metric": 1.0}
+
+        stepper = _CountingStepper()
+        trainer = self._make_trainer(
+            loss_module=_CountingLossModule(),
+            optimization_stepper=stepper,
+        )
+        trainer.register_op("post_optim_complete_log", extra_metric_hook)
+        td = TensorDict({"x": torch.randn(3)}, [])
+        trainer.optim_steps(td)
+
+        assert "custom_metric" in trainer._log_dict
+        assert trainer._log_dict["custom_metric"][-1] == 1.0
+        assert "optim_steps" in trainer._log_dict
+        assert "loss" in trainer._log_dict
+
+    def test_auto_log_optim_steps_disabled(self):
+        captured = {}
+
+        def capture_hook(optim_steps, average_losses):
+            captured["optim_steps"] = optim_steps
+            captured["average_losses"] = average_losses
+            return None
+
+        stepper = _CountingStepper()
+        trainer = self._make_trainer(
+            loss_module=_CountingLossModule(),
+            optimization_stepper=stepper,
+            auto_log_optim_steps=False,
+        )
+        trainer.register_op("post_optim_complete_log", capture_hook)
+        td = TensorDict({"x": torch.randn(3)}, [])
+        trainer.optim_steps(td)
+
+        # Hook still fires and sees the values
+        assert captured["optim_steps"] == trainer._optim_count
+        assert "loss" in captured["average_losses"].keys()
+        # but the trainer doesn't auto-log them
+        assert "optim_steps" not in trainer._log_dict
+        assert "loss" not in trainer._log_dict
+
+    @pytest.mark.parametrize(
+        "trainer_cls",
+        [
+            SACTrainer,
+            PPOTrainer,
+            DQNTrainer,
+            DDPGTrainer,
+            IQLTrainer,
+            CQLTrainer,
+            TD3Trainer,
+        ],
+    )
+    def test_subclass_exposes_auto_log_optim_steps(self, trainer_cls):
+        """Every Trainer subclass must surface auto_log_optim_steps in its __init__."""
+        sig = inspect.signature(trainer_cls.__init__)
+        assert (
+            "auto_log_optim_steps" in sig.parameters
+        ), f"{trainer_cls.__name__}.__init__ must accept auto_log_optim_steps"
+        assert sig.parameters["auto_log_optim_steps"].default is True
+
+
+class TestDefaultOptimizationStepper:
+    def test_loss_components_partial(self):
+        torch.manual_seed(0)
+        x = torch.randn(5, 10)
+        model1 = nn.Linear(10, 20)
+        model2 = nn.Linear(10, 20)
+        all_params = list(model1.parameters()) + list(model2.parameters())
+        optimizer = torch.optim.SGD(all_params, lr=1e-3)
+
+        class TwoLossModule(nn.Module):
+            def forward(self, td):
+                return TensorDict(
+                    {
+                        "loss_actor": model1(x).sum(),
+                        "loss_critic": model2(x).sum(),
+                    },
+                    [],
+                )
+
+        loss_module = TwoLossModule()
+        stepper = DefaultOptimizationStepper(loss_components=["loss_actor"])
+
+        trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=None,
+            frame_skip=None,
+            optim_steps_per_batch=None,
+            loss_module=loss_module,
+            optimizer=optimizer,
+            optimization_stepper=stepper,
+        )
+        trainer._pbar_str = OrderedDict()
+
+        model1_before = [p.clone() for p in model1.parameters()]
+        model2_before = [p.clone() for p in model2.parameters()]
+
+        td = TensorDict({"x": torch.randn(3)}, [])
+        losses = stepper.step(trainer, td)
+
+        assert "grad_norm" in losses.keys()
+        assert all(
+            not torch.equal(b, a) for b, a in zip(model1_before, model1.parameters())
+        )
+        assert all(
+            torch.equal(b, a) for b, a in zip(model2_before, model2.parameters())
+        )
+
+
+class TestProcessLossHook:
+    @pytest.mark.parametrize("factor", [0.5, 2.0, 10.0])
+    def test_scale_loss(self, factor):
+        trainer = mocking_trainer()
+        td_loss = TensorDict({"loss_a": torch.tensor(1.0)}, [])
+        td_sub_batch = TensorDict({"sub_batch": torch.tensor(1.0)}, [])
+
+        class ScaleLoss:
+            def __init__(self, scale):
+                self.scale = scale
+
+            def __call__(self, sub_batch, losses):
+                return losses.apply(lambda t: t * self.scale)
+
+        scale_hook = ScaleLoss(factor)
+        trainer.register_op("process_loss", scale_hook)
+        td_out = trainer._process_loss_hook(td_sub_batch.clone(), td_loss.clone())
+        assert torch.allclose(td_out["loss_a"], torch.tensor(factor))
+
+    def test_chained_hooks(self):
+        """Test that multiple process_loss hooks are applied in order."""
+        trainer = mocking_trainer()
+        td_loss = TensorDict({"loss_a": torch.tensor(2.0)}, [])
+        td_sub_batch = TensorDict()
+
+        call_order = []
+
+        class AddOne:
+            def __call__(self, sub_batch, losses):
+                call_order.append("add")
+                losses = losses.clone()
+                losses["loss_a"] = losses["loss_a"] + 1
+                return losses
+
+        class MultiplyTwo:
+            def __call__(self, sub_batch, losses):
+                call_order.append("mul")
+                losses = losses.clone()
+                losses["loss_a"] = losses["loss_a"] * 2
+                return losses
+
+        trainer.register_op("process_loss", AddOne())
+        trainer.register_op("process_loss", MultiplyTwo())
+
+        td_out = trainer._process_loss_hook(td_sub_batch, td_loss.clone())
+        # (2 + 1) * 2 = 6
+        assert torch.allclose(td_out["loss_a"], torch.tensor(6.0))
+        assert call_order == ["add", "mul"]
+
+    def test_hook_receives_sub_batch(self):
+        """Test that the hook can use information from the sub_batch."""
+        trainer = mocking_trainer()
+        td_loss = TensorDict({"loss_a": torch.tensor(1.0)}, [])
+        td_sub_batch = TensorDict({"importance_weight": torch.tensor(0.5)}, [])
+
+        class WeightedLoss:
+            def __call__(self, sub_batch, losses):
+                weight = sub_batch.get("importance_weight")
+                losses = losses.clone()
+                losses["loss_a"] = losses["loss_a"] * weight
+                return losses
+
+        trainer.register_op("process_loss", WeightedLoss())
+        td_out = trainer._process_loss_hook(td_sub_batch, td_loss.clone())
+        assert torch.allclose(td_out["loss_a"], torch.tensor(0.5))
+
+
+class TestSetupShutdownHooks:
+    @staticmethod
+    def _make_trainer(collector):
+        trainer = Trainer(
+            collector=collector,
+            total_frames=2,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=MockingLossModule(),
+            optimizer=None,
+            progress_bar=False,
+        )
+        trainer._pbar_str = OrderedDict()
+        return trainer
+
+    def test_setup_and_shutdown_hooks_order(self):
+        batches = [
+            TensorDict({"x": torch.zeros(1)}, [1]),
+            TensorDict({"x": torch.ones(1)}, [1]),
+        ]
+        collector = MockingIterableCollector(batches)
+        trainer = self._make_trainer(collector)
+
+        call_order = []
+
+        def setup_hook():
+            call_order.append("setup")
+
+        def pre_steps_hook(_batch):
+            call_order.append("pre_steps")
+
+        def shutdown_hook():
+            call_order.append("shutdown")
+
+        trainer.register_op("setup", setup_hook)
+        trainer.register_op("pre_steps_log", pre_steps_hook)
+        trainer.register_op("shutdown", shutdown_hook)
+
+        trainer.train()
+
+        assert call_order == ["setup", "pre_steps", "pre_steps", "shutdown"]
+        assert collector.shutdown_calls == 1
+
+
+class TestEarlyStopping:
+    @pytest.mark.parametrize(
+        "monitor,values,hook_kwargs,expected_stops,expected_reason",
+        [
+            (
+                "r_training",
+                [1.0, 1.1, 1.09, 1.08],
+                {"patience": 2, "wait_for": 0},
+                [False, False, False, True],
+                "did not improve",
+            ),
+            (
+                "score",
+                [1.0, 0.0, -1.0, -2.0],
+                {"patience": 1, "wait_for": 3},
+                [False, False, False, True],
+                "did not improve",
+            ),
+            (
+                "validation_loss",
+                [1.0, 0.85, 0.8],
+                {"mode": "min", "min_delta": 0.1, "patience": 1, "wait_for": 0},
+                [False, False, True],
+                "did not improve",
+            ),
+            (
+                "score",
+                [1.0, 1.2, 1.25],
+                {"mode": "max", "min_delta": 0.1, "patience": 1, "wait_for": 0},
+                [False, False, True],
+                "did not improve",
+            ),
+            (
+                "score",
+                [1.0, float("nan")],
+                {"wait_for": 0, "check_finite": True, "patience": 10},
+                [False, True],
+                "non-finite",
+            ),
+        ],
+    )
+    def test_early_stopping_params(
+        self, monitor, values, hook_kwargs, expected_stops, expected_reason
+    ):
+        trainer = mocking_trainer(optimizer=None)
+        early_stopping = EarlyStopping(
+            monitor=monitor,
+            **hook_kwargs,
+        )
+        early_stopping.register(trainer)
+
+        td = TensorDict()
+        for value, should_stop in zip(values, expected_stops):
+            trainer._log(**{monitor: value})
+            trainer.collected_frames += 1
+            trainer._post_steps_log_hook(td)
+            assert trainer._stop_training == should_stop
+
+        assert trainer._stop_training
+        assert expected_reason in early_stopping.stop_reason
+
+    def test_missing_monitor_raises(self):
+        trainer = mocking_trainer(optimizer=None)
+        early_stopping = EarlyStopping(
+            monitor="missing",
+        )
+        early_stopping.register(trainer)
+
+        with pytest.raises(RuntimeError, match="could not find monitored metric"):
+            trainer._post_steps_log_hook(TensorDict())
+
+    def test_train_stops_early(self):
+        rewards = [1.0, 2.0, 2.0, 2.0, 2.0]
+        batches = [
+            TensorDict({("next", "reward"): torch.tensor([reward])}, [1])
+            for reward in rewards
+        ]
+        collector = MockingIterableCollector(batches=batches)
+        trainer = Trainer(
+            collector=collector,
+            total_frames=100,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=MockingLossModule(),
+            optimizer=None,
+            progress_bar=False,
+        )
+
+        trainer.register_op("pre_steps_log", LogScalar(REWARD_KEY, "r_training"))
+        EarlyStopping(monitor="r_training", patience=1, wait_for=0).register(trainer)
+
+        trainer.train()
+        assert trainer.collected_frames < trainer.total_frames
+        assert trainer._stop_training
+        assert collector.shutdown_calls == 1
 
 
 if __name__ == "__main__":
