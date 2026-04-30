@@ -1299,9 +1299,9 @@ class TestPostOptimCompleteLog:
     def test_subclass_exposes_auto_log_optim_steps(self, trainer_cls):
         """Every Trainer subclass must surface auto_log_optim_steps in its __init__."""
         sig = inspect.signature(trainer_cls.__init__)
-        assert "auto_log_optim_steps" in sig.parameters, (
-            f"{trainer_cls.__name__}.__init__ must accept auto_log_optim_steps"
-        )
+        assert (
+            "auto_log_optim_steps" in sig.parameters
+        ), f"{trainer_cls.__name__}.__init__ must accept auto_log_optim_steps"
         assert sig.parameters["auto_log_optim_steps"].default is True
 
 

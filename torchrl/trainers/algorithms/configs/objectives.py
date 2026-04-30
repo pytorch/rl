@@ -40,12 +40,19 @@ class LossConfig(ConfigBase):
 
 @dataclass
 class SACLossConfig(LossConfig):
-    """A class to configure a SAC loss."""
+    """Hydra configuration for :class:`~torchrl.objectives.SACLoss` (and :class:`~torchrl.objectives.sac.DiscreteSACLoss` when ``discrete=True``).
+
+    Every kwarg accepted by ``SACLoss.__init__`` is exposed as a field here. The
+    ``discrete``/``action_space``/``num_actions``/``target_entropy_weight`` fields
+    apply only when the discrete variant is selected.
+    """
 
     actor_network: Any = None
     qvalue_network: Any = None
     value_network: Any = None
     discrete: bool = False
+    action_space: Any = None
+    num_actions: int | None = None
     num_qvalue_nets: int = 2
     loss_function: str = "smooth_l1"
     alpha_init: float = 1.0
@@ -54,6 +61,7 @@ class SACLossConfig(LossConfig):
     action_spec: Any = None
     fixed_alpha: bool = False
     target_entropy: str | float = "auto"
+    target_entropy_weight: float = 0.98
     delay_actor: bool = False
     delay_qvalue: bool = True
     delay_value: bool = True
@@ -63,6 +71,8 @@ class SACLossConfig(LossConfig):
     reduction: str | None = None
     skip_done_states: bool = False
     deactivate_vmap: bool = False
+    use_prioritized_weights: str | bool = "auto"
+    scalar_output_mode: str | None = None
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_sac_loss"
 
     def __post_init__(self) -> None:
@@ -93,7 +103,14 @@ def _make_sac_loss(*args, **kwargs) -> SACLoss:
 
 @dataclass
 class PPOLossConfig(LossConfig):
-    """A class to configure a PPO loss."""
+    """Hydra configuration for the PPO loss family.
+
+    Dispatches between :class:`~torchrl.objectives.ClipPPOLoss` (``loss_type='clip'``),
+    :class:`~torchrl.objectives.KLPENPPOLoss` (``loss_type='kl'``) and
+    :class:`~torchrl.objectives.PPOLoss` (``loss_type='ppo'``). Every kwarg
+    accepted by any of those classes is exposed here; only the kwargs relevant
+    to the selected ``loss_type`` are forwarded.
+    """
 
     actor_network: Any = None
     critic_network: Any = None
@@ -102,9 +119,9 @@ class PPOLossConfig(LossConfig):
     samples_mc_entropy: int = 1
     entropy_coeff: float | None = None
     log_explained_variance: bool = True
-    critic_coeff: float = 0.25
+    critic_coeff: float | None = None
     loss_critic_type: str = "smooth_l1"
-    normalize_advantage: bool = True
+    normalize_advantage: bool = False
     normalize_advantage_exclude_dims: tuple = ()
     gamma: float | None = None
     separate_losses: bool = False
@@ -116,6 +133,12 @@ class PPOLossConfig(LossConfig):
     critic: Any = None
     reduction: str | None = None
     clip_value: float | None = None
+    clip_epsilon: float = 0.2
+    dtarg: float = 0.01
+    beta: float = 1.0
+    increment: float = 2.0
+    decrement: float = 0.5
+    samples_mc_kl: int = 1
     device: Any = None
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_ppo_loss"
 
@@ -126,11 +149,30 @@ class PPOLossConfig(LossConfig):
 
 def _make_ppo_loss(*args, **kwargs) -> PPOLoss:
     loss_type = kwargs.pop("loss_type", "clip")
+    # Drop kwargs that don't apply to the chosen loss flavor so each class
+    # receives only what its __init__ accepts.
+    clip_only = {"clip_epsilon"}
+    kl_only = {"dtarg", "beta", "increment", "decrement", "samples_mc_kl"}
+    ppo_only = {
+        "log_explained_variance",
+        "advantage_key",
+        "value_target_key",
+        "value_key",
+        "functional",
+        "actor",
+        "critic",
+    }
     if loss_type == "clip":
+        for k in kl_only | ppo_only:
+            kwargs.pop(k, None)
         return ClipPPOLoss(*args, **kwargs)
     elif loss_type == "kl":
+        for k in clip_only | ppo_only:
+            kwargs.pop(k, None)
         return KLPENPPOLoss(*args, **kwargs)
     elif loss_type == "ppo":
+        for k in clip_only | kl_only:
+            kwargs.pop(k, None)
         return PPOLoss(*args, **kwargs)
     else:
         raise ValueError(f"Invalid loss type: {loss_type}")
@@ -138,7 +180,10 @@ def _make_ppo_loss(*args, **kwargs) -> PPOLoss:
 
 @dataclass
 class TD3LossConfig(LossConfig):
-    """A class to configure a TD3 loss."""
+    """Hydra configuration for :class:`~torchrl.objectives.TD3Loss`.
+
+    Every kwarg accepted by ``TD3Loss.__init__`` is exposed as a field here.
+    """
 
     actor_network: Any = None
     qvalue_network: Any = None
@@ -199,7 +244,10 @@ class HardUpdateConfig(TargetNetUpdaterConfig):
 
 @dataclass
 class GAEConfig(LossConfig):
-    """A class to configure a GAELoss."""
+    """Hydra configuration for :class:`~torchrl.objectives.value.GAE`.
+
+    Every kwarg accepted by ``GAE.__init__`` is exposed as a field here.
+    """
 
     gamma: float | None = None
     lmbda: float | None = None
@@ -226,7 +274,10 @@ class GAEConfig(LossConfig):
 
 @dataclass
 class DQNLossConfig(LossConfig):
-    """A class to configure a DQN loss."""
+    """Hydra configuration for :class:`~torchrl.objectives.DQNLoss`.
+
+    Every kwarg accepted by ``DQNLoss.__init__`` is exposed as a field here.
+    """
 
     value_network: Any = None
     loss_function: str = "l2"
@@ -234,7 +285,9 @@ class DQNLossConfig(LossConfig):
     double_dqn: bool = False
     action_space: Any = None
     gamma: float | None = None
+    priority_key: str | None = None
     reduction: str | None = None
+    use_prioritized_weights: str | bool = "auto"
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_dqn_loss"
 
     def __post_init__(self) -> None:
@@ -250,7 +303,10 @@ def _make_dqn_loss(*args, **kwargs) -> DQNLoss:
 
 @dataclass
 class DDPGLossConfig(LossConfig):
-    """A class to configure a DDPG loss."""
+    """Hydra configuration for :class:`~torchrl.objectives.DDPGLoss`.
+
+    Every kwarg accepted by ``DDPGLoss.__init__`` is exposed as a field here.
+    """
 
     actor_network: Any = None
     value_network: Any = None
@@ -260,6 +316,7 @@ class DDPGLossConfig(LossConfig):
     gamma: float | None = None
     separate_losses: bool = False
     reduction: str | None = None
+    use_prioritized_weights: str | bool = "auto"
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_ddpg_loss"
 
     def __post_init__(self) -> None:
@@ -278,20 +335,28 @@ def _make_ddpg_loss(*args, **kwargs) -> DDPGLoss:
 
 @dataclass
 class IQLLossConfig(LossConfig):
-    """A class to configure an IQL loss."""
+    """Hydra configuration for :class:`~torchrl.objectives.IQLLoss` (and :class:`~torchrl.objectives.iql.DiscreteIQLLoss` when ``discrete=True``).
+
+    Every kwarg accepted by ``IQLLoss.__init__`` is exposed as a field here. The
+    ``discrete``/``action_space`` fields apply only when the discrete variant is
+    selected.
+    """
 
     actor_network: Any = None
     qvalue_network: Any = None
     value_network: Any = None
     discrete: bool = False
+    action_space: Any = None
     num_qvalue_nets: int = 2
     loss_function: str = "smooth_l1"
     temperature: float = 1.0
     expectile: float = 0.5
     gamma: float | None = None
+    priority_key: str | None = None
     separate_losses: bool = False
     reduction: str | None = None
     deactivate_vmap: bool = False
+    scalar_output_mode: str | None = None
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_iql_loss"
 
     def __post_init__(self) -> None:
@@ -310,13 +375,20 @@ def _make_iql_loss(*args, **kwargs) -> IQLLoss:
     if value_network is not None and hasattr(value_network, "_target_"):
         kwargs["value_network"] = value_network()
     if discrete_loss_type:
+        # DiscreteIQLLoss has no `deactivate_vmap` kwarg.
+        kwargs.pop("deactivate_vmap", None)
         return DiscreteIQLLoss(*args, **kwargs)
+    # IQLLoss has no `action_space` kwarg.
+    kwargs.pop("action_space", None)
     return IQLLoss(*args, **kwargs)
 
 
 @dataclass
 class CQLLossConfig(LossConfig):
-    """A class to configure a CQL loss."""
+    """Hydra configuration for :class:`~torchrl.objectives.CQLLoss`.
+
+    Every kwarg accepted by ``CQLLoss.__init__`` is exposed as a field here.
+    """
 
     actor_network: Any = None
     qvalue_network: Any = None
@@ -339,6 +411,7 @@ class CQLLossConfig(LossConfig):
     lagrange_thresh: float = 0.0
     reduction: str | None = None
     deactivate_vmap: bool = False
+    scalar_output_mode: str | None = None
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_cql_loss"
 
     def __post_init__(self) -> None:
