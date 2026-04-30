@@ -260,6 +260,7 @@ class _EnvPostInit(abc.ABCMeta):
         spec_locked = kwargs.pop("spec_locked", True)
         auto_reset = kwargs.pop("auto_reset", False)
         auto_reset_replace = kwargs.pop("auto_reset_replace", True)
+        policy = kwargs.pop("policy", None)
         instance: EnvBase = super().__call__(*args, **kwargs)
         if "_cache" not in instance.__dict__:
             instance._cache = {}
@@ -284,9 +285,17 @@ class _EnvPostInit(abc.ABCMeta):
                 AutoResetTransform,
             )
 
-            return AutoResetEnv(
+            instance = AutoResetEnv(
                 instance, AutoResetTransform(replace=auto_reset_replace)
             )
+            if policy is not None:
+                # Local import: torchrl.modules imports torchrl.envs at module import time.
+                from torchrl.modules.utils.utils import (
+                    _maybe_append_env_transforms_from_module,
+                )
+
+                instance = _maybe_append_env_transforms_from_module(instance, policy)
+            return instance
 
         done_keys = set(instance.full_done_spec.keys(True, True))
         obs_keys = set(instance.full_observation_spec.keys(True, True))
@@ -308,6 +317,13 @@ class _EnvPostInit(abc.ABCMeta):
                     f"The set of keys of one spec collides (culprit: {total_set.intersection(keyset)}) with another."
                 )
             total_set = total_set.union(keyset)
+        if policy is not None:
+            # Local import: torchrl.modules imports torchrl.envs at module import time.
+            from torchrl.modules.utils.utils import (
+                _maybe_append_env_transforms_from_module,
+            )
+
+            instance = _maybe_append_env_transforms_from_module(instance, policy)
         return instance
 
 
@@ -327,6 +343,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             at every reset and every step. Defaults to ``False``.
         allow_done_after_reset (bool, optional): if ``True``, an environment can
             be done after a call to :meth:`reset` is made. Defaults to ``False``.
+        policy (torch.nn.Module, optional): a policy module used to infer and
+            append any environment transforms it needs, such as
+            :class:`~torchrl.envs.transforms.InitTracker` and recurrent-state
+            :class:`~torchrl.envs.transforms.TensorDictPrimer` transforms.
+            This returns a :class:`~torchrl.envs.TransformedEnv` when transforms
+            are added.
         spec_locked (bool, optional): if ``True``, the specs are locked and can only be
             modified if :meth:`~torchrl.envs.EnvBase.set_spec_lock_` is called.
 

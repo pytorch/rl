@@ -12,11 +12,11 @@ needs to happen there.
 
 Pieces, in the order they appear:
 
-* :func:`~torchrl.modules.get_env_transforms_from_module(policy)` returns the
+* ``GymEnv(..., policy=policy)`` attaches the
   :class:`~torchrl.envs.transforms.InitTracker` and
   :class:`~torchrl.envs.transforms.TensorDictPrimer` the recurrent policy
-  needs, in a single call. Append it to the env and ``is_init`` and the
-  hidden-state key both materialise in every rollout.
+  needs. If the env is passed in bare, the collector performs the same setup
+  before collection starts.
 * :class:`~torchrl.collectors.SyncDataCollector` is constructed with
   ``replay_buffer=rb`` so the collector populates the buffer itself — no
   ``rb.extend(...)`` in the training loop. ``collector.start()`` runs it in a
@@ -50,14 +50,8 @@ from torch import nn
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers import SliceSampler
-from torchrl.envs import GymEnv, TransformedEnv
-from torchrl.modules import (
-    get_env_transforms_from_module,
-    GRUModule,
-    MLP,
-    QValueModule,
-    set_recurrent_mode,
-)
+from torchrl.envs import GymEnv
+from torchrl.modules import GRUModule, MLP, QValueModule, set_recurrent_mode
 
 torch.manual_seed(0)
 
@@ -88,9 +82,9 @@ qval = QValueModule(action_space="categorical")
 policy = Seq(OrderedDict(embed=embed, gru=gru, mlp=mlp, qval=qval))
 
 # ---------------------------------------------------------------------------
-# Env: one call hooks up InitTracker + TensorDictPrimer for the GRU.
+# Env: the policy argument hooks up InitTracker + TensorDictPrimer for the GRU.
 # ---------------------------------------------------------------------------
-env = TransformedEnv(GymEnv("CartPole-v1"), get_env_transforms_from_module(policy))
+env = GymEnv("CartPole-v1", policy=policy)
 
 # ---------------------------------------------------------------------------
 # Replay buffer: no traj_key — the sampler auto-detects it on first sample.
@@ -117,25 +111,26 @@ collector = SyncDataCollector(
     total_frames=-1,
     replay_buffer=rb,
 )
-collector.start()
+try:
+    collector.start()
 
-# Wait until the buffer has enough data to draw a first batch.
-while rb.write_count < BATCH_SIZE:
-    time.sleep(0.05)
+    # Wait until the buffer has enough data to draw a first batch.
+    while rb.write_count < BATCH_SIZE:
+        time.sleep(0.05)
 
-# ---------------------------------------------------------------------------
-# Training loop: sample, run the recurrent policy, done.
-# ---------------------------------------------------------------------------
-N_TRAINING_STEPS = 5
-for step in range(N_TRAINING_STEPS):
-    sample = rb.sample()
-    if step == 0:
-        # First sample triggered the auto-detect — confirm what was picked.
-        print("Auto-detected traj_key:", rb.sampler.traj_key)
-    with set_recurrent_mode("recurrent"):
-        out = policy(sample)
-    assert out["action_value"].shape == torch.Size([NUM_SLICES * SLICE_LEN, N_ACT])
-    print(f"step {step}: write_count={rb.write_count}")
-
-collector.async_shutdown()
+    # ---------------------------------------------------------------------------
+    # Training loop: sample, run the recurrent policy, done.
+    # ---------------------------------------------------------------------------
+    N_TRAINING_STEPS = 5
+    for step in range(N_TRAINING_STEPS):
+        sample = rb.sample()
+        if step == 0:
+            # First sample triggered the auto-detect — confirm what was picked.
+            print("Auto-detected traj_key:", rb.sampler.traj_key)
+        with set_recurrent_mode("recurrent"):
+            out = policy(sample)
+        assert out["action_value"].shape == torch.Size([NUM_SLICES * SLICE_LEN, N_ACT])
+        print(f"step {step}: write_count={rb.write_count}")
+finally:
+    collector.async_shutdown()
 print("\nDone.")

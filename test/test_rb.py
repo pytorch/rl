@@ -110,7 +110,7 @@ from torchrl.envs.transforms.transforms import (
     UnsqueezeTransform,
     VecNorm,
 )
-from torchrl.modules import RandomPolicy
+from torchrl.modules import GRUModule, RandomPolicy, set_recurrent_mode
 
 from torchrl.testing import (
     capture_log_records,
@@ -3602,6 +3602,59 @@ class TestSamplers:
         sample = rb.sample()
         # is_init must not appear if it wasn't in the storage
         assert "is_init" not in sample.keys(True)
+
+    def test_slice_sampler_flat_sample_matches_batched_recurrent_module(self):
+        """A flat padded sample must match an explicit [B, T] recurrent call."""
+        torch.manual_seed(0)
+        B, T = 4, 5
+        input_size, hidden_size = 3, 7
+        parts = []
+        for traj_id, length in enumerate([11, 9, 10, 12]):
+            is_init = torch.zeros(length, 1, dtype=torch.bool)
+            is_init[0] = True
+            parts.append(
+                TensorDict(
+                    {
+                        "traj": torch.full((length,), traj_id, dtype=torch.int),
+                        "embed": torch.randn(length, input_size),
+                        "recurrent_state": torch.randn(length, 1, hidden_size),
+                        "is_init": is_init,
+                    },
+                    batch_size=[length],
+                )
+            )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(sum(part.shape[0] for part in parts)),
+            sampler=SliceSampler(
+                slice_len=T,
+                traj_key="traj",
+                strict_length=False,
+                pad_output=True,
+            ),
+            batch_size=B * T,
+        )
+        rb.extend(torch.cat(parts))
+        sample = rb.sample()
+        assert sample["is_init"].reshape(B, T)[:, 0].all()
+
+        gru = GRUModule(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=1,
+            in_keys=["embed", "recurrent_state", "is_init"],
+            out_keys=["features", ("next", "recurrent_state")],
+        )
+        with set_recurrent_mode("recurrent"):
+            flat_out = gru(sample.clone())
+            batched_out = gru(sample.clone().reshape(B, T))
+
+        torch.testing.assert_close(
+            flat_out["features"].reshape(B, T, hidden_size), batched_out["features"]
+        )
+        torch.testing.assert_close(
+            flat_out[("next", "recurrent_state")].reshape(B, T, 1, hidden_size),
+            batched_out[("next", "recurrent_state")],
+        )
 
     def test_slice_sampler_mask_all_long_trajs_no_mask(self):
         """When all trajs >= slice_len, pad_output=True still emits no mask (nothing to pad)."""

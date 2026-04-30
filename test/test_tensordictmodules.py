@@ -15,6 +15,7 @@ from tensordict import LazyStackedTensorDict, pad, TensorDict, unravel_key_list
 from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
 from tensordict.utils import assert_close
 from torch import nn
+from torchrl.collectors import SyncDataCollector
 from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
 from torchrl.envs import (
     CatFrames,
@@ -1783,6 +1784,77 @@ def test_get_env_transforms_from_module_custom_init_key():
     # No RNN → bare InitTracker
     assert isinstance(transforms, InitTracker)
     assert transforms.init_key == "my_init"
+
+
+def _make_recurrent_counting_policy():
+    obs_to_float = TensorDictModule(
+        lambda observation: observation.to(torch.get_default_dtype()),
+        in_keys=["observation"],
+        out_keys=["embed"],
+    )
+    gru = GRUModule(
+        input_size=1,
+        hidden_size=1,
+        num_layers=1,
+        in_keys=["embed", "recurrent_state", "is_init"],
+        out_keys=["embed", ("next", "recurrent_state")],
+    )
+    action = TensorDictModule(
+        lambda embed: torch.ones_like(embed, dtype=torch.bool),
+        in_keys=["embed"],
+        out_keys=["action"],
+    )
+    return TensorDictSequential(obs_to_float, gru, action)
+
+
+def test_env_policy_argument_adds_recurrent_transforms():
+    """EnvBase subclasses accept policy=... and return a prepared TransformedEnv."""
+    policy = _make_recurrent_counting_policy()
+    env = CountingEnv(max_steps=3, policy=policy)
+    assert isinstance(env, TransformedEnv)
+    assert any(isinstance(t, InitTracker) for t in env.transform)
+    assert any(isinstance(t, TensorDictPrimer) for t in env.transform)
+
+    tensordict = env.reset()
+    assert "is_init" in tensordict.keys()
+    assert "recurrent_state" in tensordict.keys()
+
+
+def test_collector_adds_recurrent_env_transforms():
+    """Collectors prepare bare envs from recurrent policies before rollout."""
+    policy = _make_recurrent_counting_policy()
+    collector = SyncDataCollector(
+        CountingEnv(max_steps=3),
+        policy,
+        frames_per_batch=3,
+        total_frames=3,
+    )
+    try:
+        assert isinstance(collector.env, TransformedEnv)
+        assert any(isinstance(t, InitTracker) for t in collector.env.transform)
+        assert any(isinstance(t, TensorDictPrimer) for t in collector.env.transform)
+        batch = next(iter(collector))
+        assert "is_init" in batch.keys()
+        assert "recurrent_state" in batch.keys()
+    finally:
+        collector.shutdown()
+
+
+def test_collector_does_not_duplicate_recurrent_env_transforms():
+    """Collector auto-setup is idempotent with env policy=... setup."""
+    policy = _make_recurrent_counting_policy()
+    collector = SyncDataCollector(
+        CountingEnv(max_steps=3, policy=policy),
+        policy,
+        frames_per_batch=3,
+        total_frames=3,
+    )
+    try:
+        transforms = list(collector.env.transform)
+        assert sum(isinstance(t, InitTracker) for t in transforms) == 1
+        assert sum(isinstance(t, TensorDictPrimer) for t in transforms) == 1
+    finally:
+        collector.shutdown()
 
 
 if __name__ == "__main__":

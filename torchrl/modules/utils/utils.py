@@ -127,6 +127,69 @@ def get_env_transforms_from_module(module, init_key="is_init"):
     return Compose(tracker, primer)
 
 
+def _maybe_append_env_transforms_from_module(
+    env,
+    module,
+    init_key: str = "is_init",
+    *,
+    require_primer: bool = False,
+):
+    """Append recurrent env transforms required by ``module`` if absent."""
+    if not hasattr(module, "apply"):
+        return env
+    primer = get_primers_from_module(module, warn=False)
+    if require_primer and primer is None:
+        return env
+
+    # Local import: torchrl.envs imports torchrl.modules at module import time.
+    from torchrl.envs.transforms import Compose, InitTracker, TensorDictPrimer
+    from torchrl.envs.transforms.transforms import TransformedEnv
+
+    def _flatten(transform):
+        if transform is None:
+            return []
+        if isinstance(transform, Compose):
+            result = []
+            for item in transform:
+                result.extend(_flatten(item))
+            return result
+        return [transform]
+
+    existing = []
+    if isinstance(env, TransformedEnv):
+        existing = _flatten(env.transform)
+
+    has_init_tracker = any(
+        isinstance(transform, InitTracker) and transform.init_key == init_key
+        for transform in existing
+    )
+    existing_primer_keys = set()
+    for transform in existing:
+        if isinstance(transform, TensorDictPrimer):
+            existing_primer_keys.update(transform.primers.keys(True, True))
+
+    transforms = []
+    if not has_init_tracker:
+        transforms.append(InitTracker(init_key=init_key))
+
+    if primer is not None:
+        primer_transforms = [
+            transform
+            for transform in _flatten(primer)
+            if not (
+                isinstance(transform, TensorDictPrimer)
+                and set(transform.primers.keys(True, True)).issubset(
+                    existing_primer_keys
+                )
+            )
+        ]
+        transforms.extend(primer_transforms)
+
+    if not transforms:
+        return env
+    return env.append_transform(Compose(*transforms))
+
+
 def _unpad_tensors(tensors, mask, as_nested: bool = True) -> torch.Tensor:
     shape = tensors.shape[2:]
     mask = expand_as_right(mask.bool(), tensors)

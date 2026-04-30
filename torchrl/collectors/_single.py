@@ -42,6 +42,7 @@ from torchrl.envs.utils import (
     set_exploration_type,
 )
 from torchrl.modules import RandomPolicy, set_exploration_modules_spec_from_env
+from torchrl.modules.utils.utils import _maybe_append_env_transforms_from_module
 from torchrl.weight_update.utils import _resolve_model
 from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
 
@@ -488,6 +489,9 @@ class Collector(BaseCollector):
         # Set up policy version tracking
         self._setup_policy_version_tracking(track_policy_version)
 
+        # Set up recurrent policy environment transforms
+        self.env = self._maybe_setup_policy_env_transforms(self.env, policy)
+
         # Set up replay buffer
         self._setup_replay_buffer(
             replay_buffer=replay_buffer,
@@ -587,6 +591,16 @@ class Collector(BaseCollector):
                     )
                 env.update_kwargs(create_env_kwargs)
         return env
+
+    def _maybe_setup_policy_env_transforms(
+        self,
+        env: EnvBase,
+        policy: TensorDictModule | Callable,
+    ) -> EnvBase:
+        """Attach recurrent policy env transforms when the env does not have them."""
+        return _maybe_append_env_transforms_from_module(
+            env, policy, require_primer=True
+        )
 
     def _init_policy(
         self,
