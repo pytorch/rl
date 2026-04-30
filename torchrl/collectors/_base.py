@@ -228,6 +228,55 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
     verbose: bool = False
     _profile_config: ProfileConfig | None = None
     trajs_per_batch: int | None = None
+    _pre_collect_hook: Callable[[], None] | None = None
+    _post_collect_hook: Callable[[TensorDictBase], None] | None = None
+
+    def __init__(
+        self,
+        *,
+        pre_collect_hook: Callable[[], None] | None = None,
+        post_collect_hook: Callable[[TensorDictBase], None] | None = None,
+    ):
+        self._pre_collect_hook = pre_collect_hook
+        self._post_collect_hook = post_collect_hook
+
+    @property
+    def pre_collect_hook(self) -> Callable[[], None] | None:
+        """Get the pre-collection hook.
+
+        Returns:
+            A callable to be executed before each rollout, or None.
+        """
+        return self._pre_collect_hook
+
+    @pre_collect_hook.setter
+    def pre_collect_hook(self, hook: Callable[[], None] | None) -> None:
+        """Set the pre-collection hook.
+
+        Args:
+            hook: A callable to be executed before each rollout.
+        """
+        self._pre_collect_hook = hook
+
+    @property
+    def post_collect_hook(self) -> Callable[[TensorDictBase], None] | None:
+        """Get the post-collection hook.
+
+        Returns:
+            A callable to be executed after each rollout, receiving the collected
+            TensorDict as argument, or None.
+        """
+        return self._post_collect_hook
+
+    @post_collect_hook.setter
+    def post_collect_hook(self, hook: Callable[[TensorDictBase], None] | None) -> None:
+        """Set the post-collection hook.
+
+        Args:
+            hook: A callable to be executed after each rollout, receiving the
+                collected TensorDict as argument.
+        """
+        self._post_collect_hook = hook
 
     def enable_profile(
         self,
@@ -408,6 +457,72 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                     f"Arguments and keyword arguments are not supported for non-callable attributes. Got {args} and {kwargs} for {attr_path}"
                 )
             return attr
+
+    def get_distant_attr(self, attr: str) -> Any:
+        """Get a nested attribute of this collector.
+
+        This method allows remote callers to retrieve attributes from nested
+        structures of the collector without needing to know the full structure.
+
+        Args:
+            attr: Full path to the attribute, e.g.,
+                "_receiver_schemes['model_id'].some_attribute"
+
+        Returns:
+            The value of the attribute.
+
+        Examples:
+            >>> collector.get_distant_attr("_receiver_schemes['policy']._sync_interval")
+        """
+        return _resolve_attr(self, attr)
+
+    def map_fn(
+        self,
+        method_name: str,
+        list_of_args: list[tuple] | None = None,
+        list_of_kwargs: list[dict] | None = None,
+    ) -> list[Any]:
+        """Apply a method to each set of arguments.
+
+        This method executes a method on the collector with different arguments,
+        returning a list of results.
+
+        Args:
+            method_name: Name of the method to call on the collector.
+            list_of_args: List of positional argument tuples. Each tuple
+                contains the arguments for one call.
+            list_of_kwargs: List of keyword argument dicts. Each dict
+                contains the kwargs for one call.
+
+        Returns:
+            List of return values from each method call.
+
+        Examples:
+            >>> # Call a method with different arguments
+            >>> collector.map_fn("update_policy_weights_", list_of_args=[(weights1,), (weights2,)])
+            >>>
+            >>> # Call with kwargs
+            >>> collector.map_fn("update_policy_weights_", list_of_kwargs=[{"weights": w1}, {"weights": w2}])
+        """
+        if list_of_args is None:
+            list_of_args = [()] * len(list_of_kwargs) if list_of_kwargs else [()]
+        if list_of_kwargs is None:
+            list_of_kwargs = [{}] * len(list_of_args)
+
+        if len(list_of_args) != len(list_of_kwargs):
+            raise ValueError(
+                f"list_of_args and list_of_kwargs must have the same length. "
+                f"Got {len(list_of_args)} and {len(list_of_kwargs)}"
+            )
+
+        method = _resolve_attr(self, method_name)
+        if not callable(method):
+            raise AttributeError(f"Attribute {method_name} is not callable.")
+
+        results = []
+        for args, kwargs in zip(list_of_args, list_of_kwargs):
+            results.append(method(*args, **kwargs))
+        return results
 
     def _get_policy_and_device(
         self,

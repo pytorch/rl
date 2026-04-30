@@ -13,6 +13,7 @@ from collections.abc import Callable
 from functools import partial
 
 from tensordict import TensorDict, TensorDictBase
+from tensordict.utils import NestedKey
 from torch import optim
 
 from torchrl.collectors import BaseCollector
@@ -87,6 +88,14 @@ class PPOTrainer(Trainer):
             timing information for all hooks to the logger (e.g., wandb, tensorboard).
             Timing metrics will be logged with prefix "time/" (e.g., "time/hook/UpdateWeights").
             Default is False.
+        done_key (NestedKey, optional): Done key used by GAE, losses, and logging. Default: "done".
+        terminated_key (NestedKey, optional): Terminated key used by GAE, losses, and logging.
+            Default: "terminated".
+        reward_key (NestedKey, optional): Reward key used by GAE, losses, and logging. Default: "reward".
+        episode_reward_key (NestedKey, optional): Episode reward key used for cumulative reward logging.
+            Default: "reward".
+        action_key (NestedKey, optional): Action key used by losses and logging. Default: "action".
+        observation_key (NestedKey, optional): Observation key used for logging. Default: "observation".
 
     Examples:
         >>> # Basic usage with manual configuration
@@ -137,6 +146,12 @@ class PPOTrainer(Trainer):
         gae: Callable[[TensorDictBase], TensorDictBase] | None = None,
         weight_update_map: dict[str, str] | None = None,
         log_timings: bool = False,
+        done_key: NestedKey = "done",
+        terminated_key: NestedKey = "terminated",
+        reward_key: NestedKey = "reward",
+        episode_reward_key: NestedKey = "reward",
+        action_key: NestedKey = "action",
+        observation_key: NestedKey = "observation",
     ) -> None:
         warnings.warn(
             "PPOTrainer is an experimental/prototype feature. The API may change in future versions. "
@@ -173,9 +188,25 @@ class PPOTrainer(Trainer):
                 value_network=self.loss_module.critic_network,
                 average_gae=True,
             )
-            self.register_op("pre_epoch", gae)
         elif not add_gae and gae is not None:
             raise ValueError("gae must not be provided if add_gae is False")
+
+        if add_gae:
+            if hasattr(gae, "set_keys"):
+                gae.set_keys(
+                    reward=reward_key,
+                    done=done_key,
+                    terminated=terminated_key,
+                )
+            self.register_op("pre_epoch", gae)
+
+        if hasattr(self.loss_module, "set_keys"):
+            self.loss_module.set_keys(
+                reward=reward_key,
+                done=done_key,
+                terminated=terminated_key,
+                action=action_key,
+            )
 
         if (
             not self.async_collection
@@ -259,6 +290,12 @@ class PPOTrainer(Trainer):
         self.log_rewards = log_rewards
         self.log_actions = log_actions
         self.log_observations = log_observations
+        self.done_key = done_key
+        self.terminated_key = terminated_key
+        self.reward_key = reward_key
+        self.episode_reward_key = episode_reward_key
+        self.action_key = action_key
+        self.observation_key = observation_key
 
         # Set up comprehensive logging for PPO training
         if self.enable_logging:
@@ -276,7 +313,7 @@ class PPOTrainer(Trainer):
         """
         # Always log done states as percentage (episode completion rate)
         log_done_percentage = LogScalar(
-            key=("next", "done"),
+            key=("next", self.done_key),
             logname="done_percentage",
             log_pbar=True,
             include_std=False,  # No std for binary values
@@ -291,7 +328,7 @@ class PPOTrainer(Trainer):
         if self.log_rewards:
             # 1. Log training rewards (most important metric for PPO)
             log_rewards = LogScalar(
-                key=("next", "reward"),
+                key=("next", self.reward_key),
                 logname="r_training",
                 log_pbar=True,  # Show in progress bar
                 include_std=True,
@@ -304,7 +341,7 @@ class PPOTrainer(Trainer):
 
             # 2. Log maximum reward in batch (for monitoring best performance)
             log_max_reward = LogScalar(
-                key=("next", "reward"),
+                key=("next", self.reward_key),
                 logname="r_max",
                 log_pbar=False,
                 include_std=False,
@@ -317,7 +354,7 @@ class PPOTrainer(Trainer):
 
             # 3. Log total reward in batch (for monitoring cumulative performance)
             log_total_reward = LogScalar(
-                key=("next", "reward"),
+                key=("next", self.episode_reward_key),
                 logname="r_total",
                 log_pbar=False,
                 include_std=False,
@@ -332,7 +369,7 @@ class PPOTrainer(Trainer):
         if self.log_actions:
             # 4. Log action norms (useful for monitoring policy behavior)
             log_action_norm = LogScalar(
-                key="action",
+                key=self.action_key,
                 logname="action_norm",
                 log_pbar=False,
                 include_std=True,
@@ -347,7 +384,7 @@ class PPOTrainer(Trainer):
         if self.log_observations:
             # 5. Log observation statistics (for monitoring state distributions)
             log_obs_norm = LogScalar(
-                key="observation",
+                key=self.observation_key,
                 logname="obs_norm",
                 log_pbar=False,
                 include_std=True,

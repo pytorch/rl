@@ -13,7 +13,11 @@ import torch
 
 from omegaconf import MISSING
 
-from torchrl.trainers.algorithms.configs.common import ConfigBase
+from torchrl.trainers.algorithms.configs.common import (
+    _normalize_hydra_key,
+    _normalize_hydra_keys,
+    ConfigBase,
+)
 
 
 @dataclass
@@ -392,6 +396,10 @@ def _make_tensordict_module(*args, **kwargs):
     module = kwargs.pop("module")
     shared = kwargs.pop("shared", False)
 
+    for key in ("in_keys", "out_keys"):
+        if key in kwargs:
+            kwargs[key] = _normalize_hydra_keys(kwargs[key])
+
     # Instantiate the module if it's a config
     if hasattr(module, "_target_"):
         module = instantiate(module)
@@ -417,7 +425,7 @@ def _make_tensordict_sequential(*args, **kwargs):
     modules = kwargs.pop("modules")
     shared = kwargs.pop("shared", False)
     partial_tolerant = kwargs.pop("partial_tolerant", False)
-    selected_out_keys = kwargs.pop("selected_out_keys", None)
+    selected_out_keys = _normalize_hydra_keys(kwargs.pop("selected_out_keys", None))
     inplace = kwargs.pop("inplace", None)
 
     def _instantiate_module(module):
@@ -464,9 +472,9 @@ def _make_tanh_normal_model(*args, **kwargs):
 
     # Extract parameters
     network = kwargs.pop("network")
-    in_keys = list(kwargs.pop("in_keys", ["observation"]))
-    param_keys = list(kwargs.pop("param_keys", ["loc", "scale"]))
-    out_keys = list(kwargs.pop("out_keys", ["action"]))
+    in_keys = _normalize_hydra_keys(kwargs.pop("in_keys", ["observation"]))
+    param_keys = _normalize_hydra_keys(kwargs.pop("param_keys", ["loc", "scale"]))
+    out_keys = _normalize_hydra_keys(kwargs.pop("out_keys", ["action"]))
     extract_normal_params = kwargs.pop("extract_normal_params", True)
     scale_mapping = kwargs.pop("scale_mapping", "biased_softplus_1.0")
     scale_lb = kwargs.pop("scale_lb", 1e-4)
@@ -518,6 +526,10 @@ def _make_value_model(*args, **kwargs):
     network = kwargs.pop("network")
     shared = kwargs.pop("shared", False)
 
+    for key in ("in_keys", "out_keys"):
+        if key in kwargs:
+            kwargs[key] = _normalize_hydra_keys(kwargs[key])
+
     # Instantiate the network if it's a config
     if hasattr(network, "_target_"):
         network = instantiate(network)
@@ -536,36 +548,28 @@ def _make_value_model(*args, **kwargs):
 
 def _make_tanh_module(*args, **kwargs):
     """Helper function to create a TanhModule."""
-    from omegaconf import ListConfig
-
     from torchrl.modules import TanhModule
 
     kwargs.pop("shared", False)
 
-    if "in_keys" in kwargs and isinstance(kwargs["in_keys"], ListConfig):
-        kwargs["in_keys"] = list(kwargs["in_keys"])
-    if "out_keys" in kwargs and isinstance(kwargs["out_keys"], ListConfig):
-        kwargs["out_keys"] = list(kwargs["out_keys"])
+    if "in_keys" in kwargs:
+        kwargs["in_keys"] = _normalize_hydra_keys(kwargs["in_keys"])
+    if "out_keys" in kwargs:
+        kwargs["out_keys"] = _normalize_hydra_keys(kwargs["out_keys"])
 
     return TanhModule(**kwargs)
 
 
 def _make_additive_gaussian_module(*args, **kwargs):
     """Helper function to create an AdditiveGaussianModule."""
-    from omegaconf import ListConfig
-
     from torchrl.modules.tensordict_module.exploration import AdditiveGaussianModule
 
     kwargs.pop("shared", False)
     kwargs.pop("in_keys", None)
     kwargs.pop("out_keys", None)
 
-    if "action_key" in kwargs and isinstance(kwargs["action_key"], ListConfig):
-        action_key_list = list(kwargs["action_key"])
-        if len(action_key_list) == 1:
-            kwargs["action_key"] = action_key_list[0]
-        else:
-            kwargs["action_key"] = tuple(action_key_list)
+    if "action_key" in kwargs:
+        kwargs["action_key"] = _normalize_hydra_key(kwargs["action_key"])
 
     return AdditiveGaussianModule(**kwargs)
 
@@ -593,7 +597,7 @@ def _make_qvalue_model(*args, **kwargs):
 
     network = kwargs.pop("network")
     shared = kwargs.pop("shared", False)
-    out_keys = kwargs.pop("out_keys", None)
+    out_keys = _normalize_hydra_keys(kwargs.pop("out_keys", None))
     kwargs.pop("param_keys", None)
 
     if out_keys is not None and "action_value_key" not in kwargs:

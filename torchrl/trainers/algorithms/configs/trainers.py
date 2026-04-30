@@ -15,7 +15,8 @@ from torchrl.collectors import BaseCollector
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.objectives.value.advantages import GAE
-from torchrl.trainers.algorithms.configs.common import ConfigBase
+from torchrl.trainers import TrainerHookBase
+from torchrl.trainers.algorithms.configs.common import _normalize_hydra_key, ConfigBase
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
 from torchrl.trainers.algorithms.dqn import DQNTrainer
@@ -31,6 +32,18 @@ class TrainerConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for trainer configurations."""
+
+
+def _register_trainer_hooks(trainer: Any, hooks: list[Any] | None) -> None:
+    if hooks is None:
+        return
+    for index, hook in enumerate(hooks):
+        if not isinstance(hook, TrainerHookBase):
+            raise TypeError(
+                "trainer hooks must be TrainerHookBase instances with a "
+                f"register(trainer) method, got {type(hook)} at index {index}."
+            )
+        hook.register(trainer)
 
 
 @dataclass
@@ -62,6 +75,13 @@ class SACTrainerConfig(TrainerConfig):
     target_net_updater: Any = None
     async_collection: bool = False
     log_timings: bool = False
+    done_key: Any = "done"
+    terminated_key: Any = "terminated"
+    reward_key: Any = "reward"
+    episode_reward_key: Any = "reward_sum"
+    action_key: Any = "action"
+    observation_key: Any = "observation"
+    hooks: list[Any] | None = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_sac_trainer"
 
@@ -96,11 +116,20 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
     target_net_updater = kwargs.pop("target_net_updater")
     async_collection = kwargs.pop("async_collection", False)
     log_timings = kwargs.pop("log_timings", False)
+    done_key = _normalize_hydra_key(kwargs.pop("done_key", "done"))
+    terminated_key = _normalize_hydra_key(kwargs.pop("terminated_key", "terminated"))
+    reward_key = _normalize_hydra_key(kwargs.pop("reward_key", "reward"))
+    episode_reward_key = _normalize_hydra_key(
+        kwargs.pop("episode_reward_key", "reward_sum")
+    )
+    action_key = _normalize_hydra_key(kwargs.pop("action_key", "action"))
+    observation_key = _normalize_hydra_key(kwargs.pop("observation_key", "observation"))
+    hooks = kwargs.pop("hooks", None)
 
     # Instantiate networks first
-    if actor_network is not None:
+    if actor_network is not None and not isinstance(actor_network, torch.nn.Module):
         actor_network = actor_network()
-    if critic_network is not None:
+    if critic_network is not None and not isinstance(critic_network, torch.nn.Module):
         critic_network = critic_network()
 
     if not isinstance(collector, BaseCollector):
@@ -141,7 +170,7 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
     if not isinstance(logger, Logger) and logger is not None:
         raise ValueError(f"logger must be a Logger, got {type(logger)}")
 
-    return SACTrainer(
+    trainer = SACTrainer(
         collector=collector,
         total_frames=total_frames,
         frame_skip=frame_skip,
@@ -160,7 +189,15 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
         target_net_updater=target_net_updater,
         async_collection=async_collection,
         log_timings=log_timings,
+        done_key=done_key,
+        terminated_key=terminated_key,
+        reward_key=reward_key,
+        episode_reward_key=episode_reward_key,
+        action_key=action_key,
+        observation_key=observation_key,
     )
+    _register_trainer_hooks(trainer, hooks)
+    return trainer
 
 
 @dataclass
@@ -225,6 +262,13 @@ class PPOTrainerConfig(TrainerConfig):
     gae: Any = None
     weight_update_map: dict[str, str] | None = None
     log_timings: bool = False
+    done_key: Any = "done"
+    terminated_key: Any = "terminated"
+    reward_key: Any = "reward"
+    episode_reward_key: Any = "reward"
+    action_key: Any = "action"
+    observation_key: Any = "observation"
+    hooks: list[Any] | None = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_ppo_trainer"
 
@@ -260,6 +304,15 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     create_env_fn = kwargs.pop("create_env_fn")
     weight_update_map = kwargs.pop("weight_update_map", None)
     log_timings = kwargs.pop("log_timings", False)
+    done_key = _normalize_hydra_key(kwargs.pop("done_key", "done"))
+    terminated_key = _normalize_hydra_key(kwargs.pop("terminated_key", "terminated"))
+    reward_key = _normalize_hydra_key(kwargs.pop("reward_key", "reward"))
+    episode_reward_key = _normalize_hydra_key(
+        kwargs.pop("episode_reward_key", "reward")
+    )
+    action_key = _normalize_hydra_key(kwargs.pop("action_key", "action"))
+    observation_key = _normalize_hydra_key(kwargs.pop("observation_key", "observation"))
+    hooks = kwargs.pop("hooks", None)
 
     if create_env_fn is not None:
         # could be referenced somewhere else, no need to raise an error
@@ -268,9 +321,9 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     async_collection = kwargs.pop("async_collection", False)
 
     # Instantiate networks first
-    if actor_network is not None:
+    if actor_network is not None and not isinstance(actor_network, torch.nn.Module):
         actor_network = actor_network()
-    if critic_network is not None:
+    if critic_network is not None and not isinstance(critic_network, torch.nn.Module):
         critic_network = critic_network()
     else:
         critic_network = loss_module.critic_network
@@ -320,7 +373,7 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     if not isinstance(gae, (GAE, TensorDictModuleBase)) and gae is not None:
         gae = gae()
 
-    return PPOTrainer(
+    trainer = PPOTrainer(
         collector=collector,
         total_frames=total_frames,
         frame_skip=frame_skip,
@@ -342,7 +395,15 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
         gae=gae,
         weight_update_map=weight_update_map,
         log_timings=log_timings,
+        done_key=done_key,
+        terminated_key=terminated_key,
+        reward_key=reward_key,
+        episode_reward_key=episode_reward_key,
+        action_key=action_key,
+        observation_key=observation_key,
     )
+    _register_trainer_hooks(trainer, hooks)
+    return trainer
 
 
 @dataclass
@@ -372,6 +433,7 @@ class DQNTrainerConfig(TrainerConfig):
     annealing_num_steps: int = 250_000
     async_collection: bool = False
     log_timings: bool = False
+    hooks: list[Any] | None = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_dqn_trainer"
 
@@ -410,6 +472,7 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
     annealing_num_steps = kwargs.pop("annealing_num_steps", 250_000)
     async_collection = kwargs.pop("async_collection", False)
     log_timings = kwargs.pop("log_timings", False)
+    hooks = kwargs.pop("hooks", None)
 
     if value_network is not None and not isinstance(value_network, torch.nn.Module):
         value_network = value_network()
@@ -455,7 +518,7 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
     if not isinstance(logger, Logger) and logger is not None:
         raise ValueError(f"logger must be a Logger, got {type(logger)}")
 
-    return DQNTrainer(
+    trainer = DQNTrainer(
         collector=collector,
         total_frames=total_frames,
         frame_skip=frame_skip,
@@ -476,6 +539,8 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
         async_collection=async_collection,
         log_timings=log_timings,
     )
+    _register_trainer_hooks(trainer, hooks)
+    return trainer
 
 
 @dataclass
@@ -503,6 +568,13 @@ class DDPGTrainerConfig(TrainerConfig):
     target_net_updater: Any = None
     async_collection: bool = False
     log_timings: bool = False
+    done_key: Any = "done"
+    terminated_key: Any = "terminated"
+    reward_key: Any = "reward"
+    episode_reward_key: Any = "reward_sum"
+    action_key: Any = "action"
+    observation_key: Any = "observation"
+    hooks: list[Any] | None = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_ddpg_trainer"
 
@@ -536,12 +608,20 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
     target_net_updater = kwargs.pop("target_net_updater")
     async_collection = kwargs.pop("async_collection", False)
     log_timings = kwargs.pop("log_timings", False)
+    done_key = _normalize_hydra_key(kwargs.pop("done_key", "done"))
+    terminated_key = _normalize_hydra_key(kwargs.pop("terminated_key", "terminated"))
+    reward_key = _normalize_hydra_key(kwargs.pop("reward_key", "reward"))
+    episode_reward_key = _normalize_hydra_key(
+        kwargs.pop("episode_reward_key", "reward_sum")
+    )
+    action_key = _normalize_hydra_key(kwargs.pop("action_key", "action"))
+    observation_key = _normalize_hydra_key(kwargs.pop("observation_key", "observation"))
+    hooks = kwargs.pop("hooks", None)
 
-    if actor_network is not None:
+    if actor_network is not None and not isinstance(actor_network, torch.nn.Module):
         actor_network = actor_network()
-    if critic_network is not None:
+    if critic_network is not None and not isinstance(critic_network, torch.nn.Module):
         critic_network = critic_network()
-
     if not isinstance(collector, BaseCollector):
         if not async_collection:
             collector = collector()
@@ -568,7 +648,7 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
     if not isinstance(logger, Logger) and logger is not None:
         raise ValueError(f"logger must be a Logger, got {type(logger)}")
 
-    return DDPGTrainer(
+    trainer = DDPGTrainer(
         collector=collector,
         total_frames=total_frames,
         frame_skip=frame_skip,
@@ -587,7 +667,15 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
         target_net_updater=target_net_updater,
         async_collection=async_collection,
         log_timings=log_timings,
+        done_key=done_key,
+        terminated_key=terminated_key,
+        reward_key=reward_key,
+        episode_reward_key=episode_reward_key,
+        action_key=action_key,
+        observation_key=observation_key,
     )
+    _register_trainer_hooks(trainer, hooks)
+    return trainer
 
 
 @dataclass
@@ -616,6 +704,7 @@ class IQLTrainerConfig(TrainerConfig):
     target_net_updater: Any = None
     async_collection: bool = False
     log_timings: bool = False
+    hooks: list[Any] | None = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_iql_trainer"
 
@@ -650,6 +739,7 @@ def _make_iql_trainer(*args, **kwargs) -> IQLTrainer:
     target_net_updater = kwargs.pop("target_net_updater")
     async_collection = kwargs.pop("async_collection", False)
     log_timings = kwargs.pop("log_timings", False)
+    hooks = kwargs.pop("hooks", None)
 
     if actor_network is not None:
         actor_network = actor_network()
@@ -686,7 +776,7 @@ def _make_iql_trainer(*args, **kwargs) -> IQLTrainer:
     if not isinstance(logger, Logger) and logger is not None:
         raise ValueError(f"logger must be a Logger, got {type(logger)}")
 
-    return IQLTrainer(
+    trainer = IQLTrainer(
         collector=collector,
         total_frames=total_frames,
         frame_skip=frame_skip,
@@ -706,6 +796,8 @@ def _make_iql_trainer(*args, **kwargs) -> IQLTrainer:
         async_collection=async_collection,
         log_timings=log_timings,
     )
+    _register_trainer_hooks(trainer, hooks)
+    return trainer
 
 
 @dataclass
@@ -733,6 +825,7 @@ class CQLTrainerConfig(TrainerConfig):
     target_net_updater: Any = None
     async_collection: bool = False
     log_timings: bool = False
+    hooks: list[Any] | None = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_cql_trainer"
 
@@ -766,6 +859,7 @@ def _make_cql_trainer(*args, **kwargs) -> CQLTrainer:
     target_net_updater = kwargs.pop("target_net_updater")
     async_collection = kwargs.pop("async_collection", False)
     log_timings = kwargs.pop("log_timings", False)
+    hooks = kwargs.pop("hooks", None)
 
     if actor_network is not None:
         actor_network = actor_network()
@@ -798,7 +892,7 @@ def _make_cql_trainer(*args, **kwargs) -> CQLTrainer:
     if not isinstance(logger, Logger) and logger is not None:
         raise ValueError(f"logger must be a Logger, got {type(logger)}")
 
-    return CQLTrainer(
+    trainer = CQLTrainer(
         collector=collector,
         total_frames=total_frames,
         frame_skip=frame_skip,
@@ -818,6 +912,8 @@ def _make_cql_trainer(*args, **kwargs) -> CQLTrainer:
         async_collection=async_collection,
         log_timings=log_timings,
     )
+    _register_trainer_hooks(trainer, hooks)
+    return trainer
 
 
 @dataclass
@@ -845,6 +941,7 @@ class TD3TrainerConfig(TrainerConfig):
     target_net_updater: Any = None
     policy_update_delay: int = 2
     value_estimator_gamma: float | None = None
+    hooks: list[Any] | None = None
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_td3_trainer"
 
     def __post_init__(self) -> None:
@@ -887,6 +984,7 @@ def _make_td3_trainer(*args, **kwargs):
     target_net_updater = kwargs.pop("target_net_updater", None)
     policy_update_delay = kwargs.pop("policy_update_delay", 2)
     value_estimator_gamma = kwargs.pop("value_estimator_gamma", None)
+    hooks = kwargs.pop("hooks", None)
 
     if actor_network is not None and not isinstance(actor_network, torch.nn.Module):
         actor_network = actor_network()
@@ -980,7 +1078,7 @@ def _make_td3_trainer(*args, **kwargs):
     if not isinstance(logger, Logger) and logger is not None:
         raise TypeError(f"logger must be a Logger or None, got {type(logger)}")
 
-    return TD3Trainer(
+    trainer = TD3Trainer(
         collector=collector,
         total_frames=total_frames,
         frame_skip=frame_skip,
@@ -1003,3 +1101,5 @@ def _make_td3_trainer(*args, **kwargs):
         target_net_updater=target_net_updater,
         exploration_module=exploration_module,
     )
+    _register_trainer_hooks(trainer, hooks)
+    return trainer

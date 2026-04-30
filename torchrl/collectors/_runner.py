@@ -190,6 +190,8 @@ def _main_async_collector(
     profile_config: ProfileConfig | None = None,
     trajs_per_batch: int | None = None,
     init_fn: Callable[[], None] | None = None,
+    pre_collect_hook: Callable[[], None] | None = None,
+    post_collect_hook: Callable[[TensorDictBase], None] | None = None,
 ) -> None:
     # Process-level initialisation hook (e.g. Isaac Lab ``AppLauncher``).
     # Runs before any CUDA/torchrl work in the child process.
@@ -256,6 +258,8 @@ def _main_async_collector(
             # which checks replay_buffer.write_count when replay_buffer is provided
             init_random_frames=init_random_frames,
             trajs_per_batch=trajs_per_batch,
+            pre_collect_hook=pre_collect_hook,
+            post_collect_hook=post_collect_hook,
         )
         # Set up weight receivers for worker process using the standard register_scheme_receiver API.
         # This properly initializes the schemes on the receiver side and stores them in _receiver_schemes.
@@ -581,6 +585,36 @@ def _main_async_collector(
                 pipe_child.send((result, "getattr_env"))
             except AttributeError as e:
                 pipe_child.send((e, "getattr_env"))
+            has_timed_out = False
+            continue
+
+        elif msg == "cascade_execute":
+            attr_path, args, kwargs = data_in
+            try:
+                result = inner_collector.cascade_execute(attr_path, *args, **kwargs)
+                pipe_child.send((result, "cascade_execute"))
+            except Exception as e:
+                pipe_child.send((e, "cascade_execute"))
+            has_timed_out = False
+            continue
+
+        elif msg == "get_distant_attr":
+            attr_name = data_in
+            try:
+                result = inner_collector.get_distant_attr(attr_name)
+                pipe_child.send((result, "get_distant_attr"))
+            except Exception as e:
+                pipe_child.send((e, "get_distant_attr"))
+            has_timed_out = False
+            continue
+
+        elif msg == "setattr":
+            attr_name, value = data_in
+            try:
+                setattr(inner_collector, attr_name, value)
+                pipe_child.send((None, "setattr"))
+            except Exception as e:
+                pipe_child.send((e, "setattr"))
             has_timed_out = False
             continue
 

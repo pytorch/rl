@@ -584,7 +584,7 @@ class PettingZooWrapper(_EnvWrapper):
                         )
 
         if self.return_state:
-            state = torch.as_tensor(self.state(), device=self.device)
+            state = self.observation_spec["state"].encode(self.state())
             tensordict_out.set("state", state)
 
         return tensordict_out
@@ -707,7 +707,7 @@ class PettingZooWrapper(_EnvWrapper):
         tensordict_out.set("truncated", truncated)
 
         if self.return_state:
-            state = torch.as_tensor(self.state(), device=self.device)
+            state = self.observation_spec["state"].encode(self.state())
             tensordict_out.set("state", state)
 
         return tensordict_out

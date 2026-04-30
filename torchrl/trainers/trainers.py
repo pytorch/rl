@@ -298,6 +298,10 @@ class Trainer:
             timing information for all hooks to the logger (e.g., wandb, tensorboard).
             Timing metrics will be logged with prefix "time/" (e.g., "time/hook/UpdateWeights").
             Default is False.
+        auto_log_optim_steps (bool, optional): If True, automatically log ``optim_steps`` and the
+            keys of the averaged loss TensorDict at the end of every optimization loop, in addition
+            to anything ``post_optim_complete_log`` hooks return. Set to False to fully delegate
+            this logging to user-registered hooks. Default is True.
     """
 
     @classmethod
@@ -336,6 +340,7 @@ class Trainer:
         num_epochs: int = 1,
         async_collection: bool = False,
         log_timings: bool = False,
+        auto_log_optim_steps: bool = True,
     ) -> None:
         # objects
         self.frame_skip = frame_skip
@@ -367,6 +372,7 @@ class Trainer:
         self.progress_bar = progress_bar and _has_tqdm
         self.save_trainer_interval = save_trainer_interval
         self.save_trainer_file = save_trainer_file
+        self.auto_log_optim_steps = auto_log_optim_steps
 
         self._log_dict = defaultdict(list)
 
@@ -417,6 +423,8 @@ class Trainer:
             []
         )  # Process batches for optimization (e.g., subsampling)
         self._post_optim_ops = []  # After optimization (e.g., weight syncing)
+        self._setup_ops = []  # Before training starts (e.g., warmups, lazy init)
+        self._shutdown_ops = []  # At training end (e.g., final eval, publish)
 
         self._modules = {}
 
@@ -631,6 +639,8 @@ class Trainer:
             "post_optim_complete_log",
             "pre_epoch",
             "post_epoch",
+            "setup",
+            "shutdown",
         ],
         op: Callable,
         **kwargs,
@@ -752,13 +762,21 @@ class Trainer:
             _check_input_output_typehint(op, input=None, output=None)
             self._post_epoch_ops.append((timed_op, kwargs))
 
+        elif dest == "setup":
+            _check_input_output_typehint(op, input=None, output=None)
+            self._setup_ops.append((timed_op, kwargs))
+
+        elif dest == "shutdown":
+            _check_input_output_typehint(op, input=None, output=None)
+            self._shutdown_ops.append((timed_op, kwargs))
+
         else:
             raise RuntimeError(
                 f"The hook collection {dest} is not recognised. Choose from:"
                 f"(batch_process, pre_optim_steps, process_optim_batch, post_loss, "
                 f"process_loss, optimizer, post_steps, post_optim, pre_steps_log, "
                 f"post_steps_log, post_optim_log, pre_epoch_log, post_epoch_log, "
-                f"post_optim_complete_log, pre_epoch, post_epoch)"
+                f"post_optim_complete_log, setup, shutdown, pre_epoch, post_epoch)"
             )
 
     register_hook = register_op
@@ -884,7 +902,11 @@ class Trainer:
             result = op(optim_steps, average_losses, **kwargs)
             if result is not None:
                 self._log(**result)
-        self._log(optim_steps=optim_steps, **average_losses)
+        if self.auto_log_optim_steps:
+            if average_losses is not None:
+                self._log(optim_steps=optim_steps, **average_losses)
+            else:
+                self._log(optim_steps=optim_steps)
 
     def _post_epoch_hook(self) -> None:
         """Execute regular hooks that run AFTER each epoch of optimization.
@@ -919,6 +941,14 @@ class Trainer:
             if result is not None:
                 self._log(**result)
 
+    def _setup_hook(self) -> None:
+        for op, kwargs in self._setup_ops:
+            op(**kwargs)
+
+    def _shutdown_hook(self) -> None:
+        for op, kwargs in self._shutdown_ops:
+            op(**kwargs)
+
     def train(self):
         if self.progress_bar:
             self._pbar = tqdm(total=self.total_frames)
@@ -933,6 +963,8 @@ class Trainer:
             iterator = self._async_iterator()
         else:
             iterator = self.collector
+
+        self._setup_hook()
 
         for batch in iterator:
             if not self.async_collection:
@@ -970,6 +1002,7 @@ class Trainer:
                 break
             self.save_trainer()
 
+        self._shutdown_hook()
         self.collector.shutdown()
 
     def _async_iterator(self):
@@ -1422,6 +1455,16 @@ class ClearCudaCache(TrainerHookBase):
         if self.count % self.interval == 0:
             torch.cuda.empty_cache()
 
+    def state_dict(self) -> dict[str, Any]:
+        return {"count": self.count}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        self.count = state_dict["count"]
+
+    def register(self, trainer: Trainer, name: str = "clear_cuda_cache"):
+        trainer.register_module(name, self)
+        trainer.register_op("pre_optim_steps", self)
+
 
 class LogTiming(TrainerHookBase):
     """Hook to log timing information collected by timeit context managers.
@@ -1592,6 +1635,12 @@ class LogScalar(TrainerHookBase):
             result[f"{self.logname}_std"] = std_value
 
         return result
+
+    def state_dict(self) -> dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        pass
 
     def register(self, trainer: Trainer, name: str | None = None):
         if name is None:

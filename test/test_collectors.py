@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import functools
 import gc
+import os
 import subprocess
 import sys
 import time
@@ -53,6 +54,7 @@ from torchrl.collectors import (
 )
 from torchrl.collectors._constants import _Interruptor
 from torchrl.collectors._multi_base import MultiCollector
+from torchrl.collectors.distributed.ray import _has_ray, RayCollector
 
 from torchrl.collectors.utils import (
     _make_policy_factory,
@@ -2508,7 +2510,6 @@ class TestCollectorDevices:
     @pytest.mark.parametrize("main_device", get_default_devices())
     @pytest.mark.parametrize("storing_device", [None, *get_default_devices()])
     def test_output_device(self, main_device, storing_device):
-
         # env has no device, policy is strictly on GPU
         device = None
         env_device = None
@@ -3123,7 +3124,6 @@ class TestPreemptiveThreshold:
         "env_name", ["vec"]
     )  # 1226: removing "conv" for efficiency
     def test_multisync_collector_interruptor_mechanism(self, env_name, seed=100):
-
         frames_per_batch = 800
 
         def env_fn(seed):
@@ -4331,6 +4331,288 @@ class TestCollectorsNonTensor:
         finally:
             collector.shutdown()
             del collector
+
+
+class TestCollectHooks:
+    def test_post_collect_hook_called(self):
+        call_count = 0
+
+        def hook(result):
+            nonlocal call_count
+            call_count += 1
+
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=64,
+            post_collect_hook=hook,
+        )
+        try:
+            batches = list(collector)
+            assert len(batches) > 0, "collector should yield batches"
+            assert call_count == len(
+                batches
+            ), f"hook was called {call_count} times, expected {len(batches)}"
+        finally:
+            collector.shutdown()
+
+    def test_post_collect_hook_receives_yielded_batch(self):
+        received_batches = []
+
+        def postproc(result):
+            result = result.clone()
+            result.set("hook_marker", torch.ones(result.batch_size, dtype=torch.bool))
+            return result
+
+        def hook(result):
+            assert "hook_marker" in result.keys()
+            received_batches.append(result)
+
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=64,
+            postproc=postproc,
+            post_collect_hook=hook,
+        )
+        try:
+            batches = list(collector)
+            assert len(batches) > 0
+            assert len(received_batches) == len(batches)
+            for batch, received in zip(batches, received_batches):
+                assert batch is received
+        finally:
+            collector.shutdown()
+
+    def test_post_collect_hook_for_metrics(self):
+        total_frames = 0
+
+        def compute_metrics(result):
+            nonlocal total_frames
+            total_frames += result.numel()
+
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=64,
+            post_collect_hook=compute_metrics,
+        )
+        try:
+            list(collector)
+            assert total_frames == 64
+        finally:
+            collector.shutdown()
+
+    def test_hooks_none_by_default(self):
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=64,
+        )
+        try:
+            assert collector.pre_collect_hook is None
+            assert collector.post_collect_hook is None
+            list(collector)
+        finally:
+            collector.shutdown()
+
+    def test_pre_collect_hook_called_from_constructor(self):
+        call_count = 0
+
+        def hook():
+            nonlocal call_count
+            call_count += 1
+
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=64,
+            pre_collect_hook=hook,
+        )
+        try:
+            batches = list(collector)
+            assert call_count == len(batches)
+        finally:
+            collector.shutdown()
+
+    def test_hook_setters(self):
+        pre_count = 0
+        post_count = 0
+
+        def pre_hook():
+            nonlocal pre_count
+            pre_count += 1
+
+        def post_hook(result):
+            nonlocal post_count
+            post_count += 1
+
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=64,
+        )
+        assert collector.pre_collect_hook is None
+        assert collector.post_collect_hook is None
+
+        collector.pre_collect_hook = pre_hook
+        collector.post_collect_hook = post_hook
+        assert collector.pre_collect_hook is pre_hook
+        assert collector.post_collect_hook is post_hook
+
+        try:
+            batches = list(collector)
+            assert pre_count == len(batches)
+            assert post_count == len(batches)
+        finally:
+            collector.shutdown()
+
+    def test_hook_exception_propagates(self):
+        def hook(result):
+            raise RuntimeError("hook failed")
+
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=64,
+            post_collect_hook=hook,
+        )
+        try:
+            with pytest.raises(RuntimeError, match="hook failed"):
+                list(collector)
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.parametrize("collector_cls", [MultiSyncCollector, MultiAsyncCollector])
+    def test_hooks_run_in_multiprocess_workers(self, collector_cls):
+        manager = torch.multiprocessing.Manager()
+        hook_calls = manager.list()
+
+        def pre_hook():
+            hook_calls.append(("pre", os.getpid()))
+
+        def post_hook(result):
+            hook_calls.append(("post", os.getpid(), result.numel()))
+
+        collector = collector_cls(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            policy=RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=128,
+            pre_collect_hook=pre_hook,
+            post_collect_hook=post_hook,
+        )
+        try:
+            list(collector)
+            pids = {entry[1] for entry in hook_calls}
+            assert pids
+            assert os.getpid() not in pids
+            assert len(pids) == 2
+            assert {entry[0] for entry in hook_calls} == {"pre", "post"}
+        finally:
+            collector.shutdown()
+            manager.shutdown()
+
+    def test_multiprocess_hook_setters_update_workers(self):
+        manager = torch.multiprocessing.Manager()
+        hook_calls = manager.list()
+        collector = MultiSyncCollector(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            policy=RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=64,
+        )
+
+        def pre_hook():
+            hook_calls.append(("pre", os.getpid()))
+
+        def post_hook(result):
+            hook_calls.append(("post", os.getpid()))
+
+        try:
+            collector.pre_collect_hook = pre_hook
+            collector.post_collect_hook = post_hook
+            list(collector)
+            pids = {entry[1] for entry in hook_calls}
+            assert os.getpid() not in pids
+            assert len(pids) == 2
+            assert {entry[0] for entry in hook_calls} == {"pre", "post"}
+        finally:
+            collector.shutdown()
+            manager.shutdown()
+
+
+class TestCollectorRemoteHelpers:
+    def test_local_map_fn_and_get_distant_attr(self):
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=16,
+            worker_idx=5,
+        )
+        try:
+            assert collector.get_distant_attr("worker_idx") == 5
+            assert collector.map_fn(
+                "get_distant_attr",
+                list_of_args=[("worker_idx",), ("frames_per_batch",)],
+            ) == [5, 16]
+            with pytest.raises(ValueError, match="same length"):
+                collector.map_fn(
+                    "get_distant_attr",
+                    list_of_args=[("worker_idx",)],
+                    list_of_kwargs=[{}, {}],
+                )
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.parametrize("collector_cls", [MultiSyncCollector, MultiAsyncCollector])
+    def test_multiprocess_map_fn_and_get_distant_attr(self, collector_cls):
+        collector = collector_cls(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            policy=RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=32,
+        )
+        try:
+            assert collector.get_distant_attr("worker_idx") == [0, 1]
+            assert collector.map_fn(
+                "get_distant_attr",
+                list_of_args=[("worker_idx",), ("worker_idx",)],
+            ) == [0, 1]
+            with pytest.raises(ValueError, match="Expected 2 argument entries"):
+                collector.map_fn("get_distant_attr", list_of_args=[("worker_idx",)])
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.skipif(not _has_ray, reason="requires ray.")
+    def test_ray_map_fn_and_get_distant_attr(self):
+        collector = RayCollector(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            policy=RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=32,
+            num_collectors=2,
+            ray_init_config={"num_cpus": 2, "include_dashboard": False},
+            remote_configs={"num_cpus": 1, "num_gpus": 0},
+        )
+        try:
+            assert collector.get_distant_attr("worker_idx") == [0, 1]
+            assert collector.map_fn(
+                "get_distant_attr",
+                list_of_args=[("worker_idx",), ("worker_idx",)],
+            ) == [0, 1]
+            with pytest.raises(ValueError, match="Expected 2 argument entries"):
+                collector.map_fn("get_distant_attr", list_of_args=[("worker_idx",)])
+        finally:
+            collector.shutdown()
 
 
 class TestCollectorRB:
