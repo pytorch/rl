@@ -17,9 +17,8 @@ from torchrl.objectives.value.advantages import GAE
 
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils_atari import make_parallel_env, make_ppo_models, SharedAdam
+from tensordict import from_module
 
-
-torch.set_float32_matmul_precision("high")
 
 
 class A3CWorker(mp.Process):
@@ -98,6 +97,19 @@ class A3CWorker(mp.Process):
             new_model = deepcopy(model)
         td_new_params.to_module(new_model)
         return new_model
+
+    def sync_with_global(self):
+        # Fast in-place copy using TensorDict
+        local_params = from_module(self.local_actor)
+        global_params = from_module(self.global_actor)
+        local_params.update_(global_params)
+        
+        # Repeat for critic if separate
+        local_critic_params = from_module(self.local_critic)
+        global_critic_params = from_module(self.global_critic)
+        local_critic_params.update_(global_critic_params)
+
+        torch.set_float32_matmul_precision("high")
 
     def update(self, batch, max_grad_norm=None):
         if max_grad_norm is None:
@@ -193,6 +205,9 @@ class A3CWorker(mp.Process):
 
                 num_network_updates += 1
                 loss = self.update(batch).clone()
+                
+                self.sync_with_global()
+                
                 losses.append(loss)
 
             losses = torch.stack(losses).float().mean()
