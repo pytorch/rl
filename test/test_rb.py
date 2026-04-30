@@ -14,6 +14,7 @@ import shutil
 import signal
 import sys
 import tempfile
+import warnings
 from functools import partial
 from pathlib import Path
 from unittest import mock
@@ -3308,7 +3309,8 @@ class TestSamplers:
     def test_slice_sampler_auto_traj_key_collector_ids(self):
         """Auto-detection should prefer ("collector", "traj_ids") over "episode"."""
         torch.manual_seed(0)
-        # Build data with both keys present; sampler should pick collector key.
+        # Build data with both keys present; sampler should pick collector key
+        # and warn that this changes the pre-0.13 default.
         traj_ids = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2], dtype=torch.int)
         data = TensorDict(
             {
@@ -3324,8 +3326,9 @@ class TestSamplers:
             batch_size=6,
         )
         rb.extend(data)
-        # Force resolution
-        sample = rb.sample()
+        # Force resolution — with both keys present we must see a FutureWarning.
+        with pytest.warns(FutureWarning, match="auto-detected"):
+            sample = rb.sample()
         assert rb.sampler.traj_key == ("collector", "traj_ids")
         assert rb.sampler._fetch_traj is True
         assert rb.sampler._traj_key_auto is False
@@ -3334,6 +3337,28 @@ class TestSamplers:
         for i in range(2):
             traj_vals = sample_reshaped[i][("collector", "traj_ids")]
             assert traj_vals.unique().numel() == 1
+
+    def test_slice_sampler_auto_traj_key_no_warning_single_key(self):
+        """No FutureWarning when only one of the two candidate keys is present."""
+        torch.manual_seed(0)
+        traj_ids = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2], dtype=torch.int)
+        data = TensorDict(
+            {
+                ("collector", "traj_ids"): traj_ids,
+                "obs": torch.arange(8).float(),
+            },
+            batch_size=[8],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(8),
+            sampler=SliceSampler(num_slices=2),
+            batch_size=6,
+        )
+        rb.extend(data)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            rb.sample()
+        assert rb.sampler.traj_key == ("collector", "traj_ids")
 
     def test_slice_sampler_auto_traj_key_episode(self):
         """Auto-detection falls back to 'episode' when collector key is absent."""
@@ -3443,7 +3468,7 @@ class TestSamplers:
         assert ("collector", "mask") in sample.keys(True)
 
     def test_slice_sampler_mask_shape_dtype(self):
-        """mask is bool with shape [B*T, 1]."""
+        """mask is bool with shape [B*T] (matches batch shape, no trailing 1)."""
         torch.manual_seed(0)
         B, T = 4, 6
         rb = self._make_rb_with_short_trajs(
@@ -3451,8 +3476,11 @@ class TestSamplers:
         )
         sample = rb.sample()
         mask = sample[("collector", "mask")]
-        assert mask.shape == torch.Size([B * T, 1])
+        assert mask.shape == torch.Size([B * T])
         assert mask.dtype == torch.bool
+        # mask must match the leading batch dim so trainer code can index
+        # batch[batch.get(("collector", "mask"))] without broadcasting tricks.
+        assert mask.shape[0] == sample.batch_size[0]
 
     def test_slice_sampler_mask_correctness(self):
         """mask rows are contiguous: True prefix followed by False suffix."""
@@ -3467,11 +3495,15 @@ class TestSamplers:
             # derive lengths from the mask itself
             lengths = mask.sum(-1)  # [B]
             for i in range(B):
-                l = lengths[i].item()
-                assert l >= 1
-                assert l <= T
-                assert mask[i, :l].all(), f"slice {i}: first {l} steps should be True"
-                assert not mask[i, l:].any(), f"slice {i}: steps after {l} should be False"
+                length = lengths[i].item()
+                assert length >= 1
+                assert length <= T
+                assert mask[
+                    i, :length
+                ].all(), f"slice {i}: first {length} steps should be True"
+                assert not mask[
+                    i, length:
+                ].any(), f"slice {i}: steps after {length} should be False"
 
     def test_slice_sampler_mask_padded_obs_is_valid(self):
         """Padded positions repeat the last real index — obs values must be finite."""
@@ -3483,11 +3515,13 @@ class TestSamplers:
         assert torch.isfinite(sample["obs"]).all()
 
     def test_slice_sampler_strict_length_no_mask(self):
-        """With strict_length=True (or pad_output=False), no mask is emitted."""
+        """With pad_output=False, no mask is emitted regardless of strict_length."""
         torch.manual_seed(0)
         data = TensorDict(
             {
-                "traj": torch.cat([torch.zeros(6, dtype=torch.int), torch.ones(6, dtype=torch.int)]),
+                "traj": torch.cat(
+                    [torch.zeros(6, dtype=torch.int), torch.ones(6, dtype=torch.int)]
+                ),
                 "obs": torch.arange(12).float(),
             },
             batch_size=[12],
@@ -3495,7 +3529,7 @@ class TestSamplers:
         rb = TensorDictReplayBuffer(
             storage=LazyTensorStorage(12),
             sampler=SliceSampler(
-                slice_len=4, traj_key="traj", strict_length=True, pad_output=True
+                slice_len=4, traj_key="traj", strict_length=True, pad_output=False
             ),
             batch_size=8,
         )
@@ -3503,12 +3537,21 @@ class TestSamplers:
         sample = rb.sample()
         assert ("collector", "mask") not in sample.keys(True)
 
+    def test_slice_sampler_pad_output_strict_length_raises(self):
+        """pad_output=True + strict_length=True is rejected at construction."""
+        with pytest.raises(ValueError, match="pad_output=True is incompatible"):
+            SliceSampler(
+                slice_len=4, traj_key="traj", strict_length=True, pad_output=True
+            )
+
     def test_slice_sampler_mask_all_long_trajs_no_mask(self):
         """When all trajs >= slice_len, pad_output=True still emits no mask (nothing to pad)."""
         torch.manual_seed(0)
         data = TensorDict(
             {
-                "traj": torch.cat([torch.zeros(8, dtype=torch.int), torch.ones(8, dtype=torch.int)]),
+                "traj": torch.cat(
+                    [torch.zeros(8, dtype=torch.int), torch.ones(8, dtype=torch.int)]
+                ),
                 "obs": torch.arange(16).float(),
             },
             batch_size=[16],
@@ -3537,12 +3580,16 @@ class TestSamplers:
         lengths = mask.sum(-1)  # [B] — derived from mask
         trunc = sample[("next", "truncated")].reshape(B, T)
         for i in range(B):
-            l = lengths[i].item()
-            # truncated should be True exactly at position l-1
-            assert trunc[i, l - 1].item(), f"slice {i}: truncated missing at last real step"
+            length = lengths[i].item()
+            # truncated should be True exactly at position length-1
+            assert trunc[
+                i, length - 1
+            ].item(), f"slice {i}: truncated missing at last real step"
             # no truncated flag in padded region
-            if l < T:
-                assert not trunc[i, l:].any(), f"slice {i}: spurious truncated in padding"
+            if length < T:
+                assert not trunc[
+                    i, length:
+                ].any(), f"slice {i}: spurious truncated in padding"
 
     @pytest.mark.parametrize("ndim", [1, 2])
     @pytest.mark.parametrize("strict_length", [True, False])

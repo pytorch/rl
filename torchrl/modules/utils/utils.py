@@ -115,6 +115,9 @@ def get_env_transforms_from_module(module, init_key="is_init"):
         >>> transforms = get_env_transforms_from_module(gru)
         >>> # TransformedEnv(base_env, transforms)
     """
+    # Local import: torchrl.envs imports from torchrl.modules, so a
+    # module-top import here creates a circular import. TYPE_CHECKING
+    # wouldn't help — we need the runtime classes.
     from torchrl.envs.transforms import Compose, InitTracker
 
     primer = get_primers_from_module(module, warn=False)
