@@ -1342,7 +1342,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         sampler (Sampler, optional): the sampler to be used. If none is provided,
             a default :class:`~torchrl.data.replay_buffers.PrioritizedSampler` with
             ``alpha``, ``beta``, and ``eps`` will be created.
-        device_sampler (torch.device or str, optional): device where the
+        sampler_device (torch.device or str, optional): device where the
             priority sampler trees will be stored. Defaults to ``None``, in
             which case CUDA storage selects CUDA sampling and CPU storage
             selects CPU sampling. Cannot be used together with ``sampler``.
@@ -1451,7 +1451,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         dtype: torch.dtype = torch.float,
         storage: Storage | None = None,
         sampler: Sampler | None = None,
-        device_sampler: DEVICE_TYPING | None = None,
+        sampler_device: DEVICE_TYPING | None = None,
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
@@ -1464,10 +1464,10 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             storage = ListStorage(max_size=1_000)
         if sampler is None:
             sampler = PrioritizedSampler(
-                storage.max_size, alpha, beta, eps, dtype, device=device_sampler
+                storage.max_size, alpha, beta, eps, dtype, device=sampler_device
             )
-        elif device_sampler is not None:
-            raise TypeError("device_sampler cannot be passed when sampler is provided.")
+        elif sampler_device is not None:
+            raise TypeError("sampler_device cannot be passed when sampler is provided.")
         super().__init__(
             storage=storage,
             sampler=sampler,
@@ -1917,7 +1917,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             This is to be used when the sampler is of type
             :class:`~torchrl.data.PrioritizedSampler`.
             Defaults to ``"td_error"``.
-        device_sampler (torch.device or str, optional): device where the
+        sampler_device (torch.device or str, optional): device where the
             priority sampler trees will be stored. Defaults to ``None``, in
             which case CUDA storage selects CUDA sampling and CPU storage
             selects CPU sampling.
@@ -2029,7 +2029,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         priority_key: str = "td_error",
         eps: float = 1e-8,
         storage: Storage | None = None,
-        device_sampler: DEVICE_TYPING | None = None,
+        sampler_device: DEVICE_TYPING | None = None,
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
@@ -2048,7 +2048,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             beta,
             eps,
             reduction=reduction,
-            device=device_sampler,
+            device=sampler_device,
         )
         super().__init__(
             priority_key=priority_key,

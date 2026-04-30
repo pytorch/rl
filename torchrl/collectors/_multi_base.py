@@ -394,10 +394,26 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
         init_fn: Callable[[], None] | None = None,
+        pre_collect_hook: Callable[[], None] | None = None,
+        post_collect_hook: Callable[[TensorDictBase], None] | None = None,
     ):
         self.closed = True
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
+        super().__init__(
+            pre_collect_hook=pre_collect_hook,
+            post_collect_hook=post_collect_hook,
+        )
+        self._worker_pre_collect_hook = (
+            CloudpickleWrapper(pre_collect_hook)
+            if pre_collect_hook is not None
+            else None
+        )
+        self._worker_post_collect_hook = (
+            CloudpickleWrapper(post_collect_hook)
+            if post_collect_hook is not None
+            else None
+        )
         self._worker_trajs_per_batch = None
         # Wrap init_fn with CloudpickleWrapper to support lambdas / closures
         # across the spawn start method.
@@ -1244,6 +1260,8 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "profile_config": self._profile_config,
                     "trajs_per_batch": self._worker_trajs_per_batch,
                     "init_fn": self._worker_init_fn,
+                    "pre_collect_hook": self._worker_pre_collect_hook,
+                    "post_collect_hook": self._worker_post_collect_hook,
                 }
                 proc = _ProcessNoWarnCtx(
                     target=_main_async_collector,
@@ -1550,6 +1568,106 @@ also that the state dict is synchronised across processes if needed."""
                         raise TimeoutError(
                             f"Worker {idx}: Timed out waiting for profile confirmation."
                         )
+
+    def _set_worker_attr(self, attr_name: str, value: Any) -> None:
+        if not hasattr(self, "pipes") or getattr(self, "closed", True):
+            return
+        _check_for_faulty_process(self.procs)
+        for pipe in self.pipes:
+            pipe.send(((attr_name, value), "setattr"))
+        for idx, pipe in enumerate(self.pipes):
+            result, msg = self._recv_and_check(pipe, worker_idx=idx)
+            if msg != "setattr":
+                raise RuntimeError(f"Expected msg='setattr', got {msg}")
+            if isinstance(result, Exception):
+                raise result
+
+    @property
+    def pre_collect_hook(self) -> Callable[[], None] | None:
+        return self._pre_collect_hook
+
+    @pre_collect_hook.setter
+    def pre_collect_hook(self, hook: Callable[[], None] | None) -> None:
+        self._pre_collect_hook = hook
+        self._worker_pre_collect_hook = (
+            CloudpickleWrapper(hook) if hook is not None else None
+        )
+        self._set_worker_attr("pre_collect_hook", self._worker_pre_collect_hook)
+
+    @property
+    def post_collect_hook(self) -> Callable[[TensorDictBase], None] | None:
+        return self._post_collect_hook
+
+    @post_collect_hook.setter
+    def post_collect_hook(self, hook: Callable[[TensorDictBase], None] | None) -> None:
+        self._post_collect_hook = hook
+        self._worker_post_collect_hook = (
+            CloudpickleWrapper(hook) if hook is not None else None
+        )
+        self._set_worker_attr("post_collect_hook", self._worker_post_collect_hook)
+
+    def _normalize_worker_calls(
+        self,
+        list_of_args: list[tuple] | None = None,
+        list_of_kwargs: list[dict] | None = None,
+    ) -> tuple[list[tuple], list[dict]]:
+        if list_of_args is None and list_of_kwargs is None:
+            list_of_args = [()] * self.num_workers
+            list_of_kwargs = [{}] * self.num_workers
+        elif list_of_args is None:
+            list_of_args = [()] * len(list_of_kwargs)
+        elif list_of_kwargs is None:
+            list_of_kwargs = [{}] * len(list_of_args)
+
+        if len(list_of_args) != self.num_workers:
+            raise ValueError(
+                f"Expected {self.num_workers} argument entries, got {len(list_of_args)}."
+            )
+        if len(list_of_kwargs) != self.num_workers:
+            raise ValueError(
+                f"Expected {self.num_workers} keyword-argument entries, got {len(list_of_kwargs)}."
+            )
+        return list_of_args, list_of_kwargs
+
+    def map_fn(
+        self,
+        method_name: str,
+        list_of_args: list[tuple] | None = None,
+        list_of_kwargs: list[dict] | None = None,
+    ) -> list[Any]:
+        """Apply a method to each worker collector."""
+        list_of_args, list_of_kwargs = self._normalize_worker_calls(
+            list_of_args, list_of_kwargs
+        )
+        _check_for_faulty_process(self.procs)
+        for pipe, args, kwargs in zip(self.pipes, list_of_args, list_of_kwargs):
+            pipe.send(((method_name, args, kwargs), "cascade_execute"))
+
+        results = []
+        for idx, pipe in enumerate(self.pipes):
+            result, msg = self._recv_and_check(pipe, worker_idx=idx)
+            if msg != "cascade_execute":
+                raise RuntimeError(f"Expected msg='cascade_execute', got {msg}")
+            if isinstance(result, Exception):
+                raise result
+            results.append(result)
+        return results
+
+    def get_distant_attr(self, attr: str) -> list[Any]:
+        """Get a nested attribute from each worker collector."""
+        _check_for_faulty_process(self.procs)
+        for pipe in self.pipes:
+            pipe.send((attr, "get_distant_attr"))
+
+        results = []
+        for idx, pipe in enumerate(self.pipes):
+            result, msg = self._recv_and_check(pipe, worker_idx=idx)
+            if msg != "get_distant_attr":
+                raise RuntimeError(f"Expected msg='get_distant_attr', got {msg}")
+            if isinstance(result, Exception):
+                raise result
+            results.append(result)
+        return results
 
     def __del__(self):
         try:

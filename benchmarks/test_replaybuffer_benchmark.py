@@ -79,6 +79,15 @@ def sample_prioritized_sampler(sampler, storage, batch_size):
         torch.cuda.synchronize(sampler.device)
 
 
+def sample_prioritized_replay_buffer(rb):
+    sample = rb.sample()
+    sampler_device = rb._sampler.device
+    if sampler_device.type == "cuda":
+        torch.cuda.synchronize(sampler_device)
+    elif sample.device is not None and sample.device.type == "cuda":
+        torch.cuda.synchronize(sample.device)
+
+
 def iterate(rb):
     next(rb)
 
@@ -136,6 +145,73 @@ class create_prioritized_sampler:
         return ((sampler, storage, self.batch_size), {})
 
 
+class create_prioritized_replay_buffer:
+    def __init__(
+        self,
+        size,
+        storage_type,
+        storage_device,
+        sampler_device,
+        batch_size,
+        alpha=0.7,
+        beta=0.5,
+    ):
+        self.size = size
+        self.storage_type = storage_type
+        self.storage_device = torch.device(storage_device)
+        self.sampler_device = torch.device(sampler_device)
+        self.batch_size = batch_size
+        self.alpha = alpha
+        self.beta = beta
+
+    def __call__(self):
+        ext = pytest.importorskip("torchrl._torchrl")
+        if not hasattr(ext, "SumSegmentTreeFp32"):
+            _skip_or_fail_unavailable("TorchRL was not built with segment tree support")
+        if "cuda" in {self.storage_device.type, self.sampler_device.type}:
+            if not torch.cuda.is_available():
+                _skip_or_fail_unavailable("CUDA is not available")
+            if not hasattr(ext, "CudaSumSegmentTreeFp32"):
+                _skip_or_fail_unavailable(
+                    "TorchRL was not built with CUDA segment tree support"
+                )
+        if self.storage_type == "memmap":
+            storage = LazyMemmapStorage(self.size)
+            data_device = torch.device("cpu")
+        elif self.storage_type == "tensor":
+            storage = LazyTensorStorage(self.size, device=self.storage_device)
+            data_device = self.storage_device
+        else:
+            raise RuntimeError(f"Unknown storage_type {self.storage_type}.")
+        rb = TensorDictPrioritizedReplayBuffer(
+            alpha=self.alpha,
+            beta=self.beta,
+            storage=storage,
+            sampler_device=self.sampler_device,
+            batch_size=self.batch_size,
+            priority_key="td_error",
+        )
+        data = TensorDict(
+            {
+                "obs": torch.arange(
+                    self.size, dtype=torch.float32, device=data_device
+                ).unsqueeze(-1),
+                "td_error": torch.linspace(0.1, 1.0, self.size, device=data_device),
+            },
+            batch_size=[self.size],
+            device=data_device,
+        )
+        rb.extend(data)
+        if self.storage_device.type == "cuda":
+            torch.cuda.synchronize(self.storage_device)
+        if (
+            self.sampler_device.type == "cuda"
+            and self.sampler_device != self.storage_device
+        ):
+            torch.cuda.synchronize(self.sampler_device)
+        return ((rb,), {})
+
+
 def _prioritized_sampler_benchmark_devices():
     device = os.getenv("TORCHRL_BENCHMARK_DEVICE")
     if device == "CPU":
@@ -143,6 +219,26 @@ def _prioritized_sampler_benchmark_devices():
     if device == "GPU":
         return ["cuda"]
     return ["cpu", "cuda"]
+
+
+def _prioritized_replay_buffer_benchmark_configs():
+    device = os.getenv("TORCHRL_BENCHMARK_DEVICE")
+    if device == "CPU":
+        return [
+            pytest.param("memmap", "cpu", "cpu", id="memmap_cpu_storage_cpu_sampler")
+        ]
+    if device == "GPU":
+        return [
+            pytest.param("tensor", "cuda", "cuda", id="cuda_storage_cuda_sampler"),
+            pytest.param("memmap", "cpu", "cuda", id="memmap_cpu_storage_cuda_sampler"),
+            pytest.param("tensor", "cuda", "cpu", id="cuda_storage_cpu_sampler"),
+        ]
+    return [
+        pytest.param("memmap", "cpu", "cpu", id="memmap_cpu_storage_cpu_sampler"),
+        pytest.param("tensor", "cuda", "cuda", id="cuda_storage_cuda_sampler"),
+        pytest.param("memmap", "cpu", "cuda", id="memmap_cpu_storage_cuda_sampler"),
+        pytest.param("tensor", "cuda", "cpu", id="cuda_storage_cpu_sampler"),
+    ]
 
 
 @pytest.mark.parametrize(
@@ -183,19 +279,38 @@ def test_rb_sample(benchmark, rb, storage, sampler, size):
     benchmark(sample, rb)
 
 
-@pytest.mark.parametrize("device", _prioritized_sampler_benchmark_devices())
-@pytest.mark.parametrize("size", [1_000_000, 10_000_000])
-def test_prioritized_sampler_sample_scale(benchmark, size, device):
-    batch_size = 65_536
-    (sampler, storage, batch_size), _ = create_prioritized_sampler(
-        size=size, device=device, batch_size=batch_size
-    )()
-    benchmark(
-        sample_prioritized_sampler,
-        sampler,
-        storage,
-        batch_size,
+class TestPrioritizedReplayBufferBenchmark:
+    @pytest.mark.parametrize("device", _prioritized_sampler_benchmark_devices())
+    @pytest.mark.parametrize("size", [1_000_000, 10_000_000])
+    def test_sampler_sample_scale(self, benchmark, size, device):
+        batch_size = 65_536
+        (sampler, storage, batch_size), _ = create_prioritized_sampler(
+            size=size, device=device, batch_size=batch_size
+        )()
+        benchmark(
+            sample_prioritized_sampler,
+            sampler,
+            storage,
+            batch_size,
+        )
+
+    @pytest.mark.parametrize(
+        "storage_type,storage_device,sampler_device",
+        _prioritized_replay_buffer_benchmark_configs(),
     )
+    @pytest.mark.parametrize("size", [1_000_000])
+    def test_sample_mixed_devices(
+        self, benchmark, size, storage_type, storage_device, sampler_device
+    ):
+        batch_size = 65_536
+        (rb,), _ = create_prioritized_replay_buffer(
+            size=size,
+            storage_type=storage_type,
+            storage_device=storage_device,
+            sampler_device=sampler_device,
+            batch_size=batch_size,
+        )()
+        benchmark(sample_prioritized_replay_buffer, rb)
 
 
 def infinite_iter(obj):

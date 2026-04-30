@@ -1544,12 +1544,12 @@ def test_cuda_prioritized_replay_buffer_samples_on_cuda():
     assert sample["priority_weight"].device == device
 
 
-def test_tensordict_prioritized_replay_buffer_device_sampler_cpu():
+def test_tensordict_prioritized_replay_buffer_sampler_device_cpu():
     rb = TensorDictPrioritizedReplayBuffer(
         alpha=0.7,
         beta=0.5,
         storage=LazyTensorStorage(32),
-        device_sampler="cpu",
+        sampler_device="cpu",
         batch_size=8,
         priority_key="td_error",
     )
@@ -1580,7 +1580,7 @@ def test_tensordict_prioritized_replay_buffer_memmap_storage_cuda_sampler(tmpdir
         alpha=0.7,
         beta=0.5,
         storage=LazyMemmapStorage(32, scratch_dir=tmpdir),
-        device_sampler="cuda:0",
+        sampler_device="cuda:0",
         batch_size=8,
         priority_key="td_error",
     )
@@ -1615,7 +1615,7 @@ def test_tensordict_prioritized_replay_buffer_cuda_storage_cpu_sampler():
         alpha=0.7,
         beta=0.5,
         storage=LazyTensorStorage(32, device=device),
-        device_sampler="cpu",
+        sampler_device="cpu",
         batch_size=8,
         priority_key="td_error",
     )
@@ -4909,6 +4909,63 @@ class TestSharedStorageInit:
         expected = {0.0, 1.0, 2.0, 3.0}
         assert expected.issubset(values)
         assert len(storage) >= 8
+
+    def prioritized_collector_worker(self, rb, worker_id, queue):
+        data = TensorDict(
+            {
+                "obs": torch.full((4, 1), worker_id, dtype=torch.float32),
+                "td_error": torch.linspace(0.1, 1.0, 4) + worker_id,
+            },
+            batch_size=(4,),
+        )
+        rb.extend(data)
+        queue.put("done")
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+    def test_prioritized_memmap_cuda_sampler_after_multiprocess_writes(self, tmpdir):
+        ext = pytest.importorskip("torchrl._torchrl")
+        if not hasattr(ext, "CudaSumSegmentTreeFp32"):
+            pytest.skip("TorchRL was not built with CUDA segment tree support")
+
+        storage = LazyMemmapStorage(max_size=32, scratch_dir=tmpdir, shared_init=True)
+        writer_rb = TensorDictReplayBuffer(storage=storage, batch_size=4).share(True)
+        queue = mp.Queue()
+
+        processes = []
+        for i in range(2):
+            p = mp.Process(
+                target=self.prioritized_collector_worker,
+                args=(writer_rb, i, queue),
+            )
+            processes.append(p)
+            p.start()
+
+        for p in processes:
+            p.join()
+            assert p.exitcode == 0
+            assert queue.get(timeout=5) == "done"
+
+        assert len(storage) == 8
+        learner_rb = TensorDictPrioritizedReplayBuffer(
+            alpha=0.7,
+            beta=0.5,
+            storage=storage,
+            sampler_device="cuda:0",
+            batch_size=4,
+            priority_key="td_error",
+        )
+
+        sample = learner_rb.sample()
+        assert learner_rb._sampler.device == torch.device("cuda:0")
+        assert sample["obs"].device.type == "cpu"
+        assert sample["index"].device.type == "cpu"
+        assert sample["priority_weight"].device.type == "cpu"
+
+        sample["td_error"] = torch.ones_like(sample["td_error"]) * 10
+        learner_rb.update_tensordict_priority(sample)
+        sample = learner_rb.sample()
+        assert sample["index"].device.type == "cpu"
 
 
 @pytest.mark.skipif(not _has_zstandard, reason="zstandard required for this test.")
