@@ -1200,7 +1200,11 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
 
     def read_action(self, action):
         action = super().read_action(action)
-        if isinstance(self.action_spec, (OneHot, Categorical)) and action.size == 1:
+        if (
+            isinstance(self.action_spec, (OneHot, Categorical))
+            and action.size == 1
+            and not self._is_batched
+        ):
             # some envs require an integer for indexing
             action = int(action)
         return action
@@ -1383,6 +1387,8 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
 
     @implement_for("gymnasium", None, "1.0.0")
     def _reward_space(self, env):  # noqa: F811
+        if hasattr(env, "reward_space") and env.reward_space is not None:
+            return env.reward_space
         env = env.unwrapped
         if hasattr(env, "reward_space") and env.reward_space is not None:
             rs = env.reward_space
@@ -1390,6 +1396,8 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
 
     @implement_for("gymnasium", "1.1.0")
     def _reward_space(self, env):  # noqa: F811
+        if hasattr(env, "reward_space") and env.reward_space is not None:
+            return env.reward_space
         env = env.unwrapped
         if hasattr(env, "reward_space") and env.reward_space is not None:
             rs = env.reward_space
@@ -1472,8 +1480,11 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
                 categorical_action_encoding=self._categorical_action_encoding,
             )
         else:
+            reward_shape = [1]
+            if self._is_batched and batch_size is None:
+                reward_shape = [*self.batch_size, *reward_shape]
             reward_spec = Unbounded(
-                shape=[1],
+                shape=reward_shape,
                 device=self.device,
             )
         if batch_size is not None:
@@ -1968,9 +1979,15 @@ class GymEnv(GymWrapper):
                 else:
                     raise err
         env = super()._build_env(env, pixels_only=pixels_only, from_pixels=from_pixels)
+        reward_space = self._reward_space(env)
         if num_envs > 0:
             make_fn = partial(self.lib.make, env_name, **kwargs)
             env = self._async_env([make_fn] * num_envs)
+            if reward_space is not None and self._reward_space(env) is None:
+                reward_space = gym_backend("vector.utils").batch_space(
+                    reward_space, num_envs
+                )
+                env.reward_space = reward_space
             self.batch_size = torch.Size([num_envs, *self.batch_size])
         return env
 
