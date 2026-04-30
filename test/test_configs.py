@@ -2743,6 +2743,8 @@ trainer:
   mixing_strategy: qmix
   reward_key: reward
   episode_reward_key: reward_sum
+  aggregated_reward_key: reward
+  aggregated_episode_reward_key: reward_sum
   done_key: done
   terminated_key: terminated
   action_key: action

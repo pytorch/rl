@@ -182,8 +182,10 @@ trainer:
   eps_end: ${exploration.eps_end}
   annealing_num_steps: ${exploration.annealing_num_steps}
   mixing_strategy: qmix
-  reward_key: reward
-  episode_reward_key: episode_reward
+  reward_key: [agents, reward]
+  episode_reward_key: [agents, episode_reward]
+  aggregated_reward_key: reward
+  aggregated_episode_reward_key: episode_reward
   done_key: done
   terminated_key: terminated
   action_key: [agents, action]

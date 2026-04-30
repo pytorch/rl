@@ -440,6 +440,8 @@ class DQNTrainerConfig(TrainerConfig):
     terminated_key: Any = "terminated"
     reward_key: Any = "reward"
     episode_reward_key: Any = "reward_sum"
+    aggregated_reward_key: Any = None
+    aggregated_episode_reward_key: Any = None
     action_key: Any = "action"
     observation_key: Any = "observation"
 
@@ -487,6 +489,12 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
     reward_key = _normalize_hydra_key(kwargs.pop("reward_key", "reward"))
     episode_reward_key = _normalize_hydra_key(
         kwargs.pop("episode_reward_key", "reward_sum")
+    )
+    aggregated_reward_key = _normalize_hydra_key(
+        kwargs.pop("aggregated_reward_key", None)
+    )
+    aggregated_episode_reward_key = _normalize_hydra_key(
+        kwargs.pop("aggregated_episode_reward_key", None)
     )
     action_key = _normalize_hydra_key(kwargs.pop("action_key", "action"))
     observation_key = _normalize_hydra_key(kwargs.pop("observation_key", "observation"))
@@ -572,6 +580,8 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
         terminated_key=terminated_key,
         reward_key=reward_key,
         episode_reward_key=episode_reward_key,
+        aggregated_reward_key=aggregated_reward_key,
+        aggregated_episode_reward_key=aggregated_episode_reward_key,
         action_key=action_key,
         observation_key=observation_key,
         async_collection=async_collection,
