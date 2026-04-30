@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import inspect
 import os
 import tempfile
 from argparse import Namespace
@@ -36,6 +37,13 @@ from torchrl.data import (
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.testing import PONG_VERSIONED
 from torchrl.trainers import LogValidationReward, Trainer
+from torchrl.trainers.algorithms.cql import CQLTrainer
+from torchrl.trainers.algorithms.ddpg import DDPGTrainer
+from torchrl.trainers.algorithms.dqn import DQNTrainer
+from torchrl.trainers.algorithms.iql import IQLTrainer
+from torchrl.trainers.algorithms.ppo import PPOTrainer
+from torchrl.trainers.algorithms.sac import SACTrainer
+from torchrl.trainers.algorithms.td3 import TD3Trainer
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.trainers import (
     _has_tqdm,
@@ -1275,6 +1283,26 @@ class TestPostOptimCompleteLog:
         # but the trainer doesn't auto-log them
         assert "optim_steps" not in trainer._log_dict
         assert "loss" not in trainer._log_dict
+
+    @pytest.mark.parametrize(
+        "trainer_cls",
+        [
+            SACTrainer,
+            PPOTrainer,
+            DQNTrainer,
+            DDPGTrainer,
+            IQLTrainer,
+            CQLTrainer,
+            TD3Trainer,
+        ],
+    )
+    def test_subclass_exposes_auto_log_optim_steps(self, trainer_cls):
+        """Every Trainer subclass must surface auto_log_optim_steps in its __init__."""
+        sig = inspect.signature(trainer_cls.__init__)
+        assert (
+            "auto_log_optim_steps" in sig.parameters
+        ), f"{trainer_cls.__name__}.__init__ must accept auto_log_optim_steps"
+        assert sig.parameters["auto_log_optim_steps"].default is True
 
 
 class TestDefaultOptimizationStepper:

@@ -160,3 +160,24 @@ all.
 
 Read a recently-merged PR in the same area and match the conventions there
 before inventing your own.
+
+## 16. Config / class parity
+
+Some classes (Trainers under `torchrl/trainers/algorithms/`, losses, replay-buffer
+components, transforms, …) have a Hydra `*Config` dataclass companion under
+`torchrl/trainers/algorithms/configs/`. The Config exists so users can construct
+the class via Hydra YAML — it is a faithful façade.
+
+- **Parity.** Every kwarg accepted by the wrapped class's `__init__` must
+  appear as a field on the Config (with the same default), be popped from
+  `kwargs` inside the matching `_make_*` factory, and be forwarded into the
+  constructor. Adding a kwarg to the class without surfacing it in the Config
+  silently breaks Hydra users.
+- **Cross-references.** Each Config docstring must reference its wrapped class
+  via Sphinx (e.g. ``Hydra configuration for :class:`~torchrl.trainers.algorithms.SACTrainer```)
+  and the class docstring must reference the Config (e.g.
+  ``See also :class:`~torchrl.trainers.algorithms.configs.SACTrainerConfig```).
+  This makes the round-trip discoverable for both human and AI contributors.
+- **When in doubt**, run
+  `git grep -n "class .*Config(" torchrl/trainers/algorithms/configs/`
+  and inspect the matching `_make_*` factory to see the existing pattern.

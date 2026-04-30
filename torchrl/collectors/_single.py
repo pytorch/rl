@@ -450,11 +450,17 @@ class Collector(BaseCollector):
         track_policy_version: bool = False,
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
+        pre_collect_hook: Callable[[], None] | None = None,
+        post_collect_hook: Callable[[TensorDictBase], None] | None = None,
         **kwargs,
     ):
         self.closed = True
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
+        super().__init__(
+            pre_collect_hook=pre_collect_hook,
+            post_collect_hook=post_collect_hook,
+        )
 
         # Note: weight_sync_schemes can be used to send weights to components
         # within the environment (e.g., RayModuleTransform), not just sub-collectors
@@ -1420,6 +1426,8 @@ class Collector(BaseCollector):
                         for event in events:
                             event.record()
                             event.synchronize()
+                    if self.post_collect_hook is not None:
+                        self.post_collect_hook(tensordict_out)
                     yield tensordict_out
                 elif self.replay_buffer is not None and not self._ignore_rb:
                     self.replay_buffer.extend(tensordict_out)
@@ -1435,7 +1443,10 @@ class Collector(BaseCollector):
                     # >>>      else:
                     # >>>          break
                     # >>> assert data0["done"] is not data1["done"]
-                    yield tensordict_out.clone()
+                    tensordict_out = tensordict_out.clone()
+                    if self.post_collect_hook is not None:
+                        self.post_collect_hook(tensordict_out)
+                    yield tensordict_out
 
         # Stop profiler if it hasn't been stopped yet
         if profiler is not None and profiler.is_active:
@@ -1607,6 +1618,9 @@ class Collector(BaseCollector):
             TensorDictBase containing the computed rollout.
 
         """
+        if self.pre_collect_hook is not None:
+            self.pre_collect_hook()
+
         if self.reset_at_each_iter:
             self._carrier.update(self.env.reset())
 

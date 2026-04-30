@@ -144,6 +144,9 @@ class TD3OptimizationStepper(OptimizationStepper):
 class TD3Trainer(Trainer):
     """A trainer class for Twin Delayed DDPG (TD3) algorithm.
 
+    See also :class:`~torchrl.trainers.algorithms.configs.TD3TrainerConfig` for the
+    Hydra configuration counterpart.
+
     This trainer implements the TD3 algorithm, an off-policy actor-critic method
     that builds on DDPG with improvements for stability including:
     - Clipped double Q-learning
@@ -217,6 +220,7 @@ class TD3Trainer(Trainer):
         log_observations: bool = False,
         async_collection: bool = False,
         log_timings: bool = False,
+        auto_log_optim_steps: bool = True,
         target_net_updater: TargetNetUpdater,
         exploration_module: torch.nn.Module | None = None,
     ) -> None:
@@ -245,6 +249,7 @@ class TD3Trainer(Trainer):
             num_epochs=num_epochs,
             async_collection=async_collection,
             log_timings=log_timings,
+            auto_log_optim_steps=auto_log_optim_steps,
         )
         self.replay_buffer = replay_buffer
         self.async_collection = async_collection
