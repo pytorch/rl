@@ -301,6 +301,23 @@ clean <code class="xref py py-class docutils literal notranslate"><span class="p
 <li><p><strong>Batching strategies</strong>: Multiple ways to organize collected data</p></li>
 </ul>
 </section>
+<section id="collection-hooks">
+<h2>Collection hooks<a class="headerlink" href="#collection-hooks" title="Link to this heading">¶</a></h2>
+<p>Collectors accept optional hooks for per-rollout side effects:
+<code class="docutils literal notranslate"><span class="pre">pre_collect_hook</span></code> is called before a rollout starts, and
+<code class="docutils literal notranslate"><span class="pre">post_collect_hook</span></code> is called with the <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a>
+batch that will be yielded by iteration.  Hook return values are ignored, and
+exceptions raised by hooks propagate to the caller and stop collection.</p>
+<p>Hooks are intended for instrumentation and worker-local side effects, such as
+stepping a profiler or recording rollout metrics.  Use <code class="docutils literal notranslate"><span class="pre">postproc</span></code> when the
+collected data itself should be transformed before training.</p>
+<p>For <a class="reference internal" href="generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector" title="torchrl.collectors.MultiCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiCollector</span></code></a>, <a class="reference internal" href="generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector" title="torchrl.collectors.MultiSyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncCollector</span></code></a>, and
+<a class="reference internal" href="generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector" title="torchrl.collectors.MultiAsyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiAsyncCollector</span></code></a>, hooks run in each worker process.  The helper
+methods <a class="reference internal" href="generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.map_fn" title="torchrl.collectors.BaseCollector.map_fn"><code class="xref py py-meth docutils literal notranslate"><span class="pre">map_fn()</span></code></a> and
+<a class="reference internal" href="generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.get_distant_attr" title="torchrl.collectors.BaseCollector.get_distant_attr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_distant_attr()</span></code></a> broadcast to each
+worker for multi-process collectors and to each actor for
+<a class="reference internal" href="generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector" title="torchrl.collectors.distributed.RayCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">RayCollector</span></code></a>.</p>
+</section>
 <section id="quick-example">
 <h2>Quick Example<a class="headerlink" href="#quick-example" title="Link to this heading">¶</a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">Collector</span>
@@ -447,6 +464,7 @@ clean <code class="xref py py-class docutils literal notranslate"><span class="p
 <li><a class="reference internal" href="#">torchrl.collectors package</a><ul>
 <li><a class="reference internal" href="#multicollector-api">MultiCollector API</a></li>
 <li><a class="reference internal" href="#key-features">Key Features</a></li>
+<li><a class="reference internal" href="#collection-hooks">Collection hooks</a></li>
 <li><a class="reference internal" href="#quick-example">Quick Example</a></li>
 <li><a class="reference internal" href="#legacy-names">Legacy names</a></li>
 <li><a class="reference internal" href="#documentation-sections">Documentation Sections</a></li>

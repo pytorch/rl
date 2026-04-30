@@ -274,7 +274,7 @@ provided this argument is ignored.  Defaults to <code class="docutils literal no
 <li><p><strong>score_network</strong> (<em>nn.Module</em><em>, </em><em>optional</em>) – Network that predicts noise given
 <code class="docutils literal notranslate"><span class="pre">(noisy_action,</span> <span class="pre">observation,</span> <span class="pre">timestep)</span></code> concatenated along the
 last dimension.  If <code class="docutils literal notranslate"><span class="pre">None</span></code>, a two-hidden-layer MLP of width 256
-with a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear" title="(in PyTorch v2.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyLinear</span></code></a> first layer is constructed
+with a <code class="xref py py-class docutils literal notranslate"><span class="pre">LazyLinear</span></code> first layer is constructed
 automatically (<code class="docutils literal notranslate"><span class="pre">obs_dim</span></code> need not be specified in this case).</p></li>
 <li><p><strong>num_steps</strong> (<em>int</em>) – Number of DDPM denoising steps.  Defaults to 100.</p></li>
 <li><p><strong>beta_start</strong> (<em>float</em>) – Starting beta for the linear schedule.

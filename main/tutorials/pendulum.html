@@ -345,11 +345,11 @@ simulation graph.</p></li>
 
 <span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">Bounded</span><span class="p">,</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">Unbounded</span>
 <span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="p">(</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">CatTensors</span></a><span class="p">,</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">EnvBase</span></a><span class="p">,</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Transform</span></a><span class="p">,</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TransformedEnv</span></a><span class="p">,</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">UnsqueezeTransform</span></a><span class="p">,</span>
+    <span class="n">CatTensors</span><span class="p">,</span>
+    <span class="n">EnvBase</span><span class="p">,</span>
+    <span class="n">Transform</span><span class="p">,</span>
+    <span class="n">TransformedEnv</span><span class="p">,</span>
+    <span class="n">UnsqueezeTransform</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">torchrl.envs.transforms.transforms</span> <span class="kn">import</span> <span class="n">_apply_to_composite</span>
 <span class="kn">from</span> <span class="nn">torchrl.envs.utils</span> <span class="kn">import</span> <span class="n">check_env_specs</span><span class="p">,</span> <span class="n">step_mdp</span>
@@ -481,7 +481,7 @@ needed as the state needs to be read from the environment.</p>
     <span class="p">)</span>
     <span class="n">new_th</span> <span class="o">=</span> <span class="n">angle_normalize</span><span class="p">(</span><span class="n">th</span> <span class="o">+</span> <span class="n">new_thdot</span> <span class="o">*</span> <span class="n">dt</span><span class="p">)</span>
     <span class="n">reward</span> <span class="o">=</span> <span class="o">-</span><span class="n">costs</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">*</span><span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-    <span class="n">done</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros_like.html#torch.zeros_like" title="torch.zeros_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span></a><span class="p">(</span><span class="n">reward</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">bool</span></a><span class="p">)</span>
+    <span class="n">done</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">reward</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
     <span class="n">out</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">(</span>
         <span class="p">{</span>
             <span class="s2">&quot;th&quot;</span><span class="p">:</span> <span class="n">new_th</span><span class="p">,</span>
@@ -531,8 +531,8 @@ expect it to be <code class="docutils literal notranslate"><span class="pre">Fal
         <span class="c1"># parameters to get started.</span>
         <span class="n">tensordict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gen_params</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
 
-    <span class="n">high_th</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.tensor.html#torch.tensor" title="torch.tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span></a><span class="p">(</span><span class="n">DEFAULT_X</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
-    <span class="n">high_thdot</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.tensor.html#torch.tensor" title="torch.tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span></a><span class="p">(</span><span class="n">DEFAULT_Y</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">high_th</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">DEFAULT_X</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">high_thdot</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">DEFAULT_Y</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
     <span class="n">low_th</span> <span class="o">=</span> <span class="o">-</span><span class="n">high_th</span>
     <span class="n">low_thdot</span> <span class="o">=</span> <span class="o">-</span><span class="n">high_thdot</span>
 
@@ -540,12 +540,12 @@ expect it to be <code class="docutils literal notranslate"><span class="pre">Fal
     <span class="c1"># of simulators run simultaneously. In other contexts, the initial</span>
     <span class="c1"># random state&#39;s shape will depend upon the environment batch-size instead.</span>
     <span class="n">th</span> <span class="o">=</span> <span class="p">(</span>
-        <a href="https://docs.pytorch.org/docs/stable/generated/torch.rand.html#torch.rand" title="torch.rand" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">rand</span></a><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">rng</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">rng</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
         <span class="o">*</span> <span class="p">(</span><span class="n">high_th</span> <span class="o">-</span> <span class="n">low_th</span><span class="p">)</span>
         <span class="o">+</span> <span class="n">low_th</span>
     <span class="p">)</span>
     <span class="n">thdot</span> <span class="o">=</span> <span class="p">(</span>
-        <a href="https://docs.pytorch.org/docs/stable/generated/torch.rand.html#torch.rand" title="torch.rand" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">rand</span></a><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">rng</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">rng</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
         <span class="o">*</span> <span class="p">(</span><span class="n">high_thdot</span> <span class="o">-</span> <span class="n">low_thdot</span><span class="p">)</span>
         <span class="o">+</span> <span class="n">low_thdot</span>
     <span class="p">)</span>
@@ -613,13 +613,13 @@ this is irrelevant as the environment batch size will most likely be empty.</p>
             <span class="n">low</span><span class="o">=-</span><span class="n">torch</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span>
             <span class="n">high</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span>
             <span class="n">shape</span><span class="o">=</span><span class="p">(),</span>
-            <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">float32</span></a><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
         <span class="p">),</span>
         <span class="n">thdot</span><span class="o">=</span><span class="n">Bounded</span><span class="p">(</span>
             <span class="n">low</span><span class="o">=-</span><span class="n">td_params</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">,</span> <span class="s2">&quot;max_speed&quot;</span><span class="p">],</span>
             <span class="n">high</span><span class="o">=</span><span class="n">td_params</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">,</span> <span class="s2">&quot;max_speed&quot;</span><span class="p">],</span>
             <span class="n">shape</span><span class="o">=</span><span class="p">(),</span>
-            <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">float32</span></a><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
         <span class="p">),</span>
         <span class="c1"># we need to add the ``params`` to the observation specs, as we want</span>
         <span class="c1"># to pass it at each step during a rollout</span>
@@ -635,7 +635,7 @@ this is irrelevant as the environment batch size will most likely be empty.</p>
         <span class="n">low</span><span class="o">=-</span><span class="n">td_params</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">,</span> <span class="s2">&quot;max_torque&quot;</span><span class="p">],</span>
         <span class="n">high</span><span class="o">=</span><span class="n">td_params</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">,</span> <span class="s2">&quot;max_torque&quot;</span><span class="p">],</span>
         <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span>
-        <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">float32</span></a><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">reward_spec</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">*</span><span class="n">td_params</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
 
@@ -666,7 +666,7 @@ with the environment execution. The parent <code class="xref py py-func docutils
 incorporates a mechanism that allows seeding multiple environments with a
 different pseudo-random and reproducible seed.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">_set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="n">rng</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="torch.Generator" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Generator</span></a><span class="p">()</span>
+    <span class="n">rng</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span><span class="p">()</span>
     <span class="k">if</span> <span class="n">seed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">rng</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">rng</span> <span class="o">=</span> <span class="n">rng</span>
@@ -710,7 +710,7 @@ generates a set of hyperparameters to be used during execution:</p>
 attribute to <code class="docutils literal notranslate"><span class="pre">False</span></code>. This means that we will <strong>not</strong> enforce the input
 <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> to have a <code class="docutils literal notranslate"><span class="pre">batch-size</span></code> that matches the one of the environment.</p>
 <p>The following code will just put together the pieces we have coded above.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">PendulumEnv</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">EnvBase</span></a><span class="p">):</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">PendulumEnv</span><span class="p">(</span><span class="n">EnvBase</span><span class="p">):</span>
     <span class="n">metadata</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">&quot;render_modes&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;human&quot;</span><span class="p">,</span> <span class="s2">&quot;rgb_array&quot;</span><span class="p">],</span>
         <span class="s2">&quot;render_fps&quot;</span><span class="p">:</span> <span class="mi">30</span><span class="p">,</span>
@@ -724,7 +724,7 @@ attribute to <code class="docutils literal notranslate"><span class="pre">False<
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_make_spec</span><span class="p">(</span><span class="n">td_params</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">seed</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">seed</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.empty.html#torch.empty" title="torch.empty" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">empty</span></a><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">int64</span></a><span class="p">)</span><span class="o">.</span><span class="n">random_</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+            <span class="n">seed</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span><span class="o">.</span><span class="n">random_</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">set_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
 
     <span class="c1"># Helpers: _make_step and gen_params</span>
@@ -744,7 +744,7 @@ attribute to <code class="docutils literal notranslate"><span class="pre">False<
 to check that a (transformed) environment has an input/output structure that
 matches the one dictated by its specs.
 Let us try it out:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">env</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">PendulumEnv</span></a><span class="p">()</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">env</span> <span class="o">=</span> <span class="n">PendulumEnv</span><span class="p">()</span>
 <span class="n">check_env_specs</span><span class="p">(</span><span class="n">env</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -1003,10 +1003,10 @@ transforms!</p>
 <code class="docutils literal notranslate"><span class="pre">[&quot;th&quot;,</span> <span class="pre">&quot;thdot&quot;]</span></code> to be able to stack them along the last
 dimension. We also pass them as <code class="docutils literal notranslate"><span class="pre">in_keys_inv</span></code> to squeeze them back to their
 original shape once they are passed as input in the next iteration.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">env</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TransformedEnv</span></a><span class="p">(</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">env</span> <span class="o">=</span> <span class="n">TransformedEnv</span><span class="p">(</span>
     <span class="n">env</span><span class="p">,</span>
     <span class="c1"># ``Unsqueeze`` the observations that we will concatenate</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">UnsqueezeTransform</span></a><span class="p">(</span>
+    <span class="n">UnsqueezeTransform</span><span class="p">(</span>
         <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
         <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;th&quot;</span><span class="p">,</span> <span class="s2">&quot;thdot&quot;</span><span class="p">],</span>
         <span class="n">in_keys_inv</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;th&quot;</span><span class="p">,</span> <span class="s2">&quot;thdot&quot;</span><span class="p">],</span>
@@ -1025,7 +1025,7 @@ design, there are two steps in writing a transform:</p>
 <li><p>Adapting the environment specs.</p></li>
 </ul>
 <p>A transform can be used in two settings: on its own, it can be used as a
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>. It can also be used appended to a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code>. It can also be used appended to a
 <a class="reference internal" href="../reference/generated/torchrl.envs.transforms.TransformedEnv.html#torchrl.envs.transforms.TransformedEnv" title="torchrl.envs.transforms.TransformedEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">TransformedEnv</span></code></a>. The structure of the class allows to
 customize the behavior in the different contexts.</p>
 <p>A <a class="reference internal" href="../reference/generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.Transform"><code class="xref py py-class docutils literal notranslate"><span class="pre">Transform</span></code></a> skeleton can be summarized as follows:</p>
@@ -1067,8 +1067,8 @@ re-written, and the <code class="xref py py-func docutils literal notranslate"><
 <p>Let us code new transforms that will compute the <code class="docutils literal notranslate"><span class="pre">sine</span></code> and <code class="docutils literal notranslate"><span class="pre">cosine</span></code>
 values of the position angle, as these values are more useful to us to learn
 a policy than the raw angle value:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">SinTransform</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Transform</span></a><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">SinTransform</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">obs</span><span class="o">.</span><span class="n">sin</span><span class="p">()</span>
 
     <span class="c1"># The transform must also modify the data at reset time</span>
@@ -1091,8 +1091,8 @@ a policy than the raw angle value:</p>
         <span class="p">)</span>
 
 
-<span class="k">class</span> <span class="nc">CosTransform</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Transform</span></a><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="k">class</span> <span class="nc">CosTransform</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">obs</span><span class="o">.</span><span class="n">cos</span><span class="p">()</span>
 
     <span class="c1"># The transform must also modify the data at reset time</span>
@@ -1115,8 +1115,8 @@ a policy than the raw angle value:</p>
         <span class="p">)</span>
 
 
-<span class="n">t_sin</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">SinTransform</span></a><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;th&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;sin&quot;</span><span class="p">])</span>
-<span class="n">t_cos</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">CosTransform</span></a><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;th&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;cos&quot;</span><span class="p">])</span>
+<span class="n">t_sin</span> <span class="o">=</span> <span class="n">SinTransform</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;th&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;sin&quot;</span><span class="p">])</span>
+<span class="n">t_cos</span> <span class="o">=</span> <span class="n">CosTransform</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;th&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;cos&quot;</span><span class="p">])</span>
 <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">t_sin</span><span class="p">)</span>
 <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">t_cos</span><span class="p">)</span>
 </pre></div>
@@ -1132,7 +1132,7 @@ a policy than the raw angle value:</p>
 <p>Concatenates the observations onto an “observation” entry.
 <code class="docutils literal notranslate"><span class="pre">del_keys=False</span></code> ensures that we keep these values for the next
 iteration.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">cat_transform</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">CatTensors</span></a><span class="p">(</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">cat_transform</span> <span class="o">=</span> <span class="n">CatTensors</span><span class="p">(</span>
     <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;sin&quot;</span><span class="p">,</span> <span class="s2">&quot;cos&quot;</span><span class="p">,</span> <span class="s2">&quot;thdot&quot;</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">out_key</span><span class="o">=</span><span class="s2">&quot;observation&quot;</span><span class="p">,</span> <span class="n">del_keys</span><span class="o">=</span><span class="kc">False</span>
 <span class="p">)</span>
 <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">cat_transform</span><span class="p">)</span>
@@ -1400,27 +1400,27 @@ differentiable system and full access to the underlying mechanics.</p>
 <p>Still, this is a very simple example that showcases how a training loop can
 be coded with a custom environment in TorchRL.</p>
 <p>Let us first write the policy network:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="torch.manual_seed" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span></a><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
 <span class="n">env</span><span class="o">.</span><span class="n">set_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
 
-<a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="torch.nn.Sequential" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">net</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="torch.nn.Sequential" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span></a><span class="p">(</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear" title="torch.nn.LazyLinear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span></a><span class="p">(</span><span class="mi">64</span><span class="p">),</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Tanh.html#torch.nn.Tanh" title="torch.nn.Tanh" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span></a><span class="p">(),</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear" title="torch.nn.LazyLinear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span></a><span class="p">(</span><span class="mi">64</span><span class="p">),</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Tanh.html#torch.nn.Tanh" title="torch.nn.Tanh" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span></a><span class="p">(),</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear" title="torch.nn.LazyLinear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span></a><span class="p">(</span><span class="mi">64</span><span class="p">),</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Tanh.html#torch.nn.Tanh" title="torch.nn.Tanh" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span></a><span class="p">(),</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear" title="torch.nn.LazyLinear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span></a><span class="p">(</span><span class="mi">1</span><span class="p">),</span>
+<span class="n">net</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+    <span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="mi">64</span><span class="p">),</span>
+    <span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span><span class="p">(),</span>
+    <span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="mi">64</span><span class="p">),</span>
+    <span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span><span class="p">(),</span>
+    <span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="mi">64</span><span class="p">),</span>
+    <span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span><span class="p">(),</span>
+    <span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span>
 <span class="p">)</span>
 <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a><span class="p">(</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="torch.nn.Sequential" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">net</span></a><span class="p">,</span>
+    <span class="n">net</span><span class="p">,</span>
     <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">],</span>
     <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">],</span>
 <span class="p">)</span>
 </pre></div>
 </div>
 <p>and our optimizer:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">optim</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Adam</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.parameters" title="torch.nn.Module.parameters" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-method"><span class="n">policy</span><span class="o">.</span><span class="n">parameters</span></a><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="mf">2e-3</span><span class="p">)</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">optim</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Adam</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="mf">2e-3</span><span class="p">)</span>
 </pre></div>
 </div>
 <section id="training-loop">
@@ -1438,24 +1438,24 @@ which demonstrates that the pendulum is upward and still as desired.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">32</span>
 <span class="n">n_iter</span> <span class="o">=</span> <span class="mi">1000</span>  <span class="c1"># set to 20_000 for a proper training</span>
 <span class="n">pbar</span> <span class="o">=</span> <span class="n">tqdm</span><span class="o">.</span><span class="n">tqdm</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n_iter</span> <span class="o">//</span> <span class="n">batch_size</span><span class="p">))</span>
-<a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.CosineAnnealingLR.html#torch.optim.lr_scheduler.CosineAnnealingLR" title="torch.optim.lr_scheduler.CosineAnnealingLR" class="sphx-glr-backref-module-torch-optim-lr_scheduler sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">scheduler</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.CosineAnnealingLR.html#torch.optim.lr_scheduler.CosineAnnealingLR" title="torch.optim.lr_scheduler.CosineAnnealingLR" class="sphx-glr-backref-module-torch-optim-lr_scheduler sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">lr_scheduler</span><span class="o">.</span><span class="n">CosineAnnealingLR</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">optim</span></a><span class="p">,</span> <span class="n">n_iter</span><span class="p">)</span>
+<span class="n">scheduler</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">lr_scheduler</span><span class="o">.</span><span class="n">CosineAnnealingLR</span><span class="p">(</span><span class="n">optim</span><span class="p">,</span> <span class="n">n_iter</span><span class="p">)</span>
 <span class="n">logs</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
 
 <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">pbar</span><span class="p">:</span>
     <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">init_td</span></a> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">gen_params</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">batch_size</span><span class="p">]))</span>
     <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">rollout</span></a> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">rollout</span></a><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a><span class="p">,</span> <span class="n">tensordict</span><span class="o">=</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">init_td</span></a><span class="p">,</span> <span class="n">auto_reset</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">traj_return</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">rollout</span></a><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
-    <span class="p">(</span><span class="o">-</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">traj_return</span></a><span class="p">)</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
-    <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">gn</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.utils.clip_grad_norm_.html#torch.nn.utils.clip_grad_norm_" title="torch.nn.utils.clip_grad_norm_" class="sphx-glr-backref-module-torch-nn-utils sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">clip_grad_norm_</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.parameters" title="torch.nn.Module.parameters" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-method"><span class="n">net</span><span class="o">.</span><span class="n">parameters</span></a><span class="p">(),</span> <span class="mf">1.0</span><span class="p">)</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">optim</span></a><span class="o">.</span><span class="n">step</span><span class="p">()</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam.zero_grad" title="torch.optim.Adam.zero_grad" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-method"><span class="n">optim</span><span class="o">.</span><span class="n">zero_grad</span></a><span class="p">()</span>
+    <span class="n">traj_return</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">rollout</span></a><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+    <span class="p">(</span><span class="o">-</span><span class="n">traj_return</span><span class="p">)</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+    <span class="n">gn</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">clip_grad_norm_</span><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="mf">1.0</span><span class="p">)</span>
+    <span class="n">optim</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+    <span class="n">optim</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
     <span class="n">pbar</span><span class="o">.</span><span class="n">set_description</span><span class="p">(</span>
-        <span class="sa">f</span><span class="s2">&quot;reward: </span><span class="si">{</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">traj_return</span></a><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2">, &quot;</span>
-        <span class="sa">f</span><span class="s2">&quot;last reward: </span><span class="si">{</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">rollout</span></a><span class="p">[</span><span class="o">...</span><span class="p">,</span><span class="w"> </span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s1">&#39;next&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;reward&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2">, gradient norm: </span><span class="si">{</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">gn</span></a><span class="si">:</span><span class="s2"> 4.4</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;reward: </span><span class="si">{</span><span class="n">traj_return</span><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2">, &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;last reward: </span><span class="si">{</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">rollout</span></a><span class="p">[</span><span class="o">...</span><span class="p">,</span><span class="w"> </span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s1">&#39;next&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;reward&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2">, gradient norm: </span><span class="si">{</span><span class="n">gn</span><span class="si">:</span><span class="s2"> 4.4</span><span class="si">}</span><span class="s2">&quot;</span>
     <span class="p">)</span>
-    <span class="n">logs</span><span class="p">[</span><span class="s2">&quot;return&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">traj_return</span></a><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+    <span class="n">logs</span><span class="p">[</span><span class="s2">&quot;return&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">traj_return</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
     <span class="n">logs</span><span class="p">[</span><span class="s2">&quot;last_reward&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">rollout</span></a><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.CosineAnnealingLR.html#torch.optim.lr_scheduler.CosineAnnealingLR.step" title="torch.optim.lr_scheduler.CosineAnnealingLR.step" class="sphx-glr-backref-module-torch-optim-lr_scheduler sphx-glr-backref-type-py-method"><span class="n">scheduler</span><span class="o">.</span><span class="n">step</span></a><span class="p">()</span>
+    <span class="n">scheduler</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
 
 
 <span class="k">def</span> <span class="nf">plot</span><span class="p">():</span>
@@ -1487,68 +1487,68 @@ which demonstrates that the pendulum is upward and still as desired.</p>
 </div>
 <img src="../_images/sphx_glr_pendulum_001.png" srcset="../_images/sphx_glr_pendulum_001.png" alt="returns, last reward" class = "sphx-glr-single-img"/><div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>  0%|          | 0/31 [00:00&lt;?, ?it/s]
 reward: -6.4381, last reward: -6.6717, gradient norm:  7.013:   0%|          | 0/31 [00:00&lt;?, ?it/s]
-reward: -6.4381, last reward: -6.6717, gradient norm:  7.013:   3%|▎         | 1/31 [00:00&lt;00:05,  5.04it/s]
-reward: -6.2590, last reward: -6.5361, gradient norm:  2.55:   3%|▎         | 1/31 [00:00&lt;00:05,  5.04it/s]
-reward: -6.2590, last reward: -6.5361, gradient norm:  2.55:   6%|▋         | 2/31 [00:00&lt;00:05,  5.30it/s]
-reward: -6.1138, last reward: -6.1229, gradient norm:  3.929:   6%|▋         | 2/31 [00:00&lt;00:05,  5.30it/s]
-reward: -6.1138, last reward: -6.1229, gradient norm:  3.929:  10%|▉         | 3/31 [00:00&lt;00:05,  5.41it/s]
-reward: -6.1932, last reward: -7.0100, gradient norm:  6.44:  10%|▉         | 3/31 [00:00&lt;00:05,  5.41it/s]
-reward: -6.1932, last reward: -7.0100, gradient norm:  6.44:  13%|█▎        | 4/31 [00:00&lt;00:04,  5.46it/s]
-reward: -6.5832, last reward: -4.3353, gradient norm:  3.126:  13%|█▎        | 4/31 [00:00&lt;00:04,  5.46it/s]
+reward: -6.4381, last reward: -6.6717, gradient norm:  7.013:   3%|▎         | 1/31 [00:00&lt;00:05,  5.20it/s]
+reward: -6.2590, last reward: -6.5361, gradient norm:  2.55:   3%|▎         | 1/31 [00:00&lt;00:05,  5.20it/s]
+reward: -6.2590, last reward: -6.5361, gradient norm:  2.55:   6%|▋         | 2/31 [00:00&lt;00:05,  5.37it/s]
+reward: -6.1138, last reward: -6.1229, gradient norm:  3.929:   6%|▋         | 2/31 [00:00&lt;00:05,  5.37it/s]
+reward: -6.1138, last reward: -6.1229, gradient norm:  3.929:  10%|▉         | 3/31 [00:00&lt;00:05,  5.42it/s]
+reward: -6.1932, last reward: -7.0100, gradient norm:  6.44:  10%|▉         | 3/31 [00:00&lt;00:05,  5.42it/s]
+reward: -6.1932, last reward: -7.0100, gradient norm:  6.44:  13%|█▎        | 4/31 [00:00&lt;00:04,  5.43it/s]
+reward: -6.5832, last reward: -4.3353, gradient norm:  3.126:  13%|█▎        | 4/31 [00:00&lt;00:04,  5.43it/s]
 reward: -6.5832, last reward: -4.3353, gradient norm:  3.126:  16%|█▌        | 5/31 [00:00&lt;00:04,  5.48it/s]
 reward: -6.7391, last reward: -4.1995, gradient norm:  2.576:  16%|█▌        | 5/31 [00:01&lt;00:04,  5.48it/s]
-reward: -6.7391, last reward: -4.1995, gradient norm:  2.576:  19%|█▉        | 6/31 [00:01&lt;00:04,  5.49it/s]
-reward: -6.8264, last reward: -5.2494, gradient norm:  7.198:  19%|█▉        | 6/31 [00:01&lt;00:04,  5.49it/s]
-reward: -6.8264, last reward: -5.2494, gradient norm:  7.198:  23%|██▎       | 7/31 [00:01&lt;00:04,  5.50it/s]
-reward: -6.7867, last reward: -5.3624, gradient norm:  4.171:  23%|██▎       | 7/31 [00:01&lt;00:04,  5.50it/s]
-reward: -6.7867, last reward: -5.3624, gradient norm:  4.171:  26%|██▌       | 8/31 [00:01&lt;00:04,  5.51it/s]
-reward: -6.9220, last reward: -4.8760, gradient norm:  1.766:  26%|██▌       | 8/31 [00:01&lt;00:04,  5.51it/s]
-reward: -6.9220, last reward: -4.8760, gradient norm:  1.766:  29%|██▉       | 9/31 [00:01&lt;00:03,  5.51it/s]
-reward: -6.6887, last reward: -5.4955, gradient norm:  21.92:  29%|██▉       | 9/31 [00:01&lt;00:03,  5.51it/s]
-reward: -6.6887, last reward: -5.4955, gradient norm:  21.92:  32%|███▏      | 10/31 [00:01&lt;00:03,  5.51it/s]
-reward: -6.7179, last reward: -4.7035, gradient norm:  3.056:  32%|███▏      | 10/31 [00:02&lt;00:03,  5.51it/s]
-reward: -6.7179, last reward: -4.7035, gradient norm:  3.056:  35%|███▌      | 11/31 [00:02&lt;00:03,  5.50it/s]
-reward: -6.5741, last reward: -4.2936, gradient norm:  2.083:  35%|███▌      | 11/31 [00:02&lt;00:03,  5.50it/s]
-reward: -6.5741, last reward: -4.2936, gradient norm:  2.083:  39%|███▊      | 12/31 [00:02&lt;00:03,  5.50it/s]
-reward: -6.7024, last reward: -4.7707, gradient norm:  1.039:  39%|███▊      | 12/31 [00:02&lt;00:03,  5.50it/s]
-reward: -6.7024, last reward: -4.7707, gradient norm:  1.039:  42%|████▏     | 13/31 [00:02&lt;00:03,  5.51it/s]
-reward: -6.3238, last reward: -5.9996, gradient norm:  14.73:  42%|████▏     | 13/31 [00:02&lt;00:03,  5.51it/s]
-reward: -6.3238, last reward: -5.9996, gradient norm:  14.73:  45%|████▌     | 14/31 [00:02&lt;00:03,  5.51it/s]
-reward: -6.2495, last reward: -7.7481, gradient norm:  3.358:  45%|████▌     | 14/31 [00:02&lt;00:03,  5.51it/s]
-reward: -6.2495, last reward: -7.7481, gradient norm:  3.358:  48%|████▊     | 15/31 [00:02&lt;00:02,  5.51it/s]
-reward: -6.3425, last reward: -8.7920, gradient norm:  14.18:  48%|████▊     | 15/31 [00:02&lt;00:02,  5.51it/s]
-reward: -6.3425, last reward: -8.7920, gradient norm:  14.18:  52%|█████▏    | 16/31 [00:02&lt;00:02,  5.51it/s]
-reward: -6.0427, last reward: -9.2459, gradient norm:  4.408:  52%|█████▏    | 16/31 [00:03&lt;00:02,  5.51it/s]
-reward: -6.0427, last reward: -9.2459, gradient norm:  4.408:  55%|█████▍    | 17/31 [00:03&lt;00:02,  5.51it/s]
-reward: -5.8613, last reward: -4.6345, gradient norm:  27.46:  55%|█████▍    | 17/31 [00:03&lt;00:02,  5.51it/s]
-reward: -5.8613, last reward: -4.6345, gradient norm:  27.46:  58%|█████▊    | 18/31 [00:03&lt;00:02,  5.52it/s]
-reward: -5.8230, last reward: -6.0143, gradient norm:  33.68:  58%|█████▊    | 18/31 [00:03&lt;00:02,  5.52it/s]
-reward: -5.8230, last reward: -6.0143, gradient norm:  33.68:  61%|██████▏   | 19/31 [00:03&lt;00:02,  5.52it/s]
-reward: -5.7731, last reward: -5.6127, gradient norm:  25.3:  61%|██████▏   | 19/31 [00:03&lt;00:02,  5.52it/s]
-reward: -5.7731, last reward: -5.6127, gradient norm:  25.3:  65%|██████▍   | 20/31 [00:03&lt;00:01,  5.52it/s]
-reward: -5.8158, last reward: -5.7852, gradient norm:  13.66:  65%|██████▍   | 20/31 [00:03&lt;00:01,  5.52it/s]
-reward: -5.8158, last reward: -5.7852, gradient norm:  13.66:  68%|██████▊   | 21/31 [00:03&lt;00:01,  5.52it/s]
-reward: -5.9687, last reward: -4.9258, gradient norm:  10.83:  68%|██████▊   | 21/31 [00:04&lt;00:01,  5.52it/s]
-reward: -5.9687, last reward: -4.9258, gradient norm:  10.83:  71%|███████   | 22/31 [00:04&lt;00:01,  5.53it/s]
-reward: -5.9617, last reward: -4.2573, gradient norm:  1.98:  71%|███████   | 22/31 [00:04&lt;00:01,  5.53it/s]
-reward: -5.9617, last reward: -4.2573, gradient norm:  1.98:  74%|███████▍  | 23/31 [00:04&lt;00:01,  5.53it/s]
-reward: -6.1261, last reward: -7.9520, gradient norm:  53.99:  74%|███████▍  | 23/31 [00:04&lt;00:01,  5.53it/s]
-reward: -6.1261, last reward: -7.9520, gradient norm:  53.99:  77%|███████▋  | 24/31 [00:04&lt;00:01,  5.51it/s]
-reward: -6.1183, last reward: -7.9438, gradient norm:  1.678:  77%|███████▋  | 24/31 [00:04&lt;00:01,  5.51it/s]
-reward: -6.1183, last reward: -7.9438, gradient norm:  1.678:  81%|████████  | 25/31 [00:04&lt;00:01,  5.51it/s]
-reward: -5.9948, last reward: -8.6588, gradient norm:  12.05:  81%|████████  | 25/31 [00:04&lt;00:01,  5.51it/s]
-reward: -5.9948, last reward: -8.6588, gradient norm:  12.05:  84%|████████▍ | 26/31 [00:04&lt;00:00,  5.52it/s]
-reward: -6.2913, last reward: -7.3637, gradient norm:  4.09:  84%|████████▍ | 26/31 [00:04&lt;00:00,  5.52it/s]
-reward: -6.2913, last reward: -7.3637, gradient norm:  4.09:  87%|████████▋ | 27/31 [00:04&lt;00:00,  5.52it/s]
-reward: -6.2270, last reward: -7.3009, gradient norm:  13.6:  87%|████████▋ | 27/31 [00:05&lt;00:00,  5.52it/s]
-reward: -6.2270, last reward: -7.3009, gradient norm:  13.6:  90%|█████████ | 28/31 [00:05&lt;00:00,  5.52it/s]
-reward: -6.1598, last reward: -8.9761, gradient norm:  8.041:  90%|█████████ | 28/31 [00:05&lt;00:00,  5.52it/s]
-reward: -6.1598, last reward: -8.9761, gradient norm:  8.041:  94%|█████████▎| 29/31 [00:05&lt;00:00,  5.41it/s]
-reward: -6.0858, last reward: -7.5394, gradient norm:  2.045:  94%|█████████▎| 29/31 [00:05&lt;00:00,  5.41it/s]
-reward: -6.0858, last reward: -7.5394, gradient norm:  2.045:  97%|█████████▋| 30/31 [00:05&lt;00:00,  5.41it/s]
-reward: -6.0550, last reward: -8.1112, gradient norm:  8.922:  97%|█████████▋| 30/31 [00:05&lt;00:00,  5.41it/s]
-reward: -6.0550, last reward: -8.1112, gradient norm:  8.922: 100%|██████████| 31/31 [00:05&lt;00:00,  5.44it/s]
-reward: -6.0550, last reward: -8.1112, gradient norm:  8.922: 100%|██████████| 31/31 [00:05&lt;00:00,  5.49it/s]
+reward: -6.7391, last reward: -4.1995, gradient norm:  2.576:  19%|█▉        | 6/31 [00:01&lt;00:04,  5.52it/s]
+reward: -6.8264, last reward: -5.2494, gradient norm:  7.198:  19%|█▉        | 6/31 [00:01&lt;00:04,  5.52it/s]
+reward: -6.8264, last reward: -5.2494, gradient norm:  7.198:  23%|██▎       | 7/31 [00:01&lt;00:04,  5.49it/s]
+reward: -6.7867, last reward: -5.3624, gradient norm:  4.171:  23%|██▎       | 7/31 [00:01&lt;00:04,  5.49it/s]
+reward: -6.7867, last reward: -5.3624, gradient norm:  4.171:  26%|██▌       | 8/31 [00:01&lt;00:04,  5.49it/s]
+reward: -6.9220, last reward: -4.8760, gradient norm:  1.766:  26%|██▌       | 8/31 [00:01&lt;00:04,  5.49it/s]
+reward: -6.9220, last reward: -4.8760, gradient norm:  1.766:  29%|██▉       | 9/31 [00:01&lt;00:04,  5.48it/s]
+reward: -6.6887, last reward: -5.4955, gradient norm:  21.92:  29%|██▉       | 9/31 [00:01&lt;00:04,  5.48it/s]
+reward: -6.6887, last reward: -5.4955, gradient norm:  21.92:  32%|███▏      | 10/31 [00:01&lt;00:03,  5.49it/s]
+reward: -6.7179, last reward: -4.7035, gradient norm:  3.056:  32%|███▏      | 10/31 [00:02&lt;00:03,  5.49it/s]
+reward: -6.7179, last reward: -4.7035, gradient norm:  3.056:  35%|███▌      | 11/31 [00:02&lt;00:03,  5.52it/s]
+reward: -6.5741, last reward: -4.2936, gradient norm:  2.083:  35%|███▌      | 11/31 [00:02&lt;00:03,  5.52it/s]
+reward: -6.5741, last reward: -4.2936, gradient norm:  2.083:  39%|███▊      | 12/31 [00:02&lt;00:03,  5.52it/s]
+reward: -6.7024, last reward: -4.7707, gradient norm:  1.039:  39%|███▊      | 12/31 [00:02&lt;00:03,  5.52it/s]
+reward: -6.7024, last reward: -4.7707, gradient norm:  1.039:  42%|████▏     | 13/31 [00:02&lt;00:03,  5.53it/s]
+reward: -6.3238, last reward: -5.9996, gradient norm:  14.73:  42%|████▏     | 13/31 [00:02&lt;00:03,  5.53it/s]
+reward: -6.3238, last reward: -5.9996, gradient norm:  14.73:  45%|████▌     | 14/31 [00:02&lt;00:03,  5.54it/s]
+reward: -6.2495, last reward: -7.7481, gradient norm:  3.358:  45%|████▌     | 14/31 [00:02&lt;00:03,  5.54it/s]
+reward: -6.2495, last reward: -7.7481, gradient norm:  3.358:  48%|████▊     | 15/31 [00:02&lt;00:02,  5.55it/s]
+reward: -6.3425, last reward: -8.7920, gradient norm:  14.18:  48%|████▊     | 15/31 [00:02&lt;00:02,  5.55it/s]
+reward: -6.3425, last reward: -8.7920, gradient norm:  14.18:  52%|█████▏    | 16/31 [00:02&lt;00:02,  5.56it/s]
+reward: -6.0427, last reward: -9.2459, gradient norm:  4.408:  52%|█████▏    | 16/31 [00:03&lt;00:02,  5.56it/s]
+reward: -6.0427, last reward: -9.2459, gradient norm:  4.408:  55%|█████▍    | 17/31 [00:03&lt;00:02,  5.57it/s]
+reward: -5.8613, last reward: -4.6345, gradient norm:  27.46:  55%|█████▍    | 17/31 [00:03&lt;00:02,  5.57it/s]
+reward: -5.8613, last reward: -4.6345, gradient norm:  27.46:  58%|█████▊    | 18/31 [00:03&lt;00:02,  5.56it/s]
+reward: -5.8230, last reward: -6.0143, gradient norm:  33.68:  58%|█████▊    | 18/31 [00:03&lt;00:02,  5.56it/s]
+reward: -5.8230, last reward: -6.0143, gradient norm:  33.68:  61%|██████▏   | 19/31 [00:03&lt;00:02,  5.56it/s]
+reward: -5.7731, last reward: -5.6127, gradient norm:  25.3:  61%|██████▏   | 19/31 [00:03&lt;00:02,  5.56it/s]
+reward: -5.7731, last reward: -5.6127, gradient norm:  25.3:  65%|██████▍   | 20/31 [00:03&lt;00:01,  5.55it/s]
+reward: -5.8158, last reward: -5.7852, gradient norm:  13.66:  65%|██████▍   | 20/31 [00:03&lt;00:01,  5.55it/s]
+reward: -5.8158, last reward: -5.7852, gradient norm:  13.66:  68%|██████▊   | 21/31 [00:03&lt;00:01,  5.56it/s]
+reward: -5.9687, last reward: -4.9258, gradient norm:  10.83:  68%|██████▊   | 21/31 [00:03&lt;00:01,  5.56it/s]
+reward: -5.9687, last reward: -4.9258, gradient norm:  10.83:  71%|███████   | 22/31 [00:03&lt;00:01,  5.57it/s]
+reward: -5.9617, last reward: -4.2573, gradient norm:  1.98:  71%|███████   | 22/31 [00:04&lt;00:01,  5.57it/s]
+reward: -5.9617, last reward: -4.2573, gradient norm:  1.98:  74%|███████▍  | 23/31 [00:04&lt;00:01,  5.58it/s]
+reward: -6.1261, last reward: -7.9520, gradient norm:  53.99:  74%|███████▍  | 23/31 [00:04&lt;00:01,  5.58it/s]
+reward: -6.1261, last reward: -7.9520, gradient norm:  53.99:  77%|███████▋  | 24/31 [00:04&lt;00:01,  5.56it/s]
+reward: -6.1183, last reward: -7.9438, gradient norm:  1.678:  77%|███████▋  | 24/31 [00:04&lt;00:01,  5.56it/s]
+reward: -6.1183, last reward: -7.9438, gradient norm:  1.678:  81%|████████  | 25/31 [00:04&lt;00:01,  5.54it/s]
+reward: -5.9948, last reward: -8.6588, gradient norm:  12.05:  81%|████████  | 25/31 [00:04&lt;00:01,  5.54it/s]
+reward: -5.9948, last reward: -8.6588, gradient norm:  12.05:  84%|████████▍ | 26/31 [00:04&lt;00:00,  5.55it/s]
+reward: -6.2913, last reward: -7.3637, gradient norm:  4.09:  84%|████████▍ | 26/31 [00:04&lt;00:00,  5.55it/s]
+reward: -6.2913, last reward: -7.3637, gradient norm:  4.09:  87%|████████▋ | 27/31 [00:04&lt;00:00,  5.54it/s]
+reward: -6.2270, last reward: -7.3009, gradient norm:  13.6:  87%|████████▋ | 27/31 [00:05&lt;00:00,  5.54it/s]
+reward: -6.2270, last reward: -7.3009, gradient norm:  13.6:  90%|█████████ | 28/31 [00:05&lt;00:00,  5.54it/s]
+reward: -6.1598, last reward: -8.9761, gradient norm:  8.041:  90%|█████████ | 28/31 [00:05&lt;00:00,  5.54it/s]
+reward: -6.1598, last reward: -8.9761, gradient norm:  8.041:  94%|█████████▎| 29/31 [00:05&lt;00:00,  5.55it/s]
+reward: -6.0858, last reward: -7.5394, gradient norm:  2.045:  94%|█████████▎| 29/31 [00:05&lt;00:00,  5.55it/s]
+reward: -6.0858, last reward: -7.5394, gradient norm:  2.045:  97%|█████████▋| 30/31 [00:05&lt;00:00,  5.54it/s]
+reward: -6.0550, last reward: -8.1112, gradient norm:  8.922:  97%|█████████▋| 30/31 [00:05&lt;00:00,  5.54it/s]
+reward: -6.0550, last reward: -8.1112, gradient norm:  8.922: 100%|██████████| 31/31 [00:05&lt;00:00,  5.54it/s]
+reward: -6.0550, last reward: -8.1112, gradient norm:  8.922: 100%|██████████| 31/31 [00:05&lt;00:00,  5.53it/s]
 </pre></div>
 </div>
 </section>
@@ -1568,7 +1568,7 @@ We saw how these methods and classes interact with the
 to write custom transformations;</p></li>
 <li><p>How to train a policy on a fully differentiable simulator.</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 5.874 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 5.834 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-pendulum-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/36eee5b78ddb0e674d19a3401b49da68/pendulum.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">pendulum.ipynb</span></code></a></p>

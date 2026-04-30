@@ -693,11 +693,17 @@
         <span class="n">track_policy_version</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">trajs_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">pre_collect_hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">post_collect_hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">worker_idx</span> <span class="o">=</span> <span class="n">worker_idx</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">trajs_per_batch</span> <span class="o">=</span> <span class="n">trajs_per_batch</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">pre_collect_hook</span><span class="o">=</span><span class="n">pre_collect_hook</span><span class="p">,</span>
+            <span class="n">post_collect_hook</span><span class="o">=</span><span class="n">post_collect_hook</span><span class="p">,</span>
+        <span class="p">)</span>
 
         <span class="c1"># Note: weight_sync_schemes can be used to send weights to components</span>
         <span class="c1"># within the environment (e.g., RayModuleTransform), not just sub-collectors</span>
@@ -1671,6 +1677,8 @@
                         <span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">events</span><span class="p">:</span>
                             <span class="n">event</span><span class="o">.</span><span class="n">record</span><span class="p">()</span>
                             <span class="n">event</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">post_collect_hook</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">post_collect_hook</span><span class="p">(</span><span class="n">tensordict_out</span><span class="p">)</span>
                     <span class="k">yield</span> <span class="n">tensordict_out</span>
                 <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignore_rb</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">tensordict_out</span><span class="p">)</span>
@@ -1686,7 +1694,10 @@
                     <span class="c1"># &gt;&gt;&gt;      else:</span>
                     <span class="c1"># &gt;&gt;&gt;          break</span>
                     <span class="c1"># &gt;&gt;&gt; assert data0[&quot;done&quot;] is not data1[&quot;done&quot;]</span>
-                    <span class="k">yield</span> <span class="n">tensordict_out</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                    <span class="n">tensordict_out</span> <span class="o">=</span> <span class="n">tensordict_out</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">post_collect_hook</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">post_collect_hook</span><span class="p">(</span><span class="n">tensordict_out</span><span class="p">)</span>
+                    <span class="k">yield</span> <span class="n">tensordict_out</span>
 
         <span class="c1"># Stop profiler if it hasn&#39;t been stopped yet</span>
         <span class="k">if</span> <span class="n">profiler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">profiler</span><span class="o">.</span><span class="n">is_active</span><span class="p">:</span>
@@ -1867,6 +1878,9 @@
 <span class="sd">            TensorDictBase containing the computed rollout.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pre_collect_hook</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pre_collect_hook</span><span class="p">()</span>
+
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reset_at_each_iter</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">())</span>
 

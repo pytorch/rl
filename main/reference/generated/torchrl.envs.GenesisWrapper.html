@@ -291,12 +291,12 @@ Cameras must be added via <code class="xref py py-meth docutils literal notransl
 a missing camera raises <code class="xref py py-class docutils literal notranslate"><span class="pre">ValueError</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>pixels_key</strong> (<em>str</em><em>, </em><em>optional</em>) – key under which the rendered frame is
 stored in the returned tensordict. Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;pixels&quot;</span></code>.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.11)"><em>torch.device</em></a><em>, </em><em>optional</em>) – torch device for returned tensors.
+<li><p><strong>device</strong> (<em>torch.device</em><em>, </em><em>optional</em>) – torch device for returned tensors.
 When <code class="docutils literal notranslate"><span class="pre">None</span></code> (the default), inferred from <code class="docutils literal notranslate"><span class="pre">gs.device</span></code> — i.e.
 the device Genesis itself is running on. This avoids a silent
 per-step copy when the sim is on GPU but the wrapper was
 defaulting to CPU.</p></li>
-<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.11)"><em>torch.Size</em></a><em>, </em><em>optional</em>) – batch size for the env. If omitted,
+<li><p><strong>batch_size</strong> (<em>torch.Size</em><em>, </em><em>optional</em>) – batch size for the env. If omitted,
 inferred from <code class="docutils literal notranslate"><span class="pre">scene.n_envs</span></code> (<code class="docutils literal notranslate"><span class="pre">()</span></code> for non-batched scenes,
 <code class="docutils literal notranslate"><span class="pre">(n_envs,)</span></code> for batched scenes). If provided, validated against
 <code class="docutils literal notranslate"><span class="pre">scene.n_envs</span></code>; a mismatch raises <code class="xref py py-class docutils literal notranslate"><span class="pre">ValueError</span></code>.</p></li>

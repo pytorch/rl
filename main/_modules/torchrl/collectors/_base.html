@@ -471,6 +471,55 @@
     <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">_profile_config</span><span class="p">:</span> <span class="n">ProfileConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">trajs_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">_pre_collect_hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">_post_collect_hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">pre_collect_hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">post_collect_hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pre_collect_hook</span> <span class="o">=</span> <span class="n">pre_collect_hook</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_post_collect_hook</span> <span class="o">=</span> <span class="n">post_collect_hook</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">pre_collect_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the pre-collection hook.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A callable to be executed before each rollout, or None.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pre_collect_hook</span>
+
+    <span class="nd">@pre_collect_hook</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">pre_collect_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set the pre-collection hook.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            hook: A callable to be executed before each rollout.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pre_collect_hook</span> <span class="o">=</span> <span class="n">hook</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">post_collect_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the post-collection hook.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A callable to be executed after each rollout, receiving the collected</span>
+<span class="sd">            TensorDict as argument, or None.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_post_collect_hook</span>
+
+    <span class="nd">@post_collect_hook</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">post_collect_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set the post-collection hook.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            hook: A callable to be executed after each rollout, receiving the</span>
+<span class="sd">                collected TensorDict as argument.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_post_collect_hook</span> <span class="o">=</span> <span class="n">hook</span>
 
 <div class="viewcode-block" id="BaseCollector.enable_profile">
 <a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.enable_profile">[docs]</a>
@@ -656,6 +705,78 @@
                     <span class="sa">f</span><span class="s2">&quot;Arguments and keyword arguments are not supported for non-callable attributes. Got </span><span class="si">{</span><span class="n">args</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="n">kwargs</span><span class="si">}</span><span class="s2"> for </span><span class="si">{</span><span class="n">attr_path</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="p">)</span>
             <span class="k">return</span> <span class="n">attr</span></div>
+
+
+<div class="viewcode-block" id="BaseCollector.get_distant_attr">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.get_distant_attr">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_distant_attr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get a nested attribute of this collector.</span>
+
+<span class="sd">        This method allows remote callers to retrieve attributes from nested</span>
+<span class="sd">        structures of the collector without needing to know the full structure.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            attr: Full path to the attribute, e.g.,</span>
+<span class="sd">                &quot;_receiver_schemes[&#39;model_id&#39;].some_attribute&quot;</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The value of the attribute.</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            &gt;&gt;&gt; collector.get_distant_attr(&quot;_receiver_schemes[&#39;policy&#39;]._sync_interval&quot;)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">_resolve_attr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseCollector.map_fn">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.map_fn">[docs]</a>
+    <span class="k">def</span> <span class="nf">map_fn</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">method_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">list_of_args</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">list_of_kwargs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply a method to each set of arguments.</span>
+
+<span class="sd">        This method executes a method on the collector with different arguments,</span>
+<span class="sd">        returning a list of results.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            method_name: Name of the method to call on the collector.</span>
+<span class="sd">            list_of_args: List of positional argument tuples. Each tuple</span>
+<span class="sd">                contains the arguments for one call.</span>
+<span class="sd">            list_of_kwargs: List of keyword argument dicts. Each dict</span>
+<span class="sd">                contains the kwargs for one call.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            List of return values from each method call.</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            &gt;&gt;&gt; # Call a method with different arguments</span>
+<span class="sd">            &gt;&gt;&gt; collector.map_fn(&quot;update_policy_weights_&quot;, list_of_args=[(weights1,), (weights2,)])</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; # Call with kwargs</span>
+<span class="sd">            &gt;&gt;&gt; collector.map_fn(&quot;update_policy_weights_&quot;, list_of_kwargs=[{&quot;weights&quot;: w1}, {&quot;weights&quot;: w2}])</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">list_of_args</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">list_of_args</span> <span class="o">=</span> <span class="p">[()]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">list_of_kwargs</span><span class="p">)</span> <span class="k">if</span> <span class="n">list_of_kwargs</span> <span class="k">else</span> <span class="p">[()]</span>
+        <span class="k">if</span> <span class="n">list_of_kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">list_of_kwargs</span> <span class="o">=</span> <span class="p">[{}]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">list_of_args</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">list_of_args</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">list_of_kwargs</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;list_of_args and list_of_kwargs must have the same length. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">list_of_args</span><span class="p">)</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">list_of_kwargs</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">method</span> <span class="o">=</span> <span class="n">_resolve_attr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">method_name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">method</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Attribute </span><span class="si">{</span><span class="n">method_name</span><span class="si">}</span><span class="s2"> is not callable.&quot;</span><span class="p">)</span>
+
+        <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">list_of_args</span><span class="p">,</span> <span class="n">list_of_kwargs</span><span class="p">):</span>
+            <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">method</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">results</span></div>
 
 
     <span class="k">def</span> <span class="nf">_get_policy_and_device</span><span class="p">(</span>
