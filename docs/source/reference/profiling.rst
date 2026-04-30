@@ -41,18 +41,68 @@ Once armed, the instrumentation can still be toggled at runtime:
 Calling ``set_profiling_enabled(True)`` without ``TORCHRL_PROFILING=1`` set
 at import time emits a warning and is a no-op.
 
-.. warning::
+.. note::
 
-   ``set_profiling_enabled()`` is **process-local**. It flips a module-level
-   flag in the calling process only; multiprocessing workers and Ray actors
-   each hold their own copy of ``torchrl._utils`` and will not observe the
-   change. ``TORCHRL_PROFILING=1`` is propagated to children at startup
+   ``set_profiling_enabled()`` itself is **process-local** — it flips a
+   module-level flag in the calling process only. To propagate a runtime
+   toggle into workers of a multi-process or Ray collector, use the
+   collector's ``map_fn`` to invoke ``set_profiling_enabled`` on each worker:
+
+   .. code-block:: python
+
+       collector.map_fn(
+           "set_profiling_enabled",
+           list_of_args=[(True,)] * collector.num_workers,
+       )
+
+   ``TORCHRL_PROFILING=1`` is also propagated to children at startup
    (subprocesses inherit ``os.environ``, Ray actors get it injected via
-   ``as_remote(...)``), so every worker comes up with profiling
-   **enabled** by default whenever the variable is set on the driver. If
-   you need runtime scoping inside a worker, drive it from within that
-   worker — for example via ``torch.profiler.schedule`` — rather than
-   expecting a driver-side ``set_profiling_enabled()`` call to reach it.
+   ``as_remote(...)``), so every worker comes up with profiling **enabled**
+   by default whenever the variable is set on the driver.
+
+Driving a torch.profiler trace from the driver
+----------------------------------------------
+
+For multi-process and Ray collectors, capturing a trace inside the worker
+that actually runs the rollout is what you usually want — the driver only
+sees IPC. ``collector.enable_profile()`` installs a ``post_collect_hook`` on
+each selected worker that owns a ``torch.profiler.profile`` lifecycle there:
+warmup, active rollouts, ``export_chrome_trace`` on completion.
+
+.. code-block:: python
+
+    import os
+    os.environ["TORCHRL_PROFILING"] = "1"  # arms named ranges in every process
+
+    import torchrl  # noqa: F401  -- import after the env var is set
+    from torchrl.collectors import MultiSyncCollector
+
+    collector = MultiSyncCollector(
+        create_env_fn=[make_env] * 4,
+        policy=policy,
+        frames_per_batch=200,
+        total_frames=20_000,
+    )
+    collector.enable_profile(
+        workers=[0, 1],                       # which workers to trace
+        num_rollouts=5,                       # total rollouts (incl. warmup)
+        warmup_rollouts=1,                    # discarded at the front
+        save_path="./traces/worker_{worker_idx}.json",
+    )
+    for data in collector:
+        train(data)
+    collector.shutdown()
+
+The same call works for a single-process :class:`~torchrl.collectors.Collector`
+and for :class:`~torchrl.collectors.distributed.RayCollector`. Per-worker
+``_ProfilerHook`` instances are constructed with each worker's index, so
+``{worker_idx}`` resolves correctly in ``save_path``.
+
+To stop profiling early — for instance, in response to a triggering event —
+call ``collector.disable_profile()``. This stops the underlying profiler in
+each targeted worker, exports the trace, and restores any
+``post_collect_hook`` that was installed before ``enable_profile`` was
+called.
 
 What gets instrumented
 ----------------------

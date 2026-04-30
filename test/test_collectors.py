@@ -5766,6 +5766,87 @@ class TestCollectorProfiling:
         expected_trace = tmp_path / "trace_0.json"
         assert expected_trace.exists(), f"Trace file not found at {expected_trace}"
 
+    def test_enable_profile_installs_profiler_hook_single(self, tmp_path):
+        """``enable_profile`` should install a ``_ProfilerHook`` as the
+        ``post_collect_hook`` and self-stop after ``num_rollouts``.
+        """
+        from torchrl.collectors._base import _ProfilerHook
+
+        env = ContinuousActionVecMockEnv()
+        collector = Collector(
+            create_env_fn=lambda: ContinuousActionVecMockEnv(),
+            policy=RandomPolicy(env.action_spec),
+            frames_per_batch=4,
+            total_frames=20,
+        )
+        try:
+            collector.enable_profile(
+                num_rollouts=3,
+                warmup_rollouts=1,
+                save_path=str(tmp_path / "trace_{worker_idx}.json"),
+            )
+            assert isinstance(collector.post_collect_hook, _ProfilerHook)
+            for _ in collector:
+                pass
+            assert (tmp_path / "trace_0.json").exists()
+        finally:
+            collector.shutdown()
+
+    def test_disable_profile_clears_hook_and_restores(self, tmp_path):
+        """``disable_profile`` clears the profiler hook and restores any prior
+        ``post_collect_hook``.
+        """
+        seen = []
+
+        def user_hook(batch):
+            seen.append(batch.numel())
+
+        collector = Collector(
+            create_env_fn=lambda: ContinuousActionVecMockEnv(),
+            policy=RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=4,
+            total_frames=20,
+            post_collect_hook=user_hook,
+        )
+        try:
+            collector.enable_profile(
+                num_rollouts=3,
+                warmup_rollouts=1,
+                save_path=str(tmp_path / "trace_{worker_idx}.json"),
+            )
+            assert collector.post_collect_hook is not user_hook
+            collector.disable_profile()
+            assert collector.profile_config is None
+            assert collector.post_collect_hook is user_hook
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.slow
+    def test_enable_profile_multi_per_worker_idx(self, tmp_path):
+        """Per-worker ``_ProfilerHook`` instances resolve their own
+        ``{worker_idx}`` placeholder in ``save_path``.
+        """
+        trace_path = tmp_path / "trace_{worker_idx}.json"
+        collector = MultiSyncCollector(
+            create_env_fn=[ContinuousActionVecMockEnv] * 2,
+            policy=RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=4,
+            total_frames=40,
+        )
+        try:
+            collector.enable_profile(
+                workers=[0, 1],
+                num_rollouts=3,
+                warmup_rollouts=1,
+                save_path=str(trace_path),
+            )
+            for _ in collector:
+                pass
+        finally:
+            collector.shutdown()
+        assert (tmp_path / "trace_0.json").exists()
+        assert (tmp_path / "trace_1.json").exists()
+
 
 class TestTrajsPerBatch:
     """Tests for the ``trajs_per_batch`` kwarg on collectors."""

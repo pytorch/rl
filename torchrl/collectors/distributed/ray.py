@@ -16,7 +16,7 @@ import torch.nn as nn
 from tensordict import TensorDict, TensorDictBase
 
 from torchrl._utils import as_remote, logger as torchrl_logger
-from torchrl.collectors._base import BaseCollector
+from torchrl.collectors._base import _ProfilerHook, BaseCollector, ProfileConfig
 from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
 from torchrl.collectors._multi_async import MultiAsyncCollector
 from torchrl.collectors._multi_sync import MultiSyncCollector
@@ -920,6 +920,46 @@ class RayCollector(BaseCollector):
             [
                 collector.get_distant_attr.remote(attr)
                 for collector in self.remote_collectors
+            ]
+        )
+
+    def _install_profile_hooks(self, config: ProfileConfig) -> None:
+        """Install per-actor :class:`_ProfilerHook` on each selected remote actor.
+
+        Each actor receives its own ``_ProfilerHook(config, worker_idx=idx)``
+        through ``set_post_collect_hook`` (a regular method on
+        :class:`BaseCollector`) — Ray actor handles can call methods but not
+        property setters directly. Actors not in ``config.workers`` are left
+        untouched.
+        """
+        targeted = [idx for idx in config.workers if idx < len(self.remote_collectors)]
+        futures = [
+            self.remote_collectors[idx].set_post_collect_hook.remote(
+                _ProfilerHook(config, worker_idx=idx)
+            )
+            for idx in targeted
+        ]
+        ray.get(futures)
+
+    def _uninstall_profile_hooks(self, config: ProfileConfig) -> None:
+        """Stop the per-actor profiler hooks and clear ``post_collect_hook``."""
+        targeted = [idx for idx in config.workers if idx < len(self.remote_collectors)]
+        # Best-effort stop — early-stop is harmless if it already auto-stopped.
+        try:
+            ray.get(
+                [
+                    self.remote_collectors[idx].cascade_execute.remote(
+                        "post_collect_hook.stop"
+                    )
+                    for idx in targeted
+                ]
+            )
+        except Exception:
+            pass
+        ray.get(
+            [
+                self.remote_collectors[idx].set_post_collect_hook.remote(None)
+                for idx in targeted
             ]
         )
 

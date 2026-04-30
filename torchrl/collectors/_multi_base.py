@@ -25,7 +25,7 @@ from torchrl._utils import (
     _set_mp_start_method_if_unset,
     RL_WARNINGS,
 )
-from torchrl.collectors._base import BaseCollector
+from torchrl.collectors._base import _ProfilerHook, BaseCollector, ProfileConfig
 from torchrl.collectors._constants import (
     _InterruptorManager,
     _is_osx,
@@ -1257,7 +1257,6 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "weight_sync_schemes": self._weight_sync_schemes,
                     "worker_idx": i,  # Worker index for queue-based weight distribution
                     "init_random_frames": self.init_random_frames,
-                    "profile_config": self._profile_config,
                     "trajs_per_batch": self._worker_trajs_per_batch,
                     "init_fn": self._worker_init_fn,
                     "pre_collect_hook": self._worker_pre_collect_hook,
@@ -1538,36 +1537,58 @@ also that the state dict is synchronised across processes if needed."""
         else:
             raise RuntimeError("Collector cannot be paused.")
 
-    def enable_profile(self, **kwargs) -> None:
-        """Enable profiling for collector worker rollouts.
+    def _install_profile_hooks(self, config: ProfileConfig) -> None:
+        """Install per-worker :class:`_ProfilerHook` on each selected worker.
 
-        For multi-process collectors, this sends the profile configuration
-        to the specified workers. Must be called before iteration starts.
-
-        See :meth:`BaseCollector.enable_profile` for full documentation.
+        Each worker gets its own ``_ProfilerHook(config, worker_idx=idx)``
+        wrapped in :class:`CloudpickleWrapper` and pushed via the existing
+        ``"setattr"`` pipe message. Workers not in ``config.workers`` are left
+        untouched.
         """
-        # First, call parent to validate and set _profile_config
-        super().enable_profile(**kwargs)
+        if not hasattr(self, "pipes") or getattr(self, "closed", True):
+            raise RuntimeError(
+                "MultiCollector workers are not running; call enable_profile() "
+                "before close()/shutdown()."
+            )
+        _check_for_faulty_process(self.procs)
+        targeted = [idx for idx in config.workers if idx < self.num_workers]
+        for idx in targeted:
+            hook = CloudpickleWrapper(_ProfilerHook(config, worker_idx=idx))
+            self.pipes[idx].send((("post_collect_hook", hook), "setattr"))
+        for idx in targeted:
+            result, msg = self._recv_and_check(self.pipes[idx], worker_idx=idx)
+            if msg != "setattr":
+                raise RuntimeError(f"Worker {idx}: Expected 'setattr' ack, got {msg}")
+            if isinstance(result, Exception):
+                raise result
 
-        # Send profile config to workers that should be profiled
-        if self._profile_config is not None:
-            for idx in self._profile_config.workers:
-                if idx < self.num_workers:
-                    self.pipes[idx].send((self._profile_config, "enable_profile"))
-
-            # Wait for confirmation from workers
-            for idx in self._profile_config.workers:
-                if idx < self.num_workers:
-                    if self.pipes[idx].poll(INSTANTIATE_TIMEOUT):
-                        _, msg = self.pipes[idx].recv()
-                        if msg != "profile_enabled":
-                            raise RuntimeError(
-                                f"Worker {idx}: Expected 'profile_enabled' message, got {msg}"
-                            )
-                    else:
-                        raise TimeoutError(
-                            f"Worker {idx}: Timed out waiting for profile confirmation."
-                        )
+    def _uninstall_profile_hooks(self, config: ProfileConfig) -> None:
+        """Stop the per-worker profiler hooks and clear ``post_collect_hook``."""
+        if not hasattr(self, "pipes") or getattr(self, "closed", True):
+            return
+        targeted = [idx for idx in config.workers if idx < self.num_workers]
+        # Stop the inner profiler — early-stop is harmless if it already auto-stopped.
+        for idx in targeted:
+            self.pipes[idx].send(
+                (("post_collect_hook.fn.stop", (), {}), "cascade_execute")
+            )
+        for idx in targeted:
+            try:
+                result, msg = self._recv_and_check(self.pipes[idx], worker_idx=idx)
+                if msg != "cascade_execute":
+                    raise RuntimeError(
+                        f"Worker {idx}: Expected 'cascade_execute' ack, got {msg}"
+                    )
+                if isinstance(result, Exception):
+                    raise result
+            except Exception:
+                # Swallow per-worker stop errors — we still want to clear the hook below.
+                pass
+        # Clear the hook on each targeted worker.
+        for idx in targeted:
+            self.pipes[idx].send((("post_collect_hook", None), "setattr"))
+        for idx in targeted:
+            self._recv_and_check(self.pipes[idx], worker_idx=idx)
 
     def _set_worker_attr(self, attr_name: str, value: Any) -> None:
         if not hasattr(self, "pipes") or getattr(self, "closed", True):
