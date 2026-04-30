@@ -1223,9 +1223,18 @@ class SliceSampler(Sampler):
             (and set on the sampled TensorDict when using
             :class:`~torchrl.data.TensorDictReplayBuffer`) marking real
             timesteps as ``True`` and padded ones as ``False``. Lengths can be
-            recovered as ``mask.reshape(B, T).sum(-1)``. Combining
-            ``pad_output=True`` with ``strict_length=True`` raises
-            :class:`ValueError`. Defaults to ``False``.
+            recovered as ``mask.reshape(B, T).sum(-1)``. When the storage
+            already contains an ``is_init`` field (i.e. the env had an
+            :class:`~torchrl.envs.transforms.InitTracker`), ``is_init`` is
+            additionally set to ``True`` at every slice start (OR-ed with the
+            existing markers from real episode resets). This lets a recurrent
+            policy under :func:`~torchrl.modules.set_recurrent_mode`
+            ``("recurrent")`` consume the flat ``[B * T]`` sample directly —
+            the RNN splits on ``is_init`` and uses each slice's stored
+            ``recurrent_state[0]`` as the initial hidden state, no manual
+            reshape required. Combining ``pad_output=True`` with
+            ``strict_length=True`` raises :class:`ValueError`. Defaults to
+            ``False``.
         compile (bool or dict of kwargs, optional): if ``True``, the bottleneck of
             the :meth:`~sample` method will be compiled with :func:`~torch.compile`.
             Keyword arguments can also be passed to torch.compile with this arg.
@@ -2125,12 +2134,68 @@ class SliceSampler(Sampler):
             }
             if mask_flat is not None:
                 info[("collector", "mask")] = mask_flat
+            self._maybe_emit_init_marker(
+                info, st_index, num_slices, seq_length, target_seq_length
+            )
             return index, info
         index = index.to(torch.long).unbind(-1)
         info = {}
         if mask_flat is not None:
             info[("collector", "mask")] = mask_flat
+        if self.pad_output:
+            # We need st_index to OR our slice-start markers with whatever
+            # is_init was already in the storage. Fetch it lazily; cheap
+            # because the index is already computed.
+            st_index = storage[index]
+            self._maybe_emit_init_marker(
+                info, st_index, num_slices, seq_length, target_seq_length
+            )
         return index, info
+
+    def _maybe_emit_init_marker(
+        self,
+        info: dict,
+        st_index,
+        num_slices: int,
+        seq_length,
+        target_seq_length: int | None,
+    ) -> None:
+        """Mark slice starts with ``is_init=True`` when ``pad_output=True``.
+
+        Recurrent modules (:class:`~torchrl.modules.LSTMModule`,
+        :class:`~torchrl.modules.GRUModule`) under
+        :func:`~torchrl.modules.set_recurrent_mode` ``("recurrent")`` split a
+        flat sequence on ``is_init`` and use the stored hidden state at each
+        split as the initial state. By marking the first timestep of every
+        slice we let the user pass the flat ``[B*T]`` sample directly to a
+        recurrent policy without a manual reshape — the RNN sees B
+        independent slices and uses each slice's stored ``recurrent_state[0]``
+        as the initial hidden state.
+
+        We OR our markers with the storage's existing ``is_init`` so that
+        episode resets that fall *inside* a slice are preserved.
+        """
+        if not self.pad_output:
+            return
+        if target_seq_length is not None:
+            T = target_seq_length
+        elif isinstance(seq_length, int):
+            T = seq_length
+        else:
+            return  # variable-length output (no padding mode); markers ill-defined
+        existing_is_init = (
+            st_index.get("is_init", default=None) if hasattr(st_index, "get") else None
+        )
+        if existing_is_init is None:
+            # The user isn't tracking is_init — don't introduce a key that
+            # wasn't there, since we'd be lying about resets within the slice.
+            return
+        init_marker = torch.zeros_like(existing_is_init)
+        slice_starts = (
+            torch.arange(num_slices, device=init_marker.device, dtype=torch.long) * T
+        )
+        init_marker[slice_starts] = True
+        info["is_init"] = init_marker | existing_is_init
 
     @property
     def _used_traj_key(self):

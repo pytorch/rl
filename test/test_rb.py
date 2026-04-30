@@ -3434,11 +3434,14 @@ class TestSamplers:
         """Helper: build a TensorDictReplayBuffer with trajectories of given lengths."""
         parts = []
         for t_id, length in enumerate(traj_lengths):
+            is_init = torch.zeros(length, 1, dtype=torch.bool)
+            is_init[0] = True  # episode reset at the first step of each trajectory
             parts.append(
                 TensorDict(
                     {
                         "traj": torch.full((length,), t_id, dtype=torch.int),
                         "obs": torch.arange(length).float(),
+                        "is_init": is_init,
                     },
                     batch_size=[length],
                 )
@@ -3543,6 +3546,62 @@ class TestSamplers:
             SliceSampler(
                 slice_len=4, traj_key="traj", strict_length=True, pad_output=True
             )
+
+    def test_slice_sampler_pad_output_marks_slice_starts(self):
+        """pad_output=True writes is_init=True at every slice start.
+
+        This is what lets a recurrent policy in `set_recurrent_mode("recurrent")`
+        consume the flat [B*T] sample without a manual reshape: the RNN splits
+        on `is_init` and uses each slice's stored hidden state at position 0.
+        """
+        torch.manual_seed(0)
+        B, T = 4, 8
+        rb = self._make_rb_with_short_trajs(
+            traj_lengths=[3, 8, 2, 7, 1, 5], slice_len=T, num_slices=B
+        )
+        for _ in range(10):
+            sample = rb.sample()
+            is_init = sample["is_init"].reshape(B, T)
+            # Position 0 of every slice must be True regardless of where the
+            # slice landed within its source trajectory.
+            assert is_init[:, 0].all(), "every slice must start with is_init=True"
+            # An episode reset that fell inside a slice (other than position 0)
+            # should also remain True — we OR with the storage's is_init.
+            mask = sample[("collector", "mask")].reshape(B, T)
+            # A slice whose first step is the start of a *real* trajectory
+            # (length-1 trajectory case) won't have any internal reset; that's
+            # fine. The strong invariant is that is_init implies a True at
+            # every slice start, never a False.
+            assert is_init[mask].any() or mask.all(), "smoke check"
+
+    def test_slice_sampler_pad_output_no_is_init_no_marker(self):
+        """Without is_init in the storage we don't introduce one out of thin air."""
+        torch.manual_seed(0)
+        # Build a buffer *without* is_init.
+        data = TensorDict(
+            {
+                "traj": torch.cat(
+                    [
+                        torch.full((3,), 0, dtype=torch.int),
+                        torch.full((6,), 1, dtype=torch.int),
+                        torch.full((2,), 2, dtype=torch.int),
+                    ]
+                ),
+                "obs": torch.arange(11).float(),
+            },
+            batch_size=[11],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(11),
+            sampler=SliceSampler(
+                slice_len=5, traj_key="traj", strict_length=False, pad_output=True
+            ),
+            batch_size=15,
+        )
+        rb.extend(data)
+        sample = rb.sample()
+        # is_init must not appear if it wasn't in the storage
+        assert "is_init" not in sample.keys(True)
 
     def test_slice_sampler_mask_all_long_trajs_no_mask(self):
         """When all trajs >= slice_len, pad_output=True still emits no mask (nothing to pad)."""

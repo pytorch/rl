@@ -29,10 +29,12 @@ Pieces, in the order they appear:
   ``[B * T]`` with ``("collector", "mask")`` flagging the real timesteps;
   short trajectories are padded instead of dropped.
 * :func:`~torchrl.modules.set_recurrent_mode` ``("recurrent")`` lets the GRU
-  consume each slice as a sequence in one cuDNN-friendly call. The single
-  ``sample.reshape(B, T)`` is the only piece of shape boilerplate that
-  remains: it tells the RNN "these are B independent slices", so it uses each
-  slice's stored ``recurrent_state[..., 0]`` as the initial hidden state.
+  consume the flat ``[B * T]`` sample directly. Because ``pad_output=True``
+  also writes ``is_init=True`` at every slice start, the RNN's existing
+  ``is_init``-based split path (``_get_num_per_traj_init``) recovers the
+  per-slice trajectory structure on its own and uses each slice's stored
+  ``recurrent_state[0]`` as the initial hidden state. No reshape, no manual
+  splitting, no per-slice book-keeping in the training loop.
 
 Run it::
 
@@ -133,27 +135,24 @@ for step in range(N_TRAINING_STEPS):
         # First sample triggered the auto-detect — confirm what was picked.
         print("Auto-detected traj_key:", rb.sampler.traj_key)
 
-    # Reshape flat [B*T] to [B, T]: the GRU treats each row as an independent
-    # slice and uses its stored recurrent_state[:, 0] as the initial hidden
-    # state. Without the reshape, the GRU would see one giant [1, B*T]
-    # sequence and propagate hidden state across unrelated slices.
-    seq = sample.reshape(NUM_SLICES, SLICE_LEN)
+    # The flat [B*T] sample carries is_init=True at every slice start, so the
+    # GRU in recurrent_mode splits the sequence into independent slices on its
+    # own. action_value comes out shaped exactly like the input.
     with set_recurrent_mode("recurrent"):
-        out = policy(seq)
-    assert out["action_value"].shape == torch.Size([NUM_SLICES, SLICE_LEN, N_ACT])
+        out = policy(sample)
+    assert out["action_value"].shape == torch.Size([NUM_SLICES * SLICE_LEN, N_ACT])
 
-    # Mask-aware loss: ("collector", "mask") is [B*T] when any slice was
-    # padded, absent otherwise. Reshape it the same way as the sample so it
-    # broadcasts against per-step quantities.
+    # ("collector", "mask") is [B*T] whenever any slice was padded, absent
+    # otherwise. Multiplying the loss by it zeros padded contributions.
     mask_key = ("collector", "mask")
     if mask_key in sample.keys(True):
-        mask = sample[mask_key].reshape(NUM_SLICES, SLICE_LEN)
-        # Example: a per-step squared-TD-error loss masked by the real-step mask.
+        mask = sample[mask_key]
         per_step = out["action_value"].pow(2).sum(-1)
         loss = (per_step * mask).sum() / mask.sum().clamp(min=1)
+        lengths = mask.reshape(NUM_SLICES, SLICE_LEN).sum(-1).tolist()
         print(
             f"step {step}: write_count={rb.write_count} "
-            f"lengths={mask.sum(-1).tolist()} loss={loss.item():.4f}"
+            f"lengths={lengths} loss={loss.item():.4f}"
         )
     else:
         print(f"step {step}: write_count={rb.write_count} (no padding)")
