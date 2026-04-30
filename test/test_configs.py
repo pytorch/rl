@@ -1321,6 +1321,108 @@ class TestOptimizerConfigs:
 @pytest.mark.skipif(
     not _configs_available, reason="Config system requires hydra-core and omegaconf"
 )
+class TestLoggerConfigs:
+    def test_wandb_logger_config(self):
+        """Test WandbLoggerConfig."""
+        from torchrl.trainers.algorithms.configs.logging import WandbLoggerConfig
+
+        cfg = WandbLoggerConfig(
+            exp_name="test",
+            project="torchrl",
+            wandb_kwargs={"entity": "unit-test"},
+        )
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.logging._make_wandb_logger"
+        )
+        assert cfg.exp_name == "test"
+        assert cfg.project == "torchrl"
+        assert cfg.video_fps == 32
+        assert cfg.wandb_kwargs == {"entity": "unit-test"}
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_wandb_logger_config_instantiation(self, monkeypatch):
+        """Test WandbLoggerConfig instantiation."""
+        from hydra.utils import instantiate
+        from torchrl.record.loggers import wandb as wandb_logger_module
+        from torchrl.record.loggers.wandb import WandbLogger
+        from torchrl.trainers.algorithms.configs.logging import WandbLoggerConfig
+
+        init_kwargs = {}
+
+        def init(**kwargs):
+            init_kwargs.update(kwargs)
+            return argparse.Namespace(config={})
+
+        wandb = argparse.Namespace(init=init)
+        monkeypatch.setitem(sys.modules, "wandb", wandb)
+        monkeypatch.setattr(wandb_logger_module, "_has_wandb", True)
+        cfg = WandbLoggerConfig(
+            exp_name="test",
+            project="torchrl",
+            log_dir="wandb_logs",
+            wandb_kwargs={"entity": "unit-test"},
+        )
+        logger = instantiate(cfg)
+        assert isinstance(logger, WandbLogger)
+        assert init_kwargs["name"] == "test"
+        assert init_kwargs["project"] == "torchrl"
+        assert init_kwargs["dir"] == "wandb_logs"
+        assert init_kwargs["entity"] == "unit-test"
+
+    def test_trackio_logger_config(self):
+        """Test TrackioLoggerConfig."""
+        from torchrl.trainers.algorithms.configs.logging import TrackioLoggerConfig
+
+        cfg = TrackioLoggerConfig(
+            exp_name="test",
+            project="torchrl",
+            trackio_kwargs={"entity": "unit-test"},
+        )
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.logging._make_trackio_logger"
+        )
+        assert cfg.exp_name == "test"
+        assert cfg.project == "torchrl"
+        assert cfg.video_fps == 32
+        assert cfg.trackio_kwargs == {"entity": "unit-test"}
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_trackio_logger_config_instantiation(self, monkeypatch):
+        """Test TrackioLoggerConfig instantiation."""
+        from hydra.utils import instantiate
+        from torchrl.record.loggers import trackio as trackio_logger_module
+        from torchrl.record.loggers.trackio import TrackioLogger
+        from torchrl.trainers.algorithms.configs.logging import TrackioLoggerConfig
+
+        init_kwargs = {}
+
+        def init(**kwargs):
+            init_kwargs.update(kwargs)
+            return argparse.Namespace(config={})
+
+        trackio = argparse.Namespace(init=init)
+        monkeypatch.setitem(sys.modules, "trackio", trackio)
+        monkeypatch.setattr(trackio_logger_module, "_has_trackio", True)
+        cfg = TrackioLoggerConfig(
+            exp_name="test",
+            project="torchrl",
+            trackio_kwargs={"entity": "unit-test"},
+        )
+        logger = instantiate(cfg)
+        assert isinstance(logger, TrackioLogger)
+        assert init_kwargs["name"] == "test"
+        assert init_kwargs["project"] == "torchrl"
+        assert init_kwargs["entity"] == "unit-test"
+
+
+@pytest.mark.skipif(
+    not _python_version_compatible, reason="Python 3.10+ required for config system"
+)
+@pytest.mark.skipif(
+    not _configs_available, reason="Config system requires hydra-core and omegaconf"
+)
 class TestTrainerConfigs:
     def test_nested_key_normalization_for_hydra_lists(self):
         from omegaconf import ListConfig

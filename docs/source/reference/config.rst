@@ -555,6 +555,7 @@ Logging Configurations
     LoggerConfig
     WandbLoggerConfig
     TensorboardLoggerConfig
+    TrackioLoggerConfig
     CSVLoggerConfig
 
 Creating Custom Configurations
