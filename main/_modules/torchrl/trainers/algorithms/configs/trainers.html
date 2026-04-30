@@ -294,10 +294,9 @@
 <a class="viewcode-back" href="../../../../../reference/generated/torchrl.trainers.algorithms.configs.trainers.SACTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.SACTrainerConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">SACTrainerConfig</span><span class="p">(</span><span class="n">TrainerConfig</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Configuration class for SAC (Soft Actor Critic) trainer.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Hydra configuration for :class:`~torchrl.trainers.algorithms.SACTrainer`.</span>
 
-<span class="sd">    This class defines the configuration parameters for creating a SAC trainer,</span>
-<span class="sd">    including both required and optional fields with sensible defaults.</span>
+<span class="sd">    Every kwarg accepted by ``SACTrainer.__init__`` is exposed as a field here.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">collector</span><span class="p">:</span> <span class="n">Any</span>
@@ -321,6 +320,12 @@
     <span class="n">target_net_updater</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">auto_log_optim_steps</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">enable_logging</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">log_rewards</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">log_actions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">log_observations</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">done_key</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="s2">&quot;done&quot;</span>
     <span class="n">terminated_key</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="s2">&quot;terminated&quot;</span>
     <span class="n">reward_key</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span>
@@ -363,6 +368,12 @@
     <span class="n">target_net_updater</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;target_net_updater&quot;</span><span class="p">)</span>
     <span class="n">async_collection</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;async_collection&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">log_timings</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_timings&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="n">auto_log_optim_steps</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;auto_log_optim_steps&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">batch_size</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;batch_size&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">enable_logging</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;enable_logging&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">log_rewards</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_rewards&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">log_actions</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_actions&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">log_observations</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_observations&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">done_key</span> <span class="o">=</span> <span class="n">_normalize_hydra_key</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;done_key&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">))</span>
     <span class="n">terminated_key</span> <span class="o">=</span> <span class="n">_normalize_hydra_key</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;terminated_key&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">))</span>
     <span class="n">reward_key</span> <span class="o">=</span> <span class="n">_normalize_hydra_key</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;reward_key&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">))</span>
@@ -433,9 +444,15 @@
         <span class="n">log_interval</span><span class="o">=</span><span class="n">log_interval</span><span class="p">,</span>
         <span class="n">save_trainer_file</span><span class="o">=</span><span class="n">save_trainer_file</span><span class="p">,</span>
         <span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay_buffer</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+        <span class="n">enable_logging</span><span class="o">=</span><span class="n">enable_logging</span><span class="p">,</span>
+        <span class="n">log_rewards</span><span class="o">=</span><span class="n">log_rewards</span><span class="p">,</span>
+        <span class="n">log_actions</span><span class="o">=</span><span class="n">log_actions</span><span class="p">,</span>
+        <span class="n">log_observations</span><span class="o">=</span><span class="n">log_observations</span><span class="p">,</span>
         <span class="n">target_net_updater</span><span class="o">=</span><span class="n">target_net_updater</span><span class="p">,</span>
         <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
+        <span class="n">auto_log_optim_steps</span><span class="o">=</span><span class="n">auto_log_optim_steps</span><span class="p">,</span>
         <span class="n">done_key</span><span class="o">=</span><span class="n">done_key</span><span class="p">,</span>
         <span class="n">terminated_key</span><span class="o">=</span><span class="n">terminated_key</span><span class="p">,</span>
         <span class="n">reward_key</span><span class="o">=</span><span class="n">reward_key</span><span class="p">,</span>
@@ -451,10 +468,9 @@
 <a class="viewcode-back" href="../../../../../reference/generated/torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">PPOTrainerConfig</span><span class="p">(</span><span class="n">TrainerConfig</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Configuration class for PPO (Proximal Policy Optimization) trainer.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Hydra configuration for :class:`~torchrl.trainers.algorithms.PPOTrainer`.</span>
 
-<span class="sd">    This class defines the configuration parameters for creating a PPO trainer,</span>
-<span class="sd">    including both required and optional fields with sensible defaults.</span>
+<span class="sd">    Every kwarg accepted by ``PPOTrainer.__init__`` is exposed as a field here.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        collector: The data collector for gathering training data.</span>
@@ -511,6 +527,14 @@
     <span class="n">gae</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">weight_update_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">auto_log_optim_steps</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.99</span>
+    <span class="n">lmbda</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.95</span>
+    <span class="n">enable_logging</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">log_rewards</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">log_actions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">log_observations</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">done_key</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="s2">&quot;done&quot;</span>
     <span class="n">terminated_key</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="s2">&quot;terminated&quot;</span>
     <span class="n">reward_key</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span>
@@ -554,6 +578,14 @@
     <span class="n">create_env_fn</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;create_env_fn&quot;</span><span class="p">)</span>
     <span class="n">weight_update_map</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;weight_update_map&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
     <span class="n">log_timings</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_timings&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="n">auto_log_optim_steps</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;auto_log_optim_steps&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">batch_size</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;batch_size&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">gamma</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;gamma&quot;</span><span class="p">,</span> <span class="mf">0.99</span><span class="p">)</span>
+    <span class="n">lmbda</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;lmbda&quot;</span><span class="p">,</span> <span class="mf">0.95</span><span class="p">)</span>
+    <span class="n">enable_logging</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;enable_logging&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">log_rewards</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_rewards&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">log_actions</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_actions&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">log_observations</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_observations&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">done_key</span> <span class="o">=</span> <span class="n">_normalize_hydra_key</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;done_key&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">))</span>
     <span class="n">terminated_key</span> <span class="o">=</span> <span class="n">_normalize_hydra_key</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;terminated_key&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">))</span>
     <span class="n">reward_key</span> <span class="o">=</span> <span class="n">_normalize_hydra_key</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;reward_key&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">))</span>
@@ -639,12 +671,20 @@
         <span class="n">log_interval</span><span class="o">=</span><span class="n">log_interval</span><span class="p">,</span>
         <span class="n">save_trainer_file</span><span class="o">=</span><span class="n">save_trainer_file</span><span class="p">,</span>
         <span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay_buffer</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+        <span class="n">gamma</span><span class="o">=</span><span class="n">gamma</span><span class="p">,</span>
+        <span class="n">lmbda</span><span class="o">=</span><span class="n">lmbda</span><span class="p">,</span>
+        <span class="n">enable_logging</span><span class="o">=</span><span class="n">enable_logging</span><span class="p">,</span>
+        <span class="n">log_rewards</span><span class="o">=</span><span class="n">log_rewards</span><span class="p">,</span>
+        <span class="n">log_actions</span><span class="o">=</span><span class="n">log_actions</span><span class="p">,</span>
+        <span class="n">log_observations</span><span class="o">=</span><span class="n">log_observations</span><span class="p">,</span>
         <span class="n">num_epochs</span><span class="o">=</span><span class="n">num_epochs</span><span class="p">,</span>
         <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
         <span class="n">add_gae</span><span class="o">=</span><span class="n">add_gae</span><span class="p">,</span>
         <span class="n">gae</span><span class="o">=</span><span class="n">gae</span><span class="p">,</span>
         <span class="n">weight_update_map</span><span class="o">=</span><span class="n">weight_update_map</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
+        <span class="n">auto_log_optim_steps</span><span class="o">=</span><span class="n">auto_log_optim_steps</span><span class="p">,</span>
         <span class="n">done_key</span><span class="o">=</span><span class="n">done_key</span><span class="p">,</span>
         <span class="n">terminated_key</span><span class="o">=</span><span class="n">terminated_key</span><span class="p">,</span>
         <span class="n">reward_key</span><span class="o">=</span><span class="n">reward_key</span><span class="p">,</span>
@@ -660,7 +700,10 @@
 <a class="viewcode-back" href="../../../../../reference/generated/torchrl.trainers.algorithms.configs.trainers.DQNTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.DQNTrainerConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">DQNTrainerConfig</span><span class="p">(</span><span class="n">TrainerConfig</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Configuration class for DQN (Deep Q-Network) trainer.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Hydra configuration for :class:`~torchrl.trainers.algorithms.DQNTrainer`.</span>
+
+<span class="sd">    Every kwarg accepted by ``DQNTrainer.__init__`` is exposed as a field here.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">collector</span><span class="p">:</span> <span class="n">Any</span>
     <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span>
@@ -685,6 +728,10 @@
     <span class="n">annealing_num_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">250_000</span>
     <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">auto_log_optim_steps</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">enable_logging</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">log_rewards</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">log_observations</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torchrl.trainers.algorithms.configs.trainers._make_dqn_trainer&quot;</span>
@@ -725,6 +772,10 @@
     <span class="n">annealing_num_steps</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;annealing_num_steps&quot;</span><span class="p">,</span> <span class="mi">250_000</span><span class="p">)</span>
     <span class="n">async_collection</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;async_collection&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">log_timings</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_timings&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="n">auto_log_optim_steps</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;auto_log_optim_steps&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">enable_logging</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;enable_logging&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">log_rewards</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_rewards&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">log_observations</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_observations&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">hooks</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;hooks&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">value_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value_network</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
@@ -787,10 +838,14 @@
         <span class="n">log_interval</span><span class="o">=</span><span class="n">log_interval</span><span class="p">,</span>
         <span class="n">save_trainer_file</span><span class="o">=</span><span class="n">save_trainer_file</span><span class="p">,</span>
         <span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay_buffer</span><span class="p">,</span>
+        <span class="n">enable_logging</span><span class="o">=</span><span class="n">enable_logging</span><span class="p">,</span>
+        <span class="n">log_rewards</span><span class="o">=</span><span class="n">log_rewards</span><span class="p">,</span>
+        <span class="n">log_observations</span><span class="o">=</span><span class="n">log_observations</span><span class="p">,</span>
         <span class="n">target_net_updater</span><span class="o">=</span><span class="n">target_net_updater</span><span class="p">,</span>
         <span class="n">greedy_module</span><span class="o">=</span><span class="n">greedy_module</span><span class="p">,</span>
         <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
+        <span class="n">auto_log_optim_steps</span><span class="o">=</span><span class="n">auto_log_optim_steps</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">_register_trainer_hooks</span><span class="p">(</span><span class="n">trainer</span><span class="p">,</span> <span class="n">hooks</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">trainer</span>
@@ -800,7 +855,10 @@
 <a class="viewcode-back" href="../../../../../reference/generated/torchrl.trainers.algorithms.configs.trainers.DDPGTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.DDPGTrainerConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">DDPGTrainerConfig</span><span class="p">(</span><span class="n">TrainerConfig</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Configuration class for DDPG (Deep Deterministic Policy Gradient) trainer.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Hydra configuration for :class:`~torchrl.trainers.algorithms.DDPGTrainer`.</span>
+
+<span class="sd">    Every kwarg accepted by ``DDPGTrainer.__init__`` is exposed as a field here.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">collector</span><span class="p">:</span> <span class="n">Any</span>
     <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span>
@@ -823,6 +881,11 @@
     <span class="n">target_net_updater</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">auto_log_optim_steps</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">enable_logging</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">log_rewards</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">log_actions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">log_observations</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">done_key</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="s2">&quot;done&quot;</span>
     <span class="n">terminated_key</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="s2">&quot;terminated&quot;</span>
     <span class="n">reward_key</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span>
@@ -864,6 +927,11 @@
     <span class="n">target_net_updater</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;target_net_updater&quot;</span><span class="p">)</span>
     <span class="n">async_collection</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;async_collection&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">log_timings</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_timings&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="n">auto_log_optim_steps</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;auto_log_optim_steps&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">enable_logging</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;enable_logging&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">log_rewards</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_rewards&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">log_actions</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_actions&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">log_observations</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_observations&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">done_key</span> <span class="o">=</span> <span class="n">_normalize_hydra_key</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;done_key&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">))</span>
     <span class="n">terminated_key</span> <span class="o">=</span> <span class="n">_normalize_hydra_key</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;terminated_key&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">))</span>
     <span class="n">reward_key</span> <span class="o">=</span> <span class="n">_normalize_hydra_key</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;reward_key&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">))</span>
@@ -920,9 +988,14 @@
         <span class="n">log_interval</span><span class="o">=</span><span class="n">log_interval</span><span class="p">,</span>
         <span class="n">save_trainer_file</span><span class="o">=</span><span class="n">save_trainer_file</span><span class="p">,</span>
         <span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay_buffer</span><span class="p">,</span>
+        <span class="n">enable_logging</span><span class="o">=</span><span class="n">enable_logging</span><span class="p">,</span>
+        <span class="n">log_rewards</span><span class="o">=</span><span class="n">log_rewards</span><span class="p">,</span>
+        <span class="n">log_actions</span><span class="o">=</span><span class="n">log_actions</span><span class="p">,</span>
+        <span class="n">log_observations</span><span class="o">=</span><span class="n">log_observations</span><span class="p">,</span>
         <span class="n">target_net_updater</span><span class="o">=</span><span class="n">target_net_updater</span><span class="p">,</span>
         <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
+        <span class="n">auto_log_optim_steps</span><span class="o">=</span><span class="n">auto_log_optim_steps</span><span class="p">,</span>
         <span class="n">done_key</span><span class="o">=</span><span class="n">done_key</span><span class="p">,</span>
         <span class="n">terminated_key</span><span class="o">=</span><span class="n">terminated_key</span><span class="p">,</span>
         <span class="n">reward_key</span><span class="o">=</span><span class="n">reward_key</span><span class="p">,</span>
@@ -938,7 +1011,10 @@
 <a class="viewcode-back" href="../../../../../reference/generated/torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">IQLTrainerConfig</span><span class="p">(</span><span class="n">TrainerConfig</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Configuration class for IQL (Implicit Q-Learning) trainer.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Hydra configuration for :class:`~torchrl.trainers.algorithms.IQLTrainer`.</span>
+
+<span class="sd">    Every kwarg accepted by ``IQLTrainer.__init__`` is exposed as a field here.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">collector</span><span class="p">:</span> <span class="n">Any</span>
     <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span>
@@ -962,6 +1038,11 @@
     <span class="n">target_net_updater</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">auto_log_optim_steps</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">enable_logging</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">log_rewards</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">log_actions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">log_observations</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torchrl.trainers.algorithms.configs.trainers._make_iql_trainer&quot;</span>
@@ -998,6 +1079,11 @@
     <span class="n">target_net_updater</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;target_net_updater&quot;</span><span class="p">)</span>
     <span class="n">async_collection</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;async_collection&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">log_timings</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_timings&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="n">auto_log_optim_steps</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;auto_log_optim_steps&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">enable_logging</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;enable_logging&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">log_rewards</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_rewards&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">log_actions</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_actions&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">log_observations</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_observations&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">hooks</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;hooks&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">actor_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1051,9 +1137,14 @@
         <span class="n">log_interval</span><span class="o">=</span><span class="n">log_interval</span><span class="p">,</span>
         <span class="n">save_trainer_file</span><span class="o">=</span><span class="n">save_trainer_file</span><span class="p">,</span>
         <span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay_buffer</span><span class="p">,</span>
+        <span class="n">enable_logging</span><span class="o">=</span><span class="n">enable_logging</span><span class="p">,</span>
+        <span class="n">log_rewards</span><span class="o">=</span><span class="n">log_rewards</span><span class="p">,</span>
+        <span class="n">log_actions</span><span class="o">=</span><span class="n">log_actions</span><span class="p">,</span>
+        <span class="n">log_observations</span><span class="o">=</span><span class="n">log_observations</span><span class="p">,</span>
         <span class="n">target_net_updater</span><span class="o">=</span><span class="n">target_net_updater</span><span class="p">,</span>
         <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
+        <span class="n">auto_log_optim_steps</span><span class="o">=</span><span class="n">auto_log_optim_steps</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">_register_trainer_hooks</span><span class="p">(</span><span class="n">trainer</span><span class="p">,</span> <span class="n">hooks</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">trainer</span>
@@ -1063,7 +1154,10 @@
 <a class="viewcode-back" href="../../../../../reference/generated/torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">CQLTrainerConfig</span><span class="p">(</span><span class="n">TrainerConfig</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Configuration class for CQL (Conservative Q-Learning) trainer.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Hydra configuration for :class:`~torchrl.trainers.algorithms.CQLTrainer`.</span>
+
+<span class="sd">    Every kwarg accepted by ``CQLTrainer.__init__`` is exposed as a field here.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">collector</span><span class="p">:</span> <span class="n">Any</span>
     <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span>
@@ -1086,6 +1180,11 @@
     <span class="n">target_net_updater</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">auto_log_optim_steps</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">enable_logging</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">log_rewards</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">log_actions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">log_observations</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torchrl.trainers.algorithms.configs.trainers._make_cql_trainer&quot;</span>
@@ -1121,6 +1220,11 @@
     <span class="n">target_net_updater</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;target_net_updater&quot;</span><span class="p">)</span>
     <span class="n">async_collection</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;async_collection&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">log_timings</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_timings&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="n">auto_log_optim_steps</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;auto_log_optim_steps&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">enable_logging</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;enable_logging&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">log_rewards</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_rewards&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">log_actions</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_actions&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">log_observations</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_observations&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">hooks</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;hooks&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">actor_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1170,9 +1274,14 @@
         <span class="n">log_interval</span><span class="o">=</span><span class="n">log_interval</span><span class="p">,</span>
         <span class="n">save_trainer_file</span><span class="o">=</span><span class="n">save_trainer_file</span><span class="p">,</span>
         <span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay_buffer</span><span class="p">,</span>
+        <span class="n">enable_logging</span><span class="o">=</span><span class="n">enable_logging</span><span class="p">,</span>
+        <span class="n">log_rewards</span><span class="o">=</span><span class="n">log_rewards</span><span class="p">,</span>
+        <span class="n">log_actions</span><span class="o">=</span><span class="n">log_actions</span><span class="p">,</span>
+        <span class="n">log_observations</span><span class="o">=</span><span class="n">log_observations</span><span class="p">,</span>
         <span class="n">target_net_updater</span><span class="o">=</span><span class="n">target_net_updater</span><span class="p">,</span>
         <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
+        <span class="n">auto_log_optim_steps</span><span class="o">=</span><span class="n">auto_log_optim_steps</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">_register_trainer_hooks</span><span class="p">(</span><span class="n">trainer</span><span class="p">,</span> <span class="n">hooks</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">trainer</span>
@@ -1180,7 +1289,10 @@
 
 <span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">TD3TrainerConfig</span><span class="p">(</span><span class="n">TrainerConfig</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Configuration class for TD3 (Twin Delayed DDPG) trainer.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Hydra configuration for :class:`~torchrl.trainers.algorithms.TD3Trainer`.</span>
+
+<span class="sd">    Every kwarg accepted by ``TD3Trainer.__init__`` is exposed as a field here.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">collector</span><span class="p">:</span> <span class="n">Any</span>
     <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span>
@@ -1198,7 +1310,18 @@
     <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">clip_grad_norm</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
     <span class="n">clip_norm</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">frame_skip</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">progress_bar</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">save_trainer_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10000</span>
+    <span class="n">log_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10000</span>
+    <span class="n">num_epochs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
     <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">auto_log_optim_steps</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">enable_logging</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">log_rewards</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">log_actions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">log_observations</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">create_env_fn</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">target_net_updater</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">policy_update_delay</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span>
@@ -1239,6 +1362,11 @@
     <span class="n">num_epochs</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;num_epochs&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
     <span class="n">async_collection</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;async_collection&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">log_timings</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_timings&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="n">auto_log_optim_steps</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;auto_log_optim_steps&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">enable_logging</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;enable_logging&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">log_rewards</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_rewards&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">log_actions</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_actions&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">log_observations</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_observations&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">actor_network</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;actor_network&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
     <span class="n">qvalue_network</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;qvalue_network&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
     <span class="n">exploration_module</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;exploration_module&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
@@ -1358,8 +1486,13 @@
         <span class="n">save_trainer_file</span><span class="o">=</span><span class="n">save_trainer_file</span><span class="p">,</span>
         <span class="n">num_epochs</span><span class="o">=</span><span class="n">num_epochs</span><span class="p">,</span>
         <span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay_buffer</span><span class="p">,</span>
+        <span class="n">enable_logging</span><span class="o">=</span><span class="n">enable_logging</span><span class="p">,</span>
+        <span class="n">log_rewards</span><span class="o">=</span><span class="n">log_rewards</span><span class="p">,</span>
+        <span class="n">log_actions</span><span class="o">=</span><span class="n">log_actions</span><span class="p">,</span>
+        <span class="n">log_observations</span><span class="o">=</span><span class="n">log_observations</span><span class="p">,</span>
         <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
+        <span class="n">auto_log_optim_steps</span><span class="o">=</span><span class="n">auto_log_optim_steps</span><span class="p">,</span>
         <span class="n">target_net_updater</span><span class="o">=</span><span class="n">target_net_updater</span><span class="p">,</span>
         <span class="n">exploration_module</span><span class="o">=</span><span class="n">exploration_module</span><span class="p">,</span>
     <span class="p">)</span>

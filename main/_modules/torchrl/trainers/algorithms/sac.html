@@ -278,6 +278,9 @@
 <span class="k">class</span> <span class="nc">SACTrainer</span><span class="p">(</span><span class="n">Trainer</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A trainer class for Soft Actor-Critic (SAC) algorithm.</span>
 
+<span class="sd">    See also :class:`~torchrl.trainers.algorithms.configs.SACTrainerConfig` for the</span>
+<span class="sd">    Hydra configuration counterpart.</span>
+
 <span class="sd">    This trainer implements the SAC algorithm, an off-policy actor-critic method that</span>
 <span class="sd">    optimizes a stochastic policy in an off-policy way, forming a bridge between</span>
 <span class="sd">    stochastic policy optimization and DDPG-style approaches. SAC incorporates the</span>
@@ -377,6 +380,7 @@
         <span class="n">target_net_updater</span><span class="p">:</span> <span class="n">TargetNetUpdater</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">auto_log_optim_steps</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">done_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;done&quot;</span><span class="p">,</span>
         <span class="n">terminated_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;terminated&quot;</span><span class="p">,</span>
         <span class="n">reward_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span><span class="p">,</span>
@@ -410,6 +414,7 @@
             <span class="n">save_trainer_file</span><span class="o">=</span><span class="n">save_trainer_file</span><span class="p">,</span>
             <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
             <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
+            <span class="n">auto_log_optim_steps</span><span class="o">=</span><span class="n">auto_log_optim_steps</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">replay_buffer</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span> <span class="o">=</span> <span class="n">async_collection</span>

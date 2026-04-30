@@ -278,6 +278,9 @@
 <span class="k">class</span> <span class="nc">DQNTrainer</span><span class="p">(</span><span class="n">Trainer</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A trainer class for Deep Q-Network (DQN) algorithm.</span>
 
+<span class="sd">    See also :class:`~torchrl.trainers.algorithms.configs.DQNTrainerConfig` for the</span>
+<span class="sd">    Hydra configuration counterpart.</span>
+
 <span class="sd">    This trainer implements the DQN algorithm, a value-based method for discrete</span>
 <span class="sd">    action spaces that learns a Q-function and derives a greedy policy from it.</span>
 
@@ -369,6 +372,7 @@
         <span class="n">greedy_module</span><span class="p">:</span> <span class="n">EGreedyModule</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">auto_log_optim_steps</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
             <span class="s2">&quot;DQNTrainer is an experimental/prototype feature. The API may change in future versions. &quot;</span>
@@ -393,6 +397,7 @@
             <span class="n">save_trainer_file</span><span class="o">=</span><span class="n">save_trainer_file</span><span class="p">,</span>
             <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
             <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
+            <span class="n">auto_log_optim_steps</span><span class="o">=</span><span class="n">auto_log_optim_steps</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">replay_buffer</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span> <span class="o">=</span> <span class="n">async_collection</span>

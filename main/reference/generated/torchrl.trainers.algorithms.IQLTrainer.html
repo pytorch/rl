@@ -255,6 +255,8 @@
 <dt class="sig sig-object py" id="torchrl.trainers.algorithms.IQLTrainer">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.trainers.algorithms.</span></span><span class="sig-name descname"><span class="pre">IQLTrainer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/trainers/algorithms/iql.html#IQLTrainer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.trainers.algorithms.IQLTrainer" title="Link to this definition">¶</a></dt>
 <dd><p>A trainer class for Implicit Q-Learning (IQL) algorithm.</p>
+<p>See also <code class="xref py py-class docutils literal notranslate"><span class="pre">IQLTrainerConfig</span></code> for the
+Hydra configuration counterpart.</p>
 <p>This trainer implements the IQL algorithm, an off-policy actor-critic method
 that uses expectile regression for value function learning. IQL avoids querying
 out-of-distribution actions by using an implicit approach to Q-learning.</p>

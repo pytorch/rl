@@ -277,6 +277,9 @@
 <span class="k">class</span> <span class="nc">IQLTrainer</span><span class="p">(</span><span class="n">Trainer</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A trainer class for Implicit Q-Learning (IQL) algorithm.</span>
 
+<span class="sd">    See also :class:`~torchrl.trainers.algorithms.configs.IQLTrainerConfig` for the</span>
+<span class="sd">    Hydra configuration counterpart.</span>
+
 <span class="sd">    This trainer implements the IQL algorithm, an off-policy actor-critic method</span>
 <span class="sd">    that uses expectile regression for value function learning. IQL avoids querying</span>
 <span class="sd">    out-of-distribution actions by using an implicit approach to Q-learning.</span>
@@ -346,6 +349,7 @@
         <span class="n">target_net_updater</span><span class="p">:</span> <span class="n">TargetNetUpdater</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">auto_log_optim_steps</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
             <span class="s2">&quot;IQLTrainer is an experimental/prototype feature. The API may change in future versions. &quot;</span>
@@ -370,6 +374,7 @@
             <span class="n">save_trainer_file</span><span class="o">=</span><span class="n">save_trainer_file</span><span class="p">,</span>
             <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
             <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
+            <span class="n">auto_log_optim_steps</span><span class="o">=</span><span class="n">auto_log_optim_steps</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">replay_buffer</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span> <span class="o">=</span> <span class="n">async_collection</span>

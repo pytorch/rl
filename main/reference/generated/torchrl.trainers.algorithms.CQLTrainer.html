@@ -255,6 +255,8 @@
 <dt class="sig sig-object py" id="torchrl.trainers.algorithms.CQLTrainer">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.trainers.algorithms.</span></span><span class="sig-name descname"><span class="pre">CQLTrainer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/trainers/algorithms/cql.html#CQLTrainer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.trainers.algorithms.CQLTrainer" title="Link to this definition">¶</a></dt>
 <dd><p>A trainer class for Conservative Q-Learning (CQL) algorithm.</p>
+<p>See also <code class="xref py py-class docutils literal notranslate"><span class="pre">CQLTrainerConfig</span></code> for the
+Hydra configuration counterpart.</p>
 <p>This trainer implements the CQL algorithm, an off-policy actor-critic method
 that adds a conservative penalty to Q-value estimates to prevent overestimation
 of out-of-distribution actions. CQL is particularly effective for offline RL.</p>
