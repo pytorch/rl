@@ -1215,6 +1215,16 @@ class SliceSampler(Sampler):
             Be mindful that this can result in effective `batch_size`  shorter
             than the one asked for! Trajectories can be split using
             :func:`~torchrl.collectors.split_trajectories`. Defaults to ``True``.
+        pad_output (bool, optional): if ``True`` and ``strict_length=False``,
+            short trajectories are padded to ``slice_len`` (or
+            ``batch_size // num_slices``) so the output always has a uniform
+            ``[B * T]`` shape. A boolean mask is written to
+            ``("collector", "mask")`` in the returned info dict (and set on the
+            sampled TensorDict when using
+            :class:`~torchrl.data.TensorDictReplayBuffer`) marking real
+            timesteps as ``True`` and padded ones as ``False``. Lengths can be
+            recovered as ``mask.reshape(B, T).sum(-1)``. Has no effect when
+            ``strict_length=True``. Defaults to ``False``.
         compile (bool or dict of kwargs, optional): if ``True``, the bottleneck of
             the :meth:`~sample` method will be compiled with :func:`~torch.compile`.
             Keyword arguments can also be passed to torch.compile with this arg.
@@ -1435,6 +1445,7 @@ class SliceSampler(Sampler):
         cache_values: bool = False,
         truncated_key: NestedKey | None = ("next", "truncated"),
         strict_length: bool = True,
+        pad_output: bool = False,
         compile: bool | dict = False,
         span: bool | int | tuple[bool | int, bool | int] = False,
         use_gpu: torch.device | bool = False,
@@ -1447,6 +1458,7 @@ class SliceSampler(Sampler):
         self.cache_values = cache_values
         self._fetch_traj = True
         self.strict_length = strict_length
+        self.pad_output = pad_output
         self._cache = {}
         self.use_gpu = bool(use_gpu)
         self._gpu_device = (
@@ -1495,14 +1507,19 @@ class SliceSampler(Sampler):
         else:
             if traj_key is not None:
                 self._fetch_traj = True
+                self._traj_key_auto = False
             elif end_key is not None:
                 self._fetch_traj = False
+                self._traj_key_auto = False
+            else:
+                # Neither provided: auto-detect from storage on first sample call.
+                # Prefer ("collector", "traj_ids") (written by collectors) over "episode".
+                self._fetch_traj = True
+                self._traj_key_auto = True
             if end_key is None:
                 end_key = ("next", "done")
-            if traj_key is None:
-                traj_key = "episode"
             self.end_key = end_key
-            self.traj_key = traj_key
+            self.traj_key = traj_key  # may be None when _traj_key_auto=True
 
         if not ((num_slices is None) ^ (slice_len is None)):
             raise TypeError(
@@ -1697,9 +1714,35 @@ class SliceSampler(Sampler):
         result[:, 0] = result[:, 0] % storage_length
         return result
 
+    def _resolve_traj_key(self, storage):
+        """Auto-detect traj_key from storage on first sample call.
+
+        Probes for ("collector", "traj_ids") first (written by TorchRL
+        collectors), then falls back to "episode", then to end_key reconstruction.
+        """
+        self._traj_key_auto = False
+        try:
+            sample = storage[0:1]
+            if hasattr(sample, "get"):
+                if sample.get(("collector", "traj_ids"), None) is not None:
+                    self.traj_key = ("collector", "traj_ids")
+                    self._fetch_traj = True
+                    return
+                if sample.get("episode", None) is not None:
+                    self.traj_key = "episode"
+                    self._fetch_traj = True
+                    return
+        except Exception:
+            pass
+        # Neither traj key found: reconstruct from end_key
+        self._fetch_traj = False
+
     def _get_stop_and_length(self, storage, fallback=True):
         if self.cache_values and "stop-and-length" in self._cache:
             return self._cache.get("stop-and-length")
+
+        if getattr(self, "_traj_key_auto", False):
+            self._resolve_traj_key(storage)
 
         if self._fetch_traj:
             # We first try with the traj_key
@@ -1820,6 +1863,7 @@ class SliceSampler(Sampler):
                 maxval, (num_slices,), device=lengths.device, generator=self._rng
             )
 
+        _target_seq_length = None
         if (lengths < seq_length).any():
             if self.strict_length:
                 idx = lengths >= seq_length
@@ -1865,12 +1909,14 @@ class SliceSampler(Sampler):
                     num_slices = traj_idx.shape[0]
 
                 # make seq_length a tensor with values clamped by lengths
+                _target_seq_length = seq_length if self.pad_output else None
                 seq_length = lengths[traj_idx].clamp_max(seq_length)
         else:
             if traj_idx is None:
                 traj_idx = get_traj_idx(lengths.shape[0])
             else:
                 num_slices = traj_idx.shape[0]
+            _target_seq_length = None
         return self._get_index(
             lengths=lengths,
             start_idx=start_idx,
@@ -1879,6 +1925,7 @@ class SliceSampler(Sampler):
             seq_length=seq_length,
             storage_length=storage_length,
             traj_idx=traj_idx,
+            target_seq_length=_target_seq_length,
             storage=storage,
         )
 
@@ -1892,6 +1939,7 @@ class SliceSampler(Sampler):
         storage_length: int,
         traj_idx: torch.Tensor | None = None,
         *,
+        target_seq_length: int | None = None,
         storage,
     ) -> tuple[torch.Tensor, dict]:
         # end_point is the last possible index for start
@@ -1948,7 +1996,42 @@ class SliceSampler(Sampler):
             ],
             1,
         )
-        index = self._tensor_slices_from_startend(seq_length, starts, storage_length)
+
+        # When strict_length=False produced variable per-slice lengths, pad all
+        # slices to target_seq_length and emit a boolean mask so callers can
+        # distinguish real timesteps from padded ones.
+        if target_seq_length is not None and isinstance(seq_length, torch.Tensor):
+            T = target_seq_length
+            n_extra_dims = starts.shape[1] - 1
+
+            # time offsets: [T, n_extra_dims+1] — only the first dim advances
+            time_offsets = torch.zeros(
+                T, n_extra_dims + 1, device=starts.device, dtype=starts.dtype
+            )
+            time_offsets[:, 0] = torch.arange(T, device=starts.device, dtype=starts.dtype)
+
+            # full index before masking: [B, T, n_extra_dims+1]
+            index_full = starts.unsqueeze(1) + time_offsets.unsqueeze(0)
+
+            # real_mask[i, t] == True iff timestep t is a real (non-padded) step
+            arange = torch.arange(T, device=seq_length.device)
+            real_mask = arange.unsqueeze(0) < seq_length.unsqueeze(1)  # [B, T]
+
+            # padded positions repeat the last real index so storage access is safe
+            last_valid = starts.clone()
+            last_valid[:, 0] = starts[:, 0] + (seq_length - 1).clamp(min=0)
+            index_full = torch.where(
+                real_mask.unsqueeze(-1),
+                index_full,
+                last_valid.unsqueeze(1).expand_as(index_full),
+            )
+            index_full[:, :, 0] = index_full[:, :, 0] % storage_length
+            index = index_full.reshape(-1, n_extra_dims + 1)
+            mask_flat = real_mask.reshape(-1, 1)  # [B*T, 1]
+        else:
+            index = self._tensor_slices_from_startend(seq_length, starts, storage_length)
+            mask_flat = None
+
         if self.truncated_key is not None:
             truncated_key = self.truncated_key
             done_key = _replace_last(truncated_key, "done")
@@ -1957,7 +2040,15 @@ class SliceSampler(Sampler):
             truncated = torch.zeros(
                 (index.shape[0], 1), dtype=torch.bool, device=index.device
             )
-            if isinstance(seq_length, int):
+            if target_seq_length is not None and isinstance(seq_length, torch.Tensor):
+                # mark the last *real* timestep of each slice as truncated
+                T = target_seq_length
+                trunc_positions = (
+                    torch.arange(num_slices, device=seq_length.device) * T
+                    + (seq_length - 1).clamp(min=0)
+                )
+                truncated[trunc_positions] = 1
+            elif isinstance(seq_length, int):
                 truncated.view(num_slices, -1)[:, -1] = 1
             else:
                 truncated[seq_length.cumsum(0) - 1] = 1
@@ -1971,13 +2062,19 @@ class SliceSampler(Sampler):
             terminated = st_index.get(terminated_key, default=None)
             if terminated is None:
                 terminated = torch.zeros_like(truncated)
-            return index, {
+            info = {
                 truncated_key: truncated,
                 done_key: done,
                 terminated_key: terminated,
             }
+            if mask_flat is not None:
+                info[("collector", "mask")] = mask_flat
+            return index, info
         index = index.to(torch.long).unbind(-1)
-        return index, {}
+        info = {}
+        if mask_flat is not None:
+            info[("collector", "mask")] = mask_flat
+        return index, info
 
     @property
     def _used_traj_key(self):

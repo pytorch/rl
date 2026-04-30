@@ -10,7 +10,7 @@ import torch
 from tensordict.utils import expand_as_right
 
 
-def get_primers_from_module(module):
+def get_primers_from_module(module, warn=True):
     """Get all tensordict primers from all submodules of a module.
 
     This method is useful for retrieving primers from modules that are contained within a
@@ -18,6 +18,8 @@ def get_primers_from_module(module):
 
     Args:
         module (torch.nn.Module): The parent module.
+        warn (bool, optional): if ``True``, a warning is raised when no primers
+            are found. Defaults to ``True``.
 
     Returns:
         TensorDictPrimer: A TensorDictPrimer Transform.
@@ -67,7 +69,8 @@ def get_primers_from_module(module):
 
     module.apply(make_primers)
     if not primers:
-        warnings.warn("No primers found in the module.")
+        if warn:
+            warnings.warn("No primers found in the module.")
         return
     elif len(primers) == 1:
         return primers[0]
@@ -75,6 +78,50 @@ def get_primers_from_module(module):
         from torchrl.envs.transforms import Compose
 
         return Compose(*primers)
+
+
+def get_env_transforms_from_module(module, init_key="is_init"):
+    """Return all :class:`~torchrl.envs.transforms.TransformedEnv` transforms needed for a recurrent module.
+
+    Composes :class:`~torchrl.envs.transforms.InitTracker` (writes
+    ``is_init=True`` at episode resets) with
+    :class:`~torchrl.envs.transforms.TensorDictPrimer` (initialises hidden
+    states). Pass the result directly to
+    :class:`~torchrl.envs.transforms.TransformedEnv`.
+
+    Args:
+        module (torch.nn.Module): A module that may contain recurrent
+            submodules (e.g. :class:`~torchrl.modules.LSTMModule` or
+            :class:`~torchrl.modules.GRUModule`).
+        init_key (str, optional): the key used by
+            :class:`~torchrl.envs.transforms.InitTracker` to mark episode
+            starts. Must match the ``is_init`` key expected by the recurrent
+            module. Defaults to ``"is_init"``.
+
+    Returns:
+        A :class:`~torchrl.envs.transforms.Compose` of
+        ``[InitTracker, TensorDictPrimer]`` when the module contains recurrent
+        submodules, or a bare :class:`~torchrl.envs.transforms.InitTracker`
+        otherwise.
+
+    Example:
+        >>> from torchrl.modules import GRUModule
+        >>> from torchrl.modules.utils import get_env_transforms_from_module
+        >>> gru = GRUModule(
+        ...     input_size=4, hidden_size=8, num_layers=1,
+        ...     in_keys=["obs", "recurrent_state", "is_init"],
+        ...     out_keys=["features", ("next", "recurrent_state")],
+        ... )
+        >>> transforms = get_env_transforms_from_module(gru)
+        >>> # TransformedEnv(base_env, transforms)
+    """
+    from torchrl.envs.transforms import Compose, InitTracker
+
+    primer = get_primers_from_module(module, warn=False)
+    tracker = InitTracker(init_key=init_key)
+    if primer is None:
+        return tracker
+    return Compose(tracker, primer)
 
 
 def _unpad_tensors(tensors, mask, as_nested: bool = True) -> torch.Tensor:

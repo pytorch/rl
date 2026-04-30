@@ -3301,6 +3301,249 @@ class TestSamplers:
             else:
                 assert len(sample["traj"].unique()) == 1
 
+    # ------------------------------------------------------------------
+    # traj_key auto-detection tests
+    # ------------------------------------------------------------------
+
+    def test_slice_sampler_auto_traj_key_collector_ids(self):
+        """Auto-detection should prefer ("collector", "traj_ids") over "episode"."""
+        torch.manual_seed(0)
+        # Build data with both keys present; sampler should pick collector key.
+        traj_ids = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2], dtype=torch.int)
+        data = TensorDict(
+            {
+                ("collector", "traj_ids"): traj_ids,
+                "episode": torch.zeros(8, dtype=torch.int),  # wrong, should be ignored
+                "obs": torch.arange(8).float(),
+            },
+            batch_size=[8],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(8),
+            sampler=SliceSampler(num_slices=2),
+            batch_size=6,
+        )
+        rb.extend(data)
+        # Force resolution
+        sample = rb.sample()
+        assert rb.sampler.traj_key == ("collector", "traj_ids")
+        assert rb.sampler._fetch_traj is True
+        assert rb.sampler._traj_key_auto is False
+        # Each slice should come from a single trajectory
+        sample_reshaped = sample.reshape(2, 3)
+        for i in range(2):
+            traj_vals = sample_reshaped[i][("collector", "traj_ids")]
+            assert traj_vals.unique().numel() == 1
+
+    def test_slice_sampler_auto_traj_key_episode(self):
+        """Auto-detection falls back to 'episode' when collector key is absent."""
+        torch.manual_seed(0)
+        traj_ids = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2], dtype=torch.int)
+        data = TensorDict(
+            {
+                "episode": traj_ids,
+                "obs": torch.arange(8).float(),
+            },
+            batch_size=[8],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(8),
+            sampler=SliceSampler(num_slices=2),
+            batch_size=6,
+        )
+        rb.extend(data)
+        rb.sample()
+        assert rb.sampler.traj_key == "episode"
+        assert rb.sampler._fetch_traj is True
+
+    def test_slice_sampler_auto_traj_key_fallback_to_done(self):
+        """Auto-detection falls back to end_key reconstruction when no traj key."""
+        torch.manual_seed(0)
+        done = torch.zeros(9, 1, dtype=torch.bool)
+        done[[2, 5, 8]] = True
+        data = TensorDict(
+            {
+                ("next", "done"): done,
+                ("next", "truncated"): done,
+                ("next", "terminated"): done,
+                "obs": torch.arange(9).float(),
+            },
+            batch_size=[9],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(9),
+            sampler=SliceSampler(num_slices=3),
+            batch_size=9,
+        )
+        rb.extend(data)
+        rb.sample()
+        assert rb.sampler._fetch_traj is False
+
+    def test_slice_sampler_explicit_traj_key_no_auto(self):
+        """Explicit traj_key should bypass auto-detection entirely."""
+        torch.manual_seed(0)
+        traj_ids = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2], dtype=torch.int)
+        data = TensorDict(
+            {
+                "my_traj": traj_ids,
+                ("collector", "traj_ids"): torch.zeros(8, dtype=torch.int),
+                "obs": torch.arange(8).float(),
+            },
+            batch_size=[8],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(8),
+            sampler=SliceSampler(num_slices=2, traj_key="my_traj"),
+            batch_size=6,
+        )
+        rb.extend(data)
+        rb.sample()
+        assert rb.sampler.traj_key == "my_traj"
+        assert getattr(rb.sampler, "_traj_key_auto", False) is False
+
+    # ------------------------------------------------------------------
+    # mask / lengths tests (strict_length=False)
+    # ------------------------------------------------------------------
+
+    def _make_rb_with_short_trajs(self, traj_lengths, slice_len, num_slices):
+        """Helper: build a TensorDictReplayBuffer with trajectories of given lengths."""
+        parts = []
+        for t_id, length in enumerate(traj_lengths):
+            parts.append(
+                TensorDict(
+                    {
+                        "traj": torch.full((length,), t_id, dtype=torch.int),
+                        "obs": torch.arange(length).float(),
+                    },
+                    batch_size=[length],
+                )
+            )
+        data = torch.cat(parts)
+        total = sum(traj_lengths)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(total),
+            sampler=SliceSampler(
+                slice_len=slice_len,
+                traj_key="traj",
+                strict_length=False,
+                pad_output=True,
+            ),
+            batch_size=num_slices * slice_len,
+        )
+        rb.extend(data)
+        return rb
+
+    def test_slice_sampler_mask_present_when_short_trajs(self):
+        """mask appears in output when short trajectories force padding."""
+        torch.manual_seed(0)
+        rb = self._make_rb_with_short_trajs(
+            traj_lengths=[3, 6, 2], slice_len=5, num_slices=3
+        )
+        sample = rb.sample()
+        assert ("collector", "mask") in sample.keys(True)
+
+    def test_slice_sampler_mask_shape_dtype(self):
+        """mask is bool with shape [B*T, 1]."""
+        torch.manual_seed(0)
+        B, T = 4, 6
+        rb = self._make_rb_with_short_trajs(
+            traj_lengths=[2, 5, 3, 4], slice_len=T, num_slices=B
+        )
+        sample = rb.sample()
+        mask = sample[("collector", "mask")]
+        assert mask.shape == torch.Size([B * T, 1])
+        assert mask.dtype == torch.bool
+
+    def test_slice_sampler_mask_correctness(self):
+        """mask rows are contiguous: True prefix followed by False suffix."""
+        torch.manual_seed(0)
+        B, T = 6, 8
+        rb = self._make_rb_with_short_trajs(
+            traj_lengths=[3, 8, 2, 7, 1, 5], slice_len=T, num_slices=B
+        )
+        for _ in range(20):
+            sample = rb.sample()
+            mask = sample[("collector", "mask")].reshape(B, T)
+            # derive lengths from the mask itself
+            lengths = mask.sum(-1)  # [B]
+            for i in range(B):
+                l = lengths[i].item()
+                assert l >= 1
+                assert l <= T
+                assert mask[i, :l].all(), f"slice {i}: first {l} steps should be True"
+                assert not mask[i, l:].any(), f"slice {i}: steps after {l} should be False"
+
+    def test_slice_sampler_mask_padded_obs_is_valid(self):
+        """Padded positions repeat the last real index — obs values must be finite."""
+        torch.manual_seed(0)
+        rb = self._make_rb_with_short_trajs(
+            traj_lengths=[2, 6, 3], slice_len=5, num_slices=3
+        )
+        sample = rb.sample()
+        assert torch.isfinite(sample["obs"]).all()
+
+    def test_slice_sampler_strict_length_no_mask(self):
+        """With strict_length=True (or pad_output=False), no mask is emitted."""
+        torch.manual_seed(0)
+        data = TensorDict(
+            {
+                "traj": torch.cat([torch.zeros(6, dtype=torch.int), torch.ones(6, dtype=torch.int)]),
+                "obs": torch.arange(12).float(),
+            },
+            batch_size=[12],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(12),
+            sampler=SliceSampler(
+                slice_len=4, traj_key="traj", strict_length=True, pad_output=True
+            ),
+            batch_size=8,
+        )
+        rb.extend(data)
+        sample = rb.sample()
+        assert ("collector", "mask") not in sample.keys(True)
+
+    def test_slice_sampler_mask_all_long_trajs_no_mask(self):
+        """When all trajs >= slice_len, pad_output=True still emits no mask (nothing to pad)."""
+        torch.manual_seed(0)
+        data = TensorDict(
+            {
+                "traj": torch.cat([torch.zeros(8, dtype=torch.int), torch.ones(8, dtype=torch.int)]),
+                "obs": torch.arange(16).float(),
+            },
+            batch_size=[16],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(16),
+            sampler=SliceSampler(
+                slice_len=4, traj_key="traj", strict_length=False, pad_output=True
+            ),
+            batch_size=8,
+        )
+        rb.extend(data)
+        sample = rb.sample()
+        # No short trajectories → no padding needed → no mask emitted
+        assert ("collector", "mask") not in sample.keys(True)
+
+    def test_slice_sampler_truncated_marks_last_real_step(self):
+        """truncated flag should sit at the last *real* timestep, not the padded end."""
+        torch.manual_seed(0)
+        B, T = 4, 6
+        rb = self._make_rb_with_short_trajs(
+            traj_lengths=[2, 5, 3, 4], slice_len=T, num_slices=B
+        )
+        sample = rb.sample()
+        mask = sample[("collector", "mask")].reshape(B, T)
+        lengths = mask.sum(-1)  # [B] — derived from mask
+        trunc = sample[("next", "truncated")].reshape(B, T)
+        for i in range(B):
+            l = lengths[i].item()
+            # truncated should be True exactly at position l-1
+            assert trunc[i, l - 1].item(), f"slice {i}: truncated missing at last real step"
+            # no truncated flag in padded region
+            if l < T:
+                assert not trunc[i, l:].any(), f"slice {i}: spurious truncated in padding"
+
     @pytest.mark.parametrize("ndim", [1, 2])
     @pytest.mark.parametrize("strict_length", [True, False])
     @pytest.mark.parametrize("circ", [False, True])

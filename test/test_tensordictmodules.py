@@ -54,7 +54,7 @@ from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticTensorDictSequential,
 )
 from torchrl.modules.tensordict_module.sequence import SafeSequential
-from torchrl.modules.utils import get_primers_from_module
+from torchrl.modules.utils import get_env_transforms_from_module, get_primers_from_module
 from torchrl.objectives import DDPGLoss
 
 from torchrl.testing.mocking_classes import CountingEnv, DiscreteActionVecMockEnv
@@ -1730,6 +1730,64 @@ def test_get_primers_from_module():
     assert "gru_recurrent_state" in transform[0].primers
     assert "lstm_recurrent_state_c" in transform[1].primers
     assert "lstm_recurrent_state_h" in transform[1].primers
+
+
+def test_get_env_transforms_from_module_no_rnn():
+    """Non-recurrent module returns a bare InitTracker."""
+    from torchrl.envs.transforms import InitTracker
+
+    module = MLP(in_features=10, out_features=10, num_cells=[])
+    transforms = get_env_transforms_from_module(module)
+    assert isinstance(transforms, InitTracker)
+
+
+def test_get_env_transforms_from_module_gru():
+    """GRUModule returns Compose([InitTracker, TensorDictPrimer])."""
+    from torchrl.envs.transforms import Compose, InitTracker, TensorDictPrimer
+
+    gru = GRUModule(
+        input_size=10,
+        hidden_size=10,
+        num_layers=1,
+        in_keys=["input", "recurrent_state", "is_init"],
+        out_keys=["features", ("next", "recurrent_state")],
+    )
+    transforms = get_env_transforms_from_module(gru)
+    assert isinstance(transforms, Compose)
+    assert any(isinstance(t, InitTracker) for t in transforms.transforms)
+    assert any(isinstance(t, TensorDictPrimer) for t in transforms.transforms)
+    # InitTracker comes before TensorDictPrimer
+    types = [type(t) for t in transforms.transforms]
+    assert types.index(InitTracker) < types.index(TensorDictPrimer)
+
+
+def test_get_env_transforms_from_module_lstm():
+    """LSTMModule returns Compose([InitTracker, TensorDictPrimer])."""
+    from torchrl.envs.transforms import Compose, InitTracker, TensorDictPrimer
+
+    lstm = LSTMModule(
+        input_size=10,
+        hidden_size=10,
+        num_layers=1,
+        in_keys=["input", "h", "c", "is_init"],
+        out_keys=["features", ("next", "h"), ("next", "c")],
+    )
+    transforms = get_env_transforms_from_module(lstm)
+    assert isinstance(transforms, Compose)
+    assert any(isinstance(t, InitTracker) for t in transforms.transforms)
+    assert any(isinstance(t, TensorDictPrimer) for t in transforms.transforms)
+
+
+def test_get_env_transforms_from_module_custom_init_key():
+    """custom init_key is forwarded to InitTracker."""
+    from torchrl.envs.transforms import Compose, InitTracker
+
+    # Use a plain MLP so we don't need to thread init_key through GRU validation
+    module = MLP(in_features=4, out_features=4, num_cells=[])
+    transforms = get_env_transforms_from_module(module, init_key="my_init")
+    # No RNN → bare InitTracker
+    assert isinstance(transforms, InitTracker)
+    assert transforms.init_key == "my_init"
 
 
 if __name__ == "__main__":
