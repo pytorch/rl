@@ -5,7 +5,7 @@
 """DreamerV3 loss modules.
 
 Implements the three loss modules from DreamerV3 (Mastering Diverse Domains in
-World Models, Hafner et al. 2023):
+World Models, Hafner et al. 2023, https://arxiv.org/abs/2301.04104):
 
 - :class:`DreamerV3ModelLoss` — world model (KL balancing + symlog reconstruction)
 - :class:`DreamerV3ActorLoss` — actor (REINFORCE + entropy bonus)
@@ -13,8 +13,6 @@ World Models, Hafner et al. 2023):
 
 Utility functions :func:`symlog`, :func:`symexp`, :func:`two_hot_encode` and
 :func:`two_hot_decode` are also exported for use in custom models.
-
-Reference: https://arxiv.org/abs/2301.04104
 """
 from __future__ import annotations
 
@@ -52,6 +50,21 @@ def symlog(x: torch.Tensor) -> torch.Tensor:
 
     Used by DreamerV3 to compress the dynamic range of targets and
     predictions before computing reconstruction losses.
+
+    Reference: https://arxiv.org/abs/2301.04104
+
+    Args:
+        x: Input tensor.
+
+    Returns:
+        Tensor of the same shape as ``x``.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.objectives import symlog
+        >>> x = torch.tensor([-100.0, 0.0, 100.0])
+        >>> symlog(x)
+        tensor([-4.6151,  0.0000,  4.6151])
     """
     return x.sign() * (x.abs() + 1).log()
 
@@ -60,6 +73,21 @@ def symexp(x: torch.Tensor) -> torch.Tensor:
     """Symmetric exponential: ``sign(x) * (exp(|x|) - 1)``.
 
     Inverse of :func:`symlog`.
+
+    Reference: https://arxiv.org/abs/2301.04104
+
+    Args:
+        x: Input tensor.
+
+    Returns:
+        Tensor of the same shape as ``x``.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.objectives import symexp, symlog
+        >>> x = torch.tensor([-1000.0, -1.0, 0.0, 1.0, 1000.0])
+        >>> torch.allclose(symexp(symlog(x)), x, atol=1e-4)
+        True
     """
     return x.sign() * (x.abs().exp() - 1)
 
@@ -88,12 +116,21 @@ def two_hot_encode(
     The scalar is split between the two nearest bin centers proportionally so
     that ``E[bins] = x``.
 
+    Reference: https://arxiv.org/abs/2301.04104
+
     Args:
         x: Values to encode, shape ``[...]``.
         bins: Sorted bin centers, shape ``[num_bins]``.
 
     Returns:
         Two-hot vectors, shape ``[..., num_bins]``.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.objectives import two_hot_encode
+        >>> bins = torch.linspace(-1.0, 1.0, 5)
+        >>> two_hot_encode(torch.tensor([0.25]), bins)
+        tensor([[0.0000, 0.0000, 0.5000, 0.5000, 0.0000]])
     """
     bins = bins.to(x.device)
     x_clamped = x.clamp(bins[0], bins[-1])
@@ -120,12 +157,22 @@ def two_hot_encode(
 def two_hot_decode(logits: torch.Tensor, bins: torch.Tensor) -> torch.Tensor:
     """Decode a distribution over ``bins`` to a scalar expectation.
 
+    Reference: https://arxiv.org/abs/2301.04104
+
     Args:
         logits: Raw logits, shape ``[..., num_bins]``.
         bins: Sorted bin centers, shape ``[num_bins]``.
 
     Returns:
         Scalar expected values, shape ``[...]``.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.objectives import two_hot_decode, two_hot_encode
+        >>> bins = torch.linspace(-1.0, 1.0, 5)
+        >>> probs = two_hot_encode(torch.tensor([0.25]), bins)
+        >>> two_hot_decode((probs + 1e-8).log(), bins)
+        tensor([0.2500])
     """
     bins = bins.to(logits.device)
     probs = torch.softmax(logits, dim=-1)
@@ -146,20 +193,32 @@ def categorical_kl_balanced(
     """KL divergence with balancing between posterior and prior.
 
     Computes:
-        loss = α * KL(sg(posterior) ‖ prior) + (1 - α) * KL(posterior ‖ sg(prior))
+        loss = alpha * KL(sg(posterior) || prior)
+             + (1 - alpha) * KL(posterior || sg(prior))
 
     The first term trains only the *prior*; the second trains only the
-    *posterior*. Free bits are applied on the *mean* KL (matching Hafner
-    et al. 2023, "Mastering Diverse Domains in World Models", eq. 5).
+    *posterior*. Free bits are applied **per categorical** (clamped before
+    averaging across categoricals and batch), matching Hafner et al. 2023
+    eq. 5: ``L_KL = max(free_bits, KL_per_categorical)``.
+
+    Reference: https://arxiv.org/abs/2301.04104
 
     Args:
         posterior_logits: Shape ``[..., num_categoricals, num_classes]``.
         prior_logits: Shape ``[..., num_categoricals, num_classes]``.
         alpha (float): Balancing weight (0.8 in the paper). Default: 0.8.
-        free_bits (float): Minimum mean KL in nats. Default: 1.0.
+        free_bits (float): Minimum per-categorical KL in nats. Default: 1.0.
 
     Returns:
         Scalar KL loss.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.objectives import categorical_kl_balanced
+        >>> posterior = torch.randn(4, 8, 16, requires_grad=True)
+        >>> prior = torch.randn(4, 8, 16, requires_grad=True)
+        >>> kl = categorical_kl_balanced(posterior, prior, alpha=0.8, free_bits=0.1)
+        >>> kl.backward()
     """
     posterior = torch.softmax(posterior_logits, dim=-1)
     prior = torch.softmax(prior_logits, dim=-1)
@@ -174,9 +233,9 @@ def categorical_kl_balanced(
     prior_sg = prior.detach()
     kl_term2 = (posterior * (posterior.log() - prior_sg.log())).sum(-1)
 
-    # Free bits applied on the mean KL, not per categorical (DreamerV3 §3).
-    kl_term1 = kl_term1.mean().clamp_min(free_bits)
-    kl_term2 = kl_term2.mean().clamp_min(free_bits)
+    # Free bits per categorical (clamp before reducing). Hafner et al. 2023, eq. 5.
+    kl_term1 = kl_term1.clamp_min(free_bits).mean()
+    kl_term2 = kl_term2.clamp_min(free_bits).mean()
 
     return alpha * kl_term1 + (1.0 - alpha) * kl_term2
 
@@ -196,7 +255,8 @@ def _match_trailing_dim(source: torch.Tensor, reference: torch.Tensor) -> torch.
     if source.ndim == reference.ndim + 1:
         return source.sum(-1, keepdim=True)
     raise ValueError(
-        f"Cannot align shape {tuple(source.shape)} to {tuple(reference.shape)}"
+        f"Cannot align source shape {tuple(source.shape)} to "
+        f"reference shape {tuple(reference.shape)}"
     )
 
 
@@ -231,19 +291,62 @@ class DreamerV3ModelLoss(LossModule):
         lambda_reward (float, optional): Reward prediction loss weight. Default: 1.0.
         lambda_continue (float, optional): Continue prediction loss weight.
             Default: 0.0 (disabled).
-        kl_alpha (float, optional): KL balancing factor (α in the paper).
+        kl_alpha (float, optional): KL balancing factor (alpha in the paper).
             Default: 0.8.
         free_bits (float, optional): Minimum KL per categorical in nats.
             Default: 1.0.
         reco_loss (str, optional): Reconstruction loss type (``"l2"`` or
             ``"l1"``). Default: ``"l2"``.
-        reward_two_hot (bool, optional): If ``True``, uses two-hot cross-entropy
-            for the reward loss; otherwise uses symlog MSE. Default: ``True``.
+        reward_two_hot (bool, optional): If ``True``, the reward head is
+            expected to output **logits over** ``num_reward_bins`` and the loss
+            is two-hot cross-entropy. If ``False``, the reward head outputs a
+            **scalar** prediction and the loss is symlog MSE. Default: ``True``.
         num_reward_bins (int, optional): Number of bins for the two-hot reward
             distribution. Default: 255.
         global_average (bool, optional): If ``True``, averages losses over all
             dimensions. Otherwise sums over non-batch/time dims first. Default:
             ``False``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torch import nn
+        >>> from torchrl.objectives import DreamerV3ModelLoss
+        >>> class StubWorldModel(nn.Module):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.head = nn.LazyLinear(4 * 4)
+        ...         self.reward_head = nn.LazyLinear(16)
+        ...         self.decoder = nn.LazyLinear(3 * 8 * 8)
+        ...     def forward(self, td):
+        ...         B, T = td.shape
+        ...         x = torch.cat([td["state"], td["belief"]], dim=-1)
+        ...         logits = self.head(x).view(B, T, 4, 4)
+        ...         reco = self.decoder(x).view(B, T, 3, 8, 8)
+        ...         reward = self.reward_head(x)
+        ...         td.set(("next", "prior_logits"), logits)
+        ...         td.set(("next", "posterior_logits"), logits)
+        ...         td.set(("next", "reco_pixels"), reco)
+        ...         td.set(("next", "reward"), reward)
+        ...         return td
+        >>> wm = StubWorldModel()
+        >>> td = TensorDict({
+        ...     "state": torch.zeros(2, 3, 16),
+        ...     "belief": torch.zeros(2, 3, 8),
+        ...     "action": torch.randn(2, 3, 2),
+        ...     "next": {
+        ...         "pixels": torch.rand(2, 3, 3, 8, 8),
+        ...         "reward": torch.randn(2, 3, 1),
+        ...         "done": torch.zeros(2, 3, dtype=torch.bool),
+        ...     },
+        ... }, [2, 3])
+        >>> with torch.no_grad():
+        ...     wm(td.clone())
+        TensorDict(...)
+        >>> loss = DreamerV3ModelLoss(wm, num_reward_bins=16, free_bits=0.1)
+        >>> loss_td, _ = loss(td)
+        >>> sorted(loss_td.keys())
+        ['loss_model_kl', 'loss_model_reco', 'loss_model_reward']
     """
 
     @dataclass
@@ -305,6 +408,7 @@ class DreamerV3ModelLoss(LossModule):
         self.free_bits = free_bits
         self.reco_loss = reco_loss
         self.reward_two_hot = reward_two_hot
+        self.num_reward_bins = num_reward_bins
         self.global_average = global_average
         self.register_buffer(
             "reward_bins",
@@ -353,7 +457,12 @@ class DreamerV3ModelLoss(LossModule):
         pred_reward = tensordict.get(("next", self.tensor_keys.reward))
 
         if self.reward_two_hot:
-            # pred_reward should be logits over reward_bins
+            if pred_reward.shape[-1] != self.num_reward_bins:
+                raise ValueError(
+                    f"reward_two_hot=True expects the reward head to output "
+                    f"logits over {self.num_reward_bins} bins, got trailing "
+                    f"dim {pred_reward.shape[-1]}."
+                )
             targets = two_hot_encode(symlog(true_reward.squeeze(-1)), self.reward_bins)
             reward_loss = -(targets * torch.log_softmax(pred_reward, dim=-1)).sum(-1)
         else:
@@ -397,10 +506,10 @@ class DreamerV3ActorLoss(LossModule):
 
     .. code-block:: text
 
-        loss_actor = -E[log π(a_t | z_t) * sg(A_t)] - η * H[π(· | z_t)]
+        loss_actor = -E[log pi(a_t | z_t) * sg(A_t)] - eta * H[pi(. | z_t)]
 
-    where ``A_t = V_λ(z_t) - v(z_t)`` is the advantage (normalized lambda
-    return minus baseline) and ``η`` is the entropy bonus weight.
+    where ``A_t = V_lambda(z_t) - v(z_t)`` is the advantage (lambda return
+    minus baseline) and ``eta`` is the entropy bonus weight.
 
     When the actor is a reparameterizable (continuous) policy the
     reparameterization gradient is used directly instead of REINFORCE.
@@ -416,11 +525,18 @@ class DreamerV3ActorLoss(LossModule):
         discount_loss (bool, optional): If ``True``, discount the actor loss
             with a cumulative gamma factor. Default: ``True``.
         entropy_bonus (float, optional): Weight for the entropy regularisation
-            term ``η``. Default: ``3e-4``.
+            term ``eta``. Default: ``3e-4``.
         use_reinforce (bool, optional): If ``True``, uses REINFORCE (log-prob
             * stop-gradient advantage). If ``False``, uses the straight
             reparameterization gradient (suitable for continuous Gaussian
             actors). Default: ``False``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torchrl.modules import MLP
+        >>> from torchrl.objectives import DreamerV3ActorLoss  # doctest: +SKIP
     """
 
     @dataclass
@@ -463,8 +579,8 @@ class DreamerV3ActorLoss(LossModule):
         discount_loss: bool = True,
         entropy_bonus: float = 3e-4,
         use_reinforce: bool = False,
-        gamma: int | None = None,
-        lmbda: int | None = None,
+        gamma: float | None = None,
+        lmbda: float | None = None,
     ):
         super().__init__()
         self.actor_model = actor_model
@@ -517,7 +633,7 @@ class DreamerV3ActorLoss(LossModule):
             discount = torch.ones_like(lambda_target)
 
         if self.use_reinforce:
-            # REINFORCE: log π(a|z) * sg(A_t)
+            # REINFORCE: log pi(a|z) * sg(A_t)
             log_prob = fake_data.get(self.tensor_keys.action_log_prob)
             log_prob = _match_trailing_dim(log_prob, lambda_target)
             with hold_out_net(self.value_model):
@@ -608,6 +724,13 @@ class DreamerV3ValueLoss(LossModule):
     - ``"two_hot"``: Two-hot cross-entropy over a fixed bin grid (matches the
       full DreamerV3 distribution-valued critic).
 
+    The discount factor used here must match the one the actor used to compute
+    ``lambda_target``. The recommended way to keep them in lock-step is to
+    pass the actor loss to the constructor via ``actor_loss=``: the value loss
+    will then read ``gamma`` from the actor's value estimator at every forward
+    call. The legacy ``gamma=`` kwarg + :meth:`sync_gamma_with_actor_loss`
+    pattern is still supported.
+
     Reference: https://arxiv.org/abs/2301.04104
 
     Args:
@@ -617,10 +740,32 @@ class DreamerV3ValueLoss(LossModule):
         discount_loss (bool, optional): If ``True``, discounts the loss with
             a cumulative gamma factor. Default: ``True``.
         gamma (float, optional): Discount factor used when ``discount_loss=True``.
-            Default: ``0.99``. Must match the actor loss's value-estimator gamma;
-            use :meth:`sync_gamma_with_actor_loss` to keep them in sync.
+            Ignored if ``actor_loss`` is provided. Default: ``0.99``.
         num_value_bins (int, optional): Number of bins for ``"two_hot"`` loss.
             Default: 255.
+        actor_loss (DreamerV3ActorLoss, optional): If provided, ``gamma`` is
+            read from this actor loss's value estimator on every forward call,
+            avoiding any chance of a mismatch. Default: ``None``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torchrl.modules import MLP
+        >>> from torchrl.objectives import DreamerV3ValueLoss
+        >>> value_model = TensorDictModule(
+        ...     MLP(out_features=1, depth=1, num_cells=8),
+        ...     in_keys=["state"],
+        ...     out_keys=["state_value"],
+        ... )
+        >>> td = TensorDict({
+        ...     "state": torch.randn(8, 4),
+        ...     "lambda_target": torch.randn(8, 1),
+        ... }, [8])
+        >>> loss = DreamerV3ValueLoss(value_model)
+        >>> loss_td, _ = loss(td)
+        >>> "loss_value" in loss_td.keys()
+        True
     """
 
     @dataclass
@@ -645,6 +790,7 @@ class DreamerV3ValueLoss(LossModule):
         discount_loss: bool = True,
         gamma: float = 0.99,
         num_value_bins: int = _DEFAULT_NUM_BINS,
+        actor_loss: DreamerV3ActorLoss | None = None,
     ):
         super().__init__()
         self.value_model = value_model
@@ -655,17 +801,27 @@ class DreamerV3ValueLoss(LossModule):
             raise ValueError(
                 f"value_loss must be 'symlog_mse' or 'two_hot', got '{value_loss}'"
             )
+        # Stash without registering as a submodule (avoid double parameter ownership)
+        self.__dict__["_actor_loss"] = actor_loss
         self.register_buffer("value_bins", _default_bins(num_value_bins))
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         pass
 
-    def sync_gamma_with_actor_loss(self, actor_loss: "DreamerV3ActorLoss") -> None:
+    def _resolved_gamma(self) -> float:
+        actor_loss = self.__dict__.get("_actor_loss")
+        if actor_loss is None:
+            return float(self.gamma)
+        estimator_gamma = actor_loss.value_estimator.gamma
+        if torch.is_tensor(estimator_gamma):
+            estimator_gamma = estimator_gamma.item()
+        return float(estimator_gamma)
+
+    def sync_gamma_with_actor_loss(self, actor_loss: DreamerV3ActorLoss) -> None:
         """Pull ``gamma`` from an actor loss's value estimator.
 
-        The discount used inside :class:`DreamerV3ValueLoss` must match the one
-        the actor used to compute ``lambda_target``; call this after the actor
-        loss's ``make_value_estimator`` to keep them in lockstep.
+        Prefer passing ``actor_loss=`` to the constructor; this method exists
+        for backward compatibility with the legacy two-step setup.
         """
         estimator_gamma = actor_loss.value_estimator.gamma
         if torch.is_tensor(estimator_gamma):
@@ -680,19 +836,25 @@ class DreamerV3ValueLoss(LossModule):
         self.value_model(tensordict_select)
         value_pred = tensordict_select.get(self.tensor_keys.value)
 
-        # lambda_target shape: [N, 1] (flat) or [B, T, 1] (batch × time)
+        # lambda_target shape: [N, 1] (flat) or [B, T, 1] (batch x time)
         # Squeeze the trailing 1 for loss computation
         target_sq = lambda_target.squeeze(-1)  # [N] or [B, T]
 
+        gamma = self._resolved_gamma()
         if self.discount_loss and target_sq.ndim >= 2:
-            discount = self.gamma * torch.ones_like(target_sq)
+            discount = gamma * torch.ones_like(target_sq)
             discount[..., 0] = 1
             discount = discount.cumprod(dim=-1)
         else:
             discount = torch.ones_like(target_sq)
 
         if self.value_loss == "two_hot":
-            # value_pred: logits over value_bins [..., num_bins]
+            if value_pred.shape[-1] != self.value_bins.shape[0]:
+                raise ValueError(
+                    f"value_loss='two_hot' expects the value head to output "
+                    f"logits over {self.value_bins.shape[0]} bins, got trailing "
+                    f"dim {value_pred.shape[-1]}."
+                )
             targets = two_hot_encode(symlog(target_sq), self.value_bins)
             loss = -(targets * torch.log_softmax(value_pred, dim=-1)).sum(-1)
         else:
@@ -703,4 +865,4 @@ class DreamerV3ValueLoss(LossModule):
 
         loss_tensordict = TensorDict({"loss_value": value_loss})
         self._clear_weakrefs(fake_data, loss_tensordict)
-        return loss_tensordict, fake_data
+        return loss_tensordict, fake_data.data

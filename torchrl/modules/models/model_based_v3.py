@@ -2,6 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+"""DreamerV3 RSSM components: discrete categorical latent state.
+
+Reference: https://arxiv.org/abs/2301.04104
+"""
 from __future__ import annotations
 
 import torch
@@ -15,14 +19,24 @@ class RSSMPriorV3(nn.Module):
 
     Implements the sequence model and dynamics predictor from DreamerV3.
     The GRU updates the deterministic hidden state:
+
+    .. code-block:: text
+
         h_t = GRU(h_{t-1}, [z_{t-1}, a_{t-1}])
+
     Then the prior predicts a distribution over the stochastic latent:
-        ẑ_t ~ Cat(MLP(h_t))
+
+    .. code-block:: text
+
+        z_hat_t ~ Cat(MLP(h_t))
 
     Reference: https://arxiv.org/abs/2301.04104
 
     Args:
-        action_spec: Action spec (used only for shape validation).
+        action_spec (TensorSpec, optional): Action spec. Used only to read
+            ``action_spec.shape``; mutually exclusive with ``action_shape``.
+        action_shape (torch.Size or tuple of int, optional): Action tensor
+            shape. Mutually exclusive with ``action_spec``.
         hidden_dim (int, optional): Hidden dimension of the linear projector.
             Defaults to 512.
         rnn_hidden_dim (int, optional): GRU hidden state dimension (belief size).
@@ -32,22 +46,53 @@ class RSSMPriorV3(nn.Module):
         num_classes (int, optional): Number of classes per categorical variable.
             Defaults to 32.
         action_dim (int, optional): Action dimension. If provided (along with
-            ``num_categoricals * num_classes``), uses explicit ``nn.Linear`` instead
-            of ``nn.LazyLinear``. Defaults to None.
+            ``num_categoricals * num_classes``), uses explicit ``nn.Linear``
+            instead of ``nn.LazyLinear``. Defaults to None.
         device (torch.device, optional): Device. Defaults to None.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.modules.models.model_based_v3 import RSSMPriorV3
+        >>> prior = RSSMPriorV3(
+        ...     action_shape=torch.Size([2]),
+        ...     hidden_dim=16,
+        ...     rnn_hidden_dim=8,
+        ...     num_categoricals=4,
+        ...     num_classes=4,
+        ...     action_dim=2,
+        ... )
+        >>> state = torch.zeros(3, 16)
+        >>> belief = torch.zeros(3, 8)
+        >>> action = torch.randn(3, 2)
+        >>> logits, next_state, next_belief = prior(state, belief, action)
+        >>> logits.shape, next_state.shape, next_belief.shape
+        (torch.Size([3, 4, 4]), torch.Size([3, 16]), torch.Size([3, 8]))
     """
 
     def __init__(
         self,
-        action_spec,
+        action_spec=None,
         hidden_dim: int = 512,
         rnn_hidden_dim: int = 512,
         num_categoricals: int = 32,
         num_classes: int = 32,
         action_dim: int | None = None,
         device=None,
+        *,
+        action_shape: torch.Size | tuple[int, ...] | None = None,
     ):
         super().__init__()
+        if action_spec is not None and action_shape is not None:
+            raise ValueError(
+                "Pass only one of `action_spec` or `action_shape`, not both."
+            )
+        if action_spec is not None:
+            self.action_shape = torch.Size(action_spec.shape)
+        elif action_shape is not None:
+            self.action_shape = torch.Size(action_shape)
+        else:
+            self.action_shape = None
+
         self.num_categoricals = num_categoricals
         self.num_classes = num_classes
         self.rnn_hidden_dim = rnn_hidden_dim
@@ -67,8 +112,6 @@ class RSSMPriorV3(nn.Module):
             nn.SiLU(),
             nn.Linear(hidden_dim, num_categoricals * num_classes, device=device),
         )
-
-        self.action_shape = action_spec.shape
 
     def forward(
         self,
@@ -94,7 +137,7 @@ class RSSMPriorV3(nn.Module):
         projector_input = torch.cat([state, action], dim=-1)
         action_state = self.action_state_projector(projector_input)
 
-        # Run GRU in full precision to avoid cuBLAS issues under autocast
+        # Run GRU in fp32 to avoid cuBLAS dispatch issues under autocast
         dtype = action_state.dtype
         device_type = action_state.device.type
         with torch.amp.autocast(device_type=device_type, enabled=False):
@@ -118,8 +161,11 @@ class RSSMPriorV3(nn.Module):
 class RSSMPosteriorV3(nn.Module):
     """DreamerV3 posterior (representation model) with discrete categorical latent.
 
-    Given the deterministic hidden state ``h_t`` and an observation embedding ``e_t``,
-    produces the posterior distribution over the stochastic latent:
+    Given the deterministic hidden state ``h_t`` and an observation embedding
+    ``e_t``, produces the posterior distribution over the stochastic latent:
+
+    .. code-block:: text
+
         z_t ~ Cat(MLP([h_t, e_t]))
 
     Reference: https://arxiv.org/abs/2301.04104
@@ -136,6 +182,22 @@ class RSSMPosteriorV3(nn.Module):
         obs_embed_dim (int, optional): Observation embedding dimension. If provided
             along with ``rnn_hidden_dim``, uses explicit ``nn.Linear``. Defaults to None.
         device (torch.device, optional): Device. Defaults to None.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.modules.models.model_based_v3 import RSSMPosteriorV3
+        >>> posterior = RSSMPosteriorV3(
+        ...     hidden_dim=16,
+        ...     num_categoricals=4,
+        ...     num_classes=4,
+        ...     rnn_hidden_dim=8,
+        ...     obs_embed_dim=12,
+        ... )
+        >>> belief = torch.randn(3, 8)
+        >>> obs_embed = torch.randn(3, 12)
+        >>> logits, state = posterior(belief, obs_embed)
+        >>> logits.shape, state.shape
+        (torch.Size([3, 4, 4]), torch.Size([3, 16]))
     """
 
     def __init__(
@@ -208,6 +270,37 @@ class RSSMRolloutV3(TensorDictModuleBase):
         rssm_prior (TensorDictModule): Prior module wrapping :class:`RSSMPriorV3`.
         rssm_posterior (TensorDictModule): Posterior module wrapping
             :class:`RSSMPosteriorV3`.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torchrl.modules.models.model_based_v3 import (
+        ...     RSSMPosteriorV3, RSSMPriorV3, RSSMRolloutV3,
+        ... )
+        >>> prior = TensorDictModule(
+        ...     RSSMPriorV3(action_shape=torch.Size([2]), hidden_dim=8,
+        ...                 rnn_hidden_dim=8, num_categoricals=4, num_classes=4,
+        ...                 action_dim=2),
+        ...     in_keys=["state", "belief", "action"],
+        ...     out_keys=[("next", "prior_logits"), ("next", "state"), ("next", "belief")],
+        ... )
+        >>> posterior = TensorDictModule(
+        ...     RSSMPosteriorV3(hidden_dim=8, num_categoricals=4, num_classes=4,
+        ...                     rnn_hidden_dim=8, obs_embed_dim=6),
+        ...     in_keys=[("next", "belief"), ("next", "encoded_latents")],
+        ...     out_keys=[("next", "posterior_logits"), ("next", "state")],
+        ... )
+        >>> rollout = RSSMRolloutV3(prior, posterior)
+        >>> td = TensorDict({
+        ...     "state": torch.zeros(2, 4, 16),
+        ...     "belief": torch.zeros(2, 4, 8),
+        ...     "action": torch.randn(2, 4, 2),
+        ...     "next": {"encoded_latents": torch.randn(2, 4, 6)},
+        ... }, [2, 4])
+        >>> out = rollout(td)
+        >>> out.shape
+        torch.Size([2, 4])
     """
 
     def __init__(
@@ -238,6 +331,7 @@ class RSSMRolloutV3(TensorDictModuleBase):
         update_values = tensordict.exclude(*self.out_keys).unbind(-1)
         _tensordict = update_values[0]
 
+        # Cache the keys we want to keep; they're constant across timesteps.
         output_keys = list(
             update_values[0].keys(include_nested=True, leaves_only=True)
         ) + list(self.out_keys)
@@ -270,8 +364,8 @@ def _straight_through_categorical(logits: torch.Tensor) -> torch.Tensor:
         one_hot tensor with same shape, gradients through softmax.
     """
     probs = torch.softmax(logits, dim=-1)
-    indices = torch.distributions.Categorical(probs=probs).sample()
+    indices = torch.distributions.Categorical(logits=logits).sample()
     one_hot = torch.zeros_like(probs)
     one_hot.scatter_(-1, indices.unsqueeze(-1), 1.0)
-    # straight-through: forward uses hard, backward uses soft
-    return one_hot + (probs - probs.detach())
+    # Straight-through: forward = one_hot, backward gradient = grad(probs).
+    return probs + (one_hot - probs).detach()

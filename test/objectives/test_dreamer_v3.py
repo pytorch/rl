@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 import torch
+from _objectives_common import LossModuleTestBase
 from tensordict import TensorDict
 from tensordict.nn import (
     InteractionType,
@@ -17,7 +18,6 @@ from tensordict.nn import (
     ProbabilisticTensorDictSequential,
     TensorDictModule,
 )
-from test_objectives import LossModuleTestBase
 from torch import nn
 
 from torchrl.data import Unbounded
@@ -348,25 +348,50 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
                 assert not torch.isnan(p.grad).any(), f"NaN grad in {name}"
                 assert not torch.isinf(p.grad).any(), f"Inf grad in {name}"
 
-    def test_dreamer_v3_kl_balanced_gradients(self, device):
-        """Both prior_logits and posterior_logits must receive gradients (KL balancing)."""
-        prior_logits = torch.randn(
-            2, 3, self.num_cats, self.num_classes, requires_grad=True, device=device
-        )
-        posterior_logits = torch.randn(
-            2, 3, self.num_cats, self.num_classes, requires_grad=True, device=device
-        )
-        # free_bits=0 so gradient flow is independent of the KL threshold.
+    @pytest.mark.parametrize("free_bits", [0.0, 0.5])
+    def test_dreamer_v3_kl_balanced_gradients(self, device, free_bits):
+        """Both prior_logits and posterior_logits must receive gradients (KL balancing).
+
+        Run with free_bits=0 (no clamp) and free_bits=0.5 (typical) to confirm
+        that gradient flow survives the per-categorical free-bits clamp.
+        """
+        # Larger logits make per-categorical KL exceed any modest free_bits,
+        # ensuring the clamp does not zero out the gradient on every element.
+        prior_logits = (
+            torch.randn(2, 3, self.num_cats, self.num_classes, device=device) * 2.0
+        ).requires_grad_(True)
+        posterior_logits = (
+            torch.randn(2, 3, self.num_cats, self.num_classes, device=device) * 2.0
+        ).requires_grad_(True)
         kl = categorical_kl_balanced(
-            posterior_logits, prior_logits, alpha=0.8, free_bits=0.0
+            posterior_logits, prior_logits, alpha=0.8, free_bits=free_bits
         )
         kl.backward()
         assert (
             prior_logits.grad is not None and prior_logits.grad.norm() > 0
-        ), "prior_logits has no gradient — KL balancing broken"
+        ), "prior_logits has no gradient - KL balancing broken"
         assert (
             posterior_logits.grad is not None and posterior_logits.grad.norm() > 0
-        ), "posterior_logits has no gradient — KL balancing broken"
+        ), "posterior_logits has no gradient - KL balancing broken"
+
+    def test_dreamer_v3_kl_balanced_free_bits_clamp(self, device):
+        """When the per-categorical KL is below ``free_bits``, the loss is the
+        clamp value and its gradient is zero. When most categoricals are above,
+        the gradient must still flow (per-categorical clamp, not mean clamp)."""
+        # Two near-identical distributions: KL is essentially zero and gets
+        # clamped to free_bits => gradient must be exactly zero everywhere.
+        base = torch.randn(2, 3, self.num_cats, self.num_classes, device=device)
+        prior_logits = base.clone().requires_grad_(True)
+        posterior_logits = base.clone().requires_grad_(True)
+        free_bits = 0.5
+        kl = categorical_kl_balanced(
+            posterior_logits, prior_logits, alpha=0.8, free_bits=free_bits
+        )
+        # Loss equals the clamp floor: alpha * fb + (1 - alpha) * fb = fb.
+        assert kl.item() == pytest.approx(free_bits, abs=1e-5)
+        kl.backward()
+        assert prior_logits.grad.abs().max().item() == pytest.approx(0.0, abs=1e-6)
+        assert posterior_logits.grad.abs().max().item() == pytest.approx(0.0, abs=1e-6)
 
     def test_dreamer_v3_model_tensor_keys(self, device):
         world_model = self._create_world_model()
@@ -476,8 +501,6 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
     # ------------------------------------------------------------------ #
 
     def test_rssm_posterior_v3_forward_shapes_and_grads(self, device):
-        from torchrl.data import Bounded
-
         B = 4
         obs_embed_dim = 16
         posterior = RSSMPosteriorV3(
@@ -500,24 +523,18 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             state_grid.sum(-1), torch.ones(B, self.num_cats, device=device), atol=1e-5
         )
 
-        # Straight-through: gradients must flow back through logits → belief/obs
+        # Straight-through: gradients must flow back through logits to belief/obs
         state.sum().backward()
         assert belief.grad is not None and belief.grad.abs().sum() > 0
         assert obs_embed.grad is not None and obs_embed.grad.abs().sum() > 0
-
-        # ensure Bounded is importable (sanity, not used here but keeps lint happy)
-        assert Bounded is not None
 
     def test_rssm_rollout_v3_forward(self, device):
         B, T = 2, 4
         obs_embed_dim = 12
         action_dim = self.action_dim
 
-        class _ActionSpec:
-            shape = torch.Size([action_dim])
-
         prior_net = RSSMPriorV3(
-            action_spec=_ActionSpec(),
+            action_shape=torch.Size([action_dim]),
             hidden_dim=self.rnn_hidden_dim,
             rnn_hidden_dim=self.rnn_hidden_dim,
             num_categoricals=self.num_cats,
@@ -581,6 +598,17 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         loss_td, _ = loss_module(tensordict)
         assert "loss_model_reco" in loss_td.keys()
         loss_td["loss_model_reco"].backward()
+
+    def test_dreamer_v3_model_loss_no_continue_default(self, device):
+        """With ``lambda_continue=0`` (default), no ``loss_model_continue`` key is emitted."""
+        tensordict = self._create_world_model_data().to(device)
+        world_model = self._create_world_model(reward_two_hot=True).to(device)
+        loss_module = DreamerV3ModelLoss(
+            world_model,
+            num_reward_bins=self.num_reward_bins,
+        )
+        loss_td, _ = loss_module(tensordict)
+        assert "loss_model_continue" not in loss_td.keys()
 
     def test_dreamer_v3_model_loss_continue(self, device):
         """Exercises the lambda_continue > 0 branch with a continue head."""
@@ -704,11 +732,8 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         B, T = 2, 3
         obs_embed_dim = 16
 
-        class _ActionSpec:
-            shape = torch.Size([self.action_dim])
-
         prior_net = RSSMPriorV3(
-            action_spec=_ActionSpec(),
+            action_shape=torch.Size([self.action_dim]),
             hidden_dim=self.rnn_hidden_dim,
             rnn_hidden_dim=self.rnn_hidden_dim,
             num_categoricals=self.num_cats,
