@@ -1215,16 +1215,24 @@ class SliceSampler(Sampler):
             Be mindful that this can result in effective `batch_size`  shorter
             than the one asked for! Trajectories can be split using
             :func:`~torchrl.collectors.split_trajectories`. Defaults to ``True``.
-        pad_output (bool, optional): if ``True`` and ``strict_length=False``,
-            short trajectories are padded so the output always has a uniform
-            ``[B * T]`` shape, and a 1D boolean mask of shape ``[B * T]`` is
-            written to ``("collector", "mask")`` flagging real (``True``) vs
-            padded (``False``) timesteps. Most workflows don't need this:
-            the default (``pad_output=False``) returns concatenated
-            variable-length slices, and downstream consumers (loss modules,
-            recurrent policies) work directly off ``is_init`` and
-            ``truncated`` markers without padding. Combining
-            ``pad_output=True`` with ``strict_length=True`` raises
+        pad_output (bool, optional): **discouraged. Prefer the default
+            (``False``).** When ``True`` (and ``strict_length=False``),
+            short trajectories are padded by *duplicating their last real
+            timestep* up to ``slice_len`` so the output's ``B * T`` is a
+            fixed product. The output is still a 1D batch of shape
+            ``[B * T]`` — the sample is not reshaped to ``[B, T]``. A 1D
+            boolean mask of shape ``[B * T]`` is written to
+            ``("collector", "mask")`` flagging real (``True``) vs
+            duplicated-last-step (``False``) positions. TorchRL's primitives
+            (recurrent modules under
+            :func:`~torchrl.modules.set_recurrent_mode`, mask-aware loss
+            modules, ``split_trajectories``, etc.) are all designed to
+            consume concatenated variable-length slices directly via the
+            ``is_init`` / ``truncated`` markers the sampler already emits,
+            so padding is a niche escape hatch for downstream code that
+            genuinely cannot accept a ragged batch (e.g. a custom op that
+            requires a fixed time dimension before a manual reshape).
+            Combining ``pad_output=True`` with ``strict_length=True`` raises
             :class:`ValueError`. Defaults to ``False``.
         compile (bool or dict of kwargs, optional): if ``True``, the bottleneck of
             the :meth:`~sample` method will be compiled with :func:`~torch.compile`.
