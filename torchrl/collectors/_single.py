@@ -597,10 +597,13 @@ class Collector(BaseCollector):
         env: EnvBase,
         policy: TensorDictModule | Callable,
     ) -> EnvBase:
-        """Attach recurrent policy env transforms when the env does not have them."""
-        return _maybe_append_env_transforms_from_module(
-            env, policy, require_primer=True
-        )
+        """Attach env transforms required by the policy if absent.
+
+        Idempotent and spec-based: if the env already exposes ``is_init`` (and
+        any recurrent-state primer keys the policy needs) in its spec, this is
+        a no-op. Otherwise the missing transforms are appended.
+        """
+        return _maybe_append_env_transforms_from_module(env, policy)
 
     def _init_policy(
         self,

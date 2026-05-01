@@ -131,56 +131,80 @@ def _maybe_append_env_transforms_from_module(
     env,
     module,
     init_key: str = "is_init",
-    *,
-    require_primer: bool = False,
 ):
-    """Append recurrent env transforms required by ``module`` if absent."""
+    """Append recurrent env transforms required by ``module`` if absent.
+
+    Detection is spec-based: we ask the env's ``full_observation_spec`` and
+    ``full_state_spec`` whether ``init_key`` (or any leaf matching it, for
+    multi-agent setups with nested init keys) and the keys produced by each
+    discovered ``TensorDictPrimer`` are already present. This is correct in
+    the presence of :class:`~torchrl.envs.BatchedEnv` /
+    :class:`~torchrl.envs.SerialEnv` where transforms may live inside child
+    envs and not be visible from the top-level transform stack. The helper is
+    idempotent — calling it twice on the same env is a no-op.
+
+    .. note::
+        Limitations:
+
+        * If a user has manually attached an :class:`InitTracker` with a
+          *renamed* ``init_key``, this helper won't recognise it and may add
+          a duplicate. Pass the same custom ``init_key`` here to avoid that,
+          or wire transforms manually.
+        * If ``module`` is a policy factory (a ``Callable`` that produces a
+          policy on demand), we cannot inspect it without instantiating it.
+          Auto-wrapping is skipped — pass ``policy=`` to the env constructor
+          with an already-built policy, or attach transforms manually with
+          :func:`get_env_transforms_from_module`.
+    """
     if not hasattr(module, "apply"):
+        # Policy factory or other plain Callable: no submodules to walk.
         return env
+
     primer = get_primers_from_module(module, warn=False)
-    if require_primer and primer is None:
-        return env
 
     # Local import: torchrl.envs imports torchrl.modules at module import time.
     from torchrl.envs.transforms import Compose, InitTracker, TensorDictPrimer
-    from torchrl.envs.transforms.transforms import TransformedEnv
 
-    def _flatten(transform):
-        if transform is None:
-            return []
-        if isinstance(transform, Compose):
-            result = []
-            for item in transform:
-                result.extend(_flatten(item))
-            return result
-        return [transform]
+    spec_keys: set = set()
+    for spec_attr in ("full_observation_spec", "full_state_spec"):
+        spec = getattr(env, spec_attr, None)
+        if spec is None:
+            continue
+        try:
+            spec_keys.update(spec.keys(True, True))
+        except (RuntimeError, AttributeError):
+            pass
 
-    existing = []
-    if isinstance(env, TransformedEnv):
-        existing = _flatten(env.transform)
-
-    has_init_tracker = any(
-        isinstance(transform, InitTracker) and transform.init_key == init_key
-        for transform in existing
-    )
-    existing_primer_keys = set()
-    for transform in existing:
-        if isinstance(transform, TensorDictPrimer):
-            existing_primer_keys.update(transform.primers.keys(True, True))
+    def _has_init_leaf(keys, key):
+        for k in keys:
+            if k == key:
+                return True
+            if isinstance(k, tuple) and k and k[-1] == key:
+                return True
+        return False
 
     transforms = []
-    if not has_init_tracker:
+    if not _has_init_leaf(spec_keys, init_key):
         transforms.append(InitTracker(init_key=init_key))
 
     if primer is not None:
+
+        def _flatten(transform):
+            if transform is None:
+                return []
+            if isinstance(transform, Compose):
+                result = []
+                for item in transform:
+                    result.extend(_flatten(item))
+                return result
+            return [transform]
+
         primer_transforms = [
-            transform
-            for transform in _flatten(primer)
+            t
+            for t in _flatten(primer)
             if not (
-                isinstance(transform, TensorDictPrimer)
-                and set(transform.primers.keys(True, True)).issubset(
-                    existing_primer_keys
-                )
+                isinstance(t, TensorDictPrimer)
+                and set(t.primers.keys(True, True)).issubset(spec_keys)
             )
         ]
         transforms.extend(primer_transforms)
