@@ -7,11 +7,17 @@ from .async_envs import AsyncEnvPool, ProcessorAsyncEnvPool, ThreadingAsyncEnvPo
 from .batched_envs import ParallelEnv, SerialEnv
 from .common import EnvBase, EnvMetaData, make_tensordict
 from .custom import (
+    AntEnv,
     ChessEnv,
     FinancialRegimeEnv,
+    HopperEnv,
+    HumanoidEnv,
     LLMHashingEnv,
+    MujocoEnv,
     PendulumEnv,
+    SatelliteEnv,
     TicTacToeEnv,
+    Walker2dEnv,
 )
 from .env_creator import env_creator, EnvCreator, get_env_metadata
 from .gym_like import default_info_dict_reader, GymLikeEnv
