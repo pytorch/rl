@@ -498,6 +498,7 @@ Trainer Hook Configurations
     BatchSubSamplerConfig
     ClearCudaCacheConfig
     CountFramesLogConfig
+    EarlyStoppingConfig
     LogScalarConfig
     LogTimingConfig
     RewardNormalizerConfig
@@ -554,6 +555,7 @@ Logging Configurations
     LoggerConfig
     WandbLoggerConfig
     TensorboardLoggerConfig
+    TrackioLoggerConfig
     CSVLoggerConfig
 
 Creating Custom Configurations

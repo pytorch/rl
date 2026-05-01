@@ -54,6 +54,30 @@ class CountFramesLogConfig(HookConfig):
 
 
 @dataclass
+class EarlyStoppingConfig(HookConfig):
+    """Configuration for the :class:`~torchrl.trainers.EarlyStopping` hook.
+
+    Examples:
+        >>> from torchrl.trainers.algorithms.configs.hooks import EarlyStoppingConfig
+        >>> from hydra.utils import instantiate
+        >>> hook = instantiate(
+        ...     EarlyStoppingConfig(monitor="r_training", patience=10_000)
+        ... )
+    """
+
+    monitor: Any = "r_evaluation"
+    mode: str = "max"
+    min_delta: float = 0.0
+    patience: int = 100_000
+    wait_for: int = 1_000_000
+    check_finite: bool = True
+    _target_: str = "torchrl.trainers.trainers.EarlyStopping"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+
+
+@dataclass
 class LogScalarConfig(HookConfig):
     """Configuration for the :class:`~torchrl.trainers.LogScalar` hook.
 

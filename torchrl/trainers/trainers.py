@@ -8,6 +8,7 @@ from __future__ import annotations
 import abc
 import itertools
 import json
+import math
 import pathlib
 import time
 import warnings
@@ -375,6 +376,8 @@ class Trainer:
         self.auto_log_optim_steps = auto_log_optim_steps
 
         self._log_dict = defaultdict(list)
+        self._stop_training = False
+        self._stop_reason = None
 
         # Hook collections for different stages of the training loop
         self._batch_process_ops = (
@@ -531,6 +534,11 @@ class Trainer:
         self._last_log = state_dict["state"]["_last_log"]
         self._last_save = state_dict["state"]["_last_save"]
         self._optim_count = state_dict["state"]["_optim_count"]
+
+    def request_stop(self, reason: str | None = None) -> None:
+        """Signal that training should stop at the next loop boundary."""
+        self._stop_training = True
+        self._stop_reason = reason
 
     def _save_trainer(self) -> None:
         if _CKPT_BACKEND == "torchsnapshot":
@@ -992,6 +1000,12 @@ class Trainer:
 
             # LOGGING POINT 2: Post-optimization logging (e.g., validation rewards, evaluation metrics)
             self._post_steps_log_hook(batch)
+
+            if self._stop_training:
+                if self._stop_reason and VERBOSE:
+                    torchrl_logger.info(f"Trainer stopping early: {self._stop_reason}")
+                self.save_trainer(force_save=True)
+                break
 
             if self.progress_bar:
                 self._pbar.update(current_frames)
@@ -2353,3 +2367,143 @@ class UTDRHook(TrainerHookBase):
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         """Load state from dictionary."""
+
+
+class EarlyStopping(TrainerHookBase):
+    """Early stopping hook for :class:`~torchrl.trainers.Trainer`.
+
+    This hook monitors a scalar metric and stops training when that metric
+    does not improve according to a configured criterion.
+
+    By default, the hook monitors ``"r_evaluation"``.
+
+    Args:
+        monitor (NestedKey, optional): Metric name to monitor.
+            Defaults to ``"r_evaluation"``.
+        mode (Literal["min", "max"], optional): One of ``"min"`` or ``"max"``.
+            In ``"max"`` mode, larger metric values are considered better.
+            Defaults to ``"max"``.
+        min_delta (float, optional): Minimum absolute improvement required to
+            qualify as better. Defaults to ``0.0``.
+        patience (int, optional): Maximum number of non-improving frames
+            allowed before stopping. Defaults to ``100_000``.
+        wait_for (int, optional): Number of initial frames to ignore before
+            checking the stopping criterion. Defaults to ``1_000_000``.
+        check_finite (bool, optional): If ``True``, non-finite metric values
+            (NaN or inf) trigger early stopping. Defaults to ``True``.
+
+    Examples:
+        >>> LogScalar(("next", "reward"), "r_training").register(trainer)
+        >>> EarlyStopping(monitor="r_training", patience=10_000).register(trainer)
+    """
+
+    def __init__(
+        self,
+        *,
+        monitor: NestedKey = "r_evaluation",
+        mode: Literal["min", "max"] = "max",
+        min_delta: float = 0.0,
+        patience: int = 100_000,
+        wait_for: int = 1_000_000,
+        check_finite: bool = True,
+    ) -> None:
+        if mode not in {"min", "max"}:
+            raise ValueError(f"mode must be either 'min' or 'max', got {mode}.")
+        if patience < 0:
+            raise ValueError(f"patience must be >= 0, got {patience}.")
+        if wait_for < 0:
+            raise ValueError(f"wait_for must be >= 0, got {wait_for}.")
+
+        self.monitor = monitor
+        self.mode = mode
+        self.min_delta = float(min_delta)
+        self.patience = int(patience)
+        self.wait_for = int(wait_for)
+        self.check_finite = check_finite
+
+        self.best_score: float | None = None
+        self.stop_reason: str | None = None
+        self._trainer: Trainer | None = None
+        self._last_improvement_frame: int | None = None
+
+    def _resolve_metric(self, trainer: Trainer) -> float:
+        metric_values = trainer._log_dict.get(self.monitor, None)
+        if not metric_values:
+            raise RuntimeError(
+                "EarlyStopping could not find monitored metric "
+                f"'{self.monitor}' in trainer._log_dict."
+            )
+
+        metric = metric_values[-1]
+        if isinstance(metric, torch.Tensor):
+            if metric.numel() != 1:
+                raise RuntimeError(
+                    "EarlyStopping expects scalar metrics, "
+                    f"got shape {tuple(metric.shape)} for '{self.monitor}'."
+                )
+            metric = float(metric.item())
+        else:
+            metric = float(metric)
+        return metric
+
+    def _is_improvement(self, score: float, best_score: float) -> bool:
+        if self.mode == "max":
+            return score > (best_score + self.min_delta)
+        return score < (best_score - self.min_delta)
+
+    def _stop(self, trainer: Trainer, reason: str) -> None:
+        self.stop_reason = reason
+        trainer.request_stop(reason)
+
+    def __call__(self, batch: TensorDictBase | None = None) -> None:
+        if self._trainer is not None and self._trainer._stop_training:
+            return
+        if self._trainer is None:
+            raise RuntimeError("EarlyStopping is not attached to a trainer.")
+
+        trainer = self._trainer
+        score = self._resolve_metric(trainer)
+
+        current_frame = int(trainer.collected_frames)
+        if current_frame < self.wait_for:
+            return
+
+        if self.check_finite and not math.isfinite(score):
+            self._stop(
+                trainer,
+                f"Monitored metric '{self.monitor}' became non-finite ({score}).",
+            )
+            return
+
+        if self.best_score is None:
+            self.best_score = score
+            self._last_improvement_frame = current_frame
+            return
+
+        if self._is_improvement(score, self.best_score):
+            self.best_score = score
+            self._last_improvement_frame = current_frame
+        else:
+            if current_frame - self._last_improvement_frame >= self.patience:
+                self._stop(
+                    trainer,
+                    f"Monitored metric '{self.monitor}' did not improve for "
+                    f"{current_frame - self._last_improvement_frame} frames.",
+                )
+
+    def state_dict(self) -> dict[str, Any]:
+        return {
+            "best_score": self.best_score,
+            "stop_reason": self.stop_reason,
+            "_last_improvement_frame": self._last_improvement_frame,
+        }
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        self.best_score = state_dict.get("best_score", None)
+        self.stop_reason = state_dict.get("stop_reason", None)
+        self._last_improvement_frame = state_dict.get("_last_improvement_frame", None)
+
+    def register(self, trainer: Trainer, name: str = "early_stopping") -> None:
+        self._trainer = trainer
+        trainer.register_op("post_steps_log", self)
+        trainer.register_module(name, self)
