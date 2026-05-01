@@ -22,7 +22,6 @@ from torchrl.objectives import (
 )
 from torchrl.objectives.iql import DiscreteIQLLoss
 from torchrl.objectives.sac import DiscreteSACLoss
-from torchrl.objectives.utils import ValueEstimators
 from torchrl.trainers.algorithms.configs.common import _normalize_hydra_key, ConfigBase
 
 
