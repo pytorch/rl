@@ -349,6 +349,16 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             :class:`~torchrl.envs.transforms.TensorDictPrimer` transforms.
             This returns a :class:`~torchrl.envs.TransformedEnv` when transforms
             are added.
+
+            .. note:: The auto-wrapping is achieved by the `EnvBase` metaclass.
+                It does not appear in the `__init__` method of subclasses
+                (:class:`~torchrl.envs.GymEnv`,
+                :class:`~torchrl.envs.DMControlEnv`, custom subclasses, etc.)
+                but is supported on every one of them, and is included in the
+                keyword arguments here strictly for type-hinting purposes.
+
+            .. seealso:: :ref:`Auto-wrapping recurrent transforms via the
+                policy= argument <Environment-policy-arg>`.
         spec_locked (bool, optional): if ``True``, the specs are locked and can only be
             modified if :meth:`~torchrl.envs.EnvBase.set_spec_lock_` is called.
 
