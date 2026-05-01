@@ -534,9 +534,83 @@ class DreamerV3ActorLoss(LossModule):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from tensordict.nn import TensorDictModule
-        >>> from torchrl.modules import MLP
-        >>> from torchrl.objectives import DreamerV3ActorLoss  # doctest: +SKIP
+        >>> from tensordict.nn import (
+        ...     InteractionType,
+        ...     ProbabilisticTensorDictModule,
+        ...     ProbabilisticTensorDictSequential,
+        ...     TensorDictModule,
+        ... )
+        >>> from torchrl.data import Unbounded
+        >>> from torchrl.envs import TransformedEnv
+        >>> from torchrl.envs.model_based.dreamer import DreamerEnv
+        >>> from torchrl.envs.transforms import TensorDictPrimer
+        >>> from torchrl.modules import MLP, SafeSequential, WorldModelWrapper
+        >>> from torchrl.modules.distributions.continuous import TanhNormal
+        >>> from torchrl.modules.models.model_based import DreamerActor
+        >>> from torchrl.modules.models.model_based_v3 import RSSMPriorV3
+        >>> from torchrl.objectives import DreamerV3ActorLoss
+        >>> from torchrl.objectives.utils import ValueEstimators
+        >>> from torchrl.testing.mocking_classes import ContinuousActionConvMockEnv
+        >>> base_env = TransformedEnv(
+        ...     ContinuousActionConvMockEnv(pixel_shape=[3, 16, 16]),
+        ...     TensorDictPrimer(
+        ...         random=False, default_value=0,
+        ...         state=Unbounded(16), belief=Unbounded(8),
+        ...     ),
+        ... )
+        >>> action_dim = base_env.action_spec.shape[0]
+        >>> rssm_prior = RSSMPriorV3(
+        ...     action_shape=base_env.action_spec.shape,
+        ...     hidden_dim=8, rnn_hidden_dim=8,
+        ...     num_categoricals=4, num_classes=4, action_dim=action_dim,
+        ... )
+        >>> transition = SafeSequential(
+        ...     TensorDictModule(
+        ...         rssm_prior,
+        ...         in_keys=["state", "belief", "action"],
+        ...         out_keys=["_", "state", "belief"],
+        ...     ),
+        ... )
+        >>> reward = TensorDictModule(
+        ...     MLP(out_features=1, depth=1, num_cells=8),
+        ...     in_keys=["state", "belief"], out_keys=["reward"],
+        ... )
+        >>> mb_env = DreamerEnv(
+        ...     world_model=WorldModelWrapper(transition, reward),
+        ...     prior_shape=torch.Size([16]),
+        ...     belief_shape=torch.Size([8]),
+        ... )
+        >>> mb_env.set_specs_from_env(base_env)
+        >>> with torch.no_grad():
+        ...     _ = mb_env.rollout(3)
+        >>> actor_module = DreamerActor(out_features=action_dim, depth=1, num_cells=8)
+        >>> actor = ProbabilisticTensorDictSequential(
+        ...     TensorDictModule(
+        ...         actor_module, in_keys=["state", "belief"], out_keys=["loc", "scale"],
+        ...     ),
+        ...     ProbabilisticTensorDictModule(
+        ...         in_keys=["loc", "scale"], out_keys=["action"],
+        ...         default_interaction_type=InteractionType.RANDOM,
+        ...         distribution_class=TanhNormal,
+        ...     ),
+        ... )
+        >>> warmup = TensorDict(
+        ...     {"state": torch.randn(1, 2, 16), "belief": torch.randn(1, 2, 8)}, [1]
+        ... )
+        >>> _ = actor(warmup)
+        >>> value = TensorDictModule(
+        ...     MLP(out_features=1, depth=1, num_cells=8),
+        ...     in_keys=["state", "belief"], out_keys=["state_value"],
+        ... )
+        >>> _ = value(warmup)
+        >>> loss = DreamerV3ActorLoss(actor, value, mb_env, imagination_horizon=3)
+        >>> loss.make_value_estimator(ValueEstimators.TDLambda)
+        >>> td = TensorDict(
+        ...     {"state": torch.randn(2, 16), "belief": torch.randn(2, 8)}, [2]
+        ... )
+        >>> loss_td, _ = loss(td)
+        >>> "loss_actor" in loss_td.keys()
+        True
     """
 
     @dataclass
