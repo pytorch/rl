@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any
 
 from omegaconf import MISSING
-from tensordict import NestedKey
 
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 
