@@ -1216,25 +1216,16 @@ class SliceSampler(Sampler):
             than the one asked for! Trajectories can be split using
             :func:`~torchrl.collectors.split_trajectories`. Defaults to ``True``.
         pad_output (bool, optional): if ``True`` and ``strict_length=False``,
-            short trajectories are padded to ``slice_len`` (or
-            ``batch_size // num_slices``) so the output always has a uniform
-            ``[B * T]`` shape. A 1D boolean mask of shape ``[B * T]`` is
-            written to ``("collector", "mask")`` in the returned info dict
-            (and set on the sampled TensorDict when using
-            :class:`~torchrl.data.TensorDictReplayBuffer`) marking real
-            timesteps as ``True`` and padded ones as ``False``. Lengths can be
-            recovered as ``mask.reshape(B, T).sum(-1)``. When the storage
-            already contains an ``is_init`` field (i.e. the env had an
-            :class:`~torchrl.envs.transforms.InitTracker`), ``is_init`` is
-            additionally set to ``True`` at every slice start (OR-ed with the
-            existing markers from real episode resets). This lets a recurrent
-            policy under :func:`~torchrl.modules.set_recurrent_mode`
-            ``("recurrent")`` consume the flat ``[B * T]`` sample directly —
-            the RNN splits on ``is_init`` and uses each slice's stored
-            ``recurrent_state[0]`` as the initial hidden state, no manual
-            reshape required. Combining ``pad_output=True`` with
-            ``strict_length=True`` raises :class:`ValueError`. Defaults to
-            ``False``.
+            short trajectories are padded so the output always has a uniform
+            ``[B * T]`` shape, and a 1D boolean mask of shape ``[B * T]`` is
+            written to ``("collector", "mask")`` flagging real (``True``) vs
+            padded (``False``) timesteps. Most workflows don't need this:
+            the default (``pad_output=False``) returns concatenated
+            variable-length slices, and downstream consumers (loss modules,
+            recurrent policies) work directly off ``is_init`` and
+            ``truncated`` markers without padding. Combining
+            ``pad_output=True`` with ``strict_length=True`` raises
+            :class:`ValueError`. Defaults to ``False``.
         compile (bool or dict of kwargs, optional): if ``True``, the bottleneck of
             the :meth:`~sample` method will be compiled with :func:`~torch.compile`.
             Keyword arguments can also be passed to torch.compile with this arg.
@@ -2142,14 +2133,12 @@ class SliceSampler(Sampler):
         info = {}
         if mask_flat is not None:
             info[("collector", "mask")] = mask_flat
-        if self.pad_output:
-            # We need st_index to OR our slice-start markers with whatever
-            # is_init was already in the storage. Fetch it lazily; cheap
-            # because the index is already computed.
-            st_index = storage[index]
-            self._maybe_emit_init_marker(
-                info, st_index, num_slices, seq_length, target_seq_length
-            )
+        # Fetch st_index lazily so the marker logic can OR with existing
+        # is_init. Cheap because index is already computed.
+        st_index = storage[index]
+        self._maybe_emit_init_marker(
+            info, st_index, num_slices, seq_length, target_seq_length
+        )
         return index, info
 
     def _maybe_emit_init_marker(
@@ -2160,40 +2149,47 @@ class SliceSampler(Sampler):
         seq_length,
         target_seq_length: int | None,
     ) -> None:
-        """Mark slice starts with ``is_init=True`` when ``pad_output=True``.
+        """Mark every slice start with ``is_init=True``.
 
         Recurrent modules (:class:`~torchrl.modules.LSTMModule`,
         :class:`~torchrl.modules.GRUModule`) under
         :func:`~torchrl.modules.set_recurrent_mode` ``("recurrent")`` split a
         flat sequence on ``is_init`` and use the stored hidden state at each
         split as the initial state. By marking the first timestep of every
-        slice we let the user pass the flat ``[B*T]`` sample directly to a
-        recurrent policy without a manual reshape — the RNN sees B
-        independent slices and uses each slice's stored ``recurrent_state[0]``
-        as the initial hidden state.
+        slice we let the user pass the concatenated flat sample straight to a
+        recurrent policy: the RNN sees the slices as independent
+        sub-trajectories and uses each slice's stored ``recurrent_state[0]``
+        as its initial hidden state.
 
-        We OR our markers with the storage's existing ``is_init`` so that
-        episode resets that fall *inside* a slice are preserved.
+        We OR our markers with the storage's existing ``is_init`` so episode
+        resets that fall *inside* a slice are preserved. If the storage
+        doesn't carry an ``is_init`` field (no :class:`InitTracker`), we don't
+        introduce one — we'd be lying about real resets we can't see.
         """
-        if not self.pad_output:
-            return
-        if target_seq_length is not None:
-            T = target_seq_length
-        elif isinstance(seq_length, int):
-            T = seq_length
-        else:
-            return  # variable-length output (no padding mode); markers ill-defined
         existing_is_init = (
             st_index.get("is_init", default=None) if hasattr(st_index, "get") else None
         )
         if existing_is_init is None:
-            # The user isn't tracking is_init — don't introduce a key that
-            # wasn't there, since we'd be lying about resets within the slice.
             return
         init_marker = torch.zeros_like(existing_is_init)
-        slice_starts = (
-            torch.arange(num_slices, device=init_marker.device, dtype=torch.long) * T
-        )
+        device = init_marker.device
+        if target_seq_length is not None:
+            # pad_output path: every slice is target_seq_length long.
+            slice_starts = (
+                torch.arange(num_slices, device=device, dtype=torch.long)
+                * target_seq_length
+            )
+        elif isinstance(seq_length, int):
+            # Uniform slices (strict_length=True, or strict_length=False with
+            # all sufficiently-long trajectories).
+            slice_starts = (
+                torch.arange(num_slices, device=device, dtype=torch.long) * seq_length
+            )
+        else:
+            # Variable per-slice length: starts are at cumulative offsets,
+            # i.e. [0, len_0, len_0+len_1, ...].
+            slice_starts = torch.zeros(num_slices, device=device, dtype=torch.long)
+            slice_starts[1:] = seq_length.to(device).cumsum(0)[:-1].to(torch.long)
         init_marker[slice_starts] = True
         info["is_init"] = init_marker | existing_is_init
 

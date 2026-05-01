@@ -3551,8 +3551,8 @@ class TestSamplers:
         """pad_output=True writes is_init=True at every slice start.
 
         This is what lets a recurrent policy in `set_recurrent_mode("recurrent")`
-        consume the flat [B*T] sample without a manual reshape: the RNN splits
-        on `is_init` and uses each slice's stored hidden state at position 0.
+        consume the flat [B*T] sample directly: the RNN splits on `is_init`
+        and uses each slice's stored hidden state at position 0.
         """
         torch.manual_seed(0)
         B, T = 4, 8
@@ -3565,14 +3565,53 @@ class TestSamplers:
             # Position 0 of every slice must be True regardless of where the
             # slice landed within its source trajectory.
             assert is_init[:, 0].all(), "every slice must start with is_init=True"
-            # An episode reset that fell inside a slice (other than position 0)
-            # should also remain True — we OR with the storage's is_init.
-            mask = sample[("collector", "mask")].reshape(B, T)
-            # A slice whose first step is the start of a *real* trajectory
-            # (length-1 trajectory case) won't have any internal reset; that's
-            # fine. The strong invariant is that is_init implies a True at
-            # every slice start, never a False.
-            assert is_init[mask].any() or mask.all(), "smoke check"
+
+    def test_slice_sampler_marks_slice_starts_no_pad(self):
+        """Default (no pad_output) flow: is_init=True at every slice start.
+
+        This is the workflow most users will hit: trajectories are written
+        end-to-end into the buffer, the sampler returns concatenated
+        variable-length slices, and the RNN splits on `is_init`. No mask, no
+        padding involved.
+        """
+        torch.manual_seed(0)
+        traj_lengths = [3, 8, 2, 7, 5]
+        parts = []
+        for t_id, length in enumerate(traj_lengths):
+            init = torch.zeros(length, 1, dtype=torch.bool)
+            init[0] = True
+            parts.append(
+                TensorDict(
+                    {
+                        "traj": torch.full((length,), t_id, dtype=torch.int),
+                        "is_init": init,
+                    },
+                    batch_size=[length],
+                )
+            )
+        data = torch.cat(parts)
+        B = 4
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(data.numel()),
+            sampler=SliceSampler(num_slices=B, traj_key="traj", strict_length=False),
+            batch_size=B * 6,
+        )
+        rb.extend(data)
+        for _ in range(10):
+            sample = rb.sample()
+            assert "is_init" in sample.keys(True)
+            is_init = sample["is_init"].squeeze(-1)
+            trunc = sample[("next", "truncated")].squeeze(-1)
+            # Slice 0 always starts at position 0.
+            assert is_init[0].item(), "first slice must start with is_init=True"
+            # Every position right after a truncated flag must be is_init=True
+            # (next slice's start). The last truncated marks the end of the
+            # batch; nothing follows it.
+            slice_ends = trunc.nonzero().squeeze(-1).tolist()
+            for end in slice_ends[:-1]:
+                assert is_init[
+                    end + 1
+                ].item(), f"slice starting at index {end + 1} missing is_init=True"
 
     def test_slice_sampler_pad_output_no_is_init_no_marker(self):
         """Without is_init in the storage we don't introduce one out of thin air."""

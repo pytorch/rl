@@ -25,14 +25,15 @@ Pieces, in the order they appear:
 * :class:`~torchrl.data.replay_buffers.SliceSampler` is built *without* a
   ``traj_key`` argument: on the first sample it probes the storage and picks
   ``("collector", "traj_ids")`` automatically (the key the collector writes).
-* ``strict_length=False, pad_output=True`` make every sample uniform
-  ``[B * T]`` and write ``is_init=True`` at every slice start (OR-ed with
-  whatever ``InitTracker`` already wrote).
+* ``strict_length=False`` keeps short trajectories instead of dropping them.
+  The sampler returns slices concatenated end-to-end (variable per-slice
+  length) and writes ``is_init=True`` at every slice start, OR-ed with
+  whatever ``InitTracker`` already wrote.
 * :func:`~torchrl.modules.set_recurrent_mode` ``("recurrent")`` lets the GRU
-  consume the flat ``[B * T]`` sample directly: the RNN's existing
-  ``is_init``-based split path recovers the per-slice trajectory structure
-  on its own and uses each slice's stored ``recurrent_state[0]`` as the
-  initial hidden state.
+  consume the concatenated sample directly: the RNN's existing
+  ``is_init``-based split path recovers per-slice trajectories on its own
+  and uses each slice's stored ``recurrent_state[0]`` as the initial hidden
+  state.
 
 Run it::
 
@@ -59,8 +60,8 @@ HIDDEN = 32
 N_OBS = 4
 N_ACT = 2
 NUM_SLICES = 4
-SLICE_LEN = 16
-BATCH_SIZE = NUM_SLICES * SLICE_LEN
+MAX_SLICE_LEN = 16
+BATCH_SIZE = NUM_SLICES * MAX_SLICE_LEN
 
 # ---------------------------------------------------------------------------
 # Recurrent policy: linear embedding -> GRU -> linear -> Q-value head.
@@ -94,7 +95,6 @@ rb = TensorDictReplayBuffer(
     sampler=SliceSampler(
         num_slices=NUM_SLICES,
         strict_length=False,
-        pad_output=True,
     ),
     batch_size=BATCH_SIZE,
 )
@@ -129,8 +129,11 @@ try:
             print("Auto-detected traj_key:", rb.sampler.traj_key)
         with set_recurrent_mode("recurrent"):
             out = policy(sample)
-        assert out["action_value"].shape == torch.Size([NUM_SLICES * SLICE_LEN, N_ACT])
-        print(f"step {step}: write_count={rb.write_count}")
+        assert out["action_value"].shape == sample.shape + (N_ACT,)
+        print(
+            f"step {step}: write_count={rb.write_count} "
+            f"sample.shape={tuple(sample.shape)}"
+        )
 finally:
     collector.async_shutdown()
 print("\nDone.")
