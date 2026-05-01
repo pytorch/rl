@@ -61,6 +61,26 @@ Key Features
   clean :class:`~torchrl.data.SliceSampler` sampling — see :ref:`collectors_replay_trajs`
 - **Batching strategies**: Multiple ways to organize collected data
 
+Collection hooks
+----------------
+
+Collectors accept optional hooks for per-rollout side effects:
+``pre_collect_hook`` is called before a rollout starts, and
+``post_collect_hook`` is called with the :class:`~tensordict.TensorDictBase`
+batch that will be yielded by iteration.  Hook return values are ignored, and
+exceptions raised by hooks propagate to the caller and stop collection.
+
+Hooks are intended for instrumentation and worker-local side effects, such as
+stepping a profiler or recording rollout metrics.  Use ``postproc`` when the
+collected data itself should be transformed before training.
+
+For :class:`MultiCollector`, :class:`MultiSyncCollector`, and
+:class:`MultiAsyncCollector`, hooks run in each worker process.  The helper
+methods :meth:`~torchrl.collectors.BaseCollector.map_fn` and
+:meth:`~torchrl.collectors.BaseCollector.get_distant_attr` broadcast to each
+worker for multi-process collectors and to each actor for
+:class:`~torchrl.collectors.distributed.RayCollector`.
+
 Quick Example
 -------------
 

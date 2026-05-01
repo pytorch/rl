@@ -367,7 +367,13 @@ class RayCollector(BaseCollector):
         use_env_creator: bool = False,
         no_cuda_sync: bool | None = None,
         trajs_per_batch: int | None = None,
+        pre_collect_hook: Callable[[], None] | None = None,
+        post_collect_hook: Callable[[TensorDictBase], None] | None = None,
     ):
+        super().__init__(
+            pre_collect_hook=pre_collect_hook,
+            post_collect_hook=post_collect_hook,
+        )
         self.frames_per_batch = frames_per_batch
         if remote_configs is None:
             remote_configs = DEFAULT_REMOTE_CLASS_CONFIG
@@ -377,6 +383,18 @@ class RayCollector(BaseCollector):
 
         if collector_kwargs is None:
             collector_kwargs = {}
+        if pre_collect_hook is not None:
+            if isinstance(collector_kwargs, dict):
+                collector_kwargs.setdefault("pre_collect_hook", pre_collect_hook)
+            else:
+                for ck in collector_kwargs:
+                    ck.setdefault("pre_collect_hook", pre_collect_hook)
+        if post_collect_hook is not None:
+            if isinstance(collector_kwargs, dict):
+                collector_kwargs.setdefault("post_collect_hook", post_collect_hook)
+            else:
+                for ck in collector_kwargs:
+                    ck.setdefault("post_collect_hook", post_collect_hook)
         if replay_buffer is not None:
             if not isinstance(replay_buffer, RayReplayBuffer):
                 raise TypeError(
@@ -853,6 +871,57 @@ class RayCollector(BaseCollector):
     def remote_collectors(self):
         """Returns list of remote collectors."""
         return self._remote_collectors
+
+    def _normalize_worker_calls(
+        self,
+        list_of_args: list[tuple] | None = None,
+        list_of_kwargs: list[dict] | None = None,
+    ) -> tuple[list[tuple], list[dict]]:
+        if list_of_args is None and list_of_kwargs is None:
+            list_of_args = [()] * self.num_collectors
+            list_of_kwargs = [{}] * self.num_collectors
+        elif list_of_args is None:
+            list_of_args = [()] * len(list_of_kwargs)
+        elif list_of_kwargs is None:
+            list_of_kwargs = [{}] * len(list_of_args)
+
+        if len(list_of_args) != self.num_collectors:
+            raise ValueError(
+                f"Expected {self.num_collectors} argument entries, got {len(list_of_args)}."
+            )
+        if len(list_of_kwargs) != self.num_collectors:
+            raise ValueError(
+                f"Expected {self.num_collectors} keyword-argument entries, got "
+                f"{len(list_of_kwargs)}."
+            )
+        return list_of_args, list_of_kwargs
+
+    def map_fn(
+        self,
+        method_name: str,
+        list_of_args: list[tuple] | None = None,
+        list_of_kwargs: list[dict] | None = None,
+    ) -> list[Any]:
+        """Apply a method to each remote collector."""
+        list_of_args, list_of_kwargs = self._normalize_worker_calls(
+            list_of_args, list_of_kwargs
+        )
+        futures = [
+            collector.cascade_execute.remote(method_name, *args, **kwargs)
+            for collector, args, kwargs in zip(
+                self.remote_collectors, list_of_args, list_of_kwargs
+            )
+        ]
+        return ray.get(futures)
+
+    def get_distant_attr(self, attr: str) -> list[Any]:
+        """Get a nested attribute from each remote collector."""
+        return ray.get(
+            [
+                collector.get_distant_attr.remote(attr)
+                for collector in self.remote_collectors
+            ]
+        )
 
     def stop_remote_collectors(self):
         """Stops all remote collectors."""

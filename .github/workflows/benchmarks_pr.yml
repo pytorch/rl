@@ -105,8 +105,7 @@ jobs:
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export COMPOSITE_LP_AGGREGATE=0
           export TD_GET_DEFAULTS_TO_NONE=1
-          RUN_BENCHMARK="python -m pytest -vvv --rank 0 test_replaybuffer_benchmark.py::test_prioritized_sampler_sample_scale --benchmark-json "
-          $RUN_BENCHMARK ${{ env.CONTENDER_JSON }}
+          python -m pytest -vvv --rank 0 test_replaybuffer_benchmark.py::TestPrioritizedReplayBufferBenchmark --benchmark-json ${{ env.CONTENDER_JSON }}
           cp ${{ env.CONTENDER_JSON }} ${{ env.BASELINE_JSON }}
       - name: Publish results
         continue-on-error: true

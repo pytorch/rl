@@ -78,6 +78,7 @@ from torchrl.trainers.algorithms.configs.hooks import (
     BatchSubSamplerConfig,
     ClearCudaCacheConfig,
     CountFramesLogConfig,
+    EarlyStoppingConfig,
     HookConfig,
     LogScalarConfig,
     LogTimingConfig,
@@ -88,6 +89,7 @@ from torchrl.trainers.algorithms.configs.logging import (
     CSVLoggerConfig,
     LoggerConfig,
     TensorboardLoggerConfig,
+    TrackioLoggerConfig,
     WandbLoggerConfig,
 )
 from torchrl.trainers.algorithms.configs.modules import (
@@ -404,6 +406,7 @@ __all__ = [
     "BatchSubSamplerConfig",
     "ClearCudaCacheConfig",
     "CountFramesLogConfig",
+    "EarlyStoppingConfig",
     "LogScalarConfig",
     "LogTimingConfig",
     "RewardNormalizerConfig",
@@ -412,6 +415,7 @@ __all__ = [
     "CSVLoggerConfig",
     "LoggerConfig",
     "TensorboardLoggerConfig",
+    "TrackioLoggerConfig",
     "WandbLoggerConfig",
     # Weight Updaters
     "WeightUpdaterConfig",
@@ -675,6 +679,7 @@ def _register_configs():
     cs.store(group="hook", name="batch_subsampler", node=BatchSubSamplerConfig)
     cs.store(group="hook", name="clear_cuda_cache", node=ClearCudaCacheConfig)
     cs.store(group="hook", name="count_frames_log", node=CountFramesLogConfig)
+    cs.store(group="hook", name="early_stopping", node=EarlyStoppingConfig)
     cs.store(group="hook", name="log_scalar", node=LogScalarConfig)
     cs.store(group="hook", name="log_timing", node=LogTimingConfig)
     cs.store(group="hook", name="reward_normalizer", node=RewardNormalizerConfig)
@@ -705,6 +710,7 @@ def _register_configs():
 
     cs.store(group="logger", name="wandb", node=WandbLoggerConfig)
     cs.store(group="logger", name="tensorboard", node=TensorboardLoggerConfig)
+    cs.store(group="logger", name="trackio", node=TrackioLoggerConfig)
     cs.store(group="logger", name="csv", node=CSVLoggerConfig)
     cs.store(group="logger", name="base", node=LoggerConfig)
 

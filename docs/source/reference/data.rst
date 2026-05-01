@@ -24,6 +24,7 @@ Quick Example
 
 .. code-block:: python
 
+    import torch
     from torchrl.data import ReplayBuffer, LazyMemmapStorage, PrioritizedSampler
     from tensordict import TensorDict
     
@@ -44,6 +45,105 @@ Quick Example
     
     # Sample
     sample = buffer.sample()  # Returns batch_size=256
+
+CUDA prioritized replay buffers
+-------------------------------
+
+Prioritized replay buffers can keep the priority trees on CPU or CUDA
+independently from the data storage. By default, CUDA tensor storage selects a
+CUDA sampler and CPU storage selects a CPU sampler. Use ``sampler_device`` when
+the storage and priority sampler should live on different devices.
+
+.. dropdown:: All-CUDA storage and sampling
+   :icon: code
+
+   .. code-block:: python
+
+       import torch
+       from tensordict import TensorDict
+       from torchrl.data import LazyTensorStorage, TensorDictPrioritizedReplayBuffer
+
+       rb = TensorDictPrioritizedReplayBuffer(
+           alpha=0.7,
+           beta=0.5,
+           storage=LazyTensorStorage(1_000_000, device="cuda"),
+           batch_size=65_536,
+           priority_key="td_error",
+       )
+
+       data = TensorDict(
+           {
+               "obs": torch.randn(100_000, 32, device="cuda"),
+               "td_error": torch.ones(100_000, device="cuda"),
+           },
+           batch_size=[100_000],
+           device="cuda",
+       )
+       rb.extend(data)
+       sample = rb.sample()
+       sample["td_error"] = torch.rand(sample.shape, device="cuda")
+       rb.update_tensordict_priority(sample)
+
+.. dropdown:: CPU memmap storage with CUDA priority sampling
+   :icon: code
+
+   .. code-block:: python
+
+       import torch
+       from tensordict import TensorDict
+       from torchrl.data import LazyMemmapStorage, TensorDictPrioritizedReplayBuffer
+
+       rb = TensorDictPrioritizedReplayBuffer(
+           alpha=0.7,
+           beta=0.5,
+           storage=LazyMemmapStorage(10_000_000, scratch_dir="/tmp/torchrl_rb"),
+           sampler_device="cuda",
+           batch_size=65_536,
+           priority_key="td_error",
+       )
+
+       data = TensorDict(
+           {
+               "obs": torch.randn(100_000, 32),
+               "td_error": torch.ones(100_000),
+           },
+           batch_size=[100_000],
+       )
+       rb.extend(data)
+       sample = rb.sample()
+       sample["td_error"] = torch.rand(sample.shape)
+       rb.update_tensordict_priority(sample)
+
+.. dropdown:: CUDA storage with CPU priority sampling
+   :icon: code
+
+   .. code-block:: python
+
+       import torch
+       from tensordict import TensorDict
+       from torchrl.data import LazyTensorStorage, TensorDictPrioritizedReplayBuffer
+
+       rb = TensorDictPrioritizedReplayBuffer(
+           alpha=0.7,
+           beta=0.5,
+           storage=LazyTensorStorage(1_000_000, device="cuda"),
+           sampler_device="cpu",
+           batch_size=65_536,
+           priority_key="td_error",
+       )
+
+       data = TensorDict(
+           {
+               "obs": torch.randn(100_000, 32, device="cuda"),
+               "td_error": torch.ones(100_000, device="cuda"),
+           },
+           batch_size=[100_000],
+           device="cuda",
+       )
+       rb.extend(data)
+       sample = rb.sample()
+       sample["td_error"] = torch.rand(sample.shape, device="cuda")
+       rb.update_tensordict_priority(sample)
 
 Documentation Sections
 ----------------------
