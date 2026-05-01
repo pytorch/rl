@@ -83,7 +83,22 @@ qval = QValueModule(action_space="categorical")
 policy = Seq(OrderedDict(embed=embed, gru=gru, mlp=mlp, qval=qval))
 
 # ---------------------------------------------------------------------------
-# Env: the policy argument hooks up InitTracker + TensorDictPrimer for the GRU.
+# Env. Two equivalent ways to bolt on the recurrent transforms; the example
+# uses the first.
+#
+# 1. Pass `policy=` to the env constructor. The `EnvBase` metaclass
+#    post-init hook walks the policy's submodules, finds the GRU, and
+#    appends `InitTracker` + the GRU's `TensorDictPrimer` to the env. The
+#    user types one keyword and gets a fully-wired env.
+#
+# 2. Hand a bare env and a policy to `SyncDataCollector(...,
+#    auto_register_policy_transforms=True)`. The collector uses the same
+#    helper (`_maybe_append_env_transforms_from_module`), which is
+#    spec-based and idempotent — so doing both is fine, no double-wrapping.
+#    Default for `auto_register_policy_transforms` is `None` through v0.14
+#    (preserves pre-0.13 behavior, emits a `FutureWarning` if it would have
+#    helped); the default flips to `True` in v0.15. Pass `False` to opt out
+#    permanently.
 # ---------------------------------------------------------------------------
 env = GymEnv("CartPole-v1", policy=policy)
 

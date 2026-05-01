@@ -291,6 +291,15 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             or `ManiSkills <https://github.com/haosulab/ManiSkill/>`_) cuda synchronization may cause unexpected
             crashes.
             Defaults to ``False``.
+        auto_register_policy_transforms (bool, optional): forwarded to each
+            worker :class:`~torchrl.collectors.Collector`. When ``True``,
+            workers append :class:`~torchrl.envs.transforms.InitTracker` and
+            recurrent-state :class:`~torchrl.envs.transforms.TensorDictPrimer`
+            transforms to their envs if the env specs don't already provide
+            them. ``False`` disables it; ``None`` (default through v0.14)
+            preserves pre-0.13 behavior and emits a
+            :class:`FutureWarning` when wrapping would have been needed.
+            Default flips to ``True`` in v0.15.
         weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers.
             If not provided, a :class:`~torchrl.collectors.MultiProcessedWeightUpdater` will be used by default,
@@ -394,10 +403,12 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
         init_fn: Callable[[], None] | None = None,
+        auto_register_policy_transforms: bool | None = None,
     ):
         self.closed = True
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
+        self._auto_register_policy_transforms = auto_register_policy_transforms
         self._worker_trajs_per_batch = None
         # Wrap init_fn with CloudpickleWrapper to support lambdas / closures
         # across the spawn start method.
@@ -1244,6 +1255,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "profile_config": self._profile_config,
                     "trajs_per_batch": self._worker_trajs_per_batch,
                     "init_fn": self._worker_init_fn,
+                    "auto_register_policy_transforms": self._auto_register_policy_transforms,
                 }
                 proc = _ProcessNoWarnCtx(
                     target=_main_async_collector,

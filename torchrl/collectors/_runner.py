@@ -190,6 +190,7 @@ def _main_async_collector(
     profile_config: ProfileConfig | None = None,
     trajs_per_batch: int | None = None,
     init_fn: Callable[[], None] | None = None,
+    auto_register_policy_transforms: bool | None = None,
 ) -> None:
     # Process-level initialisation hook (e.g. Isaac Lab ``AppLauncher``).
     # Runs before any CUDA/torchrl work in the child process.
@@ -256,6 +257,7 @@ def _main_async_collector(
             # which checks replay_buffer.write_count when replay_buffer is provided
             init_random_frames=init_random_frames,
             trajs_per_batch=trajs_per_batch,
+            auto_register_policy_transforms=auto_register_policy_transforms,
         )
         # Set up weight receivers for worker process using the standard register_scheme_receiver API.
         # This properly initializes the schemes on the receiver side and stores them in _receiver_schemes.

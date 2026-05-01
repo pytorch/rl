@@ -127,38 +127,22 @@ def get_env_transforms_from_module(module, init_key="is_init"):
     return Compose(tracker, primer)
 
 
-def _maybe_append_env_transforms_from_module(
+def _compute_missing_env_transforms(
     env,
     module,
     init_key: str = "is_init",
 ):
-    """Append recurrent env transforms required by ``module`` if absent.
+    """Return the list of env transforms ``module`` needs that ``env`` lacks.
 
-    Detection is spec-based: we ask the env's ``full_observation_spec`` and
-    ``full_state_spec`` whether ``init_key`` (or any leaf matching it, for
-    multi-agent setups with nested init keys) and the keys produced by each
-    discovered ``TensorDictPrimer`` are already present. This is correct in
-    the presence of :class:`~torchrl.envs.BatchedEnv` /
-    :class:`~torchrl.envs.SerialEnv` where transforms may live inside child
-    envs and not be visible from the top-level transform stack. The helper is
-    idempotent — calling it twice on the same env is a no-op.
-
-    .. note::
-        Limitations:
-
-        * If a user has manually attached an :class:`InitTracker` with a
-          *renamed* ``init_key``, this helper won't recognise it and may add
-          a duplicate. Pass the same custom ``init_key`` here to avoid that,
-          or wire transforms manually.
-        * If ``module`` is a policy factory (a ``Callable`` that produces a
-          policy on demand), we cannot inspect it without instantiating it.
-          Auto-wrapping is skipped — pass ``policy=`` to the env constructor
-          with an already-built policy, or attach transforms manually with
-          :func:`get_env_transforms_from_module`.
+    Pure read — does not mutate ``env``. See
+    :func:`_maybe_append_env_transforms_from_module` for the full description
+    of the detection rules and limitations; this function is the dry-run
+    counterpart used by callers that need to decide whether to apply the
+    transforms or warn the user.
     """
     if not hasattr(module, "apply"):
         # Policy factory or other plain Callable: no submodules to walk.
-        return env
+        return []
 
     primer = get_primers_from_module(module, warn=False)
 
@@ -209,8 +193,43 @@ def _maybe_append_env_transforms_from_module(
         ]
         transforms.extend(primer_transforms)
 
+    return transforms
+
+
+def _maybe_append_env_transforms_from_module(
+    env,
+    module,
+    init_key: str = "is_init",
+):
+    """Append recurrent env transforms required by ``module`` if absent.
+
+    Detection is spec-based: we ask the env's ``full_observation_spec`` and
+    ``full_state_spec`` whether ``init_key`` (or any leaf matching it, for
+    multi-agent setups with nested init keys) and the keys produced by each
+    discovered ``TensorDictPrimer`` are already present. This is correct in
+    the presence of :class:`~torchrl.envs.BatchedEnv` /
+    :class:`~torchrl.envs.SerialEnv` where transforms may live inside child
+    envs and not be visible from the top-level transform stack. The helper is
+    idempotent — calling it twice on the same env is a no-op.
+
+    .. note::
+        Limitations:
+
+        * If a user has manually attached an :class:`InitTracker` with a
+          *renamed* ``init_key``, this helper won't recognise it and may add
+          a duplicate. Pass the same custom ``init_key`` here to avoid that,
+          or wire transforms manually.
+        * If ``module`` is a policy factory (a ``Callable`` that produces a
+          policy on demand), we cannot inspect it without instantiating it.
+          Auto-wrapping is skipped — pass ``policy=`` to the env constructor
+          with an already-built policy, or attach transforms manually with
+          :func:`get_env_transforms_from_module`.
+    """
+    transforms = _compute_missing_env_transforms(env, module, init_key)
     if not transforms:
         return env
+    from torchrl.envs.transforms import Compose
+
     return env.append_transform(Compose(*transforms))
 
 
