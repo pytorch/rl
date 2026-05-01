@@ -210,11 +210,15 @@ class TensorStorageConfig(StorageConfig):
 
 @dataclass
 class ListStorageConfig(StorageConfig):
-    """Configuration for list-based storage in replay buffer."""
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.ListStorage`.
+
+    Every kwarg accepted by ``ListStorage.__init__`` is exposed as a field here.
+    """
 
     _target_: str = "torchrl.data.replay_buffers.ListStorage"
     max_size: int | None = None
     compilable: bool = False
+    device: Any = None
 
 
 @dataclass
@@ -247,26 +251,37 @@ class StorageEnsembleConfig(StorageConfig):
 
 @dataclass
 class LazyMemmapStorageConfig(StorageConfig):
-    """Configuration for lazy memory-mapped storage."""
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.LazyMemmapStorage`.
+
+    Every kwarg accepted by ``LazyMemmapStorage.__init__`` is exposed as a field here.
+    """
 
     _target_: str = "torchrl.data.replay_buffers.LazyMemmapStorage"
     max_size: int | None = None
-    device: Any = None
+    scratch_dir: Any = None
+    device: Any = "cpu"
     ndim: int = 1
+    existsok: bool = False
     compilable: bool = False
     shared_init: bool = False
+    auto_cleanup: bool | None = None
 
 
 @dataclass
 class LazyTensorStorageConfig(StorageConfig):
-    """Configuration for lazy tensor storage."""
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.LazyTensorStorage`.
+
+    Every kwarg accepted by ``LazyTensorStorage.__init__`` is exposed as a field here.
+    """
 
     _target_: str = "torchrl.data.replay_buffers.LazyTensorStorage"
     max_size: int | None = None
-    device: Any = None
+    device: Any = "cpu"
     ndim: int = 1
     compilable: bool = False
+    consolidated: bool = False
     shared_init: bool = False
+    cleanup_memmap: bool = True
 
 
 @dataclass
@@ -281,15 +296,29 @@ class ReplayBufferBaseConfig(ConfigBase):
 
 @dataclass
 class TensorDictReplayBufferConfig(ReplayBufferBaseConfig):
-    """Configuration for TensorDict-based replay buffer."""
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.TensorDictReplayBuffer`.
+
+    Every kwarg accepted by ``TensorDictReplayBuffer.__init__`` (plus the ``ReplayBuffer``
+    kwargs it forwards via ``**kwargs``) is exposed as a field here.
+    """
 
     _target_: str = "torchrl.data.replay_buffers.TensorDictReplayBuffer"
+    priority_key: str = "td_error"
     sampler: Any = None
     storage: Any = None
     writer: Any = None
-    transform: Any = None
-    batch_size: int | None = None
+    collate_fn: Any = None
+    pin_memory: bool = False
     prefetch: int | None = None
+    transform: Any = None
+    transform_factory: Any = None
+    batch_size: int | None = None
+    dim_extend: int | None = None
+    checkpointer: Any = None
+    generator: Any = None
+    shared: bool = False
+    compilable: bool | None = None
+    delayed_init: bool | None = None
 
     def __post_init__(self) -> None:
         """Post-initialization hook for TensorDict replay buffer configurations."""
@@ -298,12 +327,24 @@ class TensorDictReplayBufferConfig(ReplayBufferBaseConfig):
 
 @dataclass
 class ReplayBufferConfig(ReplayBufferBaseConfig):
-    """Configuration for generic replay buffer."""
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.ReplayBuffer`.
+
+    Every kwarg accepted by ``ReplayBuffer.__init__`` is exposed as a field here.
+    """
 
     _target_: str = "torchrl.data.replay_buffers.ReplayBuffer"
-    sampler: Any = None
     storage: Any = None
+    sampler: Any = None
     writer: Any = None
+    collate_fn: Any = None
+    pin_memory: bool = False
+    prefetch: int | None = None
     transform: Any = None
+    transform_factory: Any = None
     batch_size: int | None = None
+    dim_extend: int | None = None
+    checkpointer: Any = None
+    generator: Any = None
     shared: bool = False
+    compilable: bool | None = None
+    delayed_init: bool | None = None

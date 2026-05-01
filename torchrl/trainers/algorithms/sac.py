@@ -35,6 +35,9 @@ from torchrl.trainers.trainers import (
 class SACTrainer(Trainer):
     """A trainer class for Soft Actor-Critic (SAC) algorithm.
 
+    See also :class:`~torchrl.trainers.algorithms.configs.SACTrainerConfig` for the
+    Hydra configuration counterpart.
+
     This trainer implements the SAC algorithm, an off-policy actor-critic method that
     optimizes a stochastic policy in an off-policy way, forming a bridge between
     stochastic policy optimization and DDPG-style approaches. SAC incorporates the
@@ -134,6 +137,7 @@ class SACTrainer(Trainer):
         target_net_updater: TargetNetUpdater | None = None,
         async_collection: bool = False,
         log_timings: bool = False,
+        auto_log_optim_steps: bool = True,
         done_key: NestedKey = "done",
         terminated_key: NestedKey = "terminated",
         reward_key: NestedKey = "reward",
@@ -167,6 +171,7 @@ class SACTrainer(Trainer):
             save_trainer_file=save_trainer_file,
             async_collection=async_collection,
             log_timings=log_timings,
+            auto_log_optim_steps=auto_log_optim_steps,
         )
         self.replay_buffer = replay_buffer
         self.async_collection = async_collection

@@ -48,10 +48,9 @@ def _register_trainer_hooks(trainer: Any, hooks: list[Any] | None) -> None:
 
 @dataclass
 class SACTrainerConfig(TrainerConfig):
-    """Configuration class for SAC (Soft Actor Critic) trainer.
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.SACTrainer`.
 
-    This class defines the configuration parameters for creating a SAC trainer,
-    including both required and optional fields with sensible defaults.
+    Every kwarg accepted by ``SACTrainer.__init__`` is exposed as a field here.
     """
 
     collector: Any
@@ -75,6 +74,12 @@ class SACTrainerConfig(TrainerConfig):
     target_net_updater: Any = None
     async_collection: bool = False
     log_timings: bool = False
+    auto_log_optim_steps: bool = True
+    batch_size: int | None = None
+    enable_logging: bool = True
+    log_rewards: bool = True
+    log_actions: bool = True
+    log_observations: bool = False
     done_key: Any = "done"
     terminated_key: Any = "terminated"
     reward_key: Any = "reward"
@@ -116,6 +121,12 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
     target_net_updater = kwargs.pop("target_net_updater")
     async_collection = kwargs.pop("async_collection", False)
     log_timings = kwargs.pop("log_timings", False)
+    auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
+    batch_size = kwargs.pop("batch_size", None)
+    enable_logging = kwargs.pop("enable_logging", True)
+    log_rewards = kwargs.pop("log_rewards", True)
+    log_actions = kwargs.pop("log_actions", True)
+    log_observations = kwargs.pop("log_observations", False)
     done_key = _normalize_hydra_key(kwargs.pop("done_key", "done"))
     terminated_key = _normalize_hydra_key(kwargs.pop("terminated_key", "terminated"))
     reward_key = _normalize_hydra_key(kwargs.pop("reward_key", "reward"))
@@ -186,9 +197,15 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
         replay_buffer=replay_buffer,
+        batch_size=batch_size,
+        enable_logging=enable_logging,
+        log_rewards=log_rewards,
+        log_actions=log_actions,
+        log_observations=log_observations,
         target_net_updater=target_net_updater,
         async_collection=async_collection,
         log_timings=log_timings,
+        auto_log_optim_steps=auto_log_optim_steps,
         done_key=done_key,
         terminated_key=terminated_key,
         reward_key=reward_key,
@@ -202,10 +219,9 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
 
 @dataclass
 class PPOTrainerConfig(TrainerConfig):
-    """Configuration class for PPO (Proximal Policy Optimization) trainer.
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.PPOTrainer`.
 
-    This class defines the configuration parameters for creating a PPO trainer,
-    including both required and optional fields with sensible defaults.
+    Every kwarg accepted by ``PPOTrainer.__init__`` is exposed as a field here.
 
     Args:
         collector: The data collector for gathering training data.
@@ -262,6 +278,14 @@ class PPOTrainerConfig(TrainerConfig):
     gae: Any = None
     weight_update_map: dict[str, str] | None = None
     log_timings: bool = False
+    auto_log_optim_steps: bool = True
+    batch_size: int | None = None
+    gamma: float = 0.99
+    lmbda: float = 0.95
+    enable_logging: bool = True
+    log_rewards: bool = True
+    log_actions: bool = True
+    log_observations: bool = False
     done_key: Any = "done"
     terminated_key: Any = "terminated"
     reward_key: Any = "reward"
@@ -304,6 +328,14 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     create_env_fn = kwargs.pop("create_env_fn")
     weight_update_map = kwargs.pop("weight_update_map", None)
     log_timings = kwargs.pop("log_timings", False)
+    auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
+    batch_size = kwargs.pop("batch_size", None)
+    gamma = kwargs.pop("gamma", 0.99)
+    lmbda = kwargs.pop("lmbda", 0.95)
+    enable_logging = kwargs.pop("enable_logging", True)
+    log_rewards = kwargs.pop("log_rewards", True)
+    log_actions = kwargs.pop("log_actions", True)
+    log_observations = kwargs.pop("log_observations", False)
     done_key = _normalize_hydra_key(kwargs.pop("done_key", "done"))
     terminated_key = _normalize_hydra_key(kwargs.pop("terminated_key", "terminated"))
     reward_key = _normalize_hydra_key(kwargs.pop("reward_key", "reward"))
@@ -389,12 +421,20 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
         replay_buffer=replay_buffer,
+        batch_size=batch_size,
+        gamma=gamma,
+        lmbda=lmbda,
+        enable_logging=enable_logging,
+        log_rewards=log_rewards,
+        log_actions=log_actions,
+        log_observations=log_observations,
         num_epochs=num_epochs,
         async_collection=async_collection,
         add_gae=add_gae,
         gae=gae,
         weight_update_map=weight_update_map,
         log_timings=log_timings,
+        auto_log_optim_steps=auto_log_optim_steps,
         done_key=done_key,
         terminated_key=terminated_key,
         reward_key=reward_key,
@@ -408,7 +448,10 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
 
 @dataclass
 class DQNTrainerConfig(TrainerConfig):
-    """Configuration class for DQN (Deep Q-Network) trainer."""
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.DQNTrainer`.
+
+    Every kwarg accepted by ``DQNTrainer.__init__`` is exposed as a field here.
+    """
 
     collector: Any
     total_frames: int
@@ -433,6 +476,10 @@ class DQNTrainerConfig(TrainerConfig):
     annealing_num_steps: int = 250_000
     async_collection: bool = False
     log_timings: bool = False
+    auto_log_optim_steps: bool = True
+    enable_logging: bool = True
+    log_rewards: bool = True
+    log_observations: bool = False
     hooks: list[Any] | None = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_dqn_trainer"
@@ -472,6 +519,10 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
     annealing_num_steps = kwargs.pop("annealing_num_steps", 250_000)
     async_collection = kwargs.pop("async_collection", False)
     log_timings = kwargs.pop("log_timings", False)
+    auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
+    enable_logging = kwargs.pop("enable_logging", True)
+    log_rewards = kwargs.pop("log_rewards", True)
+    log_observations = kwargs.pop("log_observations", False)
     hooks = kwargs.pop("hooks", None)
 
     if value_network is not None and not isinstance(value_network, torch.nn.Module):
@@ -534,10 +585,14 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
         replay_buffer=replay_buffer,
+        enable_logging=enable_logging,
+        log_rewards=log_rewards,
+        log_observations=log_observations,
         target_net_updater=target_net_updater,
         greedy_module=greedy_module,
         async_collection=async_collection,
         log_timings=log_timings,
+        auto_log_optim_steps=auto_log_optim_steps,
     )
     _register_trainer_hooks(trainer, hooks)
     return trainer
@@ -545,7 +600,10 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
 
 @dataclass
 class DDPGTrainerConfig(TrainerConfig):
-    """Configuration class for DDPG (Deep Deterministic Policy Gradient) trainer."""
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.DDPGTrainer`.
+
+    Every kwarg accepted by ``DDPGTrainer.__init__`` is exposed as a field here.
+    """
 
     collector: Any
     total_frames: int
@@ -568,6 +626,11 @@ class DDPGTrainerConfig(TrainerConfig):
     target_net_updater: Any = None
     async_collection: bool = False
     log_timings: bool = False
+    auto_log_optim_steps: bool = True
+    enable_logging: bool = True
+    log_rewards: bool = True
+    log_actions: bool = True
+    log_observations: bool = False
     done_key: Any = "done"
     terminated_key: Any = "terminated"
     reward_key: Any = "reward"
@@ -608,6 +671,11 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
     target_net_updater = kwargs.pop("target_net_updater")
     async_collection = kwargs.pop("async_collection", False)
     log_timings = kwargs.pop("log_timings", False)
+    auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
+    enable_logging = kwargs.pop("enable_logging", True)
+    log_rewards = kwargs.pop("log_rewards", True)
+    log_actions = kwargs.pop("log_actions", True)
+    log_observations = kwargs.pop("log_observations", False)
     done_key = _normalize_hydra_key(kwargs.pop("done_key", "done"))
     terminated_key = _normalize_hydra_key(kwargs.pop("terminated_key", "terminated"))
     reward_key = _normalize_hydra_key(kwargs.pop("reward_key", "reward"))
@@ -664,9 +732,14 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
         replay_buffer=replay_buffer,
+        enable_logging=enable_logging,
+        log_rewards=log_rewards,
+        log_actions=log_actions,
+        log_observations=log_observations,
         target_net_updater=target_net_updater,
         async_collection=async_collection,
         log_timings=log_timings,
+        auto_log_optim_steps=auto_log_optim_steps,
         done_key=done_key,
         terminated_key=terminated_key,
         reward_key=reward_key,
@@ -680,7 +753,10 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
 
 @dataclass
 class IQLTrainerConfig(TrainerConfig):
-    """Configuration class for IQL (Implicit Q-Learning) trainer."""
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.IQLTrainer`.
+
+    Every kwarg accepted by ``IQLTrainer.__init__`` is exposed as a field here.
+    """
 
     collector: Any
     total_frames: int
@@ -704,6 +780,11 @@ class IQLTrainerConfig(TrainerConfig):
     target_net_updater: Any = None
     async_collection: bool = False
     log_timings: bool = False
+    auto_log_optim_steps: bool = True
+    enable_logging: bool = True
+    log_rewards: bool = True
+    log_actions: bool = True
+    log_observations: bool = False
     hooks: list[Any] | None = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_iql_trainer"
@@ -739,6 +820,11 @@ def _make_iql_trainer(*args, **kwargs) -> IQLTrainer:
     target_net_updater = kwargs.pop("target_net_updater")
     async_collection = kwargs.pop("async_collection", False)
     log_timings = kwargs.pop("log_timings", False)
+    auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
+    enable_logging = kwargs.pop("enable_logging", True)
+    log_rewards = kwargs.pop("log_rewards", True)
+    log_actions = kwargs.pop("log_actions", True)
+    log_observations = kwargs.pop("log_observations", False)
     hooks = kwargs.pop("hooks", None)
 
     if actor_network is not None:
@@ -792,9 +878,14 @@ def _make_iql_trainer(*args, **kwargs) -> IQLTrainer:
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
         replay_buffer=replay_buffer,
+        enable_logging=enable_logging,
+        log_rewards=log_rewards,
+        log_actions=log_actions,
+        log_observations=log_observations,
         target_net_updater=target_net_updater,
         async_collection=async_collection,
         log_timings=log_timings,
+        auto_log_optim_steps=auto_log_optim_steps,
     )
     _register_trainer_hooks(trainer, hooks)
     return trainer
@@ -802,7 +893,10 @@ def _make_iql_trainer(*args, **kwargs) -> IQLTrainer:
 
 @dataclass
 class CQLTrainerConfig(TrainerConfig):
-    """Configuration class for CQL (Conservative Q-Learning) trainer."""
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.CQLTrainer`.
+
+    Every kwarg accepted by ``CQLTrainer.__init__`` is exposed as a field here.
+    """
 
     collector: Any
     total_frames: int
@@ -825,6 +919,11 @@ class CQLTrainerConfig(TrainerConfig):
     target_net_updater: Any = None
     async_collection: bool = False
     log_timings: bool = False
+    auto_log_optim_steps: bool = True
+    enable_logging: bool = True
+    log_rewards: bool = True
+    log_actions: bool = True
+    log_observations: bool = False
     hooks: list[Any] | None = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_cql_trainer"
@@ -859,6 +958,11 @@ def _make_cql_trainer(*args, **kwargs) -> CQLTrainer:
     target_net_updater = kwargs.pop("target_net_updater")
     async_collection = kwargs.pop("async_collection", False)
     log_timings = kwargs.pop("log_timings", False)
+    auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
+    enable_logging = kwargs.pop("enable_logging", True)
+    log_rewards = kwargs.pop("log_rewards", True)
+    log_actions = kwargs.pop("log_actions", True)
+    log_observations = kwargs.pop("log_observations", False)
     hooks = kwargs.pop("hooks", None)
 
     if actor_network is not None:
@@ -908,9 +1012,14 @@ def _make_cql_trainer(*args, **kwargs) -> CQLTrainer:
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
         replay_buffer=replay_buffer,
+        enable_logging=enable_logging,
+        log_rewards=log_rewards,
+        log_actions=log_actions,
+        log_observations=log_observations,
         target_net_updater=target_net_updater,
         async_collection=async_collection,
         log_timings=log_timings,
+        auto_log_optim_steps=auto_log_optim_steps,
     )
     _register_trainer_hooks(trainer, hooks)
     return trainer
@@ -918,7 +1027,10 @@ def _make_cql_trainer(*args, **kwargs) -> CQLTrainer:
 
 @dataclass
 class TD3TrainerConfig(TrainerConfig):
-    """Configuration class for TD3 (Twin Delayed DDPG) trainer."""
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.TD3Trainer`.
+
+    Every kwarg accepted by ``TD3Trainer.__init__`` is exposed as a field here.
+    """
 
     collector: Any
     total_frames: int
@@ -936,7 +1048,18 @@ class TD3TrainerConfig(TrainerConfig):
     seed: int | None = None
     clip_grad_norm: bool = True
     clip_norm: float | None = None
+    frame_skip: int = 1
+    progress_bar: bool = True
+    save_trainer_interval: int = 10000
+    log_interval: int = 10000
+    num_epochs: int = 1
     async_collection: bool = False
+    log_timings: bool = False
+    auto_log_optim_steps: bool = True
+    enable_logging: bool = True
+    log_rewards: bool = True
+    log_actions: bool = True
+    log_observations: bool = False
     create_env_fn: Any = None
     target_net_updater: Any = None
     policy_update_delay: int = 2
@@ -977,6 +1100,11 @@ def _make_td3_trainer(*args, **kwargs):
     num_epochs = kwargs.pop("num_epochs", 1)
     async_collection = kwargs.pop("async_collection", False)
     log_timings = kwargs.pop("log_timings", False)
+    auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
+    enable_logging = kwargs.pop("enable_logging", True)
+    log_rewards = kwargs.pop("log_rewards", True)
+    log_actions = kwargs.pop("log_actions", True)
+    log_observations = kwargs.pop("log_observations", False)
     actor_network = kwargs.pop("actor_network", None)
     qvalue_network = kwargs.pop("qvalue_network", None)
     exploration_module = kwargs.pop("exploration_module", None)
@@ -1096,8 +1224,13 @@ def _make_td3_trainer(*args, **kwargs):
         save_trainer_file=save_trainer_file,
         num_epochs=num_epochs,
         replay_buffer=replay_buffer,
+        enable_logging=enable_logging,
+        log_rewards=log_rewards,
+        log_actions=log_actions,
+        log_observations=log_observations,
         async_collection=async_collection,
         log_timings=log_timings,
+        auto_log_optim_steps=auto_log_optim_steps,
         target_net_updater=target_net_updater,
         exploration_module=exploration_module,
     )

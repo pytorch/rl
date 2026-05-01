@@ -34,6 +34,9 @@ from torchrl.trainers.trainers import (
 class PPOTrainer(Trainer):
     """PPO (Proximal Policy Optimization) trainer implementation.
 
+    See also :class:`~torchrl.trainers.algorithms.configs.PPOTrainerConfig` for the
+    Hydra configuration counterpart.
+
     .. warning::
         This is an experimental/prototype feature. The API may change in future versions.
         Please report any issues or feedback to help improve this implementation.
@@ -146,6 +149,7 @@ class PPOTrainer(Trainer):
         gae: Callable[[TensorDictBase], TensorDictBase] | None = None,
         weight_update_map: dict[str, str] | None = None,
         log_timings: bool = False,
+        auto_log_optim_steps: bool = True,
         done_key: NestedKey = "done",
         terminated_key: NestedKey = "terminated",
         reward_key: NestedKey = "reward",
@@ -177,6 +181,7 @@ class PPOTrainer(Trainer):
             num_epochs=num_epochs,
             async_collection=async_collection,
             log_timings=log_timings,
+            auto_log_optim_steps=auto_log_optim_steps,
         )
         self.replay_buffer = replay_buffer
         self.async_collection = async_collection
