@@ -1828,6 +1828,7 @@ def test_collector_adds_recurrent_env_transforms():
         policy,
         frames_per_batch=3,
         total_frames=3,
+        auto_register_policy_transforms=True,
     )
     try:
         assert isinstance(collector.env, TransformedEnv)
@@ -1848,6 +1849,7 @@ def test_collector_does_not_duplicate_recurrent_env_transforms():
         policy,
         frames_per_batch=3,
         total_frames=3,
+        auto_register_policy_transforms=True,
     )
     try:
         transforms = list(collector.env.transform)

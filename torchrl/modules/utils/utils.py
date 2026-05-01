@@ -144,7 +144,15 @@ def _compute_missing_env_transforms(
         # Policy factory or other plain Callable: no submodules to walk.
         return []
 
-    primer = get_primers_from_module(module, warn=False)
+    # Walking submodules calls every ``make_tensordict_primer()`` we find. Some
+    # implementations (e.g. ConsistentDropoutModule without ``input_shape``)
+    # raise when they can't build a primer without further user input. Treat
+    # that as "we can't auto-wire the primer for this submodule" — fall back
+    # to InitTracker-only detection.
+    try:
+        primer = get_primers_from_module(module, warn=False)
+    except (RuntimeError, ValueError):
+        primer = None
 
     # Local import: torchrl.envs imports torchrl.modules at module import time.
     from torchrl.envs.transforms import Compose, InitTracker, TensorDictPrimer
