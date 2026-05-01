@@ -51,6 +51,7 @@ from torchrl.trainers.trainers import (
     BatchSubSampler,
     CountFramesLog,
     DefaultOptimizationStepper,
+    EarlyStopping,
     LogScalar,
     mask_batch,
     OptimizationStepper,
@@ -1376,7 +1377,7 @@ class TestProcessLossHook:
         """Test that multiple process_loss hooks are applied in order."""
         trainer = mocking_trainer()
         td_loss = TensorDict({"loss_a": torch.tensor(2.0)}, [])
-        td_sub_batch = TensorDict({}, [])
+        td_sub_batch = TensorDict()
 
         call_order = []
 
@@ -1461,6 +1462,103 @@ class TestSetupShutdownHooks:
         trainer.train()
 
         assert call_order == ["setup", "pre_steps", "pre_steps", "shutdown"]
+        assert collector.shutdown_calls == 1
+
+
+class TestEarlyStopping:
+    @pytest.mark.parametrize(
+        "monitor,values,hook_kwargs,expected_stops,expected_reason",
+        [
+            (
+                "r_training",
+                [1.0, 1.1, 1.09, 1.08],
+                {"patience": 2, "wait_for": 0},
+                [False, False, False, True],
+                "did not improve",
+            ),
+            (
+                "score",
+                [1.0, 0.0, -1.0, -2.0],
+                {"patience": 1, "wait_for": 3},
+                [False, False, False, True],
+                "did not improve",
+            ),
+            (
+                "validation_loss",
+                [1.0, 0.85, 0.8],
+                {"mode": "min", "min_delta": 0.1, "patience": 1, "wait_for": 0},
+                [False, False, True],
+                "did not improve",
+            ),
+            (
+                "score",
+                [1.0, 1.2, 1.25],
+                {"mode": "max", "min_delta": 0.1, "patience": 1, "wait_for": 0},
+                [False, False, True],
+                "did not improve",
+            ),
+            (
+                "score",
+                [1.0, float("nan")],
+                {"wait_for": 0, "check_finite": True, "patience": 10},
+                [False, True],
+                "non-finite",
+            ),
+        ],
+    )
+    def test_early_stopping_params(
+        self, monitor, values, hook_kwargs, expected_stops, expected_reason
+    ):
+        trainer = mocking_trainer(optimizer=None)
+        early_stopping = EarlyStopping(
+            monitor=monitor,
+            **hook_kwargs,
+        )
+        early_stopping.register(trainer)
+
+        td = TensorDict()
+        for value, should_stop in zip(values, expected_stops):
+            trainer._log(**{monitor: value})
+            trainer.collected_frames += 1
+            trainer._post_steps_log_hook(td)
+            assert trainer._stop_training == should_stop
+
+        assert trainer._stop_training
+        assert expected_reason in early_stopping.stop_reason
+
+    def test_missing_monitor_raises(self):
+        trainer = mocking_trainer(optimizer=None)
+        early_stopping = EarlyStopping(
+            monitor="missing",
+        )
+        early_stopping.register(trainer)
+
+        with pytest.raises(RuntimeError, match="could not find monitored metric"):
+            trainer._post_steps_log_hook(TensorDict())
+
+    def test_train_stops_early(self):
+        rewards = [1.0, 2.0, 2.0, 2.0, 2.0]
+        batches = [
+            TensorDict({("next", "reward"): torch.tensor([reward])}, [1])
+            for reward in rewards
+        ]
+        collector = MockingIterableCollector(batches=batches)
+        trainer = Trainer(
+            collector=collector,
+            total_frames=100,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=MockingLossModule(),
+            optimizer=None,
+            progress_bar=False,
+        )
+
+        trainer.register_op("pre_steps_log", LogScalar(REWARD_KEY, "r_training"))
+        EarlyStopping(monitor="r_training", patience=1, wait_for=0).register(trainer)
+
+        trainer.train()
+        assert trainer.collected_frames < trainer.total_frames
+        assert trainer._stop_training
         assert collector.shutdown_calls == 1
 
 

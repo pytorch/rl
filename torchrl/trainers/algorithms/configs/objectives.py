@@ -82,6 +82,7 @@ class SACLossConfig(LossConfig):
 
 def _make_sac_loss(*args, **kwargs) -> SACLoss:
     discrete_loss_type = kwargs.pop("discrete", False)
+    gamma = kwargs.pop("gamma", None)
 
     # Instantiate networks if they are config objects
     actor_network = kwargs.get("actor_network")
@@ -96,9 +97,12 @@ def _make_sac_loss(*args, **kwargs) -> SACLoss:
         kwargs["value_network"] = value_network()
 
     if discrete_loss_type:
-        return DiscreteSACLoss(*args, **kwargs)
+        loss = DiscreteSACLoss(*args, **kwargs)
     else:
-        return SACLoss(*args, **kwargs)
+        loss = SACLoss(*args, **kwargs)
+    if gamma is not None:
+        loss.make_value_estimator(gamma=gamma)
+    return loss
 
 
 @dataclass
@@ -149,6 +153,7 @@ class PPOLossConfig(LossConfig):
 
 def _make_ppo_loss(*args, **kwargs) -> PPOLoss:
     loss_type = kwargs.pop("loss_type", "clip")
+    gamma = kwargs.pop("gamma", None)
     # Drop kwargs that don't apply to the chosen loss flavor so each class
     # receives only what its __init__ accepts.
     clip_only = {"clip_epsilon"}
@@ -165,17 +170,20 @@ def _make_ppo_loss(*args, **kwargs) -> PPOLoss:
     if loss_type == "clip":
         for k in kl_only | ppo_only:
             kwargs.pop(k, None)
-        return ClipPPOLoss(*args, **kwargs)
+        loss = ClipPPOLoss(*args, **kwargs)
     elif loss_type == "kl":
         for k in clip_only | ppo_only:
             kwargs.pop(k, None)
-        return KLPENPPOLoss(*args, **kwargs)
+        loss = KLPENPPOLoss(*args, **kwargs)
     elif loss_type == "ppo":
         for k in clip_only | kl_only:
             kwargs.pop(k, None)
-        return PPOLoss(*args, **kwargs)
+        loss = PPOLoss(*args, **kwargs)
     else:
         raise ValueError(f"Invalid loss type: {loss_type}")
+    if gamma is not None:
+        loss.make_value_estimator(gamma=gamma)
+    return loss
 
 
 @dataclass
@@ -205,6 +213,8 @@ class TD3LossConfig(LossConfig):
 
 
 def _make_td3_loss(*args, **kwargs) -> TD3Loss:
+    gamma = kwargs.pop("gamma", None)
+
     # Instantiate networks if they are config objects
     actor_network = kwargs.get("actor_network")
     qvalue_network = kwargs.get("qvalue_network")
@@ -214,7 +224,10 @@ def _make_td3_loss(*args, **kwargs) -> TD3Loss:
     if qvalue_network is not None and hasattr(qvalue_network, "_target_"):
         kwargs["qvalue_network"] = qvalue_network()
 
-    return TD3Loss(*args, **kwargs)
+    loss = TD3Loss(*args, **kwargs)
+    if gamma is not None:
+        loss.make_value_estimator(gamma=gamma)
+    return loss
 
 
 @dataclass
@@ -295,10 +308,15 @@ class DQNLossConfig(LossConfig):
 
 
 def _make_dqn_loss(*args, **kwargs) -> DQNLoss:
+    gamma = kwargs.pop("gamma", None)
+
     value_network = kwargs.get("value_network")
     if value_network is not None and hasattr(value_network, "_target_"):
         kwargs["value_network"] = value_network()
-    return DQNLoss(*args, **kwargs)
+    loss = DQNLoss(*args, **kwargs)
+    if gamma is not None:
+        loss.make_value_estimator(gamma=gamma)
+    return loss
 
 
 @dataclass
@@ -324,13 +342,18 @@ class DDPGLossConfig(LossConfig):
 
 
 def _make_ddpg_loss(*args, **kwargs) -> DDPGLoss:
+    gamma = kwargs.pop("gamma", None)
+
     actor_network = kwargs.get("actor_network")
     value_network = kwargs.get("value_network")
     if actor_network is not None and hasattr(actor_network, "_target_"):
         kwargs["actor_network"] = actor_network()
     if value_network is not None and hasattr(value_network, "_target_"):
         kwargs["value_network"] = value_network()
-    return DDPGLoss(*args, **kwargs)
+    loss = DDPGLoss(*args, **kwargs)
+    if gamma is not None:
+        loss.make_value_estimator(gamma=gamma)
+    return loss
 
 
 @dataclass
@@ -365,6 +388,8 @@ class IQLLossConfig(LossConfig):
 
 def _make_iql_loss(*args, **kwargs) -> IQLLoss:
     discrete_loss_type = kwargs.pop("discrete", False)
+    gamma = kwargs.pop("gamma", None)
+
     actor_network = kwargs.get("actor_network")
     qvalue_network = kwargs.get("qvalue_network")
     value_network = kwargs.get("value_network")
@@ -377,10 +402,14 @@ def _make_iql_loss(*args, **kwargs) -> IQLLoss:
     if discrete_loss_type:
         # DiscreteIQLLoss has no `deactivate_vmap` kwarg.
         kwargs.pop("deactivate_vmap", None)
-        return DiscreteIQLLoss(*args, **kwargs)
-    # IQLLoss has no `action_space` kwarg.
-    kwargs.pop("action_space", None)
-    return IQLLoss(*args, **kwargs)
+        loss = DiscreteIQLLoss(*args, **kwargs)
+    else:
+        # IQLLoss has no `action_space` kwarg.
+        kwargs.pop("action_space", None)
+        loss = IQLLoss(*args, **kwargs)
+    if gamma is not None:
+        loss.make_value_estimator(gamma=gamma)
+    return loss
 
 
 @dataclass
@@ -419,10 +448,15 @@ class CQLLossConfig(LossConfig):
 
 
 def _make_cql_loss(*args, **kwargs) -> CQLLoss:
+    gamma = kwargs.pop("gamma", None)
+
     actor_network = kwargs.get("actor_network")
     qvalue_network = kwargs.get("qvalue_network")
     if actor_network is not None and hasattr(actor_network, "_target_"):
         kwargs["actor_network"] = actor_network()
     if qvalue_network is not None and hasattr(qvalue_network, "_target_"):
         kwargs["qvalue_network"] = qvalue_network()
-    return CQLLoss(*args, **kwargs)
+    loss = CQLLoss(*args, **kwargs)
+    if gamma is not None:
+        loss.make_value_estimator(gamma=gamma)
+    return loss
