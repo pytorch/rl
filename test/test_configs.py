@@ -1041,7 +1041,7 @@ class TestModuleConfigs:
             QValueModelConfig,
         )
 
-        network = MLPConfig(in_features=4, out_features=2, num_cells=64)
+        network = MLPConfig(in_features=4, out_features=2, depth=2, num_cells=64)
         cfg = QValueModelConfig(
             network=network,
             in_keys=["observation"],
@@ -1626,10 +1626,13 @@ class TestTrainerConfigs:
         actor_network = MLPConfig(
             in_features=4,  # CartPole observation space
             out_features=2,  # CartPole action space
+            depth=2,
             num_cells=64,
         )
 
-        critic_network = MLPConfig(in_features=4, out_features=1, num_cells=64)
+        critic_network = MLPConfig(
+            in_features=4, out_features=1, depth=2, num_cells=64
+        )
 
         actor_model = TanhNormalModelConfig(
             network=actor_network, in_keys=["observation"], out_keys=["action"]

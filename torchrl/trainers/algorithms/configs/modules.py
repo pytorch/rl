@@ -633,6 +633,7 @@ def _make_qvalue_model(*args, **kwargs):
 
     network = kwargs.pop("network")
     shared = kwargs.pop("shared", False)
+    kwargs.pop("out_keys", None)
     if "in_keys" in kwargs:
         kwargs["in_keys"] = _normalize_hydra_keys(kwargs["in_keys"])
 
