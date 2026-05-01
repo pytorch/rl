@@ -254,6 +254,7 @@
 <span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">partial</span>
 
 <span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span> <span class="nn">tensordict.utils</span> <span class="kn">import</span> <span class="n">NestedKey</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">optim</span>
 
 <span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">BaseCollector</span>
@@ -314,6 +315,27 @@
 <span class="sd">            the module&#39;s epsilon is annealed during training. Defaults to None.</span>
 <span class="sd">        async_collection (bool, optional): Whether to use async data collection. Defaults to False.</span>
 <span class="sd">        log_timings (bool, optional): Whether to log timing information for hooks. Defaults to False.</span>
+<span class="sd">        mixing_strategy (str, optional): Multi-agent mixing strategy. Accepted values are ``&quot;qmix&quot;`` and</span>
+<span class="sd">            ``&quot;vdn&quot;`` for mixed-value training, ``&quot;iql&quot;`` for independent Q-learning, or None for standard</span>
+<span class="sd">            DQN. Defaults to None.</span>
+<span class="sd">        done_key (NestedKey, optional): Key for the done signal used by logging. Defaults to ``&quot;done&quot;``.</span>
+<span class="sd">        terminated_key (NestedKey, optional): Key for the terminated signal. Defaults to ``&quot;terminated&quot;``.</span>
+<span class="sd">        reward_key (NestedKey, optional): Source reward key used by logging and reward aggregation.</span>
+<span class="sd">            Defaults to ``&quot;reward&quot;``.</span>
+<span class="sd">        episode_reward_key (NestedKey, optional): Source episode reward key used by logging and reward</span>
+<span class="sd">            aggregation. Defaults to ``&quot;reward_sum&quot;``.</span>
+<span class="sd">        aggregated_reward_key (NestedKey, optional): Destination key for rewards averaged over the agent</span>
+<span class="sd">            dimension when using QMIX or VDN. The source is ``reward_key``. Set this to ``reward_key`` to</span>
+<span class="sd">            overwrite the source reward in-place. Required when ``mixing_strategy`` is ``&quot;qmix&quot;`` or</span>
+<span class="sd">            ``&quot;vdn&quot;``. Defaults to None.</span>
+<span class="sd">        aggregated_episode_reward_key (NestedKey, optional): Destination key for episode rewards averaged over</span>
+<span class="sd">            the agent dimension when using QMIX or VDN. The source is ``episode_reward_key``. Set this to</span>
+<span class="sd">            ``episode_reward_key`` to overwrite the source reward in-place. Required when ``mixing_strategy``</span>
+<span class="sd">            is ``&quot;qmix&quot;`` or ``&quot;vdn&quot;``. Defaults to None.</span>
+<span class="sd">        action_key (NestedKey, optional): Key for actions used by the exploration module and policy specs.</span>
+<span class="sd">            Defaults to ``&quot;action&quot;``.</span>
+<span class="sd">        observation_key (NestedKey, optional): Key for observations used by logging. Defaults to</span>
+<span class="sd">            ``&quot;observation&quot;``.</span>
 
 <span class="sd">    Example:</span>
 <span class="sd">        &gt;&gt;&gt; from torchrl.collectors import Collector</span>
@@ -373,6 +395,15 @@
         <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">auto_log_optim_steps</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">mixing_strategy</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">done_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;done&quot;</span><span class="p">,</span>
+        <span class="n">terminated_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;terminated&quot;</span><span class="p">,</span>
+        <span class="n">reward_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span><span class="p">,</span>
+        <span class="n">episode_reward_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;reward_sum&quot;</span><span class="p">,</span>
+        <span class="n">aggregated_reward_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">aggregated_episode_reward_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span><span class="p">,</span>
+        <span class="n">observation_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;observation&quot;</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
             <span class="s2">&quot;DQNTrainer is an experimental/prototype feature. The API may change in future versions. &quot;</span>
@@ -401,6 +432,15 @@
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">replay_buffer</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span> <span class="o">=</span> <span class="n">async_collection</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mixing_strategy</span> <span class="o">=</span> <span class="n">mixing_strategy</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">done_key</span> <span class="o">=</span> <span class="n">done_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">terminated_key</span> <span class="o">=</span> <span class="n">terminated_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reward_key</span> <span class="o">=</span> <span class="n">reward_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">episode_reward_key</span> <span class="o">=</span> <span class="n">episode_reward_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">aggregated_reward_key</span> <span class="o">=</span> <span class="n">aggregated_reward_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">aggregated_episode_reward_key</span> <span class="o">=</span> <span class="n">aggregated_episode_reward_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_key</span> <span class="o">=</span> <span class="n">action_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">observation_key</span> <span class="o">=</span> <span class="n">observation_key</span>
 
         <span class="k">if</span> <span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">rb_trainer</span> <span class="o">=</span> <span class="n">ReplayBufferTrainer</span><span class="p">(</span>
@@ -419,7 +459,15 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_optim&quot;</span><span class="p">,</span> <span class="n">TargetNetUpdaterHook</span><span class="p">(</span><span class="n">target_net_updater</span><span class="p">))</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">greedy_module</span> <span class="o">=</span> <span class="n">greedy_module</span>
-        <span class="n">weights_source</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span><span class="o">.</span><span class="n">value_network</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span><span class="p">,</span> <span class="s2">&quot;value_network&quot;</span><span class="p">):</span>
+            <span class="n">weights_source</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span><span class="o">.</span><span class="n">value_network</span>
+        <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span><span class="p">,</span> <span class="s2">&quot;local_value_network&quot;</span><span class="p">):</span>
+            <span class="n">weights_source</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span><span class="o">.</span><span class="n">local_value_network</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
+                <span class="s2">&quot;loss_module must expose either `value_network` or `local_value_network` &quot;</span>
+                <span class="s2">&quot;to sync policy weights with the collector.&quot;</span>
+            <span class="p">)</span>
         <span class="k">if</span> <span class="n">greedy_module</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictSequential</span>
 
@@ -436,6 +484,16 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">enable_logging</span> <span class="o">=</span> <span class="n">enable_logging</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">log_rewards</span> <span class="o">=</span> <span class="n">log_rewards</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">log_observations</span> <span class="o">=</span> <span class="n">log_observations</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixing_strategy</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;qmix&quot;</span><span class="p">,</span> <span class="s2">&quot;vdn&quot;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">aggregated_reward_key</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">aggregated_episode_reward_key</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;aggregated_reward_key and aggregated_episode_reward_key must be &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;provided when mixing_strategy is </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">mixing_strategy</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;batch_process&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_aggregate_agent_rewards</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">enable_logging</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_setup_dqn_logging</span><span class="p">()</span>
@@ -447,10 +505,20 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">greedy_module</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">delta</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_greedy_last_frames</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span>
 
+    <span class="k">def</span> <span class="nf">_aggregate_agent_rewards</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">aggregated_key</span> <span class="ow">in</span> <span class="p">(</span>
+            <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reward_key</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">aggregated_reward_key</span><span class="p">),</span>
+            <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">episode_reward_key</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">aggregated_episode_reward_key</span><span class="p">),</span>
+        <span class="p">):</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">key</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">set</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">aggregated_key</span><span class="p">),</span> <span class="n">value</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">batch</span>
+
     <span class="k">def</span> <span class="nf">_setup_dqn_logging</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Set up logging hooks for DQN-specific metrics.&quot;&quot;&quot;</span>
         <span class="n">log_done_percentage</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
-            <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">),</span>
+            <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_key</span><span class="p">),</span>
             <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;done_percentage&quot;</span><span class="p">,</span>
             <span class="n">log_pbar</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="n">include_std</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
@@ -460,22 +528,28 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="n">hook_dest</span><span class="p">,</span> <span class="n">log_done_percentage</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_rewards</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixing_strategy</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;qmix&quot;</span><span class="p">,</span> <span class="s2">&quot;vdn&quot;</span><span class="p">):</span>
+                <span class="n">reward_log_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">aggregated_reward_key</span>
+                <span class="n">episode_reward_log_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">aggregated_episode_reward_key</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">reward_log_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reward_key</span>
+                <span class="n">episode_reward_log_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">episode_reward_key</span>
             <span class="n">log_rewards</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
-                <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">),</span>
+                <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">reward_log_key</span><span class="p">),</span>
                 <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;r_training&quot;</span><span class="p">,</span>
                 <span class="n">log_pbar</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
                 <span class="n">include_std</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
                 <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">log_max_reward</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
-                <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">),</span>
+                <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">reward_log_key</span><span class="p">),</span>
                 <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;r_max&quot;</span><span class="p">,</span>
                 <span class="n">log_pbar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
                 <span class="n">include_std</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
                 <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;max&quot;</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">log_total_reward</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
-                <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward_sum&quot;</span><span class="p">),</span>
+                <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">episode_reward_log_key</span><span class="p">),</span>
                 <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;r_total&quot;</span><span class="p">,</span>
                 <span class="n">log_pbar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
                 <span class="n">include_std</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
@@ -487,7 +561,7 @@
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_observations</span><span class="p">:</span>
             <span class="n">log_obs_norm</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
-                <span class="n">key</span><span class="o">=</span><span class="s2">&quot;observation&quot;</span><span class="p">,</span>
+                <span class="n">key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_key</span><span class="p">,</span>
                 <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;obs_norm&quot;</span><span class="p">,</span>
                 <span class="n">log_pbar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
                 <span class="n">include_std</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>

@@ -253,6 +253,7 @@
 <span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModuleBase</span>
 
 <span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">BaseCollector</span>
+<span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">Categorical</span><span class="p">,</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">OneHot</span>
 <span class="kn">from</span> <span class="nn">torchrl.objectives.common</span> <span class="kn">import</span> <span class="n">LossModule</span>
 <span class="kn">from</span> <span class="nn">torchrl.objectives.utils</span> <span class="kn">import</span> <span class="n">TargetNetUpdater</span>
 <span class="kn">from</span> <span class="nn">torchrl.objectives.value.advantages</span> <span class="kn">import</span> <span class="n">GAE</span>
@@ -733,6 +734,15 @@
     <span class="n">log_rewards</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
     <span class="n">log_observations</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">mixing_strategy</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">done_key</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="s2">&quot;done&quot;</span>
+    <span class="n">terminated_key</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="s2">&quot;terminated&quot;</span>
+    <span class="n">reward_key</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span>
+    <span class="n">episode_reward_key</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="s2">&quot;reward_sum&quot;</span>
+    <span class="n">aggregated_reward_key</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">aggregated_episode_reward_key</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">action_key</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span>
+    <span class="n">observation_key</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="s2">&quot;observation&quot;</span>
 
     <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torchrl.trainers.algorithms.configs.trainers._make_dqn_trainer&quot;</span>
 
@@ -777,23 +787,43 @@
     <span class="n">log_rewards</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_rewards&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
     <span class="n">log_observations</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;log_observations&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">hooks</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;hooks&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">mixing_strategy</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;mixing_strategy&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">done_key</span> <span class="o">=</span> <span class="n">_normalize_hydra_key</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;done_key&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">))</span>
+    <span class="n">terminated_key</span> <span class="o">=</span> <span class="n">_normalize_hydra_key</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;terminated_key&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">))</span>
+    <span class="n">reward_key</span> <span class="o">=</span> <span class="n">_normalize_hydra_key</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;reward_key&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">))</span>
+    <span class="n">episode_reward_key</span> <span class="o">=</span> <span class="n">_normalize_hydra_key</span><span class="p">(</span>
+        <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;episode_reward_key&quot;</span><span class="p">,</span> <span class="s2">&quot;reward_sum&quot;</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">aggregated_reward_key</span> <span class="o">=</span> <span class="n">_normalize_hydra_key</span><span class="p">(</span>
+        <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;aggregated_reward_key&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">aggregated_episode_reward_key</span> <span class="o">=</span> <span class="n">_normalize_hydra_key</span><span class="p">(</span>
+        <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;aggregated_episode_reward_key&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">action_key</span> <span class="o">=</span> <span class="n">_normalize_hydra_key</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;action_key&quot;</span><span class="p">,</span> <span class="s2">&quot;action&quot;</span><span class="p">))</span>
+    <span class="n">observation_key</span> <span class="o">=</span> <span class="n">_normalize_hydra_key</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;observation_key&quot;</span><span class="p">,</span> <span class="s2">&quot;observation&quot;</span><span class="p">))</span>
 
     <span class="k">if</span> <span class="n">value_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value_network</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
         <span class="n">value_network</span> <span class="o">=</span> <span class="n">value_network</span><span class="p">()</span>
 
-    <span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">OneHot</span>
-
-    <span class="n">action_spec</span> <span class="o">=</span> <span class="n">value_network</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+    <span class="n">action_spec</span> <span class="o">=</span> <span class="n">value_network</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">action_key</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">action_spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">n_actions</span> <span class="o">=</span> <span class="n">value_network</span><span class="o">.</span><span class="n">module</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">out_features</span>
-        <span class="n">action_spec</span> <span class="o">=</span> <span class="n">OneHot</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="n">n_actions</span><span class="p">)</span>
-    <span class="n">spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="n">action_spec</span><span class="p">)</span>
+        <span class="n">net</span> <span class="o">=</span> <span class="n">value_network</span><span class="o">.</span><span class="n">module</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">n_actions</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">net</span><span class="o">.</span><span class="n">n_agent_outputs</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="s2">&quot;n_agent_outputs&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="n">net</span><span class="o">.</span><span class="n">out_features</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">value_network</span><span class="p">,</span> <span class="s2">&quot;action_space&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;categorical&quot;</span><span class="p">:</span>
+            <span class="n">action_spec</span> <span class="o">=</span> <span class="n">Categorical</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="n">n_actions</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">action_spec</span> <span class="o">=</span> <span class="n">OneHot</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="n">n_actions</span><span class="p">)</span>
+    <span class="n">spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">({</span><span class="n">action_key</span><span class="p">:</span> <span class="n">action_spec</span><span class="p">})</span>
 
     <span class="n">greedy_module</span> <span class="o">=</span> <span class="n">EGreedyModule</span><span class="p">(</span>
         <span class="n">annealing_num_steps</span><span class="o">=</span><span class="n">annealing_num_steps</span><span class="p">,</span>
         <span class="n">eps_init</span><span class="o">=</span><span class="n">eps_init</span><span class="p">,</span>
         <span class="n">eps_end</span><span class="o">=</span><span class="n">eps_end</span><span class="p">,</span>
         <span class="n">spec</span><span class="o">=</span><span class="n">spec</span><span class="p">,</span>
+        <span class="n">action_key</span><span class="o">=</span><span class="n">action_key</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">exploration_policy</span> <span class="o">=</span> <span class="n">TensorDictSequential</span><span class="p">(</span><span class="n">value_network</span><span class="p">,</span> <span class="n">greedy_module</span><span class="p">)</span>
 
@@ -805,7 +835,16 @@
             <span class="n">collector</span> <span class="o">=</span> <span class="n">collector</span><span class="p">(</span><span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay_buffer</span><span class="p">,</span> <span class="o">**</span><span class="n">collector_kwargs</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">loss_module</span><span class="p">,</span> <span class="n">LossModule</span><span class="p">):</span>
-        <span class="n">loss_module</span> <span class="o">=</span> <span class="n">loss_module</span><span class="p">(</span><span class="n">value_network</span><span class="o">=</span><span class="n">value_network</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">mixing_strategy</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;iql&quot;</span><span class="p">):</span>
+            <span class="n">loss_module</span> <span class="o">=</span> <span class="n">loss_module</span><span class="p">(</span><span class="n">value_network</span><span class="o">=</span><span class="n">value_network</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">mixing_strategy</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;qmix&quot;</span><span class="p">,</span> <span class="s2">&quot;vdn&quot;</span><span class="p">):</span>
+            <span class="n">loss_module</span> <span class="o">=</span> <span class="n">loss_module</span><span class="p">(</span><span class="n">local_value_network</span><span class="o">=</span><span class="n">value_network</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;mixing_strategy must be one of None, &#39;iql&#39;, &#39;qmix&#39;, or &#39;vdn&#39;, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="n">mixing_strategy</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">target_net_updater</span><span class="p">,</span> <span class="n">TargetNetUpdater</span><span class="p">):</span>
         <span class="n">target_net_updater</span> <span class="o">=</span> <span class="n">target_net_updater</span><span class="p">(</span><span class="n">loss_module</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Optimizer</span><span class="p">):</span>
@@ -843,6 +882,15 @@
         <span class="n">log_observations</span><span class="o">=</span><span class="n">log_observations</span><span class="p">,</span>
         <span class="n">target_net_updater</span><span class="o">=</span><span class="n">target_net_updater</span><span class="p">,</span>
         <span class="n">greedy_module</span><span class="o">=</span><span class="n">greedy_module</span><span class="p">,</span>
+        <span class="n">mixing_strategy</span><span class="o">=</span><span class="n">mixing_strategy</span><span class="p">,</span>
+        <span class="n">done_key</span><span class="o">=</span><span class="n">done_key</span><span class="p">,</span>
+        <span class="n">terminated_key</span><span class="o">=</span><span class="n">terminated_key</span><span class="p">,</span>
+        <span class="n">reward_key</span><span class="o">=</span><span class="n">reward_key</span><span class="p">,</span>
+        <span class="n">episode_reward_key</span><span class="o">=</span><span class="n">episode_reward_key</span><span class="p">,</span>
+        <span class="n">aggregated_reward_key</span><span class="o">=</span><span class="n">aggregated_reward_key</span><span class="p">,</span>
+        <span class="n">aggregated_episode_reward_key</span><span class="o">=</span><span class="n">aggregated_episode_reward_key</span><span class="p">,</span>
+        <span class="n">action_key</span><span class="o">=</span><span class="n">action_key</span><span class="p">,</span>
+        <span class="n">observation_key</span><span class="o">=</span><span class="n">observation_key</span><span class="p">,</span>
         <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
         <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
         <span class="n">auto_log_optim_steps</span><span class="o">=</span><span class="n">auto_log_optim_steps</span><span class="p">,</span>

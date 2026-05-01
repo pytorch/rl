@@ -290,6 +290,27 @@ action spaces that learns a Q-function and derives a greedy policy from it.</p>
 the module’s epsilon is annealed during training. Defaults to None.</p></li>
 <li><p><strong>async_collection</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to use async data collection. Defaults to False.</p></li>
 <li><p><strong>log_timings</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to log timing information for hooks. Defaults to False.</p></li>
+<li><p><strong>mixing_strategy</strong> (<em>str</em><em>, </em><em>optional</em>) – Multi-agent mixing strategy. Accepted values are <code class="docutils literal notranslate"><span class="pre">&quot;qmix&quot;</span></code> and
+<code class="docutils literal notranslate"><span class="pre">&quot;vdn&quot;</span></code> for mixed-value training, <code class="docutils literal notranslate"><span class="pre">&quot;iql&quot;</span></code> for independent Q-learning, or None for standard
+DQN. Defaults to None.</p></li>
+<li><p><strong>done_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Key for the done signal used by logging. Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code>.</p></li>
+<li><p><strong>terminated_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Key for the terminated signal. Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;terminated&quot;</span></code>.</p></li>
+<li><p><strong>reward_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Source reward key used by logging and reward aggregation.
+Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;reward&quot;</span></code>.</p></li>
+<li><p><strong>episode_reward_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Source episode reward key used by logging and reward
+aggregation. Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;reward_sum&quot;</span></code>.</p></li>
+<li><p><strong>aggregated_reward_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Destination key for rewards averaged over the agent
+dimension when using QMIX or VDN. The source is <code class="docutils literal notranslate"><span class="pre">reward_key</span></code>. Set this to <code class="docutils literal notranslate"><span class="pre">reward_key</span></code> to
+overwrite the source reward in-place. Required when <code class="docutils literal notranslate"><span class="pre">mixing_strategy</span></code> is <code class="docutils literal notranslate"><span class="pre">&quot;qmix&quot;</span></code> or
+<code class="docutils literal notranslate"><span class="pre">&quot;vdn&quot;</span></code>. Defaults to None.</p></li>
+<li><p><strong>aggregated_episode_reward_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Destination key for episode rewards averaged over
+the agent dimension when using QMIX or VDN. The source is <code class="docutils literal notranslate"><span class="pre">episode_reward_key</span></code>. Set this to
+<code class="docutils literal notranslate"><span class="pre">episode_reward_key</span></code> to overwrite the source reward in-place. Required when <code class="docutils literal notranslate"><span class="pre">mixing_strategy</span></code>
+is <code class="docutils literal notranslate"><span class="pre">&quot;qmix&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;vdn&quot;</span></code>. Defaults to None.</p></li>
+<li><p><strong>action_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Key for actions used by the exploration module and policy specs.
+Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;action&quot;</span></code>.</p></li>
+<li><p><strong>observation_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Key for observations used by logging. Defaults to
+<code class="docutils literal notranslate"><span class="pre">&quot;observation&quot;</span></code>.</p></li>
 </ul>
 </dd>
 </dl>

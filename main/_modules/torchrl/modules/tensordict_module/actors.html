@@ -1399,6 +1399,10 @@
 <span class="sd">            is a :class:`tensordict.nn.TensorDictModuleBase` instance, it must</span>
 <span class="sd">            match one of its output keys. Otherwise, this string represents</span>
 <span class="sd">            the name of the action-value entry in the output tensordict.</span>
+<span class="sd">        action_key (str or tuple of str, optional): The output key for the selected</span>
+<span class="sd">            action. Defaults to ``&quot;action&quot;``.</span>
+<span class="sd">        chosen_action_value_key (str or tuple of str, optional): The output key for</span>
+<span class="sd">            the selected action value. Defaults to ``&quot;chosen_action_value&quot;``.</span>
 <span class="sd">        action_mask_key (str or tuple of str, optional): The input key</span>
 <span class="sd">            representing the action mask. Defaults to ``&quot;None&quot;`` (equivalent to no masking).</span>
 
@@ -1458,6 +1462,8 @@
         <span class="n">safe</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">action_space</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">action_value_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">chosen_action_value_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">action_mask_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">strict_shape</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
@@ -1472,10 +1478,14 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">action_value_key</span> <span class="o">=</span> <span class="n">action_value_key</span>
         <span class="k">if</span> <span class="n">action_value_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">action_value_key</span> <span class="o">=</span> <span class="s2">&quot;action_value&quot;</span>
+        <span class="k">if</span> <span class="n">action_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">action_key</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span>
+        <span class="k">if</span> <span class="n">chosen_action_value_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">chosen_action_value_key</span> <span class="o">=</span> <span class="s2">&quot;chosen_action_value&quot;</span>
         <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="s2">&quot;action&quot;</span><span class="p">,</span>
+            <span class="n">action_key</span><span class="p">,</span>
             <span class="n">action_value_key</span><span class="p">,</span>
-            <span class="s2">&quot;chosen_action_value&quot;</span><span class="p">,</span>
+            <span class="n">chosen_action_value_key</span><span class="p">,</span>
         <span class="p">]</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">TensorDictModuleBase</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">action_value_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">out_keys</span><span class="p">:</span>
@@ -1492,12 +1502,12 @@
             <span class="n">spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">()</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">Composite</span><span class="p">):</span>
             <span class="n">spec</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
-            <span class="k">if</span> <span class="s2">&quot;action&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">spec</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
-                <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">action_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+                <span class="n">spec</span><span class="p">[</span><span class="n">action_key</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="n">spec</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">spec</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+            <span class="n">spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">({</span><span class="n">action_key</span><span class="p">:</span> <span class="n">spec</span><span class="p">},</span> <span class="n">shape</span><span class="o">=</span><span class="n">spec</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
         <span class="n">spec</span><span class="p">[</span><span class="n">action_value_key</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;chosen_action_value&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">spec</span><span class="p">[</span><span class="n">chosen_action_value_key</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="n">qvalue</span> <span class="o">=</span> <span class="n">QValueModule</span><span class="p">(</span>
             <span class="n">action_value_key</span><span class="o">=</span><span class="n">action_value_key</span><span class="p">,</span>
             <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">,</span>
