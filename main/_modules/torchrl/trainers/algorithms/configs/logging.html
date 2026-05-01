@@ -246,8 +246,11 @@
 
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
 
+<span class="kn">from</span> <span class="nn">torchrl.record.loggers.trackio</span> <span class="kn">import</span> <span class="n">TrackioLogger</span>
+<span class="kn">from</span> <span class="nn">torchrl.record.loggers.wandb</span> <span class="kn">import</span> <span class="n">WandbLogger</span>
 <span class="kn">from</span> <span class="nn">torchrl.trainers.algorithms.configs.common</span> <span class="kn">import</span> <span class="n">ConfigBase</span>
 
 
@@ -283,12 +286,36 @@
     <span class="n">project</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">video_fps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">32</span>
     <span class="n">log_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">wandb_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
 
-    <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torchrl.record.loggers.wandb.WandbLogger&quot;</span>
+    <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torchrl.trainers.algorithms.configs.logging._make_wandb_logger&quot;</span>
 
     <span class="k">def</span> <span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">pass</span></div>
 
+
+
+<span class="k">def</span> <span class="nf">_make_wandb_logger</span><span class="p">(</span>
+    <span class="n">exp_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">offline</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">save_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="nb">id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">project</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">video_fps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">32</span><span class="p">,</span>
+    <span class="n">log_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">wandb_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">WandbLogger</span><span class="p">:</span>
+    <span class="n">wandb_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">wandb_kwargs</span> <span class="ow">or</span> <span class="p">{})</span>
+    <span class="k">return</span> <span class="n">WandbLogger</span><span class="p">(</span>
+        <span class="n">exp_name</span><span class="o">=</span><span class="n">exp_name</span><span class="p">,</span>
+        <span class="n">offline</span><span class="o">=</span><span class="n">offline</span><span class="p">,</span>
+        <span class="n">save_dir</span><span class="o">=</span><span class="n">save_dir</span><span class="p">,</span>
+        <span class="nb">id</span><span class="o">=</span><span class="nb">id</span><span class="p">,</span>
+        <span class="n">project</span><span class="o">=</span><span class="n">project</span><span class="p">,</span>
+        <span class="n">video_fps</span><span class="o">=</span><span class="n">video_fps</span><span class="p">,</span>
+        <span class="n">log_dir</span><span class="o">=</span><span class="n">log_dir</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">wandb_kwargs</span><span class="p">,</span>
+    <span class="p">)</span>
 
 
 <div class="viewcode-block" id="TensorboardLoggerConfig">
@@ -309,6 +336,43 @@
     <span class="k">def</span> <span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">pass</span></div>
 
+
+
+<div class="viewcode-block" id="TrackioLoggerConfig">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.trainers.algorithms.configs.logging.TrackioLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.TrackioLoggerConfig">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">TrackioLoggerConfig</span><span class="p">(</span><span class="n">LoggerConfig</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A class to configure a Trackio logger.</span>
+
+<span class="sd">    .. seealso::</span>
+<span class="sd">        :class:`~torchrl.record.loggers.trackio.TrackioLogger`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">exp_name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">project</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">video_fps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">32</span>
+    <span class="n">trackio_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+
+    <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torchrl.trainers.algorithms.configs.logging._make_trackio_logger&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">pass</span></div>
+
+
+
+<span class="k">def</span> <span class="nf">_make_trackio_logger</span><span class="p">(</span>
+    <span class="n">exp_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">project</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">video_fps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">32</span><span class="p">,</span>
+    <span class="n">trackio_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TrackioLogger</span><span class="p">:</span>
+    <span class="n">trackio_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">trackio_kwargs</span> <span class="ow">or</span> <span class="p">{})</span>
+    <span class="k">return</span> <span class="n">TrackioLogger</span><span class="p">(</span>
+        <span class="n">exp_name</span><span class="o">=</span><span class="n">exp_name</span><span class="p">,</span>
+        <span class="n">project</span><span class="o">=</span><span class="n">project</span><span class="p">,</span>
+        <span class="n">video_fps</span><span class="o">=</span><span class="n">video_fps</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">trackio_kwargs</span><span class="p">,</span>
+    <span class="p">)</span>
 
 
 <div class="viewcode-block" id="CSVLoggerConfig">
