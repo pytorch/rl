@@ -11,9 +11,7 @@ import sys
 
 import pytest
 import torch
-
 from torchrl import logger as torchrl_logger
-
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
 from torchrl.modules.models.models import MLP
@@ -98,9 +96,7 @@ class TestEnvConfigs:
         batched_env_type = (
             "parallel"
             if cls == ParallelEnv
-            else "serial"
-            if cls == SerialEnv
-            else "async"
+            else "serial" if cls == SerialEnv else "async"
         )
         cfg = BatchedEnvConfig(
             create_env_fn=GymEnvConfig(env_name="CartPole-v1"),
@@ -1539,7 +1535,7 @@ class TestTrainerConfigs:
             optimizer=optimizer_config,
             logger=None,  # Optional field
             save_trainer_file="/tmp/test.pt",
-            replay_buffer=replay_buffer_config
+            replay_buffer=replay_buffer_config,
             # All optional fields are omitted to test defaults
         )
 
