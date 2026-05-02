@@ -10,7 +10,7 @@ import torch
 from tensordict.utils import expand_as_right
 
 
-def get_primers_from_module(module, warn=True):
+def get_primers_from_module(module, warn=True, strict=True):
     """Get all tensordict primers from all submodules of a module.
 
     This method is useful for retrieving primers from modules that are contained within a
@@ -20,6 +20,15 @@ def get_primers_from_module(module, warn=True):
         module (torch.nn.Module): The parent module.
         warn (bool, optional): if ``True``, a warning is raised when no primers
             are found. Defaults to ``True``.
+        strict (bool, optional): if ``True`` (default), exceptions raised by
+            ``make_tensordict_primer()`` propagate. If ``False``, failures are
+            caught per-submodule and a ``UserWarning`` lists the offending
+            module types; primers from sibling submodules are still returned.
+            Set to ``False`` from the collector dry-run path so that a single
+            conditionally-built primer (e.g.
+            :class:`~torchrl.modules.ConsistentDropoutModule` without
+            ``input_shape``) doesn't drop primers from other submodules
+            (e.g. a sibling :class:`~torchrl.modules.LSTMModule`).
 
     Returns:
         TensorDictPrimer: A TensorDictPrimer Transform.
@@ -62,12 +71,27 @@ def get_primers_from_module(module, warn=True):
 
     """
     primers = []
+    failures: list[str] = []
 
     def make_primers(submodule):
-        if hasattr(submodule, "make_tensordict_primer"):
+        if not hasattr(submodule, "make_tensordict_primer"):
+            return
+        try:
             primers.append(submodule.make_tensordict_primer())
+        except Exception as e:
+            if strict:
+                raise
+            failures.append(f"{type(submodule).__name__}: {e}")
 
     module.apply(make_primers)
+    if failures:
+        warnings.warn(
+            "Could not auto-wire tensordict primers from these submodules: "
+            + "; ".join(sorted(set(failures)))
+            + ". They need explicit configuration (e.g. `input_shape=`) to "
+            "build a primer. Continuing without them; wire manually if needed.",
+            stacklevel=2,
+        )
     if not primers:
         if warn:
             warnings.warn("No primers found in the module.")
@@ -146,13 +170,10 @@ def _compute_missing_env_transforms(
 
     # Walking submodules calls every ``make_tensordict_primer()`` we find. Some
     # implementations (e.g. ConsistentDropoutModule without ``input_shape``)
-    # raise when they can't build a primer without further user input. Treat
-    # that as "we can't auto-wire the primer for this submodule" — fall back
-    # to InitTracker-only detection.
-    try:
-        primer = get_primers_from_module(module, warn=False)
-    except (RuntimeError, ValueError):
-        primer = None
+    # raise when they can't build a primer without further user input.
+    # ``strict=False`` keeps primers from sibling submodules and warns naming
+    # the offending module type, instead of aborting the whole walk.
+    primer = get_primers_from_module(module, warn=False, strict=False)
 
     # Local import: torchrl.envs imports torchrl.modules at module import time.
     from torchrl.envs.transforms import Compose, InitTracker, TensorDictPrimer

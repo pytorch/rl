@@ -43,6 +43,7 @@ from torchrl.modules import (
     TanhDelta,
     TanhNormal,
     ValueOperator,
+    ConsistentDropoutModule
 )
 from torchrl.modules.models.decision_transformer import _has_transformers
 from torchrl.modules.tensordict_module.common import (
@@ -59,6 +60,7 @@ from torchrl.modules.utils import (
     get_env_transforms_from_module,
     get_primers_from_module,
 )
+from torchrl.modules.utils.utils import _compute_missing_env_transforms
 from torchrl.objectives import DDPGLoss
 
 from torchrl.testing.mocking_classes import CountingEnv, DiscreteActionVecMockEnv
@@ -1734,6 +1736,44 @@ def test_get_primers_from_module():
     assert "gru_recurrent_state" in transform[0].primers
     assert "lstm_recurrent_state_c" in transform[1].primers
     assert "lstm_recurrent_state_h" in transform[1].primers
+
+
+def test_get_primers_from_module_partial_failure():
+    """One submodule's failed primer must not poison primers from siblings.
+
+    ``ConsistentDropoutModule`` without ``input_shape`` raises ``RuntimeError``
+    from ``make_tensordict_primer()``. Pre-fix, ``module.apply``'s walk
+    propagated that exception and the GRU's well-formed primer was lost too.
+    The dry-run path now passes ``strict=False`` to isolate failures
+    per-submodule.
+    """
+    dropout = ConsistentDropoutModule(p=0.1, in_keys="features")
+    gru = GRUModule(
+        input_size=10,
+        hidden_size=10,
+        num_layers=1,
+        in_keys=["input", "recurrent_state", "is_init"],
+        out_keys=["features", ("next", "recurrent_state")],
+    )
+    policy = TensorDictSequential(gru, dropout)
+
+    # Public default (strict=True): the bad primer still raises.
+    with pytest.raises(RuntimeError, match="input_shape"):
+        get_primers_from_module(policy)
+
+    # strict=False: GRU primer survives, warning names the failing module.
+    with pytest.warns(UserWarning, match="ConsistentDropoutModule"):
+        primer = get_primers_from_module(policy, warn=False, strict=False)
+    assert primer is not None
+    assert "recurrent_state" in primer.primers
+
+    # Collector dry-run end-to-end: bare env gets InitTracker AND the GRU
+    # primer. Pre-fix it would have gotten only InitTracker.
+    env = CountingEnv()
+    transforms = _compute_missing_env_transforms(env, policy)
+    type_names = [type(t).__name__ for t in transforms]
+    assert "InitTracker" in type_names
+    assert "TensorDictPrimer" in type_names
 
 
 def test_get_env_transforms_from_module_no_rnn():
