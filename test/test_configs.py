@@ -96,7 +96,9 @@ class TestEnvConfigs:
         batched_env_type = (
             "parallel"
             if cls == ParallelEnv
-            else "serial" if cls == SerialEnv else "async"
+            else "serial"
+            if cls == SerialEnv
+            else "async"
         )
         cfg = BatchedEnvConfig(
             create_env_fn=GymEnvConfig(env_name="CartPole-v1"),
@@ -1626,9 +1628,7 @@ class TestTrainerConfigs:
             num_cells=64,
         )
 
-        critic_network = MLPConfig(
-            in_features=4, out_features=1, depth=2, num_cells=64
-        )
+        critic_network = MLPConfig(in_features=4, out_features=1, depth=2, num_cells=64)
 
         actor_model = TanhNormalModelConfig(
             network=actor_network, in_keys=["observation"], out_keys=["action"]
