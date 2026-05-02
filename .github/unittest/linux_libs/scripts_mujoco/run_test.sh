@@ -15,6 +15,13 @@ export XLA_PYTHON_CLIENT_ALLOCATOR=platform
 export TF_FORCE_GPU_ALLOW_GROWTH=true
 export CUDA_VISIBLE_DEVICES=0
 
+# OpenGL backend for mujoco.Renderer (used by the mjx and mujoco backends'
+# from_pixels path; the mujoco-torch backend uses its own torch raycaster
+# and doesn't need a GL context). EGL works headless on the GPU runner;
+# matches scripts_gym/run_all.sh.
+export MUJOCO_GL=egl
+export PYOPENGL_PLATFORM=egl
+
 python -m torch.utils.collect_env
 git config --global --add safe.directory '*'
 
