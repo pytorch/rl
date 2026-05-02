@@ -17,6 +17,7 @@ Termination
     Never (the satellite cannot crash). Use a
     :class:`~torchrl.envs.transforms.TimeLimit` transform for truncation.
 """
+
 from __future__ import annotations
 
 import re
@@ -24,7 +25,6 @@ from typing import Literal
 
 import torch
 from tensordict import TensorDictBase
-
 from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
 from torchrl.envs.custom.mujoco._math import (
     cmg_jacobian,
@@ -40,7 +40,7 @@ from torchrl.envs.custom.mujoco.base import MujocoEnv
 
 
 class SatelliteEnv(MujocoEnv):
-    """Attitude-control task with 4 or 6 CMGs.
+    r"""Attitude-control task with 4 or 6 CMGs.
 
     Args:
         num_cmgs: ``4`` (pyramid) or ``6`` (orthogonal cluster).
@@ -53,7 +53,7 @@ class SatelliteEnv(MujocoEnv):
         rotor_h: scalar rotor angular momentum used in the Jacobian.
             Defaults to :attr:`ROTOR_SPEED` (proxy unit, since the
             absolute scale only changes the singularity threshold).
-        \\*\\*kwargs: forwarded to :class:`MujocoEnv`.
+        \*\*kwargs: forwarded to :class:`MujocoEnv`.
 
     Example:
         >>> from torchrl.envs import SatelliteEnv  # doctest: +SKIP
@@ -251,6 +251,4 @@ class SatelliteEnv(MujocoEnv):
         state: TensorDictBase,
         next_state: TensorDictBase,
     ) -> torch.Tensor:
-        return torch.zeros(
-            self.num_envs, 1, dtype=torch.bool, device=self.device
-        )
+        return torch.zeros(self.num_envs, 1, dtype=torch.bool, device=self.device)

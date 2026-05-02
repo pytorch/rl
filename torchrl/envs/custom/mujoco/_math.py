@@ -7,6 +7,7 @@
 Quaternions follow the MuJoCo convention ``(w, x, y, z)``. CMG geometry
 helpers support the satellite env's manipulability-based singularity penalty.
 """
+
 from __future__ import annotations
 
 import math

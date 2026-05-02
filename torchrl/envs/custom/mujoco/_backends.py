@@ -15,6 +15,7 @@ Each backend owns the model and the per-env simulation state. The env
 calls :meth:`reset`, :meth:`step`, and reads ``qpos``/``qvel``/``time``
 to compute observations and rewards.
 """
+
 from __future__ import annotations
 
 import abc
@@ -67,13 +68,18 @@ class _PhysicsBackend(abc.ABC):
         self, xml_string: str, *, num_envs: int, device: torch.device | None
     ) -> None:
         self.num_envs = num_envs
-        self.device = torch.device(device) if device is not None else torch.device("cpu")
+        self.device = (
+            torch.device(device) if device is not None else torch.device("cpu")
+        )
         self._init_model(xml_string)
 
     @abc.abstractmethod
     def _init_model(self, xml_string: str) -> None:
-        """Parse XML, populate ``nq, nv, nu, timestep, qpos0, qvel0,
-        actuator_lo, actuator_hi``, and prepare the batched data state."""
+        """Parse XML and prepare the batched data state.
+
+        Populates ``nq, nv, nu, timestep, qpos0, qvel0, actuator_lo,
+        actuator_hi`` from the parsed model.
+        """
 
     @abc.abstractmethod
     def reset(self, qpos: torch.Tensor, qvel: torch.Tensor) -> None:
@@ -203,6 +209,7 @@ class _TorchBackend(_PhysicsBackend):
         single = self.num_envs == 1
 
         if single:
+
             def _one_step(d):
                 return mujoco_torch.step(mx, d)
 
@@ -360,7 +367,9 @@ class _MujocoBackend(_PhysicsBackend):
         self.qvel0 = torch.as_tensor(d_mj.qvel.copy(), device=self.device).to(
             torch.float32
         )
-        ar = torch.as_tensor(m_mj.actuator_ctrlrange, device=self.device, dtype=torch.float32)
+        ar = torch.as_tensor(
+            m_mj.actuator_ctrlrange, device=self.device, dtype=torch.float32
+        )
         self.actuator_lo = ar[:, 0]
         self.actuator_hi = ar[:, 1]
 
@@ -414,7 +423,11 @@ class _MujocoBackend(_PhysicsBackend):
         import mujoco
         import numpy as np
 
-        if not hasattr(self, "_renderer") or self._renderer.height != height or self._renderer.width != width:
+        if (
+            not hasattr(self, "_renderer")
+            or self._renderer.height != height
+            or self._renderer.width != width
+        ):
             self._renderer = mujoco.Renderer(self._m, height=height, width=width)
         self._renderer.update_scene(self._d, camera=camera_id)
         rgb = self._renderer.render()  # (H, W, 3) uint8 numpy
@@ -422,7 +435,9 @@ class _MujocoBackend(_PhysicsBackend):
             # Tint background pixels (those at the far plane). Approximation:
             # uses the geom-id buffer is overkill -- skip when not requested.
             pass
-        return torch.as_tensor(np.ascontiguousarray(rgb), device=self.device).unsqueeze(0)
+        return torch.as_tensor(np.ascontiguousarray(rgb), device=self.device).unsqueeze(
+            0
+        )
 
 
 # ----------------------------------------------------------------------
@@ -467,6 +482,12 @@ class _MJXBackend(_PhysicsBackend):
         self._m_mj = m_mj  # kept for rendering via mujoco.Renderer
         self._mx = mx
         self._dx0_single = dx0_single
+        # All JAX arrays must live on this device or jit will fail with
+        # "Received incompatible devices for jitted computation". The
+        # model's data state lives wherever `mjx.put_model` placed it
+        # (JAX default device), and any tensors we splice in (qpos /
+        # qvel / time) must be put_d to match.
+        self._jax_device = dx0_single.qpos.device
 
         self.nq = int(m_mj.nq)
         self.nv = int(m_mj.nv)
@@ -474,7 +495,9 @@ class _MJXBackend(_PhysicsBackend):
         self.timestep = float(m_mj.opt.timestep)
         self.qpos0 = self._jax_to_torch(dx0_single.qpos)
         self.qvel0 = self._jax_to_torch(dx0_single.qvel)
-        ar = torch.as_tensor(m_mj.actuator_ctrlrange, device=self.device, dtype=torch.float32)
+        ar = torch.as_tensor(
+            m_mj.actuator_ctrlrange, device=self.device, dtype=torch.float32
+        )
         self.actuator_lo = ar[:, 0]
         self.actuator_hi = ar[:, 1]
 
@@ -492,39 +515,47 @@ class _MJXBackend(_PhysicsBackend):
     def _torch_to_jax(self, x: torch.Tensor):
         from torchrl.envs.libs.jax_utils import _tensor_to_ndarray
 
-        return _tensor_to_ndarray(x.contiguous())
+        arr = _tensor_to_ndarray(x.contiguous())
+        # Force the array onto the model's JAX device. Torch tensors on
+        # CPU would otherwise yield a CPU JAX array even when the model
+        # lives on GPU, causing a mixed-device pytree at jit time.
+        return self._jax.device_put(arr, self._jax_device)
+
+    def _broadcast_dx0(self):
+        """Build a batched copy of ``_dx0_single`` on ``self._jax_device``."""
+        jax = self._jax
+        idx = jax.device_put(jax.numpy.arange(self.num_envs), self._jax_device)
+        return jax.vmap(lambda _: self._dx0_single)(idx)
 
     def reset(self, qpos: torch.Tensor, qvel: torch.Tensor) -> None:
-        jax = self._jax
         qpos_j = self._torch_to_jax(qpos)
         qvel_j = self._torch_to_jax(qvel)
-        # Build a fresh batched state from the reference, override qpos/qvel,
-        # then re-run mjx.forward to refresh derived quantities.
-        dx = jax.vmap(lambda _: self._dx0_single)(jax.numpy.arange(self.num_envs))
-        dx = dx.replace(qpos=qpos_j, qvel=qvel_j, time=jax.numpy.zeros(self.num_envs))
+        # Broadcast _dx0_single (with time=0) over the batch, splice in
+        # the new qpos/qvel, then re-run mjx.forward so derived quantities
+        # are consistent. Time stays at zero from the reference state.
+        dx = self._broadcast_dx0()
+        dx = dx.replace(qpos=qpos_j, qvel=qvel_j)
         self._dx = self._vmap_forward(dx)
 
     def reset_mask(
         self, mask: torch.Tensor, qpos: torch.Tensor, qvel: torch.Tensor
     ) -> None:
-        jax = self._jax
         n = int(mask.sum().item())
         if n == 0:
             return
-        # Easiest: pull current full state to torch, splice in the new envs,
-        # push back. Slow path -- partial reset isn't on the hot path.
+        # Splice the reset envs into the current full state on the torch
+        # side, then push back to JAX. Partial reset isn't on the hot path.
         full_qpos = self.qpos.clone()
         full_qvel = self.qvel.clone()
         full_qpos[mask] = qpos.to(full_qpos.dtype)
         full_qvel[mask] = qvel.to(full_qvel.dtype)
-        # Reset time on masked envs.
         time = self.time.clone()
         time[mask] = 0.0
 
         qpos_j = self._torch_to_jax(full_qpos)
         qvel_j = self._torch_to_jax(full_qvel)
         time_j = self._torch_to_jax(time)
-        dx = jax.vmap(lambda _: self._dx0_single)(jax.numpy.arange(self.num_envs))
+        dx = self._broadcast_dx0()
         dx = dx.replace(qpos=qpos_j, qvel=qvel_j, time=time_j)
         self._dx = self._vmap_forward(dx)
 
@@ -563,7 +594,11 @@ class _MJXBackend(_PhysicsBackend):
         import mujoco
         import numpy as np
 
-        if not hasattr(self, "_renderer") or self._renderer.height != height or self._renderer.width != width:
+        if (
+            not hasattr(self, "_renderer")
+            or self._renderer.height != height
+            or self._renderer.width != width
+        ):
             self._renderer = mujoco.Renderer(self._m_mj, height=height, width=width)
         if not hasattr(self, "_render_d"):
             self._render_d = mujoco.MjData(self._m_mj)

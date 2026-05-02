@@ -3,11 +3,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 """Humanoid-v4 locomotion env, matching the Gymnasium task spec."""
+
 from __future__ import annotations
 
 import torch
 from tensordict import TensorDictBase
-
 from torchrl.envs.custom.mujoco.base import MujocoEnv
 
 

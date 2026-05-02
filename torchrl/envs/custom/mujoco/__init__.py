@@ -19,6 +19,7 @@ Gymnasium ``-v4`` reward / termination spec. :class:`SatelliteEnv`
 implements an attitude-control task with 4- or 6-CMG clusters and a
 manipulability-based singularity penalty.
 """
+
 from torchrl.envs.custom.mujoco.ant import AntEnv
 from torchrl.envs.custom.mujoco.base import MujocoEnv
 from torchrl.envs.custom.mujoco.hopper import HopperEnv

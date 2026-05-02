@@ -4,11 +4,11 @@
 # LICENSE file in the root directory of this source tree.
 """Tests for the MuJoCo custom envs (humanoid / ant / walker / hopper /
 satellite) across the three physics backends."""
+
 from __future__ import annotations
 
 import pytest
 import torch
-
 from torchrl.envs import (
     AntEnv,
     HopperEnv,
@@ -157,9 +157,7 @@ class TestMujoco:
     # Compile / unknown-backend / custom XML.
     # ------------------------------------------------------------------
 
-    @pytest.mark.skipif(
-        not _has_mujoco_torch, reason="mujoco-torch not installed"
-    )
+    @pytest.mark.skipif(not _has_mujoco_torch, reason="mujoco-torch not installed")
     def test_torch_backend_compile_smoke(self):
         """``compile_step=True`` must not raise on the default backend."""
         env = HopperEnv(num_envs=2, seed=0, compile_step=True)

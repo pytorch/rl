@@ -10,6 +10,7 @@ step/reset plumbing, and dispatches the simulation to one of three
 backends (``mujoco-torch``, ``mjx``, ``mujoco``) -- see
 :mod:`torchrl.envs.custom.mujoco._backends`.
 """
+
 from __future__ import annotations
 
 import abc
@@ -19,12 +20,11 @@ from typing import ClassVar, Literal
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-
 from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
 from torchrl.envs.common import _EnvPostInit, EnvBase
 from torchrl.envs.custom.mujoco._backends import (
-    BackendName,
     _PhysicsBackend,
+    BackendName,
     make_backend,
     resolve_xml_string,
 )
@@ -136,7 +136,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         >>> env = HumanoidEnv(num_envs=4)         # doctest: +SKIP
         >>> td = env.rollout(10)                  # doctest: +SKIP
 
-    See also:
+    See Also:
         :class:`~torchrl.envs.custom.mujoco._backends._PhysicsBackend`.
     """
 
@@ -234,7 +234,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
             try:
                 xml_string = resolve_xml_string(cand)
                 return self._patch_xml(xml_string)
-            except (FileNotFoundError, OSError) as e:
+            except OSError as e:
                 last_exc = e
         raise FileNotFoundError(
             f"{type(self).__name__}: none of the XML candidates resolved: "
@@ -253,8 +253,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         xml = re.sub(r"<camera\b[^/]*/>\s*", "", xml)
         xml = re.sub(r"<light\b[^/]*/>\s*", "", xml)
         camera = (
-            '<camera name="side" pos="0 -4 3" '
-            'xyaxes="1 0 0 0 0.45 1" fovy="60"/>'
+            '<camera name="side" pos="0 -4 3" ' 'xyaxes="1 0 0 0 0.45 1" fovy="60"/>'
         )
         light = (
             '<light name="top" pos="0 0 4" dir="0 0 -1" '
@@ -266,9 +265,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
                 '\n  <geom name="floor" type="plane" size="10 10 0.1" '
                 'rgba="0.8 0.85 0.8 1" conaffinity="1" condim="3"/>'
             )
-        return xml.replace(
-            "<worldbody>", f"<worldbody>\n  {camera}\n  {light}{floor}"
-        )
+        return xml.replace("<worldbody>", f"<worldbody>\n  {camera}\n  {light}{floor}")
 
     # ------------------------------------------------------------------
     # Subclass interface
@@ -325,9 +322,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
             device=self.device,
         )
 
-    def _sample_initial_state(
-        self, n: int
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def _sample_initial_state(self, n: int) -> tuple[torch.Tensor, torch.Tensor]:
         """Return ``(qpos, qvel)`` for ``n`` envs at reset.
 
         Default: ``qpos0`` plus uniform noise on both ``qpos`` and
@@ -472,12 +467,17 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         return out
 
     def _on_reset_all(self) -> None:
-        """Hook called after a full backend reset. Override for
-        per-episode randomization that lives outside the simulator
-        (e.g. sample a new target attitude)."""
+        """Hook called after a full backend reset.
+
+        Override for per-episode randomization that lives outside the
+        simulator (e.g. sample a new target attitude).
+        """
 
     def _on_reset_mask(self, mask: torch.Tensor) -> None:
-        """Hook for partial reset. Override alongside :meth:`_on_reset_all`."""
+        """Hook for partial reset.
+
+        Override alongside :meth:`_on_reset_all`.
+        """
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict["action"].to(self.dtype)
