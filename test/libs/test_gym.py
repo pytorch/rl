@@ -909,6 +909,22 @@ class TestGym:
         env = SerialEnv(2, make_env)
         check_env_specs(env)
 
+    @pytest.mark.parametrize("num_envs", [0, 1, 2])
+    def test_mo_num_envs_vector_reward_spec(self, num_envs):
+        if not _has_mo:
+            pytest.skip("mo-gym not found")
+
+        env = MOGymEnv("mo-mountaincarcontinuous-v0", num_envs=num_envs, device="cpu")
+        try:
+            expected_shape = torch.Size([2])
+            if num_envs:
+                expected_shape = torch.Size([num_envs, *expected_shape])
+            assert env.reward_spec.shape == expected_shape
+            td = env.rand_step(env.reset())
+            assert td["next", "reward"].shape == expected_shape
+        finally:
+            env.close()
+
     def test_info_reader_mario(self):
         try:
             import gym_super_mario_bros as mario_gym
@@ -1857,6 +1873,31 @@ class TestGym:
         finally:
             # Restore original isinstance
             builtins.isinstance = original_isinstance
+
+    @pytest.mark.parametrize("num_envs", [0, 1, 2])
+    def test_gymnasium_num_envs(self, num_envs, request):
+        if not _has_gymnasium:
+            pytest.skip("gymnasium not found")
+
+        gym_version = version.parse(gymnasium.__version__)
+        if version.parse("1.0.0") <= gym_version < version.parse("1.1.0"):
+            pytest.skip("gymnasium 1.0 is not supported")
+
+        with set_gym_backend("gymnasium"):
+            env = GymEnv("CartPole-v1", num_envs=num_envs)
+        request.addfinalizer(env.close)
+
+        if num_envs > 0:
+            expected_batch_size = torch.Size([num_envs])
+            expected_reward_shape = torch.Size([num_envs, 1])
+        else:
+            expected_batch_size = torch.Size([])
+            expected_reward_shape = torch.Size([1])
+
+        assert env.batch_size == expected_batch_size
+        check_env_specs(env)
+        td = env.rand_step(env.reset())
+        assert td["next", "reward"].shape == expected_reward_shape
 
 
 @pytest.mark.skipif(

@@ -13,6 +13,7 @@ from collections.abc import Callable
 from functools import partial
 
 from tensordict import TensorDict, TensorDictBase
+from tensordict.utils import NestedKey
 from torch import optim
 
 from torchrl.collectors import BaseCollector
@@ -71,6 +72,27 @@ class DQNTrainer(Trainer):
             the module's epsilon is annealed during training. Defaults to None.
         async_collection (bool, optional): Whether to use async data collection. Defaults to False.
         log_timings (bool, optional): Whether to log timing information for hooks. Defaults to False.
+        mixing_strategy (str, optional): Multi-agent mixing strategy. Accepted values are ``"qmix"`` and
+            ``"vdn"`` for mixed-value training, ``"iql"`` for independent Q-learning, or None for standard
+            DQN. Defaults to None.
+        done_key (NestedKey, optional): Key for the done signal used by logging. Defaults to ``"done"``.
+        terminated_key (NestedKey, optional): Key for the terminated signal. Defaults to ``"terminated"``.
+        reward_key (NestedKey, optional): Source reward key used by logging and reward aggregation.
+            Defaults to ``"reward"``.
+        episode_reward_key (NestedKey, optional): Source episode reward key used by logging and reward
+            aggregation. Defaults to ``"reward_sum"``.
+        aggregated_reward_key (NestedKey, optional): Destination key for rewards averaged over the agent
+            dimension when using QMIX or VDN. The source is ``reward_key``. Set this to ``reward_key`` to
+            overwrite the source reward in-place. Required when ``mixing_strategy`` is ``"qmix"`` or
+            ``"vdn"``. Defaults to None.
+        aggregated_episode_reward_key (NestedKey, optional): Destination key for episode rewards averaged over
+            the agent dimension when using QMIX or VDN. The source is ``episode_reward_key``. Set this to
+            ``episode_reward_key`` to overwrite the source reward in-place. Required when ``mixing_strategy``
+            is ``"qmix"`` or ``"vdn"``. Defaults to None.
+        action_key (NestedKey, optional): Key for actions used by the exploration module and policy specs.
+            Defaults to ``"action"``.
+        observation_key (NestedKey, optional): Key for observations used by logging. Defaults to
+            ``"observation"``.
 
     Example:
         >>> from torchrl.collectors import Collector
@@ -130,6 +152,15 @@ class DQNTrainer(Trainer):
         async_collection: bool = False,
         log_timings: bool = False,
         auto_log_optim_steps: bool = True,
+        mixing_strategy: str | None = None,
+        done_key: NestedKey = "done",
+        terminated_key: NestedKey = "terminated",
+        reward_key: NestedKey = "reward",
+        episode_reward_key: NestedKey = "reward_sum",
+        aggregated_reward_key: NestedKey | None = None,
+        aggregated_episode_reward_key: NestedKey | None = None,
+        action_key: NestedKey = "action",
+        observation_key: NestedKey = "observation",
     ) -> None:
         warnings.warn(
             "DQNTrainer is an experimental/prototype feature. The API may change in future versions. "
@@ -158,6 +189,15 @@ class DQNTrainer(Trainer):
         )
         self.replay_buffer = replay_buffer
         self.async_collection = async_collection
+        self.mixing_strategy = mixing_strategy
+        self.done_key = done_key
+        self.terminated_key = terminated_key
+        self.reward_key = reward_key
+        self.episode_reward_key = episode_reward_key
+        self.aggregated_reward_key = aggregated_reward_key
+        self.aggregated_episode_reward_key = aggregated_episode_reward_key
+        self.action_key = action_key
+        self.observation_key = observation_key
 
         if replay_buffer is not None:
             rb_trainer = ReplayBufferTrainer(
@@ -176,7 +216,15 @@ class DQNTrainer(Trainer):
         self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
 
         self.greedy_module = greedy_module
-        weights_source = self.loss_module.value_network
+        if hasattr(self.loss_module, "value_network"):
+            weights_source = self.loss_module.value_network
+        elif hasattr(self.loss_module, "local_value_network"):
+            weights_source = self.loss_module.local_value_network
+        else:
+            raise AttributeError(
+                "loss_module must expose either `value_network` or `local_value_network` "
+                "to sync policy weights with the collector."
+            )
         if greedy_module is not None:
             from tensordict.nn import TensorDictSequential
 
@@ -193,6 +241,16 @@ class DQNTrainer(Trainer):
         self.enable_logging = enable_logging
         self.log_rewards = log_rewards
         self.log_observations = log_observations
+        if self.mixing_strategy in ("qmix", "vdn"):
+            if (
+                self.aggregated_reward_key is None
+                or self.aggregated_episode_reward_key is None
+            ):
+                raise ValueError(
+                    "aggregated_reward_key and aggregated_episode_reward_key must be "
+                    f"provided when mixing_strategy is {self.mixing_strategy}."
+                )
+            self.register_op("batch_process", self._aggregate_agent_rewards)
 
         if self.enable_logging:
             self._setup_dqn_logging()
@@ -204,10 +262,20 @@ class DQNTrainer(Trainer):
             self.greedy_module.step(delta)
             self._greedy_last_frames = self.collected_frames
 
+    def _aggregate_agent_rewards(self, batch: TensorDictBase) -> TensorDictBase:
+        for key, aggregated_key in (
+            (self.reward_key, self.aggregated_reward_key),
+            (self.episode_reward_key, self.aggregated_episode_reward_key),
+        ):
+            value = batch.get(("next", key), None)
+            if value is not None:
+                batch.set(("next", aggregated_key), value.mean(-2))
+        return batch
+
     def _setup_dqn_logging(self):
         """Set up logging hooks for DQN-specific metrics."""
         log_done_percentage = LogScalar(
-            key=("next", "done"),
+            key=("next", self.done_key),
             logname="done_percentage",
             log_pbar=True,
             include_std=False,
@@ -217,22 +285,28 @@ class DQNTrainer(Trainer):
         self.register_op(hook_dest, log_done_percentage)
 
         if self.log_rewards:
+            if self.mixing_strategy in ("qmix", "vdn"):
+                reward_log_key = self.aggregated_reward_key
+                episode_reward_log_key = self.aggregated_episode_reward_key
+            else:
+                reward_log_key = self.reward_key
+                episode_reward_log_key = self.episode_reward_key
             log_rewards = LogScalar(
-                key=("next", "reward"),
+                key=("next", reward_log_key),
                 logname="r_training",
                 log_pbar=True,
                 include_std=True,
                 reduction="mean",
             )
             log_max_reward = LogScalar(
-                key=("next", "reward"),
+                key=("next", reward_log_key),
                 logname="r_max",
                 log_pbar=False,
                 include_std=False,
                 reduction="max",
             )
             log_total_reward = LogScalar(
-                key=("next", "reward_sum"),
+                key=("next", episode_reward_log_key),
                 logname="r_total",
                 log_pbar=False,
                 include_std=False,
@@ -244,7 +318,7 @@ class DQNTrainer(Trainer):
 
         if self.log_observations:
             log_obs_norm = LogScalar(
-                key="observation",
+                key=self.observation_key,
                 logname="obs_norm",
                 log_pbar=False,
                 include_std=True,

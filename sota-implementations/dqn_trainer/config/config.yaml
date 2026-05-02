@@ -38,7 +38,7 @@ networks:
 models:
   qvalue_model:
     in_keys: ["observation"]
-    out_keys: ["action_value"]
+    action_value_key: "action_value"
     action_space: "one-hot"
     network: ${networks.qvalue_network}
 
