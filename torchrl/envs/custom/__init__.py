@@ -5,14 +5,7 @@
 
 from .chess import ChessEnv
 from .llm import LLMHashingEnv
-from .mujoco import (
-    AntEnv,
-    HopperEnv,
-    HumanoidEnv,
-    MujocoEnv,
-    SatelliteEnv,
-    Walker2dEnv,
-)
+from .mujoco import AntEnv, HopperEnv, HumanoidEnv, MujocoEnv, SatelliteEnv, Walker2dEnv
 from .pendulum import PendulumEnv
 from .tictactoeenv import TicTacToeEnv
 from .trading import FinancialRegimeEnv
