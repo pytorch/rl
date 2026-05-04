@@ -12,6 +12,7 @@ import torch
 from tensordict.nn import TensorDictModuleBase
 
 from torchrl.collectors import BaseCollector
+from torchrl.data import Categorical, Composite, OneHot
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.objectives.value.advantages import GAE
@@ -481,6 +482,15 @@ class DQNTrainerConfig(TrainerConfig):
     log_rewards: bool = True
     log_observations: bool = False
     hooks: list[Any] | None = None
+    mixing_strategy: str | None = None
+    done_key: Any = "done"
+    terminated_key: Any = "terminated"
+    reward_key: Any = "reward"
+    episode_reward_key: Any = "reward_sum"
+    aggregated_reward_key: Any = None
+    aggregated_episode_reward_key: Any = None
+    action_key: Any = "action"
+    observation_key: Any = "observation"
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_dqn_trainer"
 
@@ -524,23 +534,43 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
     log_rewards = kwargs.pop("log_rewards", True)
     log_observations = kwargs.pop("log_observations", False)
     hooks = kwargs.pop("hooks", None)
+    mixing_strategy = kwargs.pop("mixing_strategy", None)
+    done_key = _normalize_hydra_key(kwargs.pop("done_key", "done"))
+    terminated_key = _normalize_hydra_key(kwargs.pop("terminated_key", "terminated"))
+    reward_key = _normalize_hydra_key(kwargs.pop("reward_key", "reward"))
+    episode_reward_key = _normalize_hydra_key(
+        kwargs.pop("episode_reward_key", "reward_sum")
+    )
+    aggregated_reward_key = _normalize_hydra_key(
+        kwargs.pop("aggregated_reward_key", None)
+    )
+    aggregated_episode_reward_key = _normalize_hydra_key(
+        kwargs.pop("aggregated_episode_reward_key", None)
+    )
+    action_key = _normalize_hydra_key(kwargs.pop("action_key", "action"))
+    observation_key = _normalize_hydra_key(kwargs.pop("observation_key", "observation"))
 
     if value_network is not None and not isinstance(value_network, torch.nn.Module):
         value_network = value_network()
 
-    from torchrl.data import Composite, OneHot
-
-    action_spec = value_network.spec.get("action", default=None)
+    action_spec = value_network.spec.get(action_key, default=None)
     if action_spec is None:
-        n_actions = value_network.module[0].out_features
-        action_spec = OneHot(n=n_actions)
-    spec = Composite(action=action_spec)
+        net = value_network.module[0]
+        n_actions = (
+            net.n_agent_outputs if hasattr(net, "n_agent_outputs") else net.out_features
+        )
+        if getattr(value_network, "action_space", None) == "categorical":
+            action_spec = Categorical(n=n_actions)
+        else:
+            action_spec = OneHot(n=n_actions)
+    spec = Composite({action_key: action_spec})
 
     greedy_module = EGreedyModule(
         annealing_num_steps=annealing_num_steps,
         eps_init=eps_init,
         eps_end=eps_end,
         spec=spec,
+        action_key=action_key,
     )
     exploration_policy = TensorDictSequential(value_network, greedy_module)
 
@@ -552,7 +582,16 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
             collector = collector(replay_buffer=replay_buffer, **collector_kwargs)
 
     if not isinstance(loss_module, LossModule):
-        loss_module = loss_module(value_network=value_network)
+        if mixing_strategy in (None, "iql"):
+            loss_module = loss_module(value_network=value_network)
+        elif mixing_strategy in ("qmix", "vdn"):
+            loss_module = loss_module(local_value_network=value_network)
+        else:
+            raise ValueError(
+                "mixing_strategy must be one of None, 'iql', 'qmix', or 'vdn', "
+                f"got {mixing_strategy}."
+            )
+
     if not isinstance(target_net_updater, TargetNetUpdater):
         target_net_updater = target_net_updater(loss_module)
     if not isinstance(optimizer, torch.optim.Optimizer):
@@ -590,6 +629,15 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
         log_observations=log_observations,
         target_net_updater=target_net_updater,
         greedy_module=greedy_module,
+        mixing_strategy=mixing_strategy,
+        done_key=done_key,
+        terminated_key=terminated_key,
+        reward_key=reward_key,
+        episode_reward_key=episode_reward_key,
+        aggregated_reward_key=aggregated_reward_key,
+        aggregated_episode_reward_key=aggregated_episode_reward_key,
+        action_key=action_key,
+        observation_key=observation_key,
         async_collection=async_collection,
         log_timings=log_timings,
         auto_log_optim_steps=auto_log_optim_steps,

@@ -1132,6 +1132,10 @@ class QValueActor(SafeSequential):
             is a :class:`tensordict.nn.TensorDictModuleBase` instance, it must
             match one of its output keys. Otherwise, this string represents
             the name of the action-value entry in the output tensordict.
+        action_key (str or tuple of str, optional): The output key for the selected
+            action. Defaults to ``"action"``.
+        chosen_action_value_key (str or tuple of str, optional): The output key for
+            the selected action value. Defaults to ``"chosen_action_value"``.
         action_mask_key (str or tuple of str, optional): The input key
             representing the action mask. Defaults to ``"None"`` (equivalent to no masking).
 
@@ -1191,6 +1195,8 @@ class QValueActor(SafeSequential):
         safe=False,
         action_space: str | None = None,
         action_value_key=None,
+        action_key: NestedKey | None = None,
+        chosen_action_value_key: NestedKey | None = None,
         action_mask_key: NestedKey | None = None,
         strict_shape: bool | str | None = None,
     ):
@@ -1205,10 +1211,14 @@ class QValueActor(SafeSequential):
         self.action_value_key = action_value_key
         if action_value_key is None:
             action_value_key = "action_value"
+        if action_key is None:
+            action_key = "action"
+        if chosen_action_value_key is None:
+            chosen_action_value_key = "chosen_action_value"
         out_keys = [
-            "action",
+            action_key,
             action_value_key,
-            "chosen_action_value",
+            chosen_action_value_key,
         ]
         if isinstance(module, TensorDictModuleBase):
             if action_value_key not in module.out_keys:
@@ -1225,12 +1235,12 @@ class QValueActor(SafeSequential):
             spec = Composite()
         if isinstance(spec, Composite):
             spec = spec.clone()
-            if "action" not in spec.keys():
-                spec["action"] = None
+            if action_key not in spec.keys(True, True):
+                spec[action_key] = None
         else:
-            spec = Composite(action=spec, shape=spec.shape[:-1])
+            spec = Composite({action_key: spec}, shape=spec.shape[:-1])
         spec[action_value_key] = None
-        spec["chosen_action_value"] = None
+        spec[chosen_action_value_key] = None
         qvalue = QValueModule(
             action_value_key=action_value_key,
             out_keys=out_keys,

@@ -16,12 +16,13 @@ from torchrl.objectives import (
     IQLLoss,
     KLPENPPOLoss,
     PPOLoss,
+    QMixerLoss,
     SACLoss,
     TD3Loss,
 )
 from torchrl.objectives.iql import DiscreteIQLLoss
 from torchrl.objectives.sac import DiscreteSACLoss
-from torchrl.trainers.algorithms.configs.common import ConfigBase
+from torchrl.trainers.algorithms.configs.common import _normalize_hydra_key, ConfigBase
 
 
 @dataclass
@@ -301,6 +302,14 @@ class DQNLossConfig(LossConfig):
     priority_key: str | None = None
     reduction: str | None = None
     use_prioritized_weights: str | bool = "auto"
+    action_key: Any = None
+    action_value_key: Any = None
+    value_key: Any = None
+    reward_key: Any = None
+    done_key: Any = None
+    terminated_key: Any = None
+    priority_key: Any = None
+    priority_weight_key: Any = None
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_dqn_loss"
 
     def __post_init__(self) -> None:
@@ -308,12 +317,86 @@ class DQNLossConfig(LossConfig):
 
 
 def _make_dqn_loss(*args, **kwargs) -> DQNLoss:
-    gamma = kwargs.pop("gamma", None)
+    tensor_keys = {}
+    for key in (
+        "action_key",
+        "action_value_key",
+        "value_key",
+        "reward_key",
+        "done_key",
+        "terminated_key",
+        "priority_key",
+        "priority_weight_key",
+    ):
+        if key in kwargs:
+            value = kwargs.pop(key)
+            if value is not None:
+                tensor_keys[key.removesuffix("_key")] = _normalize_hydra_key(value)
 
     value_network = kwargs.get("value_network")
+    gamma = kwargs.pop("gamma", None)
+
     if value_network is not None and hasattr(value_network, "_target_"):
         kwargs["value_network"] = value_network()
     loss = DQNLoss(*args, **kwargs)
+    if tensor_keys:
+        loss.set_keys(**tensor_keys)
+    if gamma is not None:
+        loss.make_value_estimator(gamma=gamma)
+    return loss
+
+
+@dataclass
+class QMixerLossConfig(LossConfig):
+    """A class to configure a QMixer loss."""
+
+    local_value_network: Any = None
+    mixer_network: Any = None
+    loss_function: str = "l2"
+    delay_value: bool = True
+    action_space: Any = None
+    gamma: float | None = None
+    priority_key: str | None = None
+    action_key: Any = None
+    action_value_key: Any = None
+    local_value_key: Any = None
+    global_value_key: Any = None
+    reward_key: Any = None
+    done_key: Any = None
+    terminated_key: Any = None
+    _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_qmixer_loss"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+
+
+def _make_qmixer_loss(*args, **kwargs) -> QMixerLoss:
+    tensor_keys = {}
+    for key in (
+        "action_key",
+        "action_value_key",
+        "local_value_key",
+        "global_value_key",
+        "reward_key",
+        "done_key",
+        "terminated_key",
+        "priority_key",
+    ):
+        if key in kwargs:
+            value = kwargs.pop(key)
+            if value is not None:
+                tensor_keys[key.removesuffix("_key")] = _normalize_hydra_key(value)
+    local_value_network = kwargs.get("local_value_network")
+    mixer_network = kwargs.get("mixer_network")
+    gamma = kwargs.pop("gamma", None)
+
+    if local_value_network is not None and hasattr(local_value_network, "_target_"):
+        kwargs["local_value_network"] = local_value_network()
+    if mixer_network is not None and hasattr(mixer_network, "_target_"):
+        kwargs["mixer_network"] = mixer_network()
+
+    loss = QMixerLoss(*args, **kwargs)
+    loss.set_keys(**tensor_keys)
     if gamma is not None:
         loss.make_value_estimator(gamma=gamma)
     return loss

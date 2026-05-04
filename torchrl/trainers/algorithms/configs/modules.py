@@ -195,6 +195,38 @@ class ConvNetConfig(NetworkConfig):
 
 
 @dataclass
+class QMixerNetworkConfig(NetworkConfig):
+    """A class to configure a QMIX mixer network.
+
+    .. seealso:: :class:`torchrl.modules.models.multiagent.QMixer`
+    """
+
+    state_shape: Any = MISSING
+    mixing_embed_dim: int = 32
+    n_agents: int = MISSING
+    device: Any = None
+    _target_: str = "torchrl.modules.models.multiagent.QMixer"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+
+
+@dataclass
+class VDNMixerNetworkConfig(NetworkConfig):
+    """A class to configure a VDN mixer network.
+
+    .. seealso:: :class:`torchrl.modules.models.multiagent.VDNMixer`
+    """
+
+    n_agents: int = MISSING
+    device: Any = None
+    _target_: str = "torchrl.modules.models.multiagent.VDNMixer"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+
+
+@dataclass
 class ModelConfig(ConfigBase):
     """Parent class to configure a model.
 
@@ -584,6 +616,10 @@ class QValueModelConfig(ModelConfig):
     _target_: str = "torchrl.trainers.algorithms.configs.modules._make_qvalue_model"
     network: NetworkConfig = MISSING
     action_space: Any = None
+    action_key: Any = None
+    action_value_key: Any = None
+    chosen_action_value_key: Any = None
+    action_mask_key: Any = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -597,12 +633,18 @@ def _make_qvalue_model(*args, **kwargs):
 
     network = kwargs.pop("network")
     shared = kwargs.pop("shared", False)
-    out_keys = _normalize_hydra_keys(kwargs.pop("out_keys", None))
-    kwargs.pop("param_keys", None)
+    kwargs.pop("out_keys", None)
+    if "in_keys" in kwargs:
+        kwargs["in_keys"] = _normalize_hydra_keys(kwargs["in_keys"])
 
-    if out_keys is not None and "action_value_key" not in kwargs:
-        if isinstance(out_keys, (list, tuple)) and len(out_keys) == 1:
-            kwargs["action_value_key"] = out_keys[0]
+    for key in (
+        "action_key",
+        "action_value_key",
+        "chosen_action_value_key",
+        "action_mask_key",
+    ):
+        if key in kwargs:
+            kwargs[key] = _normalize_hydra_key(kwargs[key])
 
     if hasattr(network, "_target_"):
         network = instantiate(network)
