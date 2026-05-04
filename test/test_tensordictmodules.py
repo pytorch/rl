@@ -29,6 +29,7 @@ from torchrl.envs import (
 from torchrl.envs.utils import set_exploration_type, step_mdp
 from torchrl.modules import (
     AdditiveGaussianModule,
+    ConsistentDropoutModule,
     DecisionTransformerInferenceWrapper,
     DTActor,
     GRUModule,
@@ -43,7 +44,6 @@ from torchrl.modules import (
     TanhDelta,
     TanhNormal,
     ValueOperator,
-    ConsistentDropoutModule
 )
 from torchrl.modules.models.decision_transformer import _has_transformers
 from torchrl.modules.tensordict_module.common import (
