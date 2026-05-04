@@ -1630,9 +1630,7 @@ class TestTrainerConfigs:
             num_cells=64,
         )
 
-        critic_network = MLPConfig(
-            in_features=4, out_features=1, depth=2, num_cells=64
-        )
+        critic_network = MLPConfig(in_features=4, out_features=1, depth=2, num_cells=64)
 
         actor_model = TanhNormalModelConfig(
             network=actor_network, in_keys=["observation"], out_keys=["action"]
