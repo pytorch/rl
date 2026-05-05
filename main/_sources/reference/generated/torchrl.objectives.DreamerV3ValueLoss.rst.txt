@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+DreamerV3ValueLoss
+==================
+
+.. autoclass:: DreamerV3ValueLoss
+    :members:
