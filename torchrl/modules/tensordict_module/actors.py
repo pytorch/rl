@@ -220,6 +220,17 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
         n_empirical_estimate (int, optional): keyword-only argument.
             Number of samples to compute the empirical
             mean when it is not available. Defaults to 1000.
+        generator (torch.Generator, int, NestedKey, or None, optional): keyword-only argument.
+            Routes sampling through an explicit RNG instead of the global PyTorch RNG.
+            Accepts a :class:`torch.Generator` (used in place, advances across calls),
+            an :class:`int` (shorthand for ``Generator().manual_seed(int)``), or a
+            :class:`NestedKey` to fetch the generator from the input tensordict on every
+            call (the value can be a ``Generator`` or a scalar int / Tensor used as a
+            JAX-style stream-key with a ``next_seed`` written back). Defaults to ``None``,
+            in which case the global RNG is used. Useful when the agent's RNG stream must
+            be isolated from the environment's — see Patterson et al.,
+            "Empirical Design in Reinforcement Learning" (`arXiv:2304.01315
+            <https://arxiv.org/abs/2304.01315>`_).
 
     Examples:
         >>> import torch

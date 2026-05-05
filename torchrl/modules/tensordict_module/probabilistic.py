@@ -145,6 +145,15 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         n_empirical_estimate (int, optional): keyword-only argument.
             Number of samples to compute the empirical
             mean when it is not available. Defaults to 1000.
+        generator (torch.Generator, int, NestedKey, or None, optional): keyword-only argument.
+            Routes sampling through an explicit RNG instead of the global PyTorch RNG.
+            Accepts a :class:`torch.Generator` (used in place, advances across calls),
+            an :class:`int` (shorthand for ``Generator().manual_seed(int)``), or a
+            :class:`NestedKey` to fetch the generator from the input tensordict on every
+            call (the value can be a ``Generator`` or a scalar int / Tensor used as a
+            JAX-style stream-key with a ``next_seed`` written back). Defaults to ``None``,
+            in which case the global RNG is used. See
+            :class:`~tensordict.nn.ProbabilisticTensorDictModule` for details.
 
     .. warning:: Running checks takes time! Using `safe=True` will guarantee that the samples are within the spec bounds
         given some heuristic coded in :meth:`~torchrl.data.TensorSpec.project`, but that requires checking whether the
@@ -197,6 +206,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         cache_dist: bool = False,
         n_empirical_estimate: int = 1000,
         num_samples: int | torch.Size | None = None,
+        generator: torch.Generator | int | NestedKey | None = None,
     ):
         super().__init__(
             in_keys=in_keys,
@@ -210,6 +220,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             log_prob_keys=log_prob_keys,
             log_prob_key=log_prob_key,
             num_samples=num_samples,
+            generator=generator,
         )
         if spec is not None:
             spec = spec.clone()

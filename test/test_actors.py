@@ -162,6 +162,105 @@ def test_probabilistic_actor_nested_normal(log_prob_key, nested_dim=5, n_actions
         assert td_out["data", "action_log_prob"].shape == (5,)
 
 
+class TestProbabilisticActorGenerator:
+    """Tests for the ``generator`` kwarg on ``ProbabilisticActor``.
+
+    The actual sampling logic lives in ``tensordict.nn`` and is exhaustively tested there;
+    these tests just verify the kwarg threads through ``ProbabilisticActor`` →
+    ``SafeProbabilisticModule`` → ``ProbabilisticTensorDictModule``.
+    """
+
+    @staticmethod
+    def _make_actor(generator=None):
+        module = TensorDictModule(
+            lambda x: (x, torch.ones_like(x)),
+            in_keys=["obs"],
+            out_keys=["loc", "scale"],
+        )
+        return ProbabilisticActor(
+            module=module,
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=dist.Normal,
+            default_interaction_type="random",
+            generator=generator,
+        )
+
+    def test_generator_object(self):
+        """Two same-seeded Generators must produce identical actions."""
+        a1 = self._make_actor(torch.Generator().manual_seed(0))
+        a2 = self._make_actor(torch.Generator().manual_seed(0))
+        # Set the global RNG to a different state to make sure it's not consulted.
+        torch.manual_seed(999)
+        s1 = a1(TensorDict(obs=torch.zeros(4)))["action"].clone()
+        s2 = a2(TensorDict(obs=torch.zeros(4)))["action"].clone()
+        assert torch.equal(s1, s2)
+
+    def test_generator_int_seed(self):
+        """Module-level int is shorthand for ``Generator().manual_seed(int)``."""
+        a_int = self._make_actor(generator=0)
+        a_gen = self._make_actor(generator=torch.Generator().manual_seed(0))
+        s_int = a_int(TensorDict(obs=torch.zeros(4)))["action"].clone()
+        s_gen = a_gen(TensorDict(obs=torch.zeros(4)))["action"].clone()
+        assert torch.equal(s_int, s_gen)
+
+    def test_generator_isolates_global_rng(self):
+        """Sampling with a generator must not advance the global RNG."""
+        a = self._make_actor(torch.Generator().manual_seed(0))
+        torch.manual_seed(1234)
+        before = torch.get_rng_state()
+        a(TensorDict(obs=torch.zeros(4)))
+        after = torch.get_rng_state()
+        assert torch.equal(before, after)
+
+    def test_generator_advances_in_place(self):
+        a = self._make_actor(torch.Generator().manual_seed(0))
+        s1 = a(TensorDict(obs=torch.zeros(4)))["action"].clone()
+        s2 = a(TensorDict(obs=torch.zeros(4)))["action"].clone()
+        assert not torch.equal(s1, s2)
+
+    def test_generator_td_key_int_writeback(self):
+        """Int seed in the input tensordict is treated as a stream-key (JAX-style)."""
+        from tensordict import NonTensorData
+
+        a = self._make_actor(generator="rng")
+
+        def run(seed, n_steps):
+            td = TensorDict(obs=torch.zeros(4))
+            td["rng"] = NonTensorData(seed)
+            samples = []
+            for _ in range(n_steps):
+                samples.append(a(td)["action"].clone())
+            return samples
+
+        traj_a = run(42, 3)
+        traj_b = run(42, 3)
+        for x, y in zip(traj_a, traj_b):
+            assert torch.equal(x, y)
+        assert not torch.equal(traj_a[0], traj_a[1])
+
+    def test_generator_td_key_generator_form(self):
+        """A Generator placed in the input tensordict is used in place."""
+        from tensordict import NonTensorData
+
+        a = self._make_actor(generator="rng")
+        td = TensorDict(obs=torch.zeros(4))
+        td["rng"] = NonTensorData(torch.Generator().manual_seed(0))
+        s_key = a(td)["action"].clone()
+        a_ref = self._make_actor(torch.Generator().manual_seed(0))
+        s_ref = a_ref(TensorDict(obs=torch.zeros(4)))["action"].clone()
+        assert torch.equal(s_key, s_ref)
+
+    def test_generator_default_unchanged(self):
+        """generator=None preserves existing global-RNG behaviour."""
+        a = self._make_actor(generator=None)
+        torch.manual_seed(0)
+        s1 = a(TensorDict(obs=torch.zeros(4)))["action"].clone()
+        torch.manual_seed(0)
+        s2 = a(TensorDict(obs=torch.zeros(4)))["action"].clone()
+        assert torch.equal(s1, s2)
+
+
 class TestQValue:
     def test_qvalue_hook_wrong_action_space(self):
         with pytest.raises(
