@@ -15,6 +15,7 @@ from tensordict import LazyStackedTensorDict, pad, TensorDict, unravel_key_list
 from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
 from tensordict.utils import assert_close
 from torch import nn
+from torchrl.collectors import SyncDataCollector
 from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
 from torchrl.envs import (
     CatFrames,
@@ -29,6 +30,7 @@ from torchrl.envs import (
 from torchrl.envs.utils import set_exploration_type, step_mdp
 from torchrl.modules import (
     AdditiveGaussianModule,
+    ConsistentDropoutModule,
     DecisionTransformerInferenceWrapper,
     DTActor,
     GRUModule,
@@ -55,7 +57,11 @@ from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticTensorDictSequential,
 )
 from torchrl.modules.tensordict_module.sequence import SafeSequential
-from torchrl.modules.utils import get_primers_from_module
+from torchrl.modules.utils import (
+    get_env_transforms_from_module,
+    get_primers_from_module,
+)
+from torchrl.modules.utils.utils import _compute_missing_env_transforms
 from torchrl.objectives import DDPGLoss
 
 from torchrl.testing.mocking_classes import CountingEnv, DiscreteActionVecMockEnv
@@ -1727,6 +1733,167 @@ def test_get_primers_from_module():
     assert "gru_recurrent_state" in transform[0].primers
     assert "lstm_recurrent_state_c" in transform[1].primers
     assert "lstm_recurrent_state_h" in transform[1].primers
+
+
+def test_get_primers_from_module_partial_failure():
+    """One submodule's failed primer must not poison primers from siblings.
+
+    ``ConsistentDropoutModule`` without ``input_shape`` raises ``RuntimeError``
+    from ``make_tensordict_primer()``. Pre-fix, ``module.apply``'s walk
+    propagated that exception and the GRU's well-formed primer was lost too.
+    The dry-run path now passes ``strict=False`` to isolate failures
+    per-submodule.
+    """
+    dropout = ConsistentDropoutModule(p=0.1, in_keys="features")
+    gru = GRUModule(
+        input_size=10,
+        hidden_size=10,
+        num_layers=1,
+        in_keys=["input", "recurrent_state", "is_init"],
+        out_keys=["features", ("next", "recurrent_state")],
+    )
+    policy = TensorDictSequential(gru, dropout)
+
+    # Public default (strict=True): the bad primer still raises.
+    with pytest.raises(RuntimeError, match="input_shape"):
+        get_primers_from_module(policy)
+
+    # strict=False: GRU primer survives, warning names the failing module.
+    with pytest.warns(UserWarning, match="ConsistentDropoutModule"):
+        primer = get_primers_from_module(policy, warn=False, strict=False)
+    assert primer is not None
+    assert "recurrent_state" in primer.primers
+
+    # Collector dry-run end-to-end: bare env gets InitTracker AND the GRU
+    # primer. Pre-fix it would have gotten only InitTracker.
+    env = CountingEnv()
+    transforms = _compute_missing_env_transforms(env, policy)
+    type_names = [type(t).__name__ for t in transforms]
+    assert "InitTracker" in type_names
+    assert "TensorDictPrimer" in type_names
+
+
+def test_get_env_transforms_from_module_no_rnn():
+    """Non-recurrent module returns a bare InitTracker."""
+    module = MLP(in_features=10, out_features=10, num_cells=[])
+    transforms = get_env_transforms_from_module(module)
+    assert isinstance(transforms, InitTracker)
+
+
+def test_get_env_transforms_from_module_gru():
+    """GRUModule returns Compose([InitTracker, TensorDictPrimer])."""
+    gru = GRUModule(
+        input_size=10,
+        hidden_size=10,
+        num_layers=1,
+        in_keys=["input", "recurrent_state", "is_init"],
+        out_keys=["features", ("next", "recurrent_state")],
+    )
+    transforms = get_env_transforms_from_module(gru)
+    assert isinstance(transforms, Compose)
+    assert any(isinstance(t, InitTracker) for t in transforms.transforms)
+    assert any(isinstance(t, TensorDictPrimer) for t in transforms.transforms)
+    # InitTracker comes before TensorDictPrimer
+    types = [type(t) for t in transforms.transforms]
+    assert types.index(InitTracker) < types.index(TensorDictPrimer)
+
+
+def test_get_env_transforms_from_module_lstm():
+    """LSTMModule returns Compose([InitTracker, TensorDictPrimer])."""
+    lstm = LSTMModule(
+        input_size=10,
+        hidden_size=10,
+        num_layers=1,
+        in_keys=["input", "h", "c", "is_init"],
+        out_keys=["features", ("next", "h"), ("next", "c")],
+    )
+    transforms = get_env_transforms_from_module(lstm)
+    assert isinstance(transforms, Compose)
+    assert any(isinstance(t, InitTracker) for t in transforms.transforms)
+    assert any(isinstance(t, TensorDictPrimer) for t in transforms.transforms)
+
+
+def test_get_env_transforms_from_module_custom_init_key():
+    """custom init_key is forwarded to InitTracker."""
+    # Use a plain MLP so we don't need to thread init_key through GRU validation
+    module = MLP(in_features=4, out_features=4, num_cells=[])
+    transforms = get_env_transforms_from_module(module, init_key="my_init")
+    # No RNN → bare InitTracker
+    assert isinstance(transforms, InitTracker)
+    assert transforms.init_key == "my_init"
+
+
+def _make_recurrent_counting_policy():
+    obs_to_float = TensorDictModule(
+        lambda observation: observation.to(torch.get_default_dtype()),
+        in_keys=["observation"],
+        out_keys=["embed"],
+    )
+    gru = GRUModule(
+        input_size=1,
+        hidden_size=1,
+        num_layers=1,
+        in_keys=["embed", "recurrent_state", "is_init"],
+        out_keys=["embed", ("next", "recurrent_state")],
+    )
+    action = TensorDictModule(
+        lambda embed: torch.ones_like(embed, dtype=torch.bool),
+        in_keys=["embed"],
+        out_keys=["action"],
+    )
+    return TensorDictSequential(obs_to_float, gru, action)
+
+
+def test_env_policy_argument_adds_recurrent_transforms():
+    """EnvBase subclasses accept policy=... and return a prepared TransformedEnv."""
+    policy = _make_recurrent_counting_policy()
+    env = CountingEnv(max_steps=3, policy=policy)
+    assert isinstance(env, TransformedEnv)
+    assert any(isinstance(t, InitTracker) for t in env.transform)
+    assert any(isinstance(t, TensorDictPrimer) for t in env.transform)
+
+    tensordict = env.reset()
+    assert "is_init" in tensordict.keys()
+    assert "recurrent_state" in tensordict.keys()
+
+
+def test_collector_adds_recurrent_env_transforms():
+    """Collectors prepare bare envs from recurrent policies before rollout."""
+    policy = _make_recurrent_counting_policy()
+    collector = SyncDataCollector(
+        CountingEnv(max_steps=3),
+        policy,
+        frames_per_batch=3,
+        total_frames=3,
+        auto_register_policy_transforms=True,
+    )
+    try:
+        assert isinstance(collector.env, TransformedEnv)
+        assert any(isinstance(t, InitTracker) for t in collector.env.transform)
+        assert any(isinstance(t, TensorDictPrimer) for t in collector.env.transform)
+        batch = next(iter(collector))
+        assert "is_init" in batch.keys()
+        assert "recurrent_state" in batch.keys()
+    finally:
+        collector.shutdown()
+
+
+def test_collector_does_not_duplicate_recurrent_env_transforms():
+    """Collector auto-setup is idempotent with env policy=... setup."""
+    policy = _make_recurrent_counting_policy()
+    collector = SyncDataCollector(
+        CountingEnv(max_steps=3, policy=policy),
+        policy,
+        frames_per_batch=3,
+        total_frames=3,
+        auto_register_policy_transforms=True,
+    )
+    try:
+        transforms = list(collector.env.transform)
+        assert sum(isinstance(t, InitTracker) for t in transforms) == 1
+        assert sum(isinstance(t, TensorDictPrimer) for t in transforms) == 1
+    finally:
+        collector.shutdown()
 
 
 if __name__ == "__main__":

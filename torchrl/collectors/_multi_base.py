@@ -291,6 +291,15 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             or `ManiSkills <https://github.com/haosulab/ManiSkill/>`_) cuda synchronization may cause unexpected
             crashes.
             Defaults to ``False``.
+        auto_register_policy_transforms (bool, optional): forwarded to each
+            worker :class:`~torchrl.collectors.Collector`. When ``True``,
+            workers append :class:`~torchrl.envs.transforms.InitTracker` and
+            recurrent-state :class:`~torchrl.envs.transforms.TensorDictPrimer`
+            transforms to their envs if the env specs don't already provide
+            them. ``False`` disables it; ``None`` (default through v0.14)
+            preserves pre-0.13 behavior and emits a
+            :class:`FutureWarning` when wrapping would have been needed.
+            Default flips to ``True`` in v0.15.
         weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers.
             If not provided, a :class:`~torchrl.collectors.MultiProcessedWeightUpdater` will be used by default,
@@ -394,12 +403,14 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
         init_fn: Callable[[], None] | None = None,
+        auto_register_policy_transforms: bool | None = None,
         pre_collect_hook: Callable[[], None] | None = None,
         post_collect_hook: Callable[[TensorDictBase], None] | None = None,
     ):
         self.closed = True
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
+        self._auto_register_policy_transforms = auto_register_policy_transforms
         super().__init__(
             pre_collect_hook=pre_collect_hook,
             post_collect_hook=post_collect_hook,
@@ -851,6 +862,19 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             raise RuntimeError(
                 "Cannot split trajectories when reset_when_done is False."
             )
+        elif split_trajs:
+            warnings.warn(
+                "split_trajs=True produces a (N_traj, T_max) zero-padded "
+                "tensordict with a 'mask' key. For sequence training, prefer "
+                "the contiguous-trajectory layout: pass a replay_buffer to "
+                "the collector and sample with "
+                ":class:`~torchrl.data.SliceSampler` (variable-length slices, "
+                "no padding, no mask). See "
+                ":ref:`Data layout: contiguous trajectories <data-layout>` "
+                "in the docs. This advisory will become a "
+                "DeprecationWarning in a future release.",
+                stacklevel=3,
+            )
         self.split_trajs = split_trajs
 
     def _setup_preemptive_threshold(self, preemptive_threshold: float | None) -> None:
@@ -1259,6 +1283,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "init_random_frames": self.init_random_frames,
                     "trajs_per_batch": self._worker_trajs_per_batch,
                     "init_fn": self._worker_init_fn,
+                    "auto_register_policy_transforms": self._auto_register_policy_transforms,
                     "pre_collect_hook": self._worker_pre_collect_hook,
                     "post_collect_hook": self._worker_post_collect_hook,
                 }

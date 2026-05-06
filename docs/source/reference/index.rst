@@ -6,6 +6,7 @@ API Reference
 
     collectors
     data
+    data_layout
     envs
     llms
     modules

@@ -13,6 +13,7 @@ import subprocess
 import sys
 import time
 import traceback
+import warnings
 from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import patch
@@ -51,6 +52,7 @@ from torchrl.collectors import (
     MultiAsyncCollector,
     MultiSyncCollector,
     ProfileConfig,
+    SyncDataCollector,
     WeightUpdaterBase,
 )
 from torchrl.collectors._base import _ProfilerHook
@@ -94,6 +96,7 @@ from torchrl.envs.utils import (
 )
 from torchrl.modules import (
     Actor,
+    GRUModule,
     OrnsteinUhlenbeckProcessModule,
     RandomPolicy,
     SafeModule,
@@ -3084,6 +3087,150 @@ class TestAutoWrap:
                     env_maker, collector_class, policy, num_envs
                 )
             )
+
+
+@pytest.mark.skipif(not _has_gym, reason="gym/gymnasium not available")
+class TestEnvTransformAutoWrap:
+    """Tests for `_maybe_append_env_transforms_from_module`.
+
+    The collector and env post-init hook share the same helper, so these
+    cover the full surface: bare env + recurrent policy, idempotency when
+    the env was already wrapped via the env hook, and BatchedEnv/ParallelEnv
+    where transforms live inside child envs and aren't visible at the top
+    of the transform stack.
+    """
+
+    @staticmethod
+    def _make_recurrent_policy():
+        gru = GRUModule(
+            input_size=4,
+            hidden_size=8,
+            num_layers=1,
+            in_keys=["observation", "recurrent_state", "is_init"],
+            out_keys=["features", ("next", "recurrent_state")],
+        )
+        return TensorDictSequential(gru)
+
+    @staticmethod
+    def _count_init_keys(spec):
+        return sum(
+            1
+            for k in spec.keys(True, True)
+            if k == "is_init" or (isinstance(k, tuple) and k and k[-1] == "is_init")
+        )
+
+    def test_bare_env_collector_appends_init_and_primer(self):
+        policy = self._make_recurrent_policy()
+        env = GymEnv(CARTPOLE_VERSIONED())
+        keys_before = set(env.full_observation_spec.keys(True, True))
+        assert "is_init" not in keys_before
+
+        collector = SyncDataCollector(
+            env,
+            policy,
+            frames_per_batch=10,
+            total_frames=10,
+            auto_register_policy_transforms=True,
+        )
+        try:
+            keys_after = set(collector.env.full_observation_spec.keys(True, True))
+            assert "is_init" in keys_after
+            assert "recurrent_state" in keys_after
+            assert self._count_init_keys(collector.env.full_observation_spec) == 1
+        finally:
+            collector.shutdown()
+
+    def test_env_hook_then_collector_is_idempotent(self):
+        policy = self._make_recurrent_policy()
+        # The env-side hook fires when policy= is passed at construction.
+        env = GymEnv(CARTPOLE_VERSIONED(), policy=policy)
+        assert "is_init" in env.full_observation_spec.keys(True, True)
+        assert "recurrent_state" in env.full_observation_spec.keys(True, True)
+
+        # The collector hook must not double-wrap.
+        collector = SyncDataCollector(
+            env,
+            policy,
+            frames_per_batch=10,
+            total_frames=10,
+            auto_register_policy_transforms=True,
+        )
+        try:
+            assert self._count_init_keys(collector.env.full_observation_spec) == 1
+        finally:
+            collector.shutdown()
+
+    def test_serial_env_with_inner_init_tracker_no_double_wrap(self):
+        policy = self._make_recurrent_policy()
+
+        def make_inner():
+            return TransformedEnv(GymEnv(CARTPOLE_VERSIONED()), InitTracker())
+
+        env = SerialEnv(2, make_inner)
+        # is_init is exposed at the SerialEnv level even though InitTracker
+        # lives inside child envs.
+        assert "is_init" in env.full_observation_spec.keys(True, True)
+
+        collector = SyncDataCollector(
+            env,
+            policy,
+            frames_per_batch=10,
+            total_frames=10,
+            auto_register_policy_transforms=True,
+        )
+        try:
+            assert self._count_init_keys(collector.env.full_observation_spec) == 1
+        finally:
+            collector.shutdown()
+
+    def test_parallel_env_with_inner_init_tracker_no_double_wrap(self):
+        policy = self._make_recurrent_policy()
+
+        def make_inner():
+            return TransformedEnv(GymEnv(CARTPOLE_VERSIONED()), InitTracker())
+
+        env = ParallelEnv(2, make_inner, mp_start_method="fork")
+        assert "is_init" in env.full_observation_spec.keys(True, True)
+        collector = SyncDataCollector(
+            env,
+            policy,
+            frames_per_batch=10,
+            total_frames=10,
+            auto_register_policy_transforms=True,
+        )
+        try:
+            assert self._count_init_keys(collector.env.full_observation_spec) == 1
+        finally:
+            collector.shutdown()
+
+    def test_default_emits_future_warning_about_v0_15_flip(self):
+        """Default (None) preserves pre-0.13 behavior and emits a FutureWarning.
+
+        The collector currently does *not* auto-wrap; the warning informs the
+        user that the default flips to True in v0.15. Construction itself
+        fails downstream (the policy expects ``is_init`` on a bare env), but
+        the warning is what we're asserting here.
+        """
+        policy = self._make_recurrent_policy()
+        env = GymEnv(CARTPOLE_VERSIONED())
+        with pytest.warns(FutureWarning, match="auto_register_policy_transforms"):
+            with pytest.raises(KeyError, match="is_init"):
+                SyncDataCollector(env, policy, frames_per_batch=10, total_frames=10)
+
+    def test_explicit_false_is_silent_and_does_not_wrap(self):
+        """auto_register_policy_transforms=False suppresses the warning and the wrap."""
+        policy = self._make_recurrent_policy()
+        env = GymEnv(CARTPOLE_VERSIONED())
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            with pytest.raises(KeyError, match="is_init"):
+                SyncDataCollector(
+                    env,
+                    policy,
+                    frames_per_batch=10,
+                    total_frames=10,
+                    auto_register_policy_transforms=False,
+                )
 
 
 def weight_reset(m):
