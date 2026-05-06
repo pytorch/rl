@@ -112,26 +112,78 @@ preserve when extending. The natural mapping is:
 It looks attractive: the buffer stores its data in the same shape the
 collector produces, no reshape needed.
 
-**It does not work with multi-process collectors that share a single
-storage.** Concrete reason: an ``ndim >= 2`` storage requires the
-trajectory ("time") axis of every ``extend`` call to be a *meaningful*
-contiguous run of frames from a single env. When several worker processes
-write into the same storage concurrently — e.g.
+**It runs into trouble with multi-process collectors that share a single
+storage.** With ``ndim >= 2`` every ``extend`` call commits one row's
+worth of frames along the time axis, and that row is implicitly assumed to
+be a contiguous run of frames from a single env. When several worker
+processes write into the same storage concurrently — e.g.
 :class:`~torchrl.collectors.MultiCollector` ``(sync=False)``,
 :class:`~torchrl.collectors.distributed.RayCollector`, an external pool of
 producers, or any cluster setup where a learner aggregates batches from
-many actors — the order in which workers' batches land in the storage
-**cannot be controlled**. A given row of the ``[N, T]`` storage would end
-up with ``T`` frames stitched together from different workers and
-different episodes, with no marker to tell them apart and the
-``SliceSampler`` silently drawing slices that straddle unrelated
-trajectories. The same issue arises if any postprocessing rearranges the
-extend order, or if the storage is shared across a cluster.
+many actors — the inter-worker write order is uncontrolled. Without
+boundary markers, a given row of the ``[N, T]`` storage can stitch
+together frames from a worker's two consecutive but unrelated episodes
+(or from different workers if a postprocessing step rearranges the extend
+order), and a :class:`~torchrl.data.SliceSampler` drawing whole rows would
+silently span them.
 
-For multi-process / asynchronous / cross-cluster collection, the only
-robust storage shape is ``ndim=1``.
+Two existing knobs mitigate this without giving up ``ndim >= 2``:
 
-Concretely, the ``ndim`` arg works for:
+* **``Collector(set_truncated=True)``.** Marks the last frame of every
+  collected batch as ``truncated`` (and therefore ``done``). With this on,
+  the boundary keys *do* delimit each row, so a sampler that respects
+  ``done`` / ``truncated`` no longer spans batch boundaries. The cost is
+  that every batch boundary becomes an *artificial* trajectory cut: it
+  shortens the effective length of the trajectories the buffer can serve,
+  and downstream value estimators see truncations that did not actually
+  happen in the env (so they bootstrap where they shouldn't have had to).
+  Useful when the alternative is wrong, but pure overhead in the cases
+  where complete-trajectory writes are an option.
+
+* **One buffer per worker, glued by a**
+  :class:`~torchrl.data.replay_buffers.ReplayBufferEnsemble`. Each member
+  storage is written by exactly one worker, so its write order is
+  deterministic and ``ndim >= 2`` is sound for that member. The ensemble
+  samples uniformly across members at training time:
+
+  .. code-block:: python
+
+      from torchrl.collectors import MultiCollector
+      from torchrl.data import (
+          LazyTensorStorage, ReplayBufferEnsemble, TensorDictReplayBuffer,
+      )
+      from torchrl.data.replay_buffers import SliceSampler
+
+      num_workers = 4
+      buffers = [
+          TensorDictReplayBuffer(
+              storage=LazyTensorStorage(N, ndim=2),     # one row = one rollout
+              sampler=SliceSampler(num_slices=4),
+          )
+          for _ in range(num_workers)
+      ]
+      rb = ReplayBufferEnsemble(
+          *buffers, sample_from_all=True, batch_size=256,
+      )
+      collector = MultiCollector(
+          [make_env] * num_workers, policy,
+          replay_buffer=rb,                              # see note below
+          frames_per_batch=200, total_frames=-1,
+      )
+
+  .. note::
+      Routing each worker's writes to *its own* member buffer requires
+      an indexed-extend hook the parent ``ReplayBufferEnsemble`` does not
+      provide out of the box. The pattern is sketched here for the
+      ``ndim >= 2`` shape; if you go this route you will likely either
+      build a thin per-worker collector (each owning its buffer) or wire
+      a custom ``post_collect_hook`` that dispatches to the right member.
+
+The simpler default is to keep ``ndim = 1`` and rely on the boundary keys
+above to recover trajectory structure — see
+:ref:`data-layout-buffer-to-collector` below.
+
+Concretely, ``ndim >= 2`` is straightforward for:
 
 * Single-process :class:`~torchrl.collectors.Collector` with a batched
   env (one process writes; the env dim is stable).
@@ -139,7 +191,7 @@ Concretely, the ``ndim`` arg works for:
   with ``cat_results="stack"``, which delivers one ``[num_workers, T]``
   batch at a time *atomically*.
 
-It does **not** work for:
+It needs the ``set_truncated`` or ensemble mitigation above for:
 
 * :class:`~torchrl.collectors.MultiCollector` ``(sync=False)``.
 * :class:`~torchrl.collectors.distributed.RayCollector`,
@@ -147,9 +199,6 @@ It does **not** work for:
   RPC-based collectors.
 * Any setup where multiple producers ``extend`` the same shared storage
   with no synchronisation guarantee.
-
-For these cases, keep ``ndim=1`` and rely on the boundary keys above to
-recover trajectory structure.
 
 The buffer-to-collector handoff: complete-trajectory writes
 -----------------------------------------------------------
@@ -189,23 +238,38 @@ This is what passing the buffer directly to the collector and setting
         batch = rb.sample()    # variable-length contiguous slices, no leaks
         # ...
 
-Two things make this work:
+How the buffer is actually populated when ``replay_buffer=`` is passed:
 
-1. The collector itself ``extend``s the buffer (via the ``replay_buffer=``
-   kwarg) — the user doesn't sit between the collector and the buffer with
-   a ``rb.extend(data)`` call, so there's no opportunity to reshape away
-   the trajectory structure.
+* In a multi-process collector, **each worker process calls
+  ``rb.extend(...)`` directly on the shared storage** — the parent does
+  not aggregate batches and re-extend.
+* This is true in both ``sync=True`` and ``sync=False`` mode. The
+  ``sync=`` flag controls *iteration delivery* (whether ``for data in
+  collector`` blocks for all workers vs first-come), not how the buffer
+  is populated.
+* Consequently the inter-worker write order on the shared buffer is
+  uncontrolled in both modes — it is the same condition that makes
+  ``ndim >= 2`` shared storages unsafe (see
+  :ref:`data-layout-storage-ndim`).
 
-2. ``trajs_per_batch`` makes each worker assemble *complete trajectories*
-   (last step has ``("next", "done") == True``) before flushing them to
-   the buffer. The buffer never sees partial episodes, so even when worker
-   A's flush interleaves with worker B's, the resulting storage is just a
-   concatenation of complete episodes — no intra-episode boundary
-   straddles a worker handoff.
+What ``trajs_per_batch`` adds is a guarantee on the *contents* of each
+extend: with ``trajs_per_batch=N``, every ``rb.extend`` call commits one
+or more **complete trajectories** (last step has
+``("next", "done") == True``). The buffer never sees a partial episode,
+so even when worker A's flush interleaves with worker B's, the resulting
+storage is just a concatenation of complete episodes. No intra-episode
+boundary ever sits at a worker-handoff seam, and the
+:class:`~torchrl.data.SliceSampler`'s boundary detection works on a flat
+``ndim = 1`` buffer regardless of write order.
 
-See :ref:`collectors_replay_trajs` for the full ``trajs_per_batch`` API,
-the synchronous-iteration pattern, and the ``set_truncated=True`` partial
-mitigation when ``trajs_per_batch`` is not an option.
+If complete-trajectory writes are not an option (e.g. very long episodes,
+where waiting for ``done`` is impractical), ``set_truncated=True``
+provides a lighter mitigation by inserting an artificial ``truncated``
+at every batch boundary — see
+:ref:`collectors_replay_trajs` for the trade-offs.
+
+See :ref:`collectors_replay_trajs` for the full ``trajs_per_batch`` API
+and the synchronous-iteration pattern.
 
 SliceSampler: variable-length contiguous slices
 -----------------------------------------------
@@ -320,6 +384,19 @@ Legacy: ``split_trajectories``
 they take a tensordict that contains multiple trajectories (delineated by
 ``done`` or ``("collector", "traj_ids")``) and produce an
 ``[N_traj, T_max]`` zero-padded tensordict with a boolean ``mask`` entry.
+
+Aside from the padding+mask cost shared with every padded layout
+(:ref:`data-layout-padded-discouraged`), this introduces a more subtle
+problem: it **bakes collector hyperparameters into the data shape**. A
+trajectory that spans the boundary between two collected batches gets
+cut at the batch boundary — the part before is artificially marked
+``truncated`` / ``done``, the part after is artificially marked
+``is_init``. Downstream code then sees boundary signals that do not
+reflect real env transitions, and changing ``frames_per_batch`` silently
+changes the trajectory shape the trainer consumes (effective lengths,
+number of returns, where value bootstraps land). The contiguous 1-D
+layout sidesteps this entirely: trajectory boundaries come exclusively
+from the env's own ``done`` signal.
 
 This is **discouraged for new code**. ``split_trajs=True`` will emit an
 advisory warning and is scheduled for full deprecation in a future
