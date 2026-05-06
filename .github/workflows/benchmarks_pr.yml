@@ -22,6 +22,7 @@ jobs:
       PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
       PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - device: CPU
@@ -33,7 +34,7 @@ jobs:
         shell: bash -l {0}
     container:
       image: ${{ matrix.image }}
-      options: --gpus all
+      options: --gpus all --shm-size=8g
     steps:
       - name: Who triggered this?
         run: |
@@ -85,7 +86,7 @@ jobs:
           export PYTHON_INCLUDE_DIR=/usr/include/python3.10
 
           python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128 -U
-          python3.10 -m pip install ninja pytest pytest-benchmark mujoco dm_control "gym[accept-rom-license,atari]" transformers ray
+          python3.10 -m pip install ninja pytest pytest-benchmark mujoco dm_control "gym[accept-rom-license,atari]" transformers accelerate ray
           python3.10 -m pip install "pybind11[global]"
           python3.10 -m pip install git+https://github.com/pytorch/tensordict 
           python3.10 -m pip install safetensors tqdm pandas numpy matplotlib

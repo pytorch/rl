@@ -28,6 +28,7 @@ jobs:
     name: ${{ matrix.device }} Pytest benchmark
     runs-on: linux.g5.4xlarge.nvidia.gpu
     strategy:
+      fail-fast: false
       matrix:
         include:
           - device: CPU
@@ -39,7 +40,7 @@ jobs:
         shell: bash -l {0}
     container:
       image: ${{ matrix.image }}
-      options: --gpus all
+      options: --gpus all --shm-size=8g
     steps:
       - name: Who triggered this?
         run: |
@@ -84,7 +85,7 @@ jobs:
           fi
 
           python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128 -U
-          python3.10 -m pip install ninja pytest pytest-benchmark mujoco dm_control "gym[accept-rom-license,atari]" transformers
+          python3.10 -m pip install ninja pytest pytest-benchmark mujoco dm_control "gym[accept-rom-license,atari]" transformers accelerate
           python -m pip install "pybind11[global]"
           python3.10 -m pip install git+https://github.com/pytorch/tensordict 
           python3.10 -m pip install safetensors tqdm pandas numpy matplotlib ray
