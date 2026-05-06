@@ -745,7 +745,14 @@ class LSTMModule(ModuleBase):
         dtype = value.dtype
 
         val, hidden0, hidden1 = self._lstm(
-            value, batch, steps, device, dtype, hidden0, hidden1, splits,
+            value,
+            batch,
+            steps,
+            device,
+            dtype,
+            hidden0,
+            hidden1,
+            splits,
         )
         tensordict_shaped.set(self.out_keys[0], val)
         tensordict_shaped.set(self.out_keys[1], hidden0)
@@ -811,7 +818,9 @@ class LSTMModule(ModuleBase):
             if splits is not None:
                 # hidden[i] is [batch, num_layers, H] — place at splits[i]-1 per row
                 h = out[i]
-                h_padded = torch.zeros(batch, steps, *h.shape[1:], device=device, dtype=dtype)
+                h_padded = torch.zeros(
+                    batch, steps, *h.shape[1:], device=device, dtype=dtype
+                )
                 batch_idx = torch.arange(batch, device=device)
                 h_padded[batch_idx, splits - 1] = h
                 out[i] = h_padded
