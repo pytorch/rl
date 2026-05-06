@@ -18,6 +18,7 @@ jobs:
     name: ${{ matrix.device }} Pytest benchmark
     runs-on: linux.g5.4xlarge.nvidia.gpu
     env:
+      PR_BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}
       PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
       PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     strategy:
@@ -39,10 +40,15 @@ jobs:
           echo "Action triggered by ${{ github.event.pull_request.html_url }}"
       - name: Check ldd --version
         run: ldd --version
+      - name: Install git for checkout
+        run: |
+          apt-get update -y
+          apt-get install -y git ca-certificates
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Python Setup
         uses: actions/setup-python@v5
@@ -94,7 +100,7 @@ jobs:
           if [ "${TORCHRL_BENCHMARK_DEVICE}" = "CPU" ]; then
             export CUDA_VISIBLE_DEVICES=
           fi
-          git fetch --no-tags --depth=1 origin "${PR_BASE_SHA}"
+          git fetch --no-tags --depth=1 "https://github.com/${PR_BASE_REPO}.git" "${PR_BASE_SHA}"
           git checkout --detach "${PR_BASE_SHA}"
           rm -rf build
           python3.10 setup.py develop
