@@ -198,10 +198,14 @@ function.
 
 .. note::
 
-  The `torchrl.collectors.utils.split_trajectories` function can be used to
-  slice adjacent trajectories. It relies on a ``"traj_ids"`` entry in the
-  input tensordict, or to the junction of ``"done"`` and ``"truncated"`` key
-  if the ``"traj_ids"`` is missing.
+  The :func:`~torchrl.collectors.utils.split_trajectories` function can be
+  used to slice adjacent trajectories. It relies on a ``"traj_ids"`` entry
+  in the input tensordict, or on the junction of ``"done"`` and
+  ``"truncated"`` if ``"traj_ids"`` is missing. The function emits an
+  ``[N_traj, T_max]`` zero-padded tensordict + ``mask``; for new code
+  prefer the contiguous 1-D layout and
+  :class:`~torchrl.data.replay_buffers.SliceSampler` instead — see
+  :ref:`Data layout: contiguous trajectories <data-layout>`.
 
 
 .. note::

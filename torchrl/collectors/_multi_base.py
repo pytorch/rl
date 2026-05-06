@@ -862,6 +862,19 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             raise RuntimeError(
                 "Cannot split trajectories when reset_when_done is False."
             )
+        elif split_trajs:
+            warnings.warn(
+                "split_trajs=True produces a (N_traj, T_max) zero-padded "
+                "tensordict with a 'mask' key. For sequence training, prefer "
+                "the contiguous-trajectory layout: pass a replay_buffer to "
+                "the collector and sample with "
+                ":class:`~torchrl.data.SliceSampler` (variable-length slices, "
+                "no padding, no mask). See "
+                ":ref:`Data layout: contiguous trajectories <data-layout>` "
+                "in the docs. This advisory will become a "
+                "DeprecationWarning in a future release.",
+                stacklevel=3,
+            )
         self.split_trajs = split_trajs
 
     def _setup_preemptive_threshold(self, preemptive_threshold: float | None) -> None:
